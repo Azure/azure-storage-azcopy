@@ -16,6 +16,8 @@ import (
 	"io"
 	"reflect"
 	"context"
+	"path/filepath"
+	"regexp"
 )
 
 var currFileDirectory string = "."
@@ -33,11 +35,16 @@ type JobPartPlanInfo struct {
 	TrasnferInfo []TransferInfo
 }
 
-func (job *JobPartPlanInfo) initializeJobPart(jobContext context.Context, jobPart JobPart, destBlobData destinationBlobData) (error){
+func (job *JobPartPlanInfo) initializeJobPart(jobContext context.Context, jobPart JobPart,
+											destBlobData destinationBlobData, isFileAlreadyCreated bool) (error){
+
+	if !isFileAlreadyCreated {
 	err := createwriteBlockBlobJobFile(jobPart, destBlobData)
 	if err != nil {
 		return err
 	}
+	}
+
 	job.ctx, job.cancel = context.WithCancel(jobContext)
 
 	jobIdBytes, err  := convertJobIdToByteFormat(jobPart.JobID)
@@ -62,7 +69,6 @@ func (job *JobPartPlanInfo) initializeJobPart(jobContext context.Context, jobPar
 	transferInfo := make([]TransferInfo, jPartPlan.NumTransfers)
 	for index := uint32(0); index < jPartPlan.NumTransfers; index++ {
 		transferCtx, transferCancel := context.WithCancel(job.ctx)
-		fmt.Println("trasnfer ctx ", transferCtx, transferCancel)
 		transferInfo[index] = TransferInfo{transferCtx, transferCancel, 0}
 	}
 	job.TrasnferInfo = transferInfo
@@ -104,6 +110,21 @@ func (job *JobPartPlanInfo)getNumTasksInJobPartFile() (uint32, error){
 	}
 	jPart := (*JobPartPlan)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
 	return jPart.NumTransfers, nil
+}
+
+func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (SrcDstPair, error){
+	tEntry, err := job.getTransferEntryForEntryIndex(entryIndex)
+	if err != nil{
+		return SrcDstPair{}, err
+	}
+	numChunks := tEntry.NumChunks
+	srcStringOffset := tEntry.Offset + (uint64(unsafe.Sizeof(chunkInfo{})) * uint64(numChunks))
+	dstStringOffset := srcStringOffset + uint64(tEntry.SrcLength)
+	srcStringSlice := job.memMap[srcStringOffset : srcStringOffset + uint64(tEntry.SrcLength)]
+	dstStringSlice := job.memMap[dstStringOffset : dstStringOffset + uint64(tEntry.DstLength)]
+	srcString := string(srcStringSlice)
+	dstString := string(dstStringSlice)
+	return SrcDstPair{srcString, dstString}, nil
 }
 
 func (job *JobPartPlanInfo) getTransferEntryForEntryIndex(entryIndex uint32) (*transferEntry, error){
@@ -231,10 +252,28 @@ func fileAlreadyExists(fileName string, dir string) (bool, error){
 	return false, nil
 }
 
+func listFileWithExtension(ext string) []os.FileInfo {
+	pathS, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+	var files []os.FileInfo
+	filepath.Walk(pathS, func(path string, f os.FileInfo, _ error) error {
+		if !f.IsDir() {
+			r, err := regexp.MatchString(ext, f.Name())
+			if err == nil && r {
+				files = append(files, f)
+			}
+		}
+		return nil
+	})
+	return files
+}
+
 func createFileName(jobId [128/8]byte, partNo uint32) (string, error) {
 	jobIdString := convertJobIdBytesToString(jobId)
 	partNoString := strconv.FormatUint(uint64(partNo), 10)
-	return jobIdString + partNoString + (".STE"), nil
+	return jobIdString + "-" + partNoString + (".STE"), nil
 }
 
 
