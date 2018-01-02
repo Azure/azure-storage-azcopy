@@ -35,7 +35,7 @@ func init() {
 	cpCmd := &cobra.Command{
 		Use:   "copy",
 		Aliases: []string{"cp", "c"},
-		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why twice
+		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
 		Short: "copy(cp) moves data between two places.",
 		Long: `copy(cp) moves data between two places. The most common cases are:
   - Upload local files/directories into Azure Storage.
@@ -50,15 +50,24 @@ func init() {
 				return errors.New("this command requires source and destination")
 			}
 
-			// TODO split validation
-			commandType := isSourceAndDestinationPairValid(args[0], args[1])
-			if commandType == common.Invalid {
+			sourceType := determineLocaltionType(args[0])
+			if sourceType == common.Unknown {
+				return errors.New("the provided source is invalid")
+			}
+
+			destinationType := determineLocaltionType(args[1])
+			if destinationType == common.Unknown {
+				return errors.New("the provided destination is invalid")
+			}
+
+			if sourceType == common.Blob && destinationType == common.Blob || sourceType == common.Local && destinationType == common.Local {
 				return errors.New("the provided source/destination pair is invalid")
 			}
 
-			commandLineInput.CommandType = commandType
 			commandLineInput.Source = args[0]
 			commandLineInput.Destination = args[1]
+			commandLineInput.SourceType = sourceType
+			commandLineInput.DestinationType = destinationType
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {

@@ -26,47 +26,22 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-
-// TODO use bit shift/or for case switching (pattern with &&)
-func isSourceAndDestinationPairValid(copySource, copyDestination string) common.CopyCmdType {
-
-	// source is local file system
-	if IsLocalPath(copySource) {
-
-		// local => local is not supported
-		if IsLocalPath(copyDestination) {
-			return common.Invalid
-		}
-
-		// local => Azure is valid
-		if IsUrl(copyDestination) {
-			return common.UploadFromLocalToWastore
-		}
-
+func determineLocaltionType(stringToParse string) common.LocationType {
+	if IsLocalPath(stringToParse) {
+		return common.Local
+	} else if IsUrl(stringToParse) {
+		return common.Blob
+	} else {
+		return common.Unknown
 	}
-
-	// source is Azure
-	if IsUrl(copySource) {
-
-		// Azure => Azure is not supported yet
-		if IsUrl(copyDestination) {
-			return common.Invalid
-		}
-
-		// Azure => local is valid
-		if IsLocalPath(copyDestination) {
-			return common.DownloadFromWastoreToLocal
-		}
-	}
-
-	return common.Invalid
 }
 
 // verify if path is a valid local path
 func IsLocalPath(path string) bool {
-	// TODO comment
+	// attempting to get stats from the OS validates whether a given path is a valid local path
 	_, err := os.Stat(path)
-	// TODO comment
+	// in case the path does not exist yet, an err is returned
+	// we need to make sure that it is indeed just a local path that does not exist yet, and not a url
 	if err == nil || (!IsUrl(path) && os.IsNotExist(err)){
 		return true
 	}
@@ -76,11 +51,12 @@ func IsLocalPath(path string) bool {
 // verify if givenUrl is a valid url
 func IsUrl(givenUrl string) bool{
 	u, err := url.Parse(givenUrl)
-	// TODO comment
+	// attempting to parse the url validates whether a given string is a valid url
 	if err != nil {
 		return false
 	}
-	// TODO comment
+	// a local path can also be parsed as a url sometimes, so in this case we make sure it is not a local path
+	// as Host, Scheme, and Path would be absent if it were a local path
 	if u.Host == "" || u.Scheme == "" || u.Path == "" {
 		return false
 	}

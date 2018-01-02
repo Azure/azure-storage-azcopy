@@ -53,10 +53,9 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	}
 	jobPartOrder.JobId = uuid
 
-	switch commandLineInput.CommandType {
-	case common.UploadFromLocalToWastore:
+	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
 		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder)
-	case common.DownloadFromWastoreToLocal:
+	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder)
 	}
 
@@ -141,7 +140,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 }
 
 func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
-	// attempt to parse the container url
+	// attempt to parse the container/blob url
 	sourceUrl, err := url.Parse(commandLineInput.Source)
 	if err != nil {
 		panic(err)
@@ -154,16 +153,11 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 
 		// create the destination if it does not exist
 		if os.IsNotExist(err) {
-			if len(sourcePathParts) > 1 {
-				_, err = os.Create(commandLineInput.Destination) //TODO do not create
-			} else {
+			if len(sourcePathParts) <  2 { // create the directory is the source is a container
 				err = os.MkdirAll(commandLineInput.Destination, os.ModePerm)
-			}
-
-			// TODO move up, do it right after err
-			// make sure the file/directory now exists
-			if err != nil {
-				panic("failed to create the destination on the local file system")
+				if err != nil {
+					panic("failed to create the destination on the local file system")
+				}
 			}
 
 			destinationFileInfo, err = os.Stat(commandLineInput.Destination)

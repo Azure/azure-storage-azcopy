@@ -22,12 +22,13 @@ package common
 
 // represents the raw input from the user
 type CopyCmdArgsAndFlags struct {
-	// job type (computed)
-	CommandType CopyCmdType
-
 	// from arguments
 	Source      string
 	Destination string
+
+	// inferred from arguments
+	SourceType LocationType
+	DestinationType LocationType
 
 	// filters from flags
 	Include        string
@@ -48,21 +49,12 @@ type CopyCmdArgsAndFlags struct {
 	Acl                      string
 }
 
-// TODO using string
-type CopyCmdType int
-const (
-	UploadFromLocalToWastore   CopyCmdType = iota
-	DownloadFromWastoreToLocal
-	Invalid
-)
-
 // define the different types of sources/destinations
 type LocationType string
 const (
 	Local LocationType = "local"
-	BlockBlob LocationType = "block"
-	PageBlob LocationType = "page"
-	AppendBlob LocationType = "append"
+	Blob LocationType = "blob"
+	Unknown LocationType = "unknown"
 )
 
 // represents a single copy task
@@ -77,6 +69,8 @@ type CopyJobPartOrder struct {
 	// job identifier
 	JobId string
 	PartNumber int
+	Version uint32
+	Priority uint32
 	IsFinalPart bool
 
 	//TODO set these!!
