@@ -3,19 +3,13 @@ package main
 import (
 	"time"
 	"encoding/json"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 //These constant defines the various types of source and destination of the transfers
 
 
 type LocationType uint16
-const (
-	fileSystemLocation LocationType = 1
-	blockBlobLocation
-	pageBlobLocation
-	appendBlobLocation
-	azureFileLocation
-)
 
 type CommandType int
 const (
@@ -113,20 +107,12 @@ type transfersStatus struct {
 	Status []transferStatus
 }
 
-type JobPart struct {
-	Version uint32
-	JobID string
-	PartNo string
-	SrcLocationType LocationType
-	DstLocationType LocationType
-	Tasks []task
-}
-
 type chunkInfo struct {
 	BlockId [128 / 8]byte
 	Status uint8
 }
 
+//add numchunks completed per transfer
 type transferEntry struct {
 	Offset uint64
 	SrcLength uint16
@@ -162,37 +148,10 @@ type blobData struct {
 	ContentEncoding string
 	MetaData string
 }
+
 type blockBlobData struct {
 	BlobData blobData
 	BlockSize uint16
-}
-
-type jobPartToBlockBlob struct {
-	JobPart
-	Data blockBlobData
-}
-
-type pageBlobData struct {
-	BlobData blobData
-}
-
-type appendBlobData struct {
-	blobData
-	BlockSize int
-}
-
-type jobPartToPageBlob struct {
-	JobPart
-	Data pageBlobData
-}
-type jobPartToAppendBlob struct {
-	JobPart
-	Data appendBlobData
-}
-
-type jobPartToUnknown struct {
-	JobPart
-	Data json.RawMessage
 }
 
 type statusQuery struct {

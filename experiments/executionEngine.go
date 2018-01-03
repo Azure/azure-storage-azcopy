@@ -17,26 +17,10 @@ import (
 	"sync/atomic"
 )
 
+type transferJob common.TransferJob
 type chunkJob struct {
 	transferId int32
 	doTransfer func(int)
-}
-
-type transferJob struct {
-	chunkSize int32 // TODO make type consistent
-
-	// specify the source and its type
-	Source     string
-	SourceType common.LocationType
-
-	// specify the destination and its type
-	Destination     string
-	DestinationType common.LocationType
-
-	// testing purpose
-	// count the number of chunks that are done
-	count uint32
-	id int32
 }
 
 type suicideJob byte
@@ -54,9 +38,9 @@ func main() {
 	}
 
 	highTransfer <- transferJob{
-		id: 1,
-		chunkSize: 4 * 1024 * 1024,
-		count: 0,
+		Id: 1,
+		ChunkSize: 4 * 1024 * 1024,
+		Count: 0,
 
 		Source: "https://azcopynextgendev2.blob.core.windows.net/testcontainer/Testy_PPT1.pptx?st=2017-12-07T00%3A27%3A00Z&se=2018-12-08T00%3A27%3A00Z&sp=rwdl&sv=2016-05-31&sr=c&sig=D9xT4VAKVAHQYosYzKDY%2FaMhBrTIvlcxLORsPst6%2BuM%3D",
 		SourceType: common.Blob,

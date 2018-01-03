@@ -15,8 +15,11 @@ import (
 	"bytes"
 	"strings"
 	"math"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+type jobPartToUnknown common.JobPartToUnknown
+type JobPart common.CopyJobPartOrder
 var JobPartInfoMap = map[string]map[string]*JobPartPlanInfo{}
 var steContext = context.Background()
 
@@ -135,7 +138,7 @@ func ExecuteAZCopyUploadblockBlob_AS(payload jobPartToUnknown){
 		panic(err)
 	}
 
-	putJobPartInfoHandlerIntoMap(jobHandler, payload.JobID, payload.PartNo, &JobPartInfoMap)
+	putJobPartInfoHandlerIntoMap(jobHandler, payload.JobPart.JobId, payload.JobPart.JobId, &JobPartInfoMap)
 
 	err = jobHandler.updateTheChunkInfo(0,1, crc, ChunkTransferStatusComplete)
 	if err != nil {
@@ -188,12 +191,12 @@ func ExecuteAZCopyDownload(payload jobPartToUnknown){
 
 func validateAndRouteHttpPostRequest(payload jobPartToUnknown) (bool){
 	switch {
-	case payload.SrcLocationType == blockBlobLocation &&
-		payload.DstLocationType == azureFileLocation:
+	case payload.JobPart.SourceType == common.Local &&
+		payload.JobPart.DestinationType == common.Blob:
 		go ExecuteAZCopyUploadblockBlob_AS(payload)
 		return true
-	case payload.SrcLocationType == azureFileLocation &&
-		payload.DstLocationType == blockBlobLocation:
+	case payload.JobPart.SourceType == common.Blob &&
+		payload.JobPart.DestinationType == common.Local:
 		go ExecuteAZCopyDownload(payload)
 		return true
 	default:
@@ -302,9 +305,8 @@ func reconstructTheExistingJobPart() (error){
 		partNoString := fileNameParts[1]
 		jobHandler := new(JobPartPlanInfo)
 		err := jobHandler.initializeJobPart(steContext,
-			JobPart{math.MaxUint32, jobIdString,
-			partNoString, math.MaxUint16,
-				math.MaxUint16, nil}, destinationBlobData{},
+			JobPart{ jobIdString, partNoString, math.MaxUint32,math.MaxUint16,
+				false, math.MaxUint16, nil}, destinationBlobData{},
 			true)
 		if err != nil{
 			return err
