@@ -94,14 +94,14 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 
 		// temporarily save the path of the container
 		cleanContainerPath := destinationUrl.Path
-		var taskList []common.CopyTask
+		var taskList []common.CopyTransfer
 		numInTaskList := 0
 		partNumber := 0
 
 		for _, f := range files {
 			if !f.IsDir() {
 				destinationUrl.Path = fmt.Sprintf("%s/%s", cleanContainerPath, f.Name())
-				taskList = append(taskList, common.CopyTask{Source: path.Join(commandLineInput.Source, f.Name()), Destination: destinationUrl.String()})
+				taskList = append(taskList, common.CopyTransfer{Source: path.Join(commandLineInput.Source, f.Name()), Destination: destinationUrl.String()})
 				numInTaskList += 1
 
 				if numInTaskList == NumOfFilesPerUploadJobPart {
@@ -109,7 +109,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 					jobPartOrderToFill.PartNumber = partNumber
 					partNumber += 1
 					DispatchJobPartOrder(jobPartOrderToFill)
-					taskList = []common.CopyTask{}
+					taskList = []common.CopyTransfer{}
 					numInTaskList = 0
 				}
 			}
@@ -118,7 +118,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		if numInTaskList != 0 {
 			jobPartOrderToFill.TaskList = taskList
 		} else {
-			jobPartOrderToFill.TaskList = []common.CopyTask{}
+			jobPartOrderToFill.TaskList = []common.CopyTransfer{}
 		}
 		jobPartOrderToFill.PartNumber = partNumber
 		jobPartOrderToFill.IsFinalPart = true
@@ -131,8 +131,8 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 			destinationUrl.Path = fmt.Sprintf("%s/%s", destinationUrl.Path, sourceFileInfo.Name())
 		}
 		//fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String())
-		singleTask := common.CopyTask{Source: commandLineInput.Source, Destination: destinationUrl.String()}
-		jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
+		singleTask := common.CopyTransfer{Source: commandLineInput.Source, Destination: destinationUrl.String()}
+		jobPartOrderToFill.TaskList = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.PartNumber = 0
 		jobPartOrderToFill.IsFinalPart = true
 		DispatchJobPartOrder(jobPartOrderToFill)
@@ -170,11 +170,11 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 	if len(sourcePathParts) > 1 {
 		if destinationFileInfo.IsDir() { // destination is dir, therefore the file name needs to be generated
 			blobName := sourcePathParts[1]
-			singleTask := common.CopyTask{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobName)}
-			jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
+			singleTask := common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobName)}
+			jobPartOrderToFill.TaskList = []common.CopyTransfer{singleTask}
 		} else { // destination is file, no need to generate file name
-			singleTask := common.CopyTask{Source: sourceUrl.String(), Destination: commandLineInput.Destination}
-			jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
+			singleTask := common.CopyTransfer{Source: sourceUrl.String(), Destination: commandLineInput.Destination}
+			jobPartOrderToFill.TaskList = []common.CopyTransfer{singleTask}
 		}
 		jobPartOrderToFill.IsFinalPart = true
 		jobPartOrderToFill.PartNumber = 0
@@ -188,7 +188,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 		containerUrl := azblob.NewContainerURL(*sourceUrl, p)
 		// temporarily save the path of the container
 		cleanContainerPath := sourceUrl.Path
-		var taskList []common.CopyTask
+		var taskList []common.CopyTransfer
 		partNumber := 0
 
 		// iterate over the container
@@ -203,7 +203,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
 				sourceUrl.Path = cleanContainerPath + "/" + blobInfo.Name
-				taskList = append(taskList, common.CopyTask{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name)})
+				taskList = append(taskList, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name)})
 			}
 			jobPartOrderToFill.TaskList = taskList
 			jobPartOrderToFill.PartNumber = partNumber

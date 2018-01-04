@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"time"
@@ -8,8 +8,49 @@ import (
 
 //These constant defines the various types of source and destination of the transfers
 
+const dataSchemaVersion = 1 // To be Incremented every time when we release azcopy with changed dataschema
 
-type LocationType uint16
+// JobPartPlan represent the header of Job Part's Memory Map File
+//todo add comments
+type JobPartPlanHeader struct {
+	Version uint32 // represent the version of data schema format
+	Id [128 / 8] byte
+	PartNum uint32
+	IsFinalPart bool
+	Priority uint8
+	TTLAfterCompletion uint32
+	SrcLocationType common.LocationType
+	DstLocationType common.LocationType
+	NumTransfers uint32
+	BlobData JobPartPlanBlobData
+}
+
+//todo add comments
+type JobPartPlanBlobData struct {
+	ContentTypeLength     uint8
+	ContentType           [256]byte
+	ContentEncodingLength uint8
+	ContentEncoding       [256]byte
+	MetaDataLength        uint16
+	MetaData              [1000]byte
+	BlockSizeInKB         uint16
+}
+
+//todo comments
+type JobPartPlanTransfer struct {
+	Offset       uint64
+	SrcLength    uint16
+	DstLength    uint16
+	ChunkNum     uint16
+	ModifiedTime uint32
+	Status       uint8
+}
+
+//todo comments
+type JobPartPlanTransferChunk struct {
+	BlockId [128 / 8]byte
+	Status uint8
+}
 
 type CommandType int
 const (
@@ -86,17 +127,6 @@ const (
 	CRC64BitExample ="AFC0A0012976B444"
 )
 
-type task struct{
-	Src string
-	SecLastModifiedTime time.Time
-	Dst string
-}
-
-type SrcDstPair struct {
-	Src string
-	Dst string
-}
-
 type transferStatus struct {
 	Src string
 	Dst string
@@ -105,53 +135,6 @@ type transferStatus struct {
 
 type transfersStatus struct {
 	Status []transferStatus
-}
-
-type chunkInfo struct {
-	BlockId [128 / 8]byte
-	Status uint8
-}
-
-//add numchunks completed per transfer
-type transferEntry struct {
-	Offset uint64
-	SrcLength uint16
-	DstLength uint16
-	NumChunks uint16
-	ModifiedTime uint32
-	Status uint8
-}
-
-type JobPartPlan struct {
-	Version uint32
-	JobId [128 / 8] byte
-	PartNo uint32
-	Priority uint8
-	TTLAfterCompletion uint32
-	SrcLocationType LocationType
-	DstLocationType LocationType
-	NumTransfers uint32
-}
-
-type destinationBlobData struct {
-	ContentTypeLength uint8
-	ContentType [256]byte
-	ContentEncodingLength uint8
-	ContentEncoding [256]byte
-	MetaDataLength uint16
-	MetaData [1000]byte
-	BlockSize uint16
-}
-
-type blobData struct {
-	ContentType string
-	ContentEncoding string
-	MetaData string
-}
-
-type blockBlobData struct {
-	BlobData blobData
-	BlockSize uint16
 }
 
 type statusQuery struct {

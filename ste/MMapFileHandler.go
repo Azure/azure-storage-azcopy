@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"errors"
@@ -18,28 +18,28 @@ import (
 	"context"
 	"path/filepath"
 	"regexp"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 var currFileDirectory string = "."
 
-type TransferInfo struct {
-	ctx context.Context
-	cancel context.CancelFunc
-	NumChunksCompleted uint16
-}
 
-type JobPartPlanInfo struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	memMap       mmap.MMap
-	TrasnferInfo []TransferInfo
-}
+/*
 
-func (job *JobPartPlanInfo) initializeJobPart(jobContext context.Context, jobPart JobPart,
-											destBlobData destinationBlobData, isFileAlreadyCreated bool) (error){
+ */
 
+ // todo params - filename
+func (job *JobPartPlanInfo) initialize(jobContext context.Context, jobPart JobPart,
+											destBlobData JobPartPlanBlobData, isFileAlreadyCreated bool) (error){
+
+	// todo remove this outside this function
+	/*
+		* Memory Map File
+		* Get JobPlanPointer
+		* walk transfers infos
+	 */
 	if !isFileAlreadyCreated {
-	err := createwriteBlockBlobJobFile(jobPart, destBlobData)
+	err := createJobPartPlanFile(jobPart, destBlobData)
 	if err != nil {
 		return err
 	}
@@ -47,10 +47,12 @@ func (job *JobPartPlanInfo) initializeJobPart(jobContext context.Context, jobPar
 
 	job.ctx, job.cancel = context.WithCancel(jobContext)
 
+	//todo remove this
 	jobIdBytes, err  := convertJobIdToByteFormat(jobPart.JobID)
 	if err != nil {
 		return err
 	}
+	//todo remove this
 	partNo, err := convertStringTouInt32(jobPart.PartNo)
 	if err != nil {
 		return err
@@ -75,134 +77,99 @@ func (job *JobPartPlanInfo) initializeJobPart(jobContext context.Context, jobPar
 	return nil
 }
 
-func (job *JobPartPlanInfo)shutDownHandler()  (error){
+func (job *JobPartPlanInfo)shutDownHandler(){
 	if job.memMap == nil {
-		return errors.New(MemoryMapFileUnmappedAlreadyError)
+		panic(errors.New(MemoryMapFileUnmappedAlreadyError))
 	}
 	err := job.memMap.Unmap()
 	if err != nil {
-		return err
+		panic(err)
 	}
-	return nil
 }
 
-func (job *JobPartPlanInfo) getJobPartPlanPointer() (*JobPartPlan, error){
-	if job.memMap == nil {
-		return nil, errors.New(MemoryMapFileUnmappedAlreadyError)
-	}
+//todo remove the error and panic
+func (job *JobPartPlanInfo) getJobPartPlanPointer() (*JobPartPlanHeader){
 	var memMap []byte = job.memMap
-	if len(memMap) <= 0 {
-		fmt.Println("mem map of job hander is nil")
-		return nil,  errors.New(MemoryMapFileUnmappedAlreadyError)
-	}
-	jPart := (*JobPartPlan)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
-	return jPart, nil
+	jPart := (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
+	return jPart
 }
 
+//todo remove func
 func (job *JobPartPlanInfo)getNumTasksInJobPartFile() (uint32, error){
-	if job.memMap == nil {
-		return 0, errors.New(MemoryMapFileUnmappedAlreadyError)
-	}
-	var memMap []byte = job.memMap
-	if len(memMap) <= 0 {
-		fmt.Println("mem map of job hander is nil")
-		return 0,  errors.New(MemoryMapFileUnmappedAlreadyError)
-	}
-	jPart := (*JobPartPlan)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
-	return jPart.NumTransfers, nil
+	return job.getJobPartPlanPointer().NumTransfers
 }
 
-func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (SrcDstPair, error){
-	tEntry, err := job.getTransferEntryForEntryIndex(entryIndex)
+//todo remove the error
+func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (source, destination string, err error){
+	tEntry, err := job.Transfer(entryIndex)
 	if err != nil{
-		return SrcDstPair{}, err
+		return
 	}
-	numChunks := tEntry.NumChunks
-	srcStringOffset := tEntry.Offset + (uint64(unsafe.Sizeof(chunkInfo{})) * uint64(numChunks))
+	numChunks := tEntry.ChunkNum
+	srcStringOffset := tEntry.Offset + (uint64(unsafe.Sizeof(JobPartPlanTransferChunk{})) * uint64(numChunks))
 	dstStringOffset := srcStringOffset + uint64(tEntry.SrcLength)
 	srcStringSlice := job.memMap[srcStringOffset : srcStringOffset + uint64(tEntry.SrcLength)]
 	dstStringSlice := job.memMap[dstStringOffset : dstStringOffset + uint64(tEntry.DstLength)]
 	srcString := string(srcStringSlice)
 	dstString := string(dstStringSlice)
-	return SrcDstPair{srcString, dstString}, nil
+	return srcString, dstString, nil
 }
 
-func (job *JobPartPlanInfo) getTransferEntryForEntryIndex(entryIndex uint32) (*transferEntry, error){
-	if job.memMap == nil{
-		return nil, errors.New(MemoryMapFileUnmappedAlreadyError)
+//todo remove the error and panic
+func (job *JobPartPlanInfo) Transfer(index uint32) (*JobPartPlanTransfer){
+
+	//todo no more error
+	jPartPlan := job.getJobPartPlanPointer()
+	if index >= jPartPlan.NumTransfers {
+		// get string in once place
+		panic(errors.New(TransferIndexOutOfBoundError))
 	}
-	numTasks, err := job.getNumTasksInJobPartFile()
-	if err != nil {
-		return nil, err
-	}
-	if entryIndex >= numTasks {
-		return nil, errors.New(TransferIndexOutOfBoundError)
-	}
-	jPartPlan, err := job.getJobPartPlanPointer()
-	if err != nil{
-		return nil, err
-	}
-	transferEntryOffsetIndex := uint64(unsafe.Sizeof(*jPartPlan)) + uint64(unsafe.Sizeof(destinationBlobData{})) + (uint64(unsafe.Sizeof(transferEntry{})) * uint64(entryIndex))
+	transferEntryOffsetIndex := uint64(unsafe.Sizeof(*jPartPlan)) + uint64(unsafe.Sizeof(JobPartPlanBlobData{})) + (uint64(unsafe.Sizeof(JobPartPlanTransfer{})) * uint64(Index))
 	transferEntrySlice := job.memMap[transferEntryOffsetIndex :]
-	tEntry := (*transferEntry)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&transferEntrySlice)).Data))
-	return tEntry, nil
+	tEntry := (*JobPartPlanTransfer)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&transferEntrySlice)).Data))
+	return tEntry
 }
 
-func (job *JobPartPlanInfo)updateTheChunkInfo(entryIndex uint32, chunkIndex uint16,
+//todo remove the error and panic
+func (job *JobPartPlanInfo)updateTheChunkInfo(transferIndex uint32, chunkIndex uint16,
 	crc [128 / 8]byte, status uint8) (error){
-	if job.memMap == nil{
-		return errors.New(MemoryMapFileUnmappedAlreadyError)
-	}
-	jPartPlan, err := job.getJobPartPlanPointer()
+
+	jPartPlan := job.getJobPartPlanPointer()
+
+	//todo no error
+	cInfo, err := job.getChunkInfo(transferIndex, chunkIndex)
 	if err != nil{
 		return err
 	}
-	cInfo, err := job.getChunkInfo(entryIndex, chunkIndex)
-	if err != nil{
-		return err
-	}
+
 	copy(cInfo.BlockId[:],crc[:])
 	cInfo.Status = status
-	result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, entryIndex, convertJobIdBytesToString(jPartPlan.JobId))
+	result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.JobId))
 	fmt.Println(result)
 	return nil
 }
 
-func (job JobPartPlanInfo)getChunkInfo(entryIndex uint32, chunkIndex uint16)(*chunkInfo, error){
+//todo remove error and panic
+func (job JobPartPlanInfo)getChunkInfo(transferIndex uint32, chunkIndex uint16)(*JobPartPlanTransferChunk, error){
 	if job.memMap == nil{
 		return nil, errors.New(MemoryMapFileUnmappedAlreadyError)
 	}
-	jPartPlan, err := job.getJobPartPlanPointer()
-	if err != nil{
-		return nil , err
-	}
-	tEntry, err := job.getTransferEntryForEntryIndex(entryIndex)
-	if err != nil{
-		return nil , err
-	}
-	if chunkIndex >= tEntry.NumChunks{
-		result := fmt.Sprintf(ChunkIndexOutOfBoundError, chunkIndex, entryIndex, convertJobIdBytesToString(jPartPlan.JobId))
+	jPartPlan := job.getJobPartPlanPointer()
+
+	tEntry := job.Transfer(transferIndex)
+
+	//remove this
+	if chunkIndex >= tEntry.ChunkNum {
+		result := fmt.Sprintf(ChunkIndexOutOfBoundError, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
 		return nil , errors.New(result)
 	}
 	chunkInfoOffset := tEntry.Offset
 	chunkInfoByteSlice := job.memMap[chunkInfoOffset :]
-	chunkInfo := (*chunkInfo)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&chunkInfoByteSlice)).Data))
+	chunkInfo := (*JobPartPlanTransferChunk)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&chunkInfoByteSlice)).Data))
 	return chunkInfo, nil
 }
 
-func roundUp(numToRound uint64, multipleOf uint64) (uint64){
-	if multipleOf <= 1{
-		return numToRound
-	}
-	if numToRound == 0 {
-		return 0
-	}
-	remainder := numToRound % multipleOf
-	if remainder == 0{
-		return numToRound;
-	}
-	return numToRound + multipleOf - remainder
-}
+
 
 func writeInterfaceDataToWriter( writer io.Writer, f interface{}, structSize uint64) (int, error){
 	var bytesWritten uint64 = 0
@@ -237,38 +204,8 @@ func writeInterfaceDataToWriter( writer io.Writer, f interface{}, structSize uin
 	return int(bytesWritten), nil
 }
 
-func fileAlreadyExists(fileName string, dir string) (bool, error){
-	fileInfos, err := ioutil.ReadDir(dir)
-	if err != nil {
-		errorMsg := fmt.Sprintf(DirectoryListingError, dir)
-		return false, errors.New(errorMsg)
-	}
-	for index := range fileInfos {
-		if strings.Compare(fileName, fileInfos[index].Name()) == 0 {
-			errorMsg := fmt.Sprintf(FileAlreadyExists, fileName)
-			return true, errors.New(errorMsg)
-		}
-	}
-	return false, nil
-}
 
-func listFileWithExtension(ext string) []os.FileInfo {
-	pathS, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	var files []os.FileInfo
-	filepath.Walk(pathS, func(path string, f os.FileInfo, _ error) error {
-		if !f.IsDir() {
-			r, err := regexp.MatchString(ext, f.Name())
-			if err == nil && r {
-				files = append(files, f)
-			}
-		}
-		return nil
-	})
-	return files
-}
+
 
 func createFileName(jobId [128/8]byte, partNo uint32) (string, error) {
 	jobIdString := convertJobIdBytesToString(jobId)
@@ -276,16 +213,11 @@ func createFileName(jobId [128/8]byte, partNo uint32) (string, error) {
 	return jobIdString + "-" + partNoString + (".STE"), nil
 }
 
-
+//todo : remove the func and use code straight
 func CreateFile(jobId [128/8]byte, partNo uint32)  (*os.File, error){
 	fileName, err := createFileName(jobId, partNo)
 	if err != nil {
 		return nil, err
-	}
-	doesExists, err := fileAlreadyExists(fileName, currFileDirectory)
-	if doesExists || err != nil {
-		if doesExists {	return nil, errors.New(FileAlreadyExists)	}
-		if err != nil {	return nil, err 	}
 	}
 	fileAbsolutePath := currFileDirectory +"/" + fileName
 	file, err := os.Create(fileAbsolutePath)
@@ -321,7 +253,7 @@ func convertJobIdBytesToString(jobId [128 /8]byte) (string){
 }
 
 func memoryMapTheJobFile(jobId [128/8]byte, partNo uint32)(mmap.MMap, error){
-
+	//
 	fileName, err := createFileName(jobId, partNo)
 	if err != nil {
 		err = fmt.Errorf(InvalidFileName, convertJobIdBytesToString(jobId), partNo)
@@ -340,9 +272,17 @@ func memoryMapTheJobFile(jobId [128/8]byte, partNo uint32)(mmap.MMap, error){
 	return mMap, nil
 }
 
-func createwriteBlockBlobJobFile(jobPart JobPart, destBlobData destinationBlobData) (error){
+func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder) (error){
 	var currentEndOffsetOfFile uint64 = 0
-	jPartPlan, err := jobPartTojobPartPlan(jobPart)
+	/*todo comments:
+	*		Get File Name from JobId and Part Num
+	*		Create the File
+	*       Create Job Part Plan From Job Part Order
+	*       Write Data to file
+	* 		Close the file
+	* 		Return File Name
+	*/
+	jPartPlan, err := jobPartTojobPartPlan(jobPartOrder)
 	if err != nil {
 		err = fmt.Errorf("error converting Job Part to Job Part In File with err %s", err.Error())
 		panic(err)
@@ -358,51 +298,51 @@ func createwriteBlockBlobJobFile(jobPart JobPart, destBlobData destinationBlobDa
 	}
 	currentEndOffsetOfFile += uint64(numBytesWritten)
 
-	numBytesWritten, err = writeInterfaceDataToWriter(file, &destBlobData, uint64(unsafe.Sizeof(destinationBlobData{})))
+	numBytesWritten, err = writeInterfaceDataToWriter(file, &destBlobData, uint64(unsafe.Sizeof(JobPartPlanBlobData{})))
 	if err != nil {
 		err = fmt.Errorf("error writing Data To The File %s", err.Error())
 		return err
 	}
 	currentEndOffsetOfFile += uint64(numBytesWritten)
 	trasnferEntryOffsets := make([]uint64, jPartPlan.NumTransfers)
-	transferEntryList := make([]transferEntry, jPartPlan.NumTransfers)
-	currentTransferChunkOffset := uint64(currentEndOffsetOfFile) + uint64(uint64(unsafe.Sizeof(transferEntry{})) * uint64(jPartPlan.NumTransfers))
+	transferEntryList := make([]JobPartPlanTransfer, jPartPlan.NumTransfers)
+	currentTransferChunkOffset := uint64(currentEndOffsetOfFile) + uint64(uint64(unsafe.Sizeof(JobPartPlanTransfer{})) * uint64(jPartPlan.NumTransfers))
 
-	for index := range jobPart.Tasks{
-		currentTransferEntry := transferEntry{currentTransferChunkOffset, uint16(len(jobPart.Tasks[index].Src)),
-			uint16(len(jobPart.Tasks[index].Dst)),
-			getNumChunks(jobPart.SrcLocationType, jobPart.DstLocationType,
-				jobPart.Tasks[index], destBlobData),
-			uint32(jobPart.Tasks[index].SecLastModifiedTime.Nanosecond()), ChunkTransferStatusInactive}
-		numBytesWritten, err = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(transferEntry{})))
+	for index := range jobPartOrder.Tasks{
+		currentTransferEntry := JobPartPlanTransfer{currentTransferChunkOffset, uint16(len(jobPartOrder.Tasks[index].Src)),
+			uint16(len(jobPartOrder.Tasks[index].Dst)),
+			getNumChunks(jobPartOrder.SrcLocationType, jobPartOrder.DstLocationType,
+				jobPartOrder.Tasks[index], destBlobData),
+			uint32(jobPartOrder.Tasks[index].SecLastModifiedTime.Nanosecond()), ChunkTransferStatusInactive}
+		numBytesWritten, err = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		if err != nil{
 			return err
 		}
 		transferEntryList[index] = currentTransferEntry
 		trasnferEntryOffsets[index] = currentTransferChunkOffset
 		currentEndOffsetOfFile += uint64(numBytesWritten)
-		currentTransferChunkOffset += uint64(currentTransferEntry.NumChunks * uint16(unsafe.Sizeof(chunkInfo{}))) +
+		currentTransferChunkOffset += uint64(currentTransferEntry.ChunkNum* uint16(unsafe.Sizeof(JobPartPlanTransferChunk{}))) +
 												uint64(currentTransferEntry.SrcLength) + uint64(currentTransferEntry.DstLength)
 	}
 
-	for index := range jobPart.Tasks{
+	for index := range jobPartOrder.Tasks{
 		currentTransferEntry := transferEntryList[index]
 		if currentEndOffsetOfFile != trasnferEntryOffsets[index]{
 			errorMsg := fmt.Sprintf(TransferTaskOffsetCalculationError, trasnferEntryOffsets[index],
 											currentEndOffsetOfFile, convertJobIdBytesToString(jPartPlan.JobId), jPartPlan.PartNo,index)
 			return errors.New(errorMsg)
 		}
-		for  cIndex := uint16(0); cIndex < currentTransferEntry.NumChunks; cIndex++ {
-			chunk := chunkInfo{[128 / 8]byte{}, ChunkTransferStatusInactive}
-			numBytesWritten, err = writeInterfaceDataToWriter(file, &chunk, uint64(unsafe.Sizeof(chunkInfo{})))
+		for  cIndex := uint16(0); cIndex < currentTransferEntry.ChunkNum; cIndex++ {
+			chunk := JobPartPlanTransferChunk{[128 / 8]byte{}, ChunkTransferStatusInactive}
+			numBytesWritten, err = writeInterfaceDataToWriter(file, &chunk, uint64(unsafe.Sizeof(JobPartPlanTransferChunk{})))
 			currentEndOffsetOfFile += uint64(numBytesWritten)
 		}
-		numBytesWritten, err = file.WriteString(jobPart.Tasks[index].Src)
+		numBytesWritten, err = file.WriteString(jobPartOrder.Tasks[index].Src)
 		if err != nil{
 			return err
 		}
 		currentEndOffsetOfFile += uint64(numBytesWritten)
-		numBytesWritten, err = file.WriteString(jobPart.Tasks[index].Dst)
+		numBytesWritten, err = file.WriteString(jobPartOrder.Tasks[index].Dst)
 		if err != nil{
 			return err
 		}
@@ -411,6 +351,7 @@ func createwriteBlockBlobJobFile(jobPart JobPart, destBlobData destinationBlobDa
 	return nil
 }
 
+//todo remove error
 func jobPartTojobPartPlan(jobPart JobPart) (JobPartPlan, error){
 	var jobID [128 /8] byte
 	versionID := jobPart.Version
@@ -433,11 +374,11 @@ func jobPartTojobPartPlan(jobPart JobPart) (JobPartPlan, error){
 }
 
 func getNumChunks(srcLocationType LocationType, dstLocationType LocationType,
-					task task, destBlobData destinationBlobData) uint16{
+					task task, destBlobData JobPartPlanBlobData) uint16{
 	return 10
 }
 
-func dataToDestinationBlobData(data blockBlobData) (destinationBlobData, error){
+func dataToDestinationBlobData(data blockBlobData) (JobPartPlanBlobData, error){
 	var contentTypeBytes [256]byte
 	var contentEncodingBytes [256]byte
 	var metaDataBytes [1000]byte
@@ -446,19 +387,19 @@ func dataToDestinationBlobData(data blockBlobData) (destinationBlobData, error){
 	contentEncoding := data.BlobData.ContentEncoding
 	metaData := data.BlobData.MetaData
 	if len(contentEncoding) > MAX_SIZE_CONTENT_ENCODING {
-		return destinationBlobData{}, errors.New(ContentEncodingLengthError)
+		return JobPartPlanBlobData{}, errors.New(ContentEncodingLengthError)
 	}
 	if len(contentType) > MAX_SIZE_CONTENT_TYPE {
-		return destinationBlobData{}, errors.New(ContentTypeLengthError)
+		return JobPartPlanBlobData{}, errors.New(ContentTypeLengthError)
 	}
 	if len(metaData) > MAX_SIZE_META_DATA {
-		return destinationBlobData{}, errors.New(MetaDataLengthError)
+		return JobPartPlanBlobData{}, errors.New(MetaDataLengthError)
 	}
 	copy(contentTypeBytes[:], contentType)
 	copy(contentEncodingBytes[:], contentEncoding)
 	copy(metaDataBytes[:], metaData)
 
-	return destinationBlobData{uint8(len(contentType)), contentTypeBytes,
+	return JobPartPlanBlobData{uint8(len(contentType)), contentTypeBytes,
 								uint8(len(contentEncoding)), contentEncodingBytes,
 								uint16(len(metaData)), metaDataBytes, uint16(blockSize)}, nil
 }

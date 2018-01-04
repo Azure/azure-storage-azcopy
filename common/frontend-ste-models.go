@@ -24,7 +24,8 @@ import (
 	"time"
 	"encoding/json"
 )
-
+type JobID string   //todo -- to uuid
+type PartNumber uint32
 // represents the raw input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
@@ -55,30 +56,30 @@ type CopyCmdArgsAndFlags struct {
 }
 
 // define the different types of sources/destinations
-type LocationType string
+type LocationType uint8
 const (
-	Local LocationType = "local"
-	Blob LocationType = "blob"
-	Unknown LocationType = "unknown"
+	Local LocationType = 0
+	Blob LocationType = 1
+	Unknown LocationType = 2
 )
 
 // This struct represent a single transfer entry with source and destination details
-type CopyTask struct {
+type CopyTransfer struct {
 	Source string
 	Destination string
-	SourceLastModifiedTime time.Time
+	LastModifiedTime time.Time   //represents the last modified time of source which ensures that source hasn't changed while transferring
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
-	JobId string   // Guid - job identifier
-	PartNumber int // part number of the job
 	Version uint32 // version of the azcopy
-	Priority uint32 // priority of the task
+	ID string   // Guid - job identifier    //todo use uuid from go sdk
+	PartNum uint32 // part number of the job
 	IsFinalPart bool // to determine the final part for a specific job
+	Priority uint8 // priority of the task
 	SourceType LocationType
 	DestinationType LocationType
-	TaskList []CopyTask
+	Transfers []CopyTransfer
 }
 
 // This struct represents the required attribute for blob request header
@@ -86,67 +87,19 @@ type BlobData struct {
 	ContentType string   //The content type specified for the blob.
 	ContentEncoding string  //Specifies which content encodings have been applied to the blob.
 	MetaData string   //User-defined name-value pairs associated with the blob
-	NoGuessMimeType bool // upload
-	PreserveLastModifiedTime bool // download
+	NoGuessMimeType bool // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime bool // when downloading, tell engine to set file's timestamp to timestamp of blob
+	BlockSize uint16
 }
 
-//This struct represents the require attribute in request header for BlockBlobTransfer
-type BlockBlobData struct {
-	JobBlobData BlobData
-	JobBlockSize uint16
-}
-
-//This struct represents the require attribute in request header for PageBlobTransfer
-type PageBlobData struct {
-	JobBlobData BlobData
-}
-
-//This struct represents the require attribute in request header for AppendBlobTransfer
-type AppendBlobData struct {
-	JobBlobData BlobData
-	BlockSize int
-}
-
-//This struct represents the Job Info for BlockBlob Transfer sent to Storage Engine
+// JobPartToBlockBlob represents the Job Info for BlockBlob Transfer sent to Storage Engine
 type JobPartToBlockBlob struct {
 	JobPart CopyJobPartOrder
-	Data BlockBlobData
+	Data BlobData
 }
 
-//This struct represents the Job Info for PageBlob Transfer sent to Storage Engine
-type JobPartToPageBlob struct {
-	JobPart CopyJobPartOrder
-	Data PageBlobData
-}
-
-//This struct represents the Job Info for AppendBlob Transfer sent to Storage Engine
-type JobPartToAppendBlob struct {
-	JobPart CopyJobPartOrder
-	Data AppendBlobData
-}
-
+// JobPartToUnknown represents the Job Info Received by Transfer Engine from Front End
 type JobPartToUnknown struct {
 	JobPart CopyJobPartOrder
 	Data json.RawMessage
-}
-
-type TransferJob struct {
-	ChunkSize uint32 // TODO make type consistent
-
-	// specify the source and its type
-	Source     string
-	SourceType LocationType
-
-	// specify the destination and its type
-	Destination     string
-	DestinationType LocationType
-
-	// testing purpose
-	// count the number of chunks that are done
-	Count uint32
-	Id uint32
-
-	ContentType string
-	ContentEncodig string
-	MetaData string
 }

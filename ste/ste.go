@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"fmt"
@@ -133,7 +133,7 @@ func ExecuteAZCopyUploadblockBlob_AS(payload jobPartToUnknown){
 
 	var jobHandler  = new(JobPartPlanInfo)
 	jobHandler.ctx, jobHandler.cancel = context.WithCancel(steContext)
-	err = (jobHandler).initializeJobPart(steContext, payload.JobPart, destBlobData, false)
+	err = (jobHandler).initialize(steContext, payload.JobPart, destBlobData, false)
 	if err != nil {
 		panic(err)
 	}
@@ -217,7 +217,7 @@ func getJobPartStatus(jobId string, partNo string)  (transfersStatus, error){
 	}
 	transferStatusList := make([]transferStatus, numTransfer)
 	for index := uint32(0); index < numTransfer; index ++{
-		transferEntry, err := jHandler.getTransferEntryForEntryIndex(index)
+		transferEntry, err := jHandler.getTransfer(index)
 		if err != nil{
 			return transfersStatus{}, err
 		}
@@ -292,28 +292,6 @@ func serveRequest(resp http.ResponseWriter, req *http.Request){
 		resp.WriteHeader(http.StatusBadRequest)
 		resp.Write([]byte(UnsuccessfulAZCopyRequest))
 	}
-}
-
-
-func reconstructTheExistingJobPart() (error){
-	files := listFileWithExtension(".STE")
-	for index := 0; index < len(files) ; index++{
-		fileName := files[index].Name()
-		fileName = strings.Split(fileName, ".")[0]
-		fileNameParts := strings.Split(fileName, "-")
-		jobIdString := fileNameParts[0]
-		partNoString := fileNameParts[1]
-		jobHandler := new(JobPartPlanInfo)
-		err := jobHandler.initializeJobPart(steContext,
-			JobPart{ jobIdString, partNoString, math.MaxUint32,math.MaxUint16,
-				false, math.MaxUint16, nil}, destinationBlobData{},
-			true)
-		if err != nil{
-			return err
-		}
-		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNoString, &JobPartInfoMap)
-	}
-	return nil
 }
 
 func CreateServer(){
