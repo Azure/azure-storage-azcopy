@@ -73,7 +73,6 @@ type CopyJobPartOrder struct {
 	Priority uint32
 	IsFinalPart bool
 
-	//TODO set these!!
 	// job metadata
 	SourceType LocationType
 	DestinationType LocationType
