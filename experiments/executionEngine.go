@@ -67,7 +67,7 @@ func main() {
 		ChunkSize: 4 * 1024 * 1024,
 		Count: 0,
 
-		Destination: "https://azcopynextgendev2.blob.core.windows.net/testcontainer/aaa2.pdf?st=2017-12-07T00%3A27%3A00Z&se=2018-12-08T00%3A27%3A00Z&sp=rwdl&sv=2016-05-31&sr=c&sig=D9xT4VAKVAHQYosYzKDY%2FaMhBrTIvlcxLORsPst6%2BuM%3D",
+		Destination: "http://azcopynextgendev2.blob.core.windows.net/testcontainer/aaa4.pdf?st=2017-12-07T00%3A27%3A00Z&se=2018-12-08T00%3A27%3A00Z&sp=rwdl&sv=2016-05-31&sr=c&sig=D9xT4VAKVAHQYosYzKDY%2FaMhBrTIvlcxLORsPst6%2BuM%3D",
 		DestinationType: common.Blob,
 
 		Source: filepath.Join("/Users/Zed/Documents/test-upload", "test.pdf"),
@@ -261,11 +261,10 @@ func generateUploadFunc(transferId int32, chunkId int32, totalNumOfChunks uint32
 		}
 
 		// step 3 check if this is the last chunk
-		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks- 1 { // this is the last block, perform EPILOGUE
+		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks { // this is the last block, perform EPILOGUE
 
 			fmt.Println("Worker", workerId, "is concluding TRANSFER job with transferId", transferId, "after processing chunkId", chunkId, "with blocklist", *blockIds)
 
-			time.Sleep(3 * time.Second)
 			_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
 			if err != nil {
 				fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with transferId", transferId, "after processing chunkId", chunkId, "due to err", err)
@@ -307,7 +306,7 @@ func generateDownloadFunc(transferId int32, chunkId int32, totalNumOfChunks uint
 		}
 
 		// step 3 check if this is the last chunk
-		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks- 1 { // this is the last block, perform EPILOGUE
+		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks { // this is the last block, perform EPILOGUE
 			err := memoryMappedFile.Unmap()
 			if err != nil {
 				fmt.Println("Worker", workerId, "is failed to conclude TRANSFER job with transferId", transferId, "after processing chunkId", chunkId)
