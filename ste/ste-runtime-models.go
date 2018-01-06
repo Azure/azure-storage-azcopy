@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"github.com/edsrzf/mmap-go"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type TransferInfo struct {
@@ -18,3 +19,8 @@ type JobPartPlanInfo struct {
 	TrasnferInfo []TransferInfo
 }
 
+type TransferMsg struct {
+	Id common.JobID
+	PartNumber common.PartNumber
+	TransferIndex uint32
+}

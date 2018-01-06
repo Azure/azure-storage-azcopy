@@ -16,11 +16,11 @@ import (
 	"strings"
 	"math"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"strconv"
 )
 
 type jobPartToUnknown common.JobPartToUnknown
-type JobPart common.CopyJobPartOrder
-var JobPartInfoMap = map[string]map[string]*JobPartPlanInfo{}
+var JobPartInfoMap = map[common.JobID]map[common.PartNumber]*JobPartPlanInfo{}
 var steContext = context.Background()
 
 func creatingTheBlockIds(numBlocks int) ([] string){
@@ -92,19 +92,19 @@ func uploadTheBlocks(ctx context.Context, blobURL azblob.BlockBlobURL,
 	return true
 }
 
-func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId string, partNo string,
-									jPartInfoMap *map[string]map[string]*JobPartPlanInfo){
+func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID, partNo common.PartNumber,
+									jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo){
 	jPartMap := (*jPartInfoMap)[jobId]
 	if jPartMap == nil {
-		(*jPartInfoMap)[jobId] = make(map[string]*JobPartPlanInfo)
+		(*jPartInfoMap)[jobId] = make(map[common.PartNumber]*JobPartPlanInfo)
 		(*jPartInfoMap)[jobId][partNo] = jobHandler
 	}else {
 		(*jPartInfoMap)[jobId][partNo] = jobHandler
 	}
 }
 
-func getJobPartInfoHandlerFromMap(jobId string, partNo string,
-										jPartInfoMap *map[string]map[string]*JobPartPlanInfo) (*JobPartPlanInfo, error){
+func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
+										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo) (*JobPartPlanInfo, error){
 	jPartMap := (*jPartInfoMap)[jobId]
 	if jPartMap == nil{
 		err := fmt.Errorf(InvalidJobId, jobId)
@@ -118,8 +118,8 @@ func getJobPartInfoHandlerFromMap(jobId string, partNo string,
 	return jHandler, nil
 }
 
-func ExecuteAZCopyUploadblockBlob_AS(payload jobPartToUnknown){
-	data := blockBlobData{}
+func ExecuteNewCopyJobPartOrder(payload jobPartToUnknown){
+	data := common.BlobData{}
 	err := json.Unmarshal(payload.Data, &data)
 	var crc [128/ 8]byte
 	copy(crc[:], CRC64BitExample)
@@ -130,44 +130,30 @@ func ExecuteAZCopyUploadblockBlob_AS(payload jobPartToUnknown){
 	if err != nil {
 		panic(err)
 	}
-
+	fileName := createJobPartPlanFile(payload.JobPart, destBlobData)
 	var jobHandler  = new(JobPartPlanInfo)
-	jobHandler.ctx, jobHandler.cancel = context.WithCancel(steContext)
-	err = (jobHandler).initialize(steContext, payload.JobPart, destBlobData, false)
+	jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
+	err = (jobHandler).initialize(jobHandler.ctx, fileName)
 	if err != nil {
 		panic(err)
 	}
 
-	putJobPartInfoHandlerIntoMap(jobHandler, payload.JobPart.JobId, payload.JobPart.JobId, &JobPartInfoMap)
+	putJobPartInfoHandlerIntoMap(jobHandler, payload.JobPart.ID, payload.JobPart.PartNum, &JobPartInfoMap)
 
-	err = jobHandler.updateTheChunkInfo(0,1, crc, ChunkTransferStatusComplete)
-	if err != nil {
-		panic(err)
-	}
-	err = jobHandler.updateTheChunkInfo(1,3, crc, ChunkTransferStatusComplete)
-	if err != nil {
-		panic(err)
-	}
-	cInfo, err := jobHandler.getChunkInfo(1,3)
-	if err != nil {
-		panic(err)
-	}
+	// Test Cases
+	jobHandler.updateTheChunkInfo(0,1, crc, ChunkTransferStatusComplete)
+
+	jobHandler.updateTheChunkInfo(1,3, crc, ChunkTransferStatusComplete)
+
+	jobHandler.getChunkInfo(1,3)
+
+	cInfo := jobHandler.getChunkInfo(1,2)
 	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
 
-	cInfo, err = jobHandler.getChunkInfo(1,2)
-	if err != nil {
-		panic(err)
-	}
+	cInfo  = jobHandler.getChunkInfo(0,1)
 	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-	cInfo, err = jobHandler.getChunkInfo(0,1)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-	cInfo, err = jobHandler.getChunkInfo(0,2)
-	if err != nil {
-		panic(err)
-	}
+
+	cInfo  = jobHandler.getChunkInfo(0,2)
 	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
 }
 
@@ -193,7 +179,7 @@ func validateAndRouteHttpPostRequest(payload jobPartToUnknown) (bool){
 	switch {
 	case payload.JobPart.SourceType == common.Local &&
 		payload.JobPart.DestinationType == common.Blob:
-		go ExecuteAZCopyUploadblockBlob_AS(payload)
+		go ExecuteNewCopyJobPartOrder(payload)
 		return true
 	case payload.JobPart.SourceType == common.Blob &&
 		payload.JobPart.DestinationType == common.Local:
@@ -206,28 +192,21 @@ func validateAndRouteHttpPostRequest(payload jobPartToUnknown) (bool){
 	return false
 }
 
-func getJobPartStatus(jobId string, partNo string)  (transfersStatus, error){
+func getJobPartStatus(jobId common.JobID, partNo common.PartNumber)  (transfersStatus, error){
 	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
 	if err != nil{
 		return transfersStatus{}, err
 	}
-	numTransfer, err := jHandler.getNumTasksInJobPartFile()
-	if err != nil{
-		return transfersStatus{}, err
-	}
+	jPartPlan := jHandler.getJobPartPlanPointer()
+	numTransfer := jPartPlan.NumTransfers
 	transferStatusList := make([]transferStatus, numTransfer)
 	for index := uint32(0); index < numTransfer; index ++{
-		transferEntry, err := jHandler.getTransfer(index)
-		if err != nil{
-			return transfersStatus{}, err
-		}
-		srcdst, err := jHandler.getTransferSrcDstDetail(index)
-		if err != nil{
-			return transfersStatus{}, err
-		}
+		transferEntry := jHandler.Transfer(index)
+
+		source, destination := jHandler.getTransferSrcDstDetail(index)
 		transferStatusList[index].Status = transferEntry.Status
-		transferStatusList[index].Src = srcdst.Src
-		transferStatusList[index].Dst = srcdst.Dst
+		transferStatusList[index].Src = source
+		transferStatusList[index].Dst = destination
 	}
 	return transfersStatus{transferStatusList}, nil
 }
@@ -251,9 +230,15 @@ func parsePostHttpRequest(req *http.Request) (jobPartToUnknown, error){
 func serveRequest(resp http.ResponseWriter, req *http.Request){
 	switch req.Method {
 	case "GET":
-		guUID := req.URL.Query()["GUID"][0]
+		var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
 		partNoString := req.URL.Query()["Part"][0]
-		tStatus, err := getJobPartStatus(guUID, partNoString)
+		partNo, err := strconv.ParseUint(partNoString, 10, 32)
+		if err != nil{
+			resp.WriteHeader(http.StatusBadRequest)
+			resp.Write([]byte(err.Error()))
+			return
+		}
+		tStatus, err := getJobPartStatus(guUID, common.PartNumber(partNo))
 		if err != nil{
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte(err.Error()))

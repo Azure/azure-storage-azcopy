@@ -46,6 +46,8 @@ type JobPartPlanTransfer struct {
 	Status       uint8
 }
 
+
+
 //todo comments
 type JobPartPlanTransferChunk struct {
 	BlockId [128 / 8]byte

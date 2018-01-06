@@ -2,11 +2,14 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"fmt"
+	"encoding/hex"
+	"io"
+	"reflect"
+	"encoding/binary"
 )
 
 func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumber){
@@ -14,30 +17,90 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 	return
 }
 
-func formatJobInfoToString(jobId common.JobID, partNo common.PartNumber) (string){
-	//todo : use sprintf
-	return ""
+func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) (string){
+	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
+	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
+	fileName := string(jobPartOrder.ID) + "-" + partNoString + ".stev" + versionIdString
+	return fileName
+}
+
+
+func convertJobIdToByteFormat(jobIDString common.JobID) ([128 / 8]byte){
+	var jobID [128 /8] byte
+	guIdBytes, err := hex.DecodeString(string(jobIDString))
+	if err != nil {
+		panic(err)
+	}
+	copy(jobID[:], guIdBytes)
+	return jobID
+}
+
+// writeInterfaceDataToWriter api writes the content of given interface to the io writer
+func writeInterfaceDataToWriter( writer io.Writer, f interface{}, structSize uint64) (int, error){
+
+	// bytesWritten keeps the track of number of actual bytes written to the writer
+	var bytesWritten uint64 = 0
+
+	// nextOffset determines the next offset at which the next element should be written
+	var nextOffset uint64= 0
+
+	// currentOffset keeps the track of end offset till which have been written to the writer
+	var currentOffset uint64 = 0
+	var padBytes [8]byte
+	// get the num of elements in interface
+	var elements = reflect.ValueOf(f).Elem()
+	for val := 0; val < elements.NumField(); val++{
+		//get the alignment of type of element
+		align := elements.Type().Field(val).Type.FieldAlign()
+
+		//rounding up the current offset to next multiple of alignment
+		nextOffset = roundUp(currentOffset, uint64(align))
+
+		/*adding 0's for the difference of number of bytes between current offset and
+		next offset to align the element*/
+		err := binary.Write(writer, binary.LittleEndian, padBytes[0: (nextOffset - currentOffset)])
+		if err != nil {
+			return 0, err
+		}
+
+		bytesWritten += uint64(nextOffset - currentOffset)
+		valueOfField := elements.Field(val)
+		elementValue := reflect.ValueOf(valueOfField.Interface()).Interface()
+		sizeElementValue := uint64(valueOfField.Type().Size())
+
+		// writing the element value to the writer
+		err = binary.Write(writer, binary.LittleEndian, elementValue)
+		if err != nil {
+			return 0, err
+		}
+		bytesWritten += sizeElementValue
+		currentOffset = bytesWritten
+	}
+
+	err := binary.Write(writer, binary.LittleEndian, padBytes[0: (structSize - bytesWritten)])
+	if err != nil {
+		return 0, err
+	}
+	bytesWritten += (structSize - bytesWritten)
+	return int(bytesWritten), nil
+}
+
+func convertJobIdBytesToString(jobId [128 /8]byte) (string){
+	jobIdString := fmt.Sprintf("%x%x%x%x%x", jobId[0:4], jobId[4:6], jobId[6:8], jobId[8:10], jobId[10:])
+	return jobIdString
 }
 
 func reconstructTheExistingJobPart() (error){
 	files := listFileWithExtension(".STE")
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
-
-		//todo : create a sep func to return job id and parts from file name
-		fileName = strings.Split(fileName, ".")[0]
-		fileNameParts := strings.Split(fileName, "-")
-		jobIdString := fileNameParts[0]
-		partNoString := fileNameParts[1]
 		jobHandler := new(JobPartPlanInfo)
-		err := jobHandler.initialize(steContext,
-			JobPart{ jobIdString, partNoString, math.MaxUint32,math.MaxUint16,
-				false, math.MaxUint16, nil}, JobPartPlanBlobData{},
-			true)
+		err := jobHandler.initialize(steContext, fileName)
 		if err != nil{
 			return err
 		}
-		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNoString, &JobPartInfoMap)
+		jobIdString, partNumber := parseStringToJobInfo(fileName)
+		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, &JobPartInfoMap)
 	}
 	return nil
 }

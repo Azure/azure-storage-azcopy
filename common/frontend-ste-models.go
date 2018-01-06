@@ -73,8 +73,8 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version uint32 // version of the azcopy
-	ID string   // Guid - job identifier    //todo use uuid from go sdk
-	PartNum uint32 // part number of the job
+	ID JobID   // Guid - job identifier    //todo use uuid from go sdk
+	PartNum PartNumber // part number of the job
 	IsFinalPart bool // to determine the final part for a specific job
 	Priority uint8 // priority of the task
 	SourceType LocationType
