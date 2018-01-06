@@ -10,6 +10,7 @@ import (
 	"io"
 	"reflect"
 	"encoding/binary"
+	"encoding/base64"
 )
 
 func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumber){
@@ -136,4 +137,21 @@ func listFileWithExtension(ext string) []os.FileInfo {
 		return nil
 	})
 	return files
+}
+
+func creatingTheBlockIds(numBlocks int) ([] string){
+	blockIDBinaryToBase64 := func(blockID []byte) string { return base64.StdEncoding.EncodeToString(blockID) }
+
+	blockIDIntToBase64 := func(blockID int) string {
+		binaryBlockID := (&[4]byte{})[:] // All block IDs are 4 bytes long
+		binary.LittleEndian.PutUint32(binaryBlockID, uint32(blockID))
+		return blockIDBinaryToBase64(binaryBlockID)
+	}
+
+	base64BlockIDs := make([]string, numBlocks)
+
+	for index := 0; index < numBlocks ; index++ {
+		base64BlockIDs[index] = blockIDIntToBase64(index)
+	}
+	return base64BlockIDs
 }

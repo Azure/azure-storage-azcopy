@@ -16,14 +16,28 @@ import (
 
 var currFileDirectory string = "."
 
+// initialize func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName string) (error){
 
+	/*
+	 *       creates the job context with cancel using the given context
+	 *       memory maps the jobpartorder file for given fileName
+	 *       gets the memory map JobPartPlanHeader for given jobpartorder
+	 *       initializes the transferInfo struct for each transfer in jobpartorder
+	 */
+
+	 // creating the context with cancel
 	job.ctx, job.cancel = context.WithCancel(jobContext)
 
+	// memory map the JobPartOrder File with given filename
 	job.memMap = memoryMapTheJobFile(fileName)
 
+	// gets the memory map JobPartPlanHeader for given JobPartOrder
 	jPartPlan := job.getJobPartPlanPointer()
 
+	// initializes the transferInfo struct for each transfer in jobpartorder
+	// Each transfer has context with cancel and numberofchunks completed
+	// NumChunkCompleted represents the number of chunks whose transaction has been completed for a transfer
 	transferInfo := make([]TransferInfo, jPartPlan.NumTransfers)
 	for index := uint32(0); index < jPartPlan.NumTransfers; index++ {
 		transferCtx, transferCancel := context.WithCancel(job.ctx)
@@ -33,6 +47,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	return nil
 }
 
+// shutDownHandler unmaps the memory map file for given JobPartOrder
 func (job *JobPartPlanInfo)shutDownHandler(){
 	if job.memMap == nil {
 		panic(errors.New(MemoryMapFileUnmappedAlreadyError))
@@ -43,59 +58,106 @@ func (job *JobPartPlanInfo)shutDownHandler(){
 	}
 }
 
+// getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 func (job *JobPartPlanInfo) getJobPartPlanPointer() (*JobPartPlanHeader){
+
+	// memMap represents the slice of memory map file of JobPartOrder
 	var memMap []byte = job.memMap
+
+	// casting the memMap slice to JobPartPlanHeader Pointer
 	jPart := (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
 	return jPart
 }
 
+// getTransferSrcDstDetail return the source and destination string for a transfer at given transferIndex in JobPartOrder
 func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (source, destination string){
+
+	// get JobPartPlanTransfer Header of transfer in JobPartOrder at given index
 	tEntry  := job.Transfer(entryIndex)
 	if tEntry == nil{
 		return
 	}
+
 	numChunks := tEntry.ChunkNum
+
+	// srcStringOffset is the startOffset of source string in memoryMap slice of JobPartOrder for a given transfer
 	srcStringOffset := tEntry.Offset + (uint64(unsafe.Sizeof(JobPartPlanTransferChunk{})) * uint64(numChunks))
+
+	// dstStringOffset is the startOffset of destination string in memoryMap slice of JobPartOrder for a given transfer
 	dstStringOffset := srcStringOffset + uint64(tEntry.SrcLength)
+
+	// srcStringSlice represents the slice of memoryMap byte slice starting from srcStringOffset
 	srcStringSlice := job.memMap[srcStringOffset : srcStringOffset + uint64(tEntry.SrcLength)]
+
+	// dstStringSlice represents the slice of memoryMap byte slice starting from dstStringOffset
 	dstStringSlice := job.memMap[dstStringOffset : dstStringOffset + uint64(tEntry.DstLength)]
+
 	srcString := string(srcStringSlice)
 	dstString := string(dstStringSlice)
 	return srcString, dstString
 }
 
+// Transfer api gives memory map JobPartPlanTransfer header for given index
 func (job *JobPartPlanInfo) Transfer(index uint32) (*JobPartPlanTransfer){
+
+	// get memory map JobPartPlan Header Pointer
 	jPartPlan := job.getJobPartPlanPointer()
 	if index >= jPartPlan.NumTransfers {
 		panic(errors.New("transfer %d of JobPart %s does not exists. Transfer Index exceeds number of transfer for this JobPart"))
 	}
-	transferEntryOffsetIndex := uint64(unsafe.Sizeof(*jPartPlan)) + uint64(unsafe.Sizeof(JobPartPlanBlobData{})) + (uint64(unsafe.Sizeof(JobPartPlanTransfer{})) * uint64(index))
+
+	// transferEntryOffsetIndex is the start offset of transfer header in memory map
+	transferEntryOffsetIndex := uint64(unsafe.Sizeof(*jPartPlan))  + ((uint64(unsafe.Sizeof(JobPartPlanTransfer{})) * uint64(index)))
+
+	// transferEntrySlice represents the slice of job part order memory map starting from transferEntryOffsetIndex
 	transferEntrySlice := job.memMap[transferEntryOffsetIndex :]
+
+	// Casting Slice into transfer header Pointer
 	tEntry := (*JobPartPlanTransfer)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&transferEntrySlice)).Data))
 	return tEntry
 }
 
+
+// updateTheChunkInfo api updates the memory map JobPartPlanTransferHeader for transfer and chunk at given index
 func (job *JobPartPlanInfo)updateTheChunkInfo(transferIndex uint32, chunkIndex uint16,
 													crc [128 / 8]byte, status uint8) {
+	// get memory map JobPartPlanHeader
 	jPartPlan := job.getJobPartPlanPointer()
+
+	// get memory map JobPartPlanTransferChunk Header
 	cInfo := job.getChunkInfo(transferIndex, chunkIndex)
+
+	//copy the given CRC into chunk's blockId
 	copy(cInfo.BlockId[:],crc[:])
+
+	//updating the chunk status with given status
 	cInfo.Status = status
 	result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
 	fmt.Println(result)
 }
 
+// getChunkInfo returns the memory map JobPartPlanTransferChunkHeader for given transfer and chunk index of JobPartOrder
 func (job JobPartPlanInfo)getChunkInfo(transferIndex uint32, chunkIndex uint16)(*JobPartPlanTransferChunk){
 
+	// get memory map JobPartPlanHeader
 	jPartPlan := job.getJobPartPlanPointer()
+
+	// get memory map JobPartPlanTransfer header for given transferIndex
 	tEntry := job.Transfer(transferIndex)
+
+	// Check to verify the bound of chunkIndex
 	if chunkIndex >= tEntry.ChunkNum {
 		errorMsg := fmt.Sprintf("given chunk %d of transfer %d of JobPart %s does not exists. Chunk Index exceeds number of chunks for transfer",
 								chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
 		panic (errors.New(errorMsg))
 	}
+
 	chunkInfoOffset := tEntry.Offset
+
+	// chunkInfoByteSlice represents the slice of memorymap buffer starting from chunkInfoOffset
 	chunkInfoByteSlice := job.memMap[chunkInfoOffset :]
+
+	// casting the chunkInfoByteSlice to memory map JobPartPlanTransferChunk header
 	chunkInfo := (*JobPartPlanTransferChunk)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&chunkInfoByteSlice)).Data))
 	return chunkInfo
 }
@@ -144,6 +206,7 @@ func fileAlreadyExists(fileName string, dir string) (bool, error){
 	return false, nil
 }
 
+// createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
 func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPlanBlobData) (string){
 	var currentEndOffsetOfFile uint64 = 0
 	/*

@@ -10,11 +10,7 @@ import (
 	"os"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"bytes"
-	"strings"
-	"math"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"strconv"
 )
@@ -22,23 +18,6 @@ import (
 type jobPartToUnknown common.JobPartToUnknown
 var JobPartInfoMap = map[common.JobID]map[common.PartNumber]*JobPartPlanInfo{}
 var steContext = context.Background()
-
-func creatingTheBlockIds(numBlocks int) ([] string){
-	blockIDBinaryToBase64 := func(blockID []byte) string { return base64.StdEncoding.EncodeToString(blockID) }
-
-	blockIDIntToBase64 := func(blockID int) string {
-		binaryBlockID := (&[4]byte{})[:] // All block IDs are 4 bytes long
-		binary.LittleEndian.PutUint32(binaryBlockID, uint32(blockID))
-		return blockIDBinaryToBase64(binaryBlockID)
-	}
-
-	base64BlockIDs := make([]string, numBlocks)
-
-	for index := 0; index < numBlocks ; index++ {
-		base64BlockIDs[index] = blockIDIntToBase64(index)
-	}
-	return base64BlockIDs
-}
 
 func uploadTheBlocksSequentially(ctx context.Context, blobUrl azblob.BlockBlobURL,
 	memMap mmap.MMap, base64BlockIDs []string) (bool){
