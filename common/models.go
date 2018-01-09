@@ -52,11 +52,11 @@ type CopyCmdArgsAndFlags struct {
 }
 
 // define the different types of sources/destinations
-type LocationType string
+type LocationType uint8
 const (
-	Local LocationType = "local"
-	Blob LocationType = "blob"
-	Unknown LocationType = "unknown"
+	Local LocationType = 1
+	Blob LocationType = 2
+	Unknown LocationType = 3
 )
 
 // represents a single copy task
