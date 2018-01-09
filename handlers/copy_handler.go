@@ -63,6 +63,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 }
 
 func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
+	// set the source and destination type
+	jobPartOrderToFill.SourceType = common.Local
+	jobPartOrderToFill.DestinationType = common.Blob
+
 	sourceFileInfo, err := os.Stat(commandLineInput.Source)
 
 	// since source was already validated, it would be surprising if file/directory cannot be accessed at this point
@@ -101,7 +105,12 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		for _, f := range files {
 			if !f.IsDir() {
 				destinationUrl.Path = fmt.Sprintf("%s/%s", cleanContainerPath, f.Name())
-				taskList = append(taskList, common.CopyTransfer{Source: path.Join(commandLineInput.Source, f.Name()), Destination: destinationUrl.String()})
+				taskList = append(taskList, common.CopyTask{
+					Source:           path.Join(commandLineInput.Source, f.Name()),
+					Destination:      destinationUrl.String(),
+					LastModifiedTime: f.ModTime(),
+					SizeInBytes:      f.Size(),
+				})
 				numInTaskList += 1
 
 				if numInTaskList == NumOfFilesPerUploadJobPart {
@@ -130,9 +139,14 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		if !strings.Contains(destinationUrl.Path[1:], "/") {
 			destinationUrl.Path = fmt.Sprintf("%s/%s", destinationUrl.Path, sourceFileInfo.Name())
 		}
-		//fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String())
-		singleTask := common.CopyTransfer{Source: commandLineInput.Source, Destination: destinationUrl.String()}
-		jobPartOrderToFill.TaskList = []common.CopyTransfer{singleTask}
+		fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String(), "with size", sourceFileInfo.Size())
+		singleTask := common.CopyTask{
+			Source:           commandLineInput.Source,
+			Destination:      destinationUrl.String(),
+			LastModifiedTime: sourceFileInfo.ModTime(),
+			SizeInBytes:      sourceFileInfo.Size(),
+		}
+		jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
 		jobPartOrderToFill.PartNumber = 0
 		jobPartOrderToFill.IsFinalPart = true
 		DispatchJobPartOrder(jobPartOrderToFill)
@@ -140,6 +154,10 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 }
 
 func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
+	// set the source and destination type
+	jobPartOrderToFill.SourceType = common.Blob
+	jobPartOrderToFill.DestinationType = common.Local
+
 	// attempt to parse the container/blob url
 	sourceUrl, err := url.Parse(commandLineInput.Source)
 	if err != nil {
@@ -153,7 +171,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 
 		// create the destination if it does not exist
 		if os.IsNotExist(err) {
-			if len(sourcePathParts) <  2 { // create the directory is the source is a container
+			if len(sourcePathParts) <  2 { // create the directory if the source is a container
 				err = os.MkdirAll(commandLineInput.Destination, os.ModePerm)
 				if err != nil {
 					panic("failed to create the destination on the local file system")
@@ -168,14 +186,25 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 
 	// source is a single blob
 	if len(sourcePathParts) > 1 {
+		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
+		blobProperties, err := blobUrl.GetPropertiesAndMetadata(context.Background(), azblob.BlobAccessConditions{})
+		if err != nil {
+			panic("Cannot get blob properties")
+		}
+
 		if destinationFileInfo.IsDir() { // destination is dir, therefore the file name needs to be generated
 			blobName := sourcePathParts[1]
-			singleTask := common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobName)}
-			jobPartOrderToFill.TaskList = []common.CopyTransfer{singleTask}
-		} else { // destination is file, no need to generate file name
-			singleTask := common.CopyTransfer{Source: sourceUrl.String(), Destination: commandLineInput.Destination}
-			jobPartOrderToFill.TaskList = []common.CopyTransfer{singleTask}
+			commandLineInput.Destination = path.Join(commandLineInput.Destination, blobName)
 		}
+
+		singleTask := common.CopyTask{
+			Source: sourceUrl.String(),
+			Destination: commandLineInput.Destination,
+			LastModifiedTime:blobProperties.LastModified(),
+			SizeInBytes:blobProperties.ContentLength(),
+		}
+		jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
 		jobPartOrderToFill.IsFinalPart = true
 		jobPartOrderToFill.PartNumber = 0
 		DispatchJobPartOrder(jobPartOrderToFill)
@@ -203,7 +232,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
 				sourceUrl.Path = cleanContainerPath + "/" + blobInfo.Name
-				taskList = append(taskList, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name)})
+				taskList = append(taskList, common.CopyTask{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime:blobInfo.Properties.LastModified, SizeInBytes:*blobInfo.Properties.ContentLength})
 			}
 			jobPartOrderToFill.TaskList = taskList
 			jobPartOrderToFill.PartNumber = partNumber
