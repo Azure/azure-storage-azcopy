@@ -105,3 +105,27 @@ type JobPartToUnknown struct {
 	JobPart CopyJobPartOrder
 	Data json.RawMessage
 }
+type JobProgressSummary struct {
+	CompleteJobOrdered                       bool
+	TotalNumberOfTransfer                    uint32
+	TotalNumberofTransferCompleted           uint32
+	NumberOfTransferCompletedafterCheckpoint uint32
+	NumberOfTransferFailedAfterCheckpoint    uint32
+	PercentageProgress                       uint32
+	FailedTransfers                          []TransferStatus
+}
+
+type JobProgressQuery struct {
+	JobId JobID
+	LastCheckPointTimestamp uint64
+}
+
+type TransferStatus struct {
+	Src string
+	Dst string
+	Status uint8
+}
+
+type TransfersStatus struct {
+	Status []TransferStatus
+}

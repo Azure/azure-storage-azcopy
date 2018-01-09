@@ -135,12 +135,15 @@ func reconstructTheExistingJobPart() (error){
 	files := listFileWithExtension(".stev")
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
+		jobIdString, partNumber, versionNumber := parseStringToJobInfo(fileName)
+		if versionNumber != dataSchemaVersion{
+			continue
+		}
 		jobHandler := new(JobPartPlanInfo)
 		err := jobHandler.initialize(steContext, fileName)
 		if err != nil{
 			return err
 		}
-		jobIdString, partNumber, versionNumber := parseStringToJobInfo(fileName)
 		//fmt.Println("jobID & partno ", jobIdString, " ", partNumber, " ", versionNumber)
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, &JobPartInfoMap)
 	}

@@ -13,8 +13,51 @@ import (
 	"crypto/rand"
 	"os/exec"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"strconv"
 )
 
+
+func fetchJobStatus(jobId string) (error){
+	url := "http://localhost:1337"
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil{
+		return err
+	}
+
+	q := req.URL.Query()
+	q.Add("type", "JobStatus")
+	q.Add("GUID", jobId)
+	q.Add("CheckpointTime", strconv.FormatUint(uint64(time.Now().Nanosecond()), 10))
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil{
+		return err
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		fmt.Println("request failed with status ", resp.Status)
+	}
+
+	defer resp.Body.Close()
+	body, err:= ioutil.ReadAll(resp.Body)
+	if err != nil{
+		return err
+	}
+	var summary common.JobProgressSummary
+	json.Unmarshal(body, &summary)
+	fmt.Println("JobId ", jobId)
+	fmt.Println("", summary.TotalNumberOfTransfer)
+	fmt.Println("", summary.TotalNumberofTransferCompleted)
+	fmt.Println("", summary.CompleteJobOrdered)
+	fmt.Println("", summary.NumberOfTransferCompletedafterCheckpoint)
+	fmt.Println("", summary.NumberOfTransferFailedAfterCheckpoint)
+	for index := 0; index < len(summary.FailedTransfers); index++ {
+		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s status: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst, summary.FailedTransfers[index])
+		fmt.Println(message)
+	}
+	return nil
+}
 
 func fetchJobPartStatus(jobId string , partNo string) (error){
 	url := "http://localhost:1337"
@@ -25,6 +68,7 @@ func fetchJobPartStatus(jobId string , partNo string) (error){
 	}
 
 	q := req.URL.Query()
+	q.Add("type", "PartStatus")
 	q.Add("GUID", jobId)
 	q.Add("Part", partNo)
 	req.URL.RawQuery = q.Encode()
@@ -42,7 +86,7 @@ func fetchJobPartStatus(jobId string , partNo string) (error){
 	if err != nil{
 		return err
 	}
-	var status transfersStatus
+	var status common.TransfersStatus
 	json.Unmarshal(body, &status)
 	for index := 0; index < len(status.Status); index++{
 		message := fmt.Sprintf("Source %s  Destination %s Status %d", status.Status[index].Src, status.Status[index].Dst, status.Status[index].Status)
@@ -92,7 +136,7 @@ func sendUploadRequestToSTE(sourceFileName string, targetfileName string) {
 		panic(err)
 	}
 	fmt.Println("Response to request", res.Status, " ", body)
-	time.Sleep(20 * time.Second)
+	time.Sleep(5 * time.Second)
 	fetchJobPartStatus(guId, "0")
 }
 
@@ -197,11 +241,11 @@ func main(){
 				os.Exit(1)
 			}
 			if *partNo == "" {
-				printCommand.PrintDefaults()
-				os.Exit(1)
+				fetchJobStatus(*guid)
+			}else {
+				fetchJobPartStatus(*guid, *partNo)
 			}
 		}
-		fetchJobPartStatus(*guid, *partNo)
 
 	case "StartSTE":
 		//InitTransferEngine()

@@ -72,7 +72,7 @@ const (
 	TransferTaskOffsetCalculationError = "calculated offset %d and actual offset %d of Job %s part %d and transfer entry %d does not match"
 	InvalidJobId = "no active job for Job Id %s"
 	InvalidPartNo = "no active part %s for Job Id %s"
-	TransferStatusMarshallingError = "error marshalling the transfer status for Job Id %s and part No %s"
+	TransferStatusMarshallingError = "error marshalling the transfer status for Job Id %s and part No %d"
 	InvalidHttpRequestBody = "the http Request Does not have a valid body definition"
 	HttpRequestBodyReadError = "error reading the HTTP Request Body"
 	HttpRequestUnmarshalError = "error UnMarshalling the HTTP Request Body"
@@ -97,6 +97,7 @@ const (
 	TransferStatusActive = 1
 	TransferStatusProgress = 2
 	TransferStatusComplete = 3
+	TransferStatusFailed = 4
 )
 
 const (
@@ -125,16 +126,6 @@ const (
 	CONTAINER_NAME = "mycontainer"
 	CRC64BitExample ="AFC0A0012976B444"
 )
-
-type transferStatus struct {
-	Src string
-	Dst string
-	Status uint8
-}
-
-type transfersStatus struct {
-	Status []transferStatus
-}
 
 type statusQuery struct {
 	Guid string

@@ -85,6 +85,15 @@ func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobI
 	}
 }
 
+func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
+										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo)  (jPartMap map[common.PartNumber]*JobPartPlanInfo){
+	jPartMap = (*jPartInfoMap)[jobId]
+	if jPartMap == nil{
+		return
+	}
+	return jPartMap
+}
+
 func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo) (*JobPartPlanInfo, error){
 	jPartMap := (*jPartInfoMap)[jobId]
@@ -196,24 +205,120 @@ func validateAndRouteHttpPostRequest(payload common.JobPartToUnknown) (bool){
 	return false
 }
 
-func getJobPartStatus(jobId common.JobID, partNo common.PartNumber)  (transfersStatus, error){
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
-	if err != nil{
-		fmt.Println("Error ", err.Error())
-		return transfersStatus{}, err
+// getJobStatus api returns the job progress summary of an active job
+/*
+	* Return following Properties in Job Progress Summary
+	* CompleteJobOrdered - determines whether final part of job has been ordered or not
+	* TotalNumberOfTransfer - total number of transfers available for the given job
+	* TotalNumberofTransferCompleted - total number of transfers in the job completed
+	* NumberOfTransferCompletedafterCheckpoint - number of transfers completed after the last checkpoint
+	* NumberOfTransferFailedAfterCheckpoint - number of transfers failed after last checkpoint timestamp
+	* PercentageProgress - job progress reported in terms of percentage
+	* FailedTransfers - list of transfer after last checkpoint timestamp that failed.
+ */
+func getJobStatus(jobId common.JobID, lastCheckPointTimeStamp uint64, resp *http.ResponseWriter){
+
+	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
+	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, &JobPartInfoMap)
+
+	// if partNumber to JobPartPlanInfo Pointer map is nil, then returning error
+	if jPartMap == nil{
+		(*resp).WriteHeader(http.StatusBadRequest)
+		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
+		(*resp).Write([]byte(errorMsg))
+		return
 	}
+
+	// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
+	var completeJobOrdered bool = false
+	// failedTransfers represents the list of transfers which failed after the last checkpoint timestamp
+	var failedTransfers []common.TransferStatus
+
+	progressSummary := common.JobProgressSummary{}
+	for partNo, jHandler := range jPartMap{
+		fmt.Println("part no ", partNo)
+
+		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
+		currentJobPartPlanInfo := jHandler.getJobPartPlanPointer()
+
+		completeJobOrdered = completeJobOrdered || currentJobPartPlanInfo.IsFinalPart
+		progressSummary.TotalNumberOfTransfer += currentJobPartPlanInfo.NumTransfers
+
+		// iterating through all transfers for current partNo and job with given jobId
+		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++{
+
+			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
+			transferHeader := jHandler.Transfer(index)
+
+			// if transferHeader completionTime is greater than lastCheckPointTimeStamp, it means the transfer was updated after lastCheckPointTimeStamp
+			if transferHeader.CompletionTime > lastCheckPointTimeStamp {
+				// check for completed transfer
+				if transferHeader.Status == TransferStatusComplete{
+					progressSummary.NumberOfTransferCompletedafterCheckpoint += 1
+				}else if transferHeader.Status == TransferStatusFailed{ // check for failed transfer
+					progressSummary.NumberOfTransferFailedAfterCheckpoint += 1
+					// getting the source and destination for failed transfer at position - index
+					source, destination := jHandler.getTransferSrcDstDetail(index)
+					// appending to list of failed transfer
+					failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, TransferStatusFailed})
+				}
+			}
+			// check for all completed transfer to calculate the progress percentage at the end
+			if transferHeader.Status == TransferStatusComplete{
+				progressSummary.TotalNumberofTransferCompleted += 1
+			}
+		}
+	}
+	progressSummary.CompleteJobOrdered = completeJobOrdered
+	progressSummary.FailedTransfers = failedTransfers
+	progressSummary.PercentageProgress = progressSummary.TotalNumberofTransferCompleted / progressSummary.TotalNumberOfTransfer * 100
+
+	// marshalling the JobProgressSummary struct to send back in response.
+	jobProgressSummaryJson, err := json.MarshalIndent(progressSummary, "", "")
+	if err != nil{
+		result := fmt.Sprintf("error marshalling the progress summary for Job Id %s", jobId)
+		(*resp).WriteHeader(http.StatusInternalServerError)
+		(*resp).Write([]byte(result))
+		return
+	}
+	(*resp).WriteHeader(http.StatusAccepted)
+	(*resp).Write(jobProgressSummaryJson)
+}
+
+func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, resp *http.ResponseWriter) {
+	// getJobPartInfoHandlerFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+	// sending back the error status and error message in response
+	if err != nil{
+		(*resp).WriteHeader(http.StatusBadRequest)
+		(*resp).Write([]byte(err.Error()))
+		return
+	}
+	// jPartPlan represents the memory map JobPartPlanHeader for given jobid and part number
 	jPartPlan := jHandler.getJobPartPlanPointer()
 	numTransfer := jPartPlan.NumTransfers
-	transferStatusList := make([]transferStatus, numTransfer)
-	for index := uint32(0); index < numTransfer; index ++{
-		transferEntry := jHandler.Transfer(index)
 
+	// trasnferStatusList represents the list containing number of transfer for given jobid and part number
+	transferStatusList := make([]common.TransferStatus, numTransfer)
+	for index := uint32(0); index < numTransfer; index ++{
+		// getting transfer header of transfer at index index for given jobId and part number
+		transferEntry := jHandler.Transfer(index)
+		// getting source and destination of a transfer at index index for given jobId and part number.
 		source, destination := jHandler.getTransferSrcDstDetail(index)
 		transferStatusList[index].Status = transferEntry.Status
 		transferStatusList[index].Src = source
 		transferStatusList[index].Dst = destination
 	}
-	return transfersStatus{transferStatusList}, nil
+	// marshalling the TransfersStatus Struct to send back in response to front-end
+	tStatusJson, err := json.MarshalIndent(common.TransfersStatus{transferStatusList}, "", "")
+	if err != nil{
+		result := fmt.Sprintf(TransferStatusMarshallingError, jobId, partNo)
+		(*resp).WriteHeader(http.StatusInternalServerError)
+		(*resp).Write([]byte(result))
+		return
+	}
+	(*resp).WriteHeader(http.StatusAccepted)
+	(*resp).Write(tStatusJson)
 }
 
 func parsePostHttpRequest(req *http.Request) (common.JobPartToUnknown, error){
@@ -235,28 +340,32 @@ func parsePostHttpRequest(req *http.Request) (common.JobPartToUnknown, error){
 func serveRequest(resp http.ResponseWriter, req *http.Request){
 	switch req.Method {
 	case "GET":
+		var queryType = req.URL.Query()["type"][0]
+		switch queryType{
+		case "JobStatus":
 		var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-		partNoString := req.URL.Query()["Part"][0]
-		partNo, err := strconv.ParseUint(partNoString, 10, 32)
+			checkPointTime, err := strconv.ParseUint(req.URL.Query()["CheckpointTime"][0], 10, 64)
 		if err != nil{
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte(err.Error()))
 			return
 		}
-		tStatus, err := getJobPartStatus(guUID, common.PartNumber(partNo))
+			getJobStatus(guUID, checkPointTime, &resp)
+
+		case "PartStatus":
+			var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
+			partNoString := req.URL.Query()["Part"][0]
+			partNo, err := strconv.ParseUint(partNoString, 10, 32)
 		if err != nil{
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte(err.Error()))
-		}else{
-			tStatusJson, err := json.MarshalIndent(tStatus, "", "")
-			if err != nil{
-				result := fmt.Sprintf(TransferStatusMarshallingError, guUID, partNoString)
-				resp.WriteHeader(http.StatusInternalServerError)
-				resp.Write([]byte(result))
-			}else{
-				resp.WriteHeader(http.StatusAccepted)
-				resp.Write(tStatusJson)
+				return
 			}
+			getJobPartStatus(guUID, common.PartNumber(partNo), &resp)
+
+		default:
+			resp.WriteHeader(http.StatusBadRequest)
+			resp.Write([]byte("operation not supported"))
 		}
 
 	case "POST":
@@ -284,20 +393,26 @@ func serveRequest(resp http.ResponseWriter, req *http.Request){
 	}
 }
 
+// processJobPartOrder api takes JobPartOrder from JobOrderChannel and execute it
 func processJobPartOrder(){
 	fmt.Println("Routine For processing Job Order Started")
+	// check to verify if transferEngineChannel has been initialized or not. If not then initializes it.
+	// since multiple routines can access the transferEngineChannel pointer at same time, loading pointer through atomic operation to avoid race condition
 	teChannelUnsafePointer := unsafe.Pointer(transferEngineChannel)
 	if atomic.LoadPointer(&teChannelUnsafePointer) == nil{
 		initializedChannels()
 	}
+	// taking the JobPartOrderChannel from TransferEngineChannels
 	jobPartOrderChannel := transferEngineChannel.JobOrderChan
 	for {
 		select {
 		case job := <- jobPartOrderChannel:
 			fmt.Println("Started processing Job Order")
+			//processing new Copy Job Part Order
 			ExecuteNewCopyJobPartOrder(job)
 		default:
-			time.Sleep(1 * time.Second)
+			// routine is set to sleep for 3 seconds in case there is no JobPartOrder to execute further in channel
+			time.Sleep(3 * time.Second)
 		}
 	}
 }
@@ -311,15 +426,23 @@ func CreateServer(){
 	}
 }
 
+// initializedChannels initializes the channels used further by coordinator and execution engine
 func initializedChannels(){
 	fmt.Println("Initializing Channels")
+	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	HighTransferMsgChannel := make(chan TransferMsg, 500)
+	// MedTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	MedTransferMsgChannel := make(chan TransferMsg, 500)
+	// LowTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	LowTransferMsgChannel := make(chan TransferMsg, 500)
+	// JobPartOrderChannel takes JobPartOrder from main routine of coordinator and feed to processJobPartOrder routine
 	JobPartOrderChannel := make(chan common.JobPartToUnknown, 500)
 
+	// HighChunkMsgChannel queues high priority job part transfer chunk transactions
 	HighChunkMsgChannel := make(chan ChunkMsg, 500)
+	// MedChunkMsgChannel queues medium priority job part transfer chunk transactions
 	MedChunkMsgChannel := make(chan ChunkMsg, 500)
+	// LowChunkMsgChannel queues low priority job part transfer chunk transactions
 	LowChunkMsgChannel := make(chan ChunkMsg, 500)
 
 	transferEngineChannel = new(TEChannels)
