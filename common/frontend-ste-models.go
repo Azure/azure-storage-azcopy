@@ -27,6 +27,7 @@ import (
 type JobID string   //todo -- to uuid
 type PartNumber uint32
 type Version	uint32
+
 // represents the raw input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
@@ -105,10 +106,22 @@ type JobPartToUnknown struct {
 	JobPart CopyJobPartOrder
 	Data json.RawMessage
 }
+
+// ExistingJobDetails represent the Job with JobId and
+type ExistingJobDetails struct {
+	JobIds [] JobID
+}
+
+type JobOrderDetails struct {
+	PartsDetail []JobPartDetails
+}
+
 type JobProgressSummary struct {
 	CompleteJobOrdered                       bool
+	//JobStatus								 uint8
 	TotalNumberOfTransfer                    uint32
 	TotalNumberofTransferCompleted           uint32
+	TotalNumberofFailedTransfer				 uint32
 	NumberOfTransferCompletedafterCheckpoint uint32
 	NumberOfTransferFailedAfterCheckpoint    uint32
 	PercentageProgress                       uint32
@@ -118,6 +131,10 @@ type JobProgressSummary struct {
 type JobProgressQuery struct {
 	JobId JobID
 	LastCheckPointTimestamp uint64
+}
+type JobPartDetails struct{
+	PartNum PartNumber
+	TransferDetails []TransferStatus
 }
 
 type TransferStatus struct {

@@ -25,6 +25,14 @@ type TransferMsg struct {
 	TransferIndex uint32
 }
 
+type TransferMsgDetail struct {
+	TransferId      uint32
+	ChunkSize       uint16
+	SourceType      common.LocationType
+	Source          string
+	DestinationType common.LocationType
+	Destination     string
+}
 type ChunkMsg struct {
 
 }

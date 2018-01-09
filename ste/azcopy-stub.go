@@ -17,7 +17,7 @@ import (
 )
 
 
-func fetchJobStatus(jobId string) (error){
+func listActiveJobs() (error){
 	url := "http://localhost:1337"
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
@@ -26,9 +26,85 @@ func fetchJobStatus(jobId string) (error){
 	}
 
 	q := req.URL.Query()
+	q.Add("type", "JobListing")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil{
+		return err
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		fmt.Println("request failed with status ", resp.Status)
+	}
+
+	defer resp.Body.Close()
+	body, err:= ioutil.ReadAll(resp.Body)
+	if err != nil{
+		return err
+	}
+	var jobList common.ExistingJobDetails
+	json.Unmarshal(body, &jobList)
+	fmt.Println("Existing Jobs")
+	for index := 0; index < len(jobList.JobIds); index++ {
+		message := fmt.Sprintf("JobId %s", jobList.JobIds[index])
+		fmt.Println(message)
+	}
+	return nil
+}
+
+func getJobDetails(jobId string) (error){
+	url := "http://localhost:1337"
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil{
+		return err
+	}
+
+	q := req.URL.Query()
+	q.Add("type", "JobDetail")
+	q.Add("GUID", jobId)
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := client.Do(req)
+	if err != nil{
+		return err
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		fmt.Println("request failed with status ", resp.Status)
+	}
+
+	defer resp.Body.Close()
+	body, err:= ioutil.ReadAll(resp.Body)
+	if err != nil{
+		return err
+	}
+	var jobDetail common.JobOrderDetails
+	json.Unmarshal(body, &jobDetail)
+	fmt.Println("Existing Jobs")
+	for index := 0; index < len(jobDetail.PartsDetail); index++ {
+		message := fmt.Sprintf("---------- Details for JobId %s and Part Number %d ---------------", jobId, jobDetail.PartsDetail[index].PartNum)
+		fmt.Println(message)
+		for tIndex := 0; tIndex < len(jobDetail.PartsDetail[index].TransferDetails); tIndex++{
+			message := fmt.Sprintf("--- transfer Id - %d; Source - %s; Destination - %s", index, jobDetail.PartsDetail[index].TransferDetails[tIndex].Src,
+																											jobDetail.PartsDetail[index].TransferDetails[tIndex].Dst)
+			fmt.Println(message)
+		}
+	}
+	return nil
+}
+
+func fetchJobStatus(jobId string) (error){
+	url := "http://localhost:1337"
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil{
+		return err
+	}
+	checkPointTime := time.Now()
+	q := req.URL.Query()
 	q.Add("type", "JobStatus")
 	q.Add("GUID", jobId)
-	q.Add("CheckpointTime", strconv.FormatUint(uint64(time.Now().Nanosecond()), 10))
+	q.Add("CheckpointTime", strconv.FormatUint(uint64(checkPointTime.Nanosecond()), 10))
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := client.Do(req)
@@ -46,14 +122,17 @@ func fetchJobStatus(jobId string) (error){
 	}
 	var summary common.JobProgressSummary
 	json.Unmarshal(body, &summary)
-	fmt.Println("JobId ", jobId)
-	fmt.Println("", summary.TotalNumberOfTransfer)
-	fmt.Println("", summary.TotalNumberofTransferCompleted)
-	fmt.Println("", summary.CompleteJobOrdered)
-	fmt.Println("", summary.NumberOfTransferCompletedafterCheckpoint)
-	fmt.Println("", summary.NumberOfTransferFailedAfterCheckpoint)
+	fmt.Println("-----------------Progress Summary for JobId ", jobId," ------------------")
+	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfer)
+	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
+	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)
+	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
+	fmt.Println("Last CheckPoint Time ", checkPointTime)
+	fmt.Println("Number of Transfer Completed After CheckPoint", summary.NumberOfTransferCompletedafterCheckpoint)
+	fmt.Println("Number of Transfer Failed After CheckPoint", summary.NumberOfTransferFailedAfterCheckpoint)
+	fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
 	for index := 0; index < len(summary.FailedTransfers); index++ {
-		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s status: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst, summary.FailedTransfers[index])
+		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s status: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
 		fmt.Println(message)
 	}
 	return nil
@@ -95,17 +174,13 @@ func fetchJobPartStatus(jobId string , partNo string) (error){
 	return nil
 }
 
-func sendUploadRequestToSTE(sourceFileName string, targetfileName string) {
-	guId,err := newUUID()
-	if err != nil {
-		panic(err)
-	}
+func sendUploadRequestToSTE(guId string, partNumber uint32, sourceFileName string, targetfileName string) {
 	fmt.Println("Sending Upload Request TO STE")
 	url := "http://localhost:1337"
 	payload := common.JobPartToBlockBlob{
 		common.CopyJobPartOrder{1,
 			common.JobID(guId),
-			0,
+			common.PartNumber(partNumber),
 			false,
 			HighJobPriority,
 			common.Local,
@@ -119,7 +194,7 @@ func sendUploadRequestToSTE(sourceFileName string, targetfileName string) {
 						sourceFileName,
 						targetfileName,
 						time.Now(), 10}}},
-		common.BlobData{"","", "", false, false, 1000}}
+		common.BlobData{"","", "", false, false, 2}}
 
 	payloadData, err := json.MarshalIndent(payload, "", "")
 	fmt.Println("Marshalled Data ", string(payloadData))
@@ -198,6 +273,9 @@ func main(){
 	guid := statusCommand.String("guid", "", "")
 	partNo := statusCommand.String("part", "", "")
 
+	listCommand := flag.NewFlagSet("list", flag.ExitOnError)
+	jobId := listCommand.String("jobId", "", "")
+
 	if len(os.Args) < 1 {
 		fmt.Println("No Command Provided")
 		os.Exit(1)
@@ -232,7 +310,12 @@ func main(){
 				os.Exit(1)
 			}
 		}
-		sendUploadRequestToSTE(*sourceFileName, *targetFileName)
+		guId,err := newUUID()
+		if err != nil {
+			panic(err)
+		}
+		sendUploadRequestToSTE(guId, 0, *sourceFileName, *targetFileName)
+		sendUploadRequestToSTE(guId, 1, *sourceFileName, *targetFileName)
 	case "status":
 		statusCommand.Parse(os.Args[2:])
 		if statusCommand.Parsed(){
@@ -246,7 +329,16 @@ func main(){
 				fetchJobPartStatus(*guid, *partNo)
 			}
 		}
-
+	case "list":
+		listCommand.Parse(os.Args[2:])
+		if listCommand.Parsed(){
+			if *jobId == ""{
+				listActiveJobs()
+			}else{
+				fmt.Println("getting job details")
+				getJobDetails(*jobId)
+			}
+		}
 	case "StartSTE":
 		//InitTransferEngine()
 

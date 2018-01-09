@@ -272,8 +272,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		// currentTransferEntry represents the JobPartPlan Transfer Header of a transfer.
 		currentTransferEntry := JobPartPlanTransfer{currentTransferChunkOffset, uint16(len(jobPartOrder.Transfers[index].Source)),
 			uint16(len(jobPartOrder.Transfers[index].Destination)),
-			getNumChunks(jobPartOrder.SourceType, jobPartOrder.DestinationType,
-				jobPartOrder.Transfers[index], data),
+			getNumChunks(jobPartOrder.Transfers[index], data),
 			uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()), TransferStatusInactive, jobPartOrder.Transfers[index].FileSizeinKB, 0}
 		numBytesWritten, err = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		if err != nil{
@@ -337,14 +336,21 @@ func jobPartTojobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 	jPartInFile := JobPartPlanHeader{versionID, jobID, uint32(partNo),
 					jobPart.IsFinalPart,DefaultJobPriority, TTA,
 		jobPart.SourceType, jobPart.DestinationType,
-		numTransfer, data}
+		numTransfer,  data}
 	return jPartInFile
 }
 
 // getNumChunks api returns the number of chunks depending on source Type and destination type
-func getNumChunks(srcLocationType common.LocationType, dstLocationType common.LocationType,
-					transfer common.CopyTransfer, destBlobData JobPartPlanBlobData) uint16{
-	return 10
+func getNumChunks(transfer common.CopyTransfer, destBlobData JobPartPlanBlobData) uint16{
+	if destBlobData.BlockSizeInKB == 0{
+		errorMsg := fmt.Sprintf("invalid block size for transfer from %s to %s", transfer.Source, transfer.Destination)
+		panic(errors.New(errorMsg))
+	}
+	if transfer.FileSizeinKB % uint32(destBlobData.BlockSizeInKB) == 0 {
+		return uint16(transfer.FileSizeinKB / uint32(destBlobData.BlockSizeInKB))
+	}else{
+		return uint16(transfer.FileSizeinKB / uint32(destBlobData.BlockSizeInKB)) + 1
+	}
 }
 
 // dataToDestinationBlobData api creates memory map JobPartPlanBlobData from BlobData sent in the request from-end
@@ -383,4 +389,18 @@ func dataToDestinationBlobData(data common.BlobData) (JobPartPlanBlobData, error
 	return JobPartPlanBlobData{uint8(len(contentType)), contentTypeBytes,
 								uint8(len(contentEncoding)), contentEncodingBytes,
 								uint16(len(metaData)), metaDataBytes, uint16(blockSize)}, nil
+}
+
+func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32) (TransferMsgDetail){
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+	if err != nil{
+		panic(err)
+	}
+	jPartPlanPointer := jHandler.getJobPartPlanPointer()
+	sourceType := jPartPlanPointer.SrcLocationType
+	destinationType := jPartPlanPointer.DstLocationType
+	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
+	chunkSize := jPartPlanPointer.BlobData.BlockSizeInKB
+	return TransferMsgDetail{transferEntryIndex, chunkSize, sourceType,
+											source, destinationType, destination}
 }
