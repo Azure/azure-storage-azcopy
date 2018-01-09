@@ -273,7 +273,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentTransferEntry := JobPartPlanTransfer{currentTransferChunkOffset, uint16(len(jobPartOrder.Transfers[index].Source)),
 			uint16(len(jobPartOrder.Transfers[index].Destination)),
 			getNumChunks(jobPartOrder.Transfers[index], data),
-			uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()), TransferStatusInactive, jobPartOrder.Transfers[index].FileSizeinKB, 0}
+			uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()), TransferStatusInactive, uint64(jobPartOrder.Transfers[index].SourceSize), 0}
 		numBytesWritten, err = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		if err != nil{
 			panic(err)
@@ -346,22 +346,23 @@ func getNumChunks(transfer common.CopyTransfer, destBlobData JobPartPlanBlobData
 		errorMsg := fmt.Sprintf("invalid block size for transfer from %s to %s", transfer.Source, transfer.Destination)
 		panic(errors.New(errorMsg))
 	}
-	if transfer.FileSizeinKB % uint32(destBlobData.BlockSizeInKB) == 0 {
-		return uint16(transfer.FileSizeinKB / uint32(destBlobData.BlockSizeInKB))
+	// TODO might overflow, check for 500000 as max
+	if uint64(transfer.SourceSize) % uint64(destBlobData.BlockSizeInKB) == 0 {
+		return uint16(uint64(transfer.SourceSize) / uint64(destBlobData.BlockSizeInKB))
 	}else{
-		return uint16(transfer.FileSizeinKB / uint32(destBlobData.BlockSizeInKB)) + 1
+		return uint16(uint64(transfer.SourceSize) / uint64(destBlobData.BlockSizeInKB)) + 1
 	}
 }
 
 // dataToDestinationBlobData api creates memory map JobPartPlanBlobData from BlobData sent in the request from-end
-func dataToDestinationBlobData(data common.BlobData) (JobPartPlanBlobData, error){
+func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanBlobData, error){
 	var contentTypeBytes [256]byte
 	var contentEncodingBytes [256]byte
 	var metaDataBytes [1000]byte
-	blockSize := data.BlockSizeinKB
+	blockSize := data.BlockSizeinBytes
 	contentType := data.ContentType
 	contentEncoding := data.ContentEncoding
-	metaData := data.MetaData
+	metaData := data.Metadata
 	// check to verify whether content-length exceeds maximum content encoding length or not
 	if len(contentEncoding) > MAX_SIZE_CONTENT_ENCODING {
 		return JobPartPlanBlobData{}, errors.New(ContentEncodingLengthError)
