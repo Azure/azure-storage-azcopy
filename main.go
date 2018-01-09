@@ -20,7 +20,7 @@
 
 package main
 
-import "github.com/zezha-msft/azs/cmd"
+import "github.com/Azure/azure-storage-azcopy/cmd"
 
 func main() {
 	cmd.Execute()

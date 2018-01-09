@@ -20,6 +20,8 @@
 
 package common
 
+import "time"
+
 // represents the raw input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
@@ -60,8 +62,10 @@ const (
 // represents a single copy task
 // source and destination are both entities (file, blob)
 type CopyTask struct {
-	Source string
-	Destination string
+	Source           string
+	Destination      string
+	LastModifiedTime time.Time
+	SizeInBytes      int64
 }
 
 // represents the job info (a single part) to be sent to the storage engine
