@@ -98,7 +98,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 
 		// temporarily save the path of the container
 		cleanContainerPath := destinationUrl.Path
-		var taskList []common.CopyTask
+		var taskList []common.CopyTransfer
 		numInTaskList := 0
 		partNumber := 0
 
@@ -118,7 +118,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 					jobPartOrderToFill.PartNumber = partNumber
 					partNumber += 1
 					DispatchJobPartOrder(jobPartOrderToFill)
-					taskList = []common.CopyTask{}
+					taskList = []common.CopyTransfer{}
 					numInTaskList = 0
 				}
 			}
@@ -127,7 +127,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		if numInTaskList != 0 {
 			jobPartOrderToFill.TaskList = taskList
 		} else {
-			jobPartOrderToFill.TaskList = []common.CopyTask{}
+			jobPartOrderToFill.TaskList = []common.CopyTransfer{}
 		}
 		jobPartOrderToFill.PartNumber = partNumber
 		jobPartOrderToFill.IsFinalPart = true
@@ -217,7 +217,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 		containerUrl := azblob.NewContainerURL(*sourceUrl, p)
 		// temporarily save the path of the container
 		cleanContainerPath := sourceUrl.Path
-		var taskList []common.CopyTask
+		var taskList []common.CopyTransfer
 		partNumber := 0
 
 		// iterate over the container
