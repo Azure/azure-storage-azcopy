@@ -11,11 +11,51 @@ import (
 	"reflect"
 	"encoding/binary"
 	"encoding/base64"
+	"strings"
+	"strconv"
+	"errors"
 )
 
-func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumber){
-	//todo : use scanf
-	return
+// parseStringToJobInfo api parses the file name to extract the job Id, part number and schema version number
+// Returns the JobId, PartNumber and data schema version
+func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumber, version common.Version){
+
+	/*
+		* Split string using delimeter '-'
+		* First part of string is JobId
+		* Other half of string contains part number and version number separated by '.'
+		* split other half using '.' as delimeter
+	    * first half of this split is part number while the other half is version number with stev as prefix
+	    * remove the stev prefix from version number
+	    * parse part number string and version number string into uint32 integer
+	 */
+	// split the s string using '-' which separates the jobId from the rest of string in filename
+	parts := strings.Split(s, "-")
+	jobIdString := parts[0]
+	partNo_versionNo := parts[1]
+
+	// after jobId string, partNo and schema version are separated using '.'
+	parts = strings.Split(partNo_versionNo, ".")
+	partNoString := parts[0]
+
+	// removing 'stev' prefix from version number
+	versionString := parts[1][4:]
+
+	// parsing part number string into uint32 integer
+	partNo64, err := strconv.ParseUint(partNoString, 10, 32)
+	if err != nil{
+		errMsg := fmt.Sprintf("error parsing the mememory map file name %s", s)
+		panic(errors.New(errMsg))
+	}
+
+	// parsing version number string into uint32 integer
+	versionNo64, err := strconv.ParseUint(versionString, 10, 32)
+	if err != nil{
+		errMsg := fmt.Sprintf("error parsing the mememory map file name %s", s)
+		panic(errors.New(errMsg))
+	}
+	fmt.Println(" string ", common.JobID(jobIdString), " ", common.PartNumber(partNo64), " ", common.Version(versionNo64))
+	return common.JobID(jobIdString), common.PartNumber(partNo64), common.Version(versionNo64)
 }
 
 func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) (string){
@@ -92,7 +132,7 @@ func convertJobIdBytesToString(jobId [128 /8]byte) (string){
 }
 
 func reconstructTheExistingJobPart() (error){
-	files := listFileWithExtension(".STE")
+	files := listFileWithExtension(".stev")
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
 		jobHandler := new(JobPartPlanInfo)
@@ -100,7 +140,8 @@ func reconstructTheExistingJobPart() (error){
 		if err != nil{
 			return err
 		}
-		jobIdString, partNumber := parseStringToJobInfo(fileName)
+		jobIdString, partNumber, versionNumber := parseStringToJobInfo(fileName)
+		//fmt.Println("jobID & partno ", jobIdString, " ", partNumber, " ", versionNumber)
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, &JobPartInfoMap)
 	}
 	return nil

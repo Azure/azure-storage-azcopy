@@ -26,6 +26,7 @@ import (
 )
 type JobID string   //todo -- to uuid
 type PartNumber uint32
+type Version	uint32
 // represents the raw input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
@@ -65,9 +66,10 @@ const (
 
 // This struct represent a single transfer entry with source and destination details
 type CopyTransfer struct {
-	Source string
-	Destination string
-	LastModifiedTime time.Time   //represents the last modified time of source which ensures that source hasn't changed while transferring
+	Source           string
+	Destination      string
+	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
+	FileSizeinKB     uint32    // size of the file in KB
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -84,12 +86,12 @@ type CopyJobPartOrder struct {
 
 // This struct represents the required attribute for blob request header
 type BlobData struct {
-	ContentType string   //The content type specified for the blob.
-	ContentEncoding string  //Specifies which content encodings have been applied to the blob.
-	MetaData string   //User-defined name-value pairs associated with the blob
-	NoGuessMimeType bool // represents user decision to interpret the content-encoding from source file
+	ContentType              string   //The content type specified for the blob.
+	ContentEncoding          string  //Specifies which content encodings have been applied to the blob.
+	MetaData                 string   //User-defined name-value pairs associated with the blob
+	NoGuessMimeType          bool // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool // when downloading, tell engine to set file's timestamp to timestamp of blob
-	BlockSize uint16
+	BlockSizeinKB            uint16
 }
 
 // JobPartToBlockBlob represents the Job Info for BlockBlob Transfer sent to Storage Engine

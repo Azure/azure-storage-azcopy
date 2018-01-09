@@ -352,7 +352,7 @@ func dataToDestinationBlobData(data common.BlobData) (JobPartPlanBlobData, error
 	var contentTypeBytes [256]byte
 	var contentEncodingBytes [256]byte
 	var metaDataBytes [1000]byte
-	blockSize := data.BlockSize
+	blockSize := data.BlockSizeinKB
 	contentType := data.ContentType
 	contentEncoding := data.ContentEncoding
 	metaData := data.MetaData

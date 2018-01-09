@@ -12,6 +12,7 @@ import (
 	"io"
 	"crypto/rand"
 	"os/exec"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 
@@ -57,22 +58,25 @@ func sendUploadRequestToSTE(sourceFileName string, targetfileName string) {
 	}
 	fmt.Println("Sending Upload Request TO STE")
 	url := "http://localhost:1337"
-	payload := jobPartToBlockBlob{
-		JobPart{1,
-			guId,
-			"0",
-			blockBlobLocation,
-			azureFileLocation,
-			[]task{
-				task{
+	payload := common.JobPartToBlockBlob{
+		common.CopyJobPartOrder{1,
+			common.JobID(guId),
+			0,
+			false,
+			HighJobPriority,
+			common.Local,
+			common.Blob,
+			[]common.CopyTransfer{
+				common.CopyTransfer{
 					sourceFileName,
-					time.Now(),
-					targetfileName}, {
-					sourceFileName,
-					time.Now(),
-					targetfileName}}},
-		blockBlobData{blobData{"text", "NA", ""}, 1000}}
-	//payload := AzCopyCommandPayload{sourceFileName, targetfileName, REQUEST_COMMAND_AZCOPY_UPLOAD, azCopyUploadAttributes}
+					targetfileName,
+					time.Now(), 10},
+					common.CopyTransfer{
+						sourceFileName,
+						targetfileName,
+						time.Now(), 10}}},
+		common.BlobData{"","", "", false, false, 1000}}
+
 	payloadData, err := json.MarshalIndent(payload, "", "")
 	fmt.Println("Marshalled Data ", string(payloadData))
 	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payloadData))
@@ -170,7 +174,7 @@ func main(){
 		}
 	case "debug":
 		go func(){
-			InitTransferEngine()
+			//InitTransferEngine()
 		}()
 	case "print":
 		printCommand.Parse(os.Args[2:])
@@ -200,7 +204,7 @@ func main(){
 		fetchJobPartStatus(*guid, *partNo)
 
 	case "StartSTE":
-		InitTransferEngine()
+		//InitTransferEngine()
 
 	default:
 		flag.PrintDefaults()

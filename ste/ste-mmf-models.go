@@ -1,8 +1,6 @@
 package ste
 
 import (
-	"time"
-	"encoding/json"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -11,7 +9,6 @@ import (
 const dataSchemaVersion = 1 // To be Incremented every time when we release azcopy with changed dataschema
 
 // JobPartPlan represent the header of Job Part's Memory Map File
-//todo add comments
 type JobPartPlanHeader struct {
 	Version uint32 // represent the version of data schema format
 	Id [128 / 8] byte
@@ -25,7 +22,6 @@ type JobPartPlanHeader struct {
 	BlobData JobPartPlanBlobData
 }
 
-//todo add comments
 type JobPartPlanBlobData struct {
 	ContentTypeLength     uint8
 	ContentType           [256]byte
@@ -36,14 +32,15 @@ type JobPartPlanBlobData struct {
 	BlockSizeInKB         uint16
 }
 
-//todo comments
 type JobPartPlanTransfer struct {
-	Offset       uint64
-	SrcLength    uint16
-	DstLength    uint16
-	ChunkNum     uint16
-	ModifiedTime uint32
-	Status       uint8
+	Offset         uint64
+	SrcLength      uint16
+	DstLength      uint16
+	ChunkNum       uint16
+	ModifiedTime   uint32
+	Status         uint8
+	FileSizeinKB   uint32
+	CompletionTime uint64
 }
 
 

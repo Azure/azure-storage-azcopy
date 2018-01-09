@@ -24,3 +24,24 @@ type TransferMsg struct {
 	PartNumber common.PartNumber
 	TransferIndex uint32
 }
+
+type ChunkMsg struct {
+
+}
+
+type TEChannels struct{
+	HighTransfer chan <- TransferMsg
+	MedTransfer chan <- TransferMsg
+	LowTransfer chan <- TransferMsg
+	JobOrderChan chan common.JobPartToUnknown
+}
+
+type EEChannels struct {
+	HighTransfer <- chan TransferMsg
+	MedTransfer <- chan TransferMsg
+	LowTransfer <- chan TransferMsg
+
+	HighChunkTransaction chan ChunkMsg
+	MedChunkTransaction chan ChunkMsg
+	LowChunkTransaction chan ChunkMsg
+}
