@@ -91,6 +91,7 @@ const (
 	ChunkTransferStatusActive = 1
 	ChunkTransferStatusProgress = 2
 	ChunkTransferStatusComplete = 3
+	ChunkTransferStatusFailed = 4
 )
 
 const (

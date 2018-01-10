@@ -199,3 +199,25 @@ func creatingTheBlockIds(numBlocks int) ([] string){
 	}
 	return base64BlockIDs
 }
+
+func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32) (TransferMsgDetail){
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+	if err != nil{
+		panic(err)
+	}
+	jPartPlanPointer := jHandler.getJobPartPlanPointer()
+	sourceType := jPartPlanPointer.SrcLocationType
+	destinationType := jPartPlanPointer.DstLocationType
+	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
+	chunkSize := jPartPlanPointer.BlobData.BlockSizeInKB
+	return TransferMsgDetail{jobId, partNo,transferEntryIndex, chunkSize, sourceType,
+		source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx, jHandler.TrasnferInfo[transferEntryIndex].cancel}
+}
+
+func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8) {
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+	if err != nil{
+		panic(err)
+	}
+	jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 /8]byte{}, status)
+}

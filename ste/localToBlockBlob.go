@@ -98,11 +98,11 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
-			// TODO: update chunk status as failed
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
 			return
 		}
 
-		// TODO: update chunk status as success
+		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete)
 		// step 4: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 			// step 5: this is the last block, perform EPILOGUE

@@ -80,7 +80,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed")
-			// TODO: update chunk status as failed
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
 			return
 		}
 
@@ -91,11 +91,11 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because writing to file for startIndex of", startIndex, "has failed")
-			// TODO: update chunk status as failed
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
 			return
 		}
 
-		// TODO: update chunk status as success
+		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete)
 
 		// step 3: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {

@@ -392,16 +392,3 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 								uint16(len(metaData)), metaDataBytes, uint64(blockSize)}, nil
 }
 
-func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32) (TransferMsgDetail){
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
-	if err != nil{
-		panic(err)
-	}
-	jPartPlanPointer := jHandler.getJobPartPlanPointer()
-	sourceType := jPartPlanPointer.SrcLocationType
-	destinationType := jPartPlanPointer.DstLocationType
-	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
-	chunkSize := jPartPlanPointer.BlobData.BlockSizeInKB
-	return TransferMsgDetail{jobId, partNo,transferEntryIndex, chunkSize, sourceType,
-											source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx, jHandler.TrasnferInfo[transferEntryIndex].cancel}
-}
