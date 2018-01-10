@@ -22,7 +22,6 @@ package common
 
 import (
 	"time"
-	"encoding/json"
 )
 type JobID string   //todo -- to uuid
 type PartNumber uint32
@@ -46,7 +45,7 @@ type CopyCmdArgsAndFlags struct {
 	WithSnapshots  bool
 
 	// options from flags
-	BlockSize                int
+	BlockSize                uint16
 	BlobType                 string
 	BlobTier                 string
 	Metadata                 string
@@ -70,7 +69,7 @@ type CopyTransfer struct {
 	Source           string
 	Destination      string
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
-	FileSizeinKB     uint32    // size of the file in KB
+	SourceSize     	 int64    // size of the source entity in bytes
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
@@ -83,28 +82,17 @@ type CopyJobPartOrder struct {
 	SourceType LocationType
 	DestinationType LocationType
 	Transfers []CopyTransfer
+	OptionalAttributes BlobTransferAttributes
 }
 
-// This struct represents the required attribute for blob request header
-type BlobData struct {
+// This struct represents the optional attribute for blob request header
+type BlobTransferAttributes struct {
 	ContentType              string   //The content type specified for the blob.
 	ContentEncoding          string  //Specifies which content encodings have been applied to the blob.
-	MetaData                 string   //User-defined name-value pairs associated with the blob
+	Metadata                 string   //User-defined name-value pairs associated with the blob
 	NoGuessMimeType          bool // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool // when downloading, tell engine to set file's timestamp to timestamp of blob
-	BlockSizeinKB            uint16
-}
-
-// JobPartToBlockBlob represents the Job Info for BlockBlob Transfer sent to Storage Engine
-type JobPartToBlockBlob struct {
-	JobPart CopyJobPartOrder
-	Data BlobData
-}
-
-// JobPartToUnknown represents the Job Info Received by Transfer Engine from Front End
-type JobPartToUnknown struct {
-	JobPart CopyJobPartOrder
-	Data json.RawMessage
+	BlockSizeinBytes         uint16
 }
 
 // ExistingJobDetails represent the Job with JobId and

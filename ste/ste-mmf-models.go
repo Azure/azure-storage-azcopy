@@ -40,7 +40,7 @@ type JobPartPlanTransfer struct {
 	ChunkNum       uint16
 	ModifiedTime   uint32
 	Status         uint8
-	FileSizeinKB   uint32
+	SourceSize     uint64
 	CompletionTime uint64
 }
 

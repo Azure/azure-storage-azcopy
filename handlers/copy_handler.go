@@ -51,7 +51,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	if err != nil {
 		panic("Failed to generate job id")
 	}
-	jobPartOrder.JobId = uuid
+	jobPartOrder.ID = common.JobID(uuid)
 
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
 		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder)
@@ -98,38 +98,38 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 
 		// temporarily save the path of the container
 		cleanContainerPath := destinationUrl.Path
-		var taskList []common.CopyTransfer
-		numInTaskList := 0
+		var Transfers []common.CopyTransfer
+		numInTransfers := 0
 		partNumber := 0
 
 		for _, f := range files {
 			if !f.IsDir() {
 				destinationUrl.Path = fmt.Sprintf("%s/%s", cleanContainerPath, f.Name())
-				taskList = append(taskList, common.CopyTask{
+				Transfers = append(Transfers, common.CopyTransfer{
 					Source:           path.Join(commandLineInput.Source, f.Name()),
 					Destination:      destinationUrl.String(),
 					LastModifiedTime: f.ModTime(),
-					SizeInBytes:      f.Size(),
+					SourceSize:      f.Size(),
 				})
-				numInTaskList += 1
+				numInTransfers += 1
 
-				if numInTaskList == NumOfFilesPerUploadJobPart {
-					jobPartOrderToFill.TaskList = taskList //TODO make truth, more defensive, consider channel
-					jobPartOrderToFill.PartNumber = partNumber
+				if numInTransfers == NumOfFilesPerUploadJobPart {
+					jobPartOrderToFill.Transfers = Transfers //TODO make truth, more defensive, consider channel
+					jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 					partNumber += 1
 					DispatchJobPartOrder(jobPartOrderToFill)
-					taskList = []common.CopyTransfer{}
-					numInTaskList = 0
+					Transfers = []common.CopyTransfer{}
+					numInTransfers = 0
 				}
 			}
 		}
 
-		if numInTaskList != 0 {
-			jobPartOrderToFill.TaskList = taskList
+		if numInTransfers != 0 {
+			jobPartOrderToFill.Transfers = Transfers
 		} else {
-			jobPartOrderToFill.TaskList = []common.CopyTransfer{}
+			jobPartOrderToFill.Transfers = []common.CopyTransfer{}
 		}
-		jobPartOrderToFill.PartNumber = partNumber
+		jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 		jobPartOrderToFill.IsFinalPart = true
 		DispatchJobPartOrder(jobPartOrderToFill)
 
@@ -140,14 +140,14 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 			destinationUrl.Path = fmt.Sprintf("%s/%s", destinationUrl.Path, sourceFileInfo.Name())
 		}
 		fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String(), "with size", sourceFileInfo.Size())
-		singleTask := common.CopyTask{
+		singleTask := common.CopyTransfer{
 			Source:           commandLineInput.Source,
 			Destination:      destinationUrl.String(),
 			LastModifiedTime: sourceFileInfo.ModTime(),
-			SizeInBytes:      sourceFileInfo.Size(),
+			SourceSize:      sourceFileInfo.Size(),
 		}
-		jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
-		jobPartOrderToFill.PartNumber = 0
+		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
+		jobPartOrderToFill.PartNum = 0
 		jobPartOrderToFill.IsFinalPart = true
 		DispatchJobPartOrder(jobPartOrderToFill)
 	}
@@ -198,15 +198,15 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 			commandLineInput.Destination = path.Join(commandLineInput.Destination, blobName)
 		}
 
-		singleTask := common.CopyTask{
+		singleTask := common.CopyTransfer{
 			Source: sourceUrl.String(),
 			Destination: commandLineInput.Destination,
 			LastModifiedTime:blobProperties.LastModified(),
-			SizeInBytes:blobProperties.ContentLength(),
+			SourceSize:blobProperties.ContentLength(),
 		}
-		jobPartOrderToFill.TaskList = []common.CopyTask{singleTask}
+		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.IsFinalPart = true
-		jobPartOrderToFill.PartNumber = 0
+		jobPartOrderToFill.PartNum = 0
 		DispatchJobPartOrder(jobPartOrderToFill)
 	} else { // source is a container
 		if !destinationFileInfo.IsDir() {
@@ -217,7 +217,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 		containerUrl := azblob.NewContainerURL(*sourceUrl, p)
 		// temporarily save the path of the container
 		cleanContainerPath := sourceUrl.Path
-		var taskList []common.CopyTransfer
+		var Transfers []common.CopyTransfer
 		partNumber := 0
 
 		// iterate over the container
@@ -232,10 +232,10 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
 				sourceUrl.Path = cleanContainerPath + "/" + blobInfo.Name
-				taskList = append(taskList, common.CopyTask{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime:blobInfo.Properties.LastModified, SizeInBytes:*blobInfo.Properties.ContentLength})
+				Transfers = append(Transfers, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime:blobInfo.Properties.LastModified, SourceSize:*blobInfo.Properties.ContentLength})
 			}
-			jobPartOrderToFill.TaskList = taskList
-			jobPartOrderToFill.PartNumber = partNumber
+			jobPartOrderToFill.Transfers = Transfers
+			jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 			partNumber += 1
 			if !marker.NotDone() { // if there is no more segment
 				jobPartOrderToFill.IsFinalPart = true
@@ -249,15 +249,19 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 }
 
 func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
-	jobPartOrderToFill.BlockSize = commandLineInput.BlockSize
-	jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
-	jobPartOrderToFill.ContentType = commandLineInput.ContentType
-	jobPartOrderToFill.Acl = commandLineInput.Acl
-	jobPartOrderToFill.BlobTier = commandLineInput.BlobTier
-	jobPartOrderToFill.ContentEncoding = commandLineInput.ContentEncoding
-	jobPartOrderToFill.Metadata = commandLineInput.Metadata
-	jobPartOrderToFill.NoGuessMimeType = commandLineInput.NoGuessMimeType
-	jobPartOrderToFill.PreserveLastModifiedTime = commandLineInput.PreserveLastModifiedTime
+	optionalAttributes := common.BlobTransferAttributes{
+		BlockSizeinBytes: commandLineInput.BlockSize,
+		ContentType: commandLineInput.ContentType,
+		ContentEncoding: commandLineInput.ContentEncoding,
+		Metadata: commandLineInput.Metadata,
+		NoGuessMimeType: commandLineInput.NoGuessMimeType,
+		PreserveLastModifiedTime: commandLineInput.PreserveLastModifiedTime,
+	}
+
+	jobPartOrderToFill.OptionalAttributes = optionalAttributes
+	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
+	//jobPartOrderToFill.Acl = commandLineInput.Acl
+	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier
 }
 
 func DispatchJobPartOrder(jobPartOrder *common.CopyJobPartOrder)  {

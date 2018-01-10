@@ -111,7 +111,7 @@ func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 }
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown, coordiatorChannels *TEChannels){
+func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *TEChannels){
 	/*
 		* Convert the blobdata to memory map compatible DestinationBlobData
 		* Create a file for JobPartOrder and write data into that file.
@@ -119,18 +119,14 @@ func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown, coordiatorChann
 		*  Create a JobPartInfo pointer for the new job and put it into the map
 		* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
-	data := common.BlobData{}
-	err := json.Unmarshal(payload.Data, &data)
+	data := payload.OptionalAttributes
 	var crc [128/ 8]byte
 	copy(crc[:], CRC64BitExample)
-	if err != nil {
-		panic(err)
-	}
 	destBlobData, err := dataToDestinationBlobData(data)
 	if err != nil {
 		panic(err)
 	}
-	fileName := createJobPartPlanFile(payload.JobPart, destBlobData)
+	fileName := createJobPartPlanFile(payload, destBlobData)
 	var jobHandler  = new(JobPartPlanInfo)
 	jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
 	err = (jobHandler).initialize(jobHandler.ctx, fileName)
@@ -138,15 +134,15 @@ func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown, coordiatorChann
 		panic(err)
 	}
 
-	putJobPartInfoHandlerIntoMap(jobHandler, payload.JobPart.ID, payload.JobPart.PartNum, &JobPartInfoMap)
+	putJobPartInfoHandlerIntoMap(jobHandler, payload.ID, payload.PartNum, &JobPartInfoMap)
 
 	if coordiatorChannels == nil{
 		panic(errors.New("channel not initialized"))
 	}
 	numTransfer := jobHandler.getJobPartPlanPointer().NumTransfers
 	for index := uint32(0); index < numTransfer; index ++{
-		transferMsg := TransferMsg{payload.JobPart.ID, payload.JobPart.PartNum, index}
-		switch payload.JobPart.Priority{
+		transferMsg := TransferMsg{payload.ID, payload.PartNum, index}
+		switch payload.Priority{
 		case HighJobPriority:
 			coordiatorChannels.HighTransfer <- transferMsg
 		case MediumJobPriority:
@@ -189,18 +185,18 @@ func unMappingtheMemoryMapFile(mMap mmap.MMap, file *os.File){
 	}
 }
 
-func ExecuteAZCopyDownload(payload common.JobPartToUnknown){
+func ExecuteAZCopyDownload(payload common.CopyJobPartOrder){
 	fmt.Println("Executing the AZ Copy Download Request in different Go Routine ")
 }
 
-func validateAndRouteHttpPostRequest(payload common.JobPartToUnknown, coordintorChannels *TEChannels) (bool){
+func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *TEChannels) (bool){
 	switch {
-	case payload.JobPart.SourceType == common.Local &&
-		payload.JobPart.DestinationType == common.Blob:
+	case payload.SourceType == common.Local &&
+		payload.DestinationType == common.Blob:
 			ExecuteNewCopyJobPartOrder(payload, coordintorChannels)
 			return true
-	case payload.JobPart.SourceType == common.Blob &&
-		payload.JobPart.DestinationType == common.Local:
+	case payload.SourceType == common.Blob &&
+		payload.DestinationType == common.Local:
 		go ExecuteAZCopyDownload(payload)
 		return true
 	default:
@@ -380,8 +376,8 @@ func getJobOrderDetails(jobId common.JobID, resp *http.ResponseWriter){
 	(*resp).Write(jobPartDetailJson)
 }
 
-func parsePostHttpRequest(req *http.Request) (common.JobPartToUnknown, error){
-	var payload common.JobPartToUnknown
+func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error){
+	var payload common.CopyJobPartOrder
 	if req.Body == nil{
 		return payload, errors.New(InvalidHttpRequestBody)
 	}
