@@ -41,7 +41,6 @@ type TEChannels struct{
 	HighTransfer chan <- TransferMsg
 	MedTransfer chan <- TransferMsg
 	LowTransfer chan <- TransferMsg
-	JobOrderChan chan common.JobPartToUnknown
 }
 
 type EEChannels struct {

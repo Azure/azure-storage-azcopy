@@ -13,15 +13,10 @@ import (
 	"bytes"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"strconv"
-	"time"
-	"sync/atomic"
-	"unsafe"
 )
 
 var JobPartInfoMap = map[common.JobID]map[common.PartNumber]*JobPartPlanInfo{}
 var steContext = context.Background()
-var transferEngineChannel *TEChannels
-var executionEngineChanel *EEChannels
 
 func uploadTheBlocksSequentially(ctx context.Context, blobUrl azblob.BlockBlobURL,
 	memMap mmap.MMap, base64BlockIDs []string) (bool){
@@ -67,7 +62,7 @@ func uploadTheBlocks(ctx context.Context, blobURL azblob.BlockBlobURL,
 		panic ("STE: uploadTheBlocks Invalid params passed to the function")
 	}
 	_, err := blobURL.PutBlock(ctx, blockID, bytes.NewReader(dataBuffer), azblob.LeaseAccessConditions{})
-	if(err != nil){
+	if err != nil {
 		fmt.Println("Uploading Failed For url %s and blockId %s with err %s", blobURL.String(), blockID, err)
 		return false
 	}
@@ -75,17 +70,21 @@ func uploadTheBlocks(ctx context.Context, blobURL azblob.BlockBlobURL,
 	return true
 }
 
+// putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID, partNo common.PartNumber,
 									jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo){
+	// get map[common.PartNumber]*JobPartPlanInfo for given jobId and part number
 	jPartMap := (*jPartInfoMap)[jobId]
+	// If no map exists, then creating a new map map[common.PartNumber]*JobPartPlanInfo for given jobId
 	if jPartMap == nil {
 		(*jPartInfoMap)[jobId] = make(map[common.PartNumber]*JobPartPlanInfo)
 		(*jPartInfoMap)[jobId][partNo] = jobHandler
-	}else {
+	}else { // if map exists for given jobId then putting JobPartPlanInfo Pointer for given part number
 		(*jPartInfoMap)[jobId][partNo] = jobHandler
 	}
 }
 
+// getJobPartMapFromJobPartInfoMap api gets the map[common.PartNumber]*JobPartPlanInfo for given jobId and part number from map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo)  (jPartMap map[common.PartNumber]*JobPartPlanInfo){
 	jPartMap = (*jPartInfoMap)[jobId]
@@ -95,6 +94,7 @@ func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 	return jPartMap
 }
 
+// getJobPartInfoHandlerFromMap
 func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo) (*JobPartPlanInfo, error){
 	jPartMap := (*jPartInfoMap)[jobId]
@@ -111,7 +111,7 @@ func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 }
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown){
+func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown, coordiatorChannels *TEChannels){
 	/*
 		* Convert the blobdata to memory map compatible DestinationBlobData
 		* Create a file for JobPartOrder and write data into that file.
@@ -140,7 +140,7 @@ func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown){
 
 	putJobPartInfoHandlerIntoMap(jobHandler, payload.JobPart.ID, payload.JobPart.PartNum, &JobPartInfoMap)
 
-	if transferEngineChannel == nil{
+	if coordiatorChannels == nil{
 		panic(errors.New("channel not initialized"))
 	}
 	numTransfer := jobHandler.getJobPartPlanPointer().NumTransfers
@@ -148,11 +148,11 @@ func ExecuteNewCopyJobPartOrder(payload common.JobPartToUnknown){
 		transferMsg := TransferMsg{payload.JobPart.ID, payload.JobPart.PartNum, index}
 		switch payload.JobPart.Priority{
 		case HighJobPriority:
-			transferEngineChannel.HighTransfer <- transferMsg
+			coordiatorChannels.HighTransfer <- transferMsg
 		case MediumJobPriority:
-			transferEngineChannel.MedTransfer <- transferMsg
+			coordiatorChannels.MedTransfer <- transferMsg
 		case LowJobPriority:
-			transferEngineChannel.LowTransfer <- transferMsg
+			coordiatorChannels.LowTransfer <- transferMsg
 		default:
 			fmt.Println("invalid job part order priority")
 		}
@@ -193,15 +193,11 @@ func ExecuteAZCopyDownload(payload common.JobPartToUnknown){
 	fmt.Println("Executing the AZ Copy Download Request in different Go Routine ")
 }
 
-func validateAndRouteHttpPostRequest(payload common.JobPartToUnknown) (bool){
+func validateAndRouteHttpPostRequest(payload common.JobPartToUnknown, coordintorChannels *TEChannels) (bool){
 	switch {
 	case payload.JobPart.SourceType == common.Local &&
 		payload.JobPart.DestinationType == common.Blob:
-			teChannelUnsafePtr := unsafe.Pointer(transferEngineChannel)
-			if atomic.LoadPointer(&teChannelUnsafePtr) == nil{
-				initializedChannels()
-			}
-			transferEngineChannel.JobOrderChan <- payload
+			ExecuteNewCopyJobPartOrder(payload, coordintorChannels)
 			return true
 	case payload.JobPart.SourceType == common.Blob &&
 		payload.JobPart.DestinationType == common.Local:
@@ -400,7 +396,7 @@ func parsePostHttpRequest(req *http.Request) (common.JobPartToUnknown, error){
 	return payload, nil
 }
 
-func serveRequest(resp http.ResponseWriter, req *http.Request){
+func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *TEChannels){
 	switch req.Method {
 	case "GET":
 		var queryType = req.URL.Query()["type"][0]
@@ -437,15 +433,13 @@ func serveRequest(resp http.ResponseWriter, req *http.Request){
 			resp.Write([]byte("operation not supported"))
 		}
 
-
-
 	case "POST":
 		jobRequestData, err := parsePostHttpRequest(req)
 		if err != nil {
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte(UnsuccessfulAZCopyRequest + " : " + err.Error()))
 		}
-		isValid := validateAndRouteHttpPostRequest(jobRequestData)
+		isValid := validateAndRouteHttpPostRequest(jobRequestData, coordinatorChannels)
 		if isValid {
 			resp.WriteHeader(http.StatusAccepted)
 			resp.Write([]byte(SuccessfulAZCopyRequest))
@@ -464,41 +458,8 @@ func serveRequest(resp http.ResponseWriter, req *http.Request){
 	}
 }
 
-// processJobPartOrder api takes JobPartOrder from JobOrderChannel and execute it
-func processJobPartOrder(){
-	fmt.Println("Routine For processing Job Order Started")
-	// check to verify if transferEngineChannel has been initialized or not. If not then initializes it.
-	// since multiple routines can access the transferEngineChannel pointer at same time, loading pointer through atomic operation to avoid race condition
-	teChannelUnsafePointer := unsafe.Pointer(transferEngineChannel)
-	if atomic.LoadPointer(&teChannelUnsafePointer) == nil{
-		initializedChannels()
-	}
-	// taking the JobPartOrderChannel from TransferEngineChannels
-	jobPartOrderChannel := transferEngineChannel.JobOrderChan
-	for {
-		select {
-		case job := <- jobPartOrderChannel:
-			fmt.Println("Started processing Job Order")
-			//processing new Copy Job Part Order
-			ExecuteNewCopyJobPartOrder(job)
-		default:
-			// routine is set to sleep for 3 seconds in case there is no JobPartOrder to execute further in channel
-			time.Sleep(3 * time.Second)
-		}
-	}
-}
-
-func CreateServer(){
-	http.HandleFunc("/", serveRequest)
-	err := http.ListenAndServe("localhost:1337", nil)
-	fmt.Print("Server Created")
-	if err != nil{
-		fmt.Print("Server already initialized")
-	}
-}
-
 // initializedChannels initializes the channels used further by coordinator and execution engine
-func initializedChannels(){
+func initializedChannels() (*TEChannels, *EEChannels){
 	fmt.Println("Initializing Channels")
 	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	HighTransferMsgChannel := make(chan TransferMsg, 500)
@@ -506,9 +467,6 @@ func initializedChannels(){
 	MedTransferMsgChannel := make(chan TransferMsg, 500)
 	// LowTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	LowTransferMsgChannel := make(chan TransferMsg, 500)
-	// JobPartOrderChannel takes JobPartOrder from main routine of coordinator and feed to processJobPartOrder routine
-	JobPartOrderChannel := make(chan common.JobPartToUnknown, 500)
-
 
 	// HighChunkMsgChannel queues high priority job part transfer chunk transactions
 	HighChunkMsgChannel := make(chan ChunkMsg, 500)
@@ -517,24 +475,41 @@ func initializedChannels(){
 	// LowChunkMsgChannel queues low priority job part transfer chunk transactions
 	LowChunkMsgChannel := make(chan ChunkMsg, 500)
 
-	transferEngineChannel = new(TEChannels)
-	transferEngineChannel.HighTransfer = HighTransferMsgChannel
-	transferEngineChannel.MedTransfer = MedTransferMsgChannel
-	transferEngineChannel.LowTransfer = LowTransferMsgChannel
-	transferEngineChannel.JobOrderChan = JobPartOrderChannel
+	transferEngineChannel := &TEChannels{
+		HighTransfer : HighTransferMsgChannel,
+		MedTransfer	: MedTransferMsgChannel,
+		LowTransfer : LowTransferMsgChannel,
+	}
 
-	executionEngineChanel = new(EEChannels)
-	executionEngineChanel.HighTransfer = HighTransferMsgChannel
-	executionEngineChanel.LowTransfer = LowTransferMsgChannel
-	executionEngineChanel.MedTransfer = MedTransferMsgChannel
-	executionEngineChanel.HighChunkTransaction = HighChunkMsgChannel
-	executionEngineChanel.MedChunkTransaction = MedChunkMsgChannel
-	executionEngineChanel.LowChunkTransaction = LowChunkMsgChannel
+	executionEngineChanel := &EEChannels{
+		HighTransfer:HighTransferMsgChannel,
+		MedTransfer:MedTransferMsgChannel,
+		LowTransfer:LowTransferMsgChannel,
+		HighChunkTransaction:HighChunkMsgChannel,
+		MedChunkTransaction:MedChunkMsgChannel,
+		LowChunkTransaction:LowChunkMsgChannel,
+	}
+	return transferEngineChannel, executionEngineChanel
 }
 
-func main() {
+func initializeCoordinator(coordinatorChannels *TEChannels) {
 	fmt.Println("STORAGE TRANSFER ENGINE")
 	reconstructTheExistingJobPart()
-	go processJobPartOrder()
-	CreateServer()
+	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		serveRequest(writer, request, coordinatorChannels)
+	})
+	err := http.ListenAndServe("localhost:1337", nil)
+	fmt.Print("Server Created")
+	if err != nil{
+		fmt.Print("Server already initialized")
+	}
+}
+
+func initializeExecutionEngine(execEngineChannels *EEChannels){
+
+}
+func InitializeSTE(){
+	coordinatorChannel, execEngineChannels := initializedChannels()
+	initializeCoordinator(coordinatorChannel)
+	initializeExecutionEngine(execEngineChannels)
 }
