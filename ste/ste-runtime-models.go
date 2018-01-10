@@ -37,7 +37,7 @@ type ChunkMsg struct {
 
 }
 
-type TEChannels struct{
+type CoordinatorChannels struct{
 	HighTransfer chan <- TransferMsg
 	MedTransfer chan <- TransferMsg
 	LowTransfer chan <- TransferMsg

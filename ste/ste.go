@@ -111,7 +111,7 @@ func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 }
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *TEChannels){
+func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *CoordinatorChannels){
 	/*
 		* Convert the blobdata to memory map compatible DestinationBlobData
 		* Create a file for JobPartOrder and write data into that file.
@@ -189,7 +189,7 @@ func ExecuteAZCopyDownload(payload common.CopyJobPartOrder){
 	fmt.Println("Executing the AZ Copy Download Request in different Go Routine ")
 }
 
-func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *TEChannels) (bool){
+func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels) (bool){
 	switch {
 	case payload.SourceType == common.Local &&
 		payload.DestinationType == common.Blob:
@@ -392,7 +392,7 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error){
 	return payload, nil
 }
 
-func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *TEChannels){
+func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels){
 	switch req.Method {
 	case "GET":
 		var queryType = req.URL.Query()["type"][0]
@@ -455,7 +455,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 }
 
 // initializedChannels initializes the channels used further by coordinator and execution engine
-func initializedChannels() (*TEChannels, *EEChannels){
+func initializedChannels() (*CoordinatorChannels, *EEChannels){
 	fmt.Println("Initializing Channels")
 	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	HighTransferMsgChannel := make(chan TransferMsg, 500)
@@ -471,7 +471,7 @@ func initializedChannels() (*TEChannels, *EEChannels){
 	// LowChunkMsgChannel queues low priority job part transfer chunk transactions
 	LowChunkMsgChannel := make(chan ChunkMsg, 500)
 
-	transferEngineChannel := &TEChannels{
+	transferEngineChannel := &CoordinatorChannels{
 		HighTransfer : HighTransferMsgChannel,
 		MedTransfer	: MedTransferMsgChannel,
 		LowTransfer : LowTransferMsgChannel,
@@ -488,7 +488,12 @@ func initializedChannels() (*TEChannels, *EEChannels){
 	return transferEngineChannel, executionEngineChanel
 }
 
-func initializeCoordinator(coordinatorChannels *TEChannels) {
+// initializeCoordinator initializes the coordinator
+/*
+	* reconstructs the existing job using job part file on disk
+	* creater a server listening on port 1337 for job part order requests from front end
+ */
+func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 	fmt.Println("STORAGE TRANSFER ENGINE")
 	reconstructTheExistingJobPart()
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
@@ -504,6 +509,8 @@ func initializeCoordinator(coordinatorChannels *TEChannels) {
 func initializeExecutionEngine(execEngineChannels *EEChannels){
 
 }
+
+// InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
 func InitializeSTE(){
 	coordinatorChannel, execEngineChannels := initializedChannels()
 	initializeCoordinator(coordinatorChannel)
