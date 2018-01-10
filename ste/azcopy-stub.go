@@ -1,4 +1,4 @@
-package ste
+package main
 
 import (
 	"fmt"
@@ -11,6 +11,9 @@ import (
 	"crypto/rand"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"strconv"
+	"os"
+	"flag"
+	"os/exec"
 )
 
 
@@ -170,47 +173,37 @@ func fetchJobPartStatus(jobId string , partNo string) (error){
 	}
 	return nil
 }
-//
-//func sendUploadRequestToSTE(guId string, partNumber uint32, sourceFileName string, targetfileName string) {
-//	fmt.Println("Sending Upload Request TO STE")
-//	url := "http://localhost:1337"
-//	payload := common.CopyJobPartOrder{
-//		common.CopyJobPartOrder{1,
-//			common.JobID(guId),
-//			common.PartNumber(partNumber),
-//			false,
-//			HighJobPriority,
-//			common.Local,
-//			common.Blob,
-//			[]common.CopyTransfer{
-//				common.CopyTransfer{
-//					sourceFileName,
-//					targetfileName,
-//					time.Now(), 10},
-//					common.CopyTransfer{
-//						sourceFileName,
-//						targetfileName,
-//						time.Now(), 10}}},
-//		common.BlobData{"","", "", false, false, 2}}
-//
-//	payloadData, err := json.MarshalIndent(payload, "", "")
-//	fmt.Println("Marshalled Data ", string(payloadData))
-//	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payloadData))
-//	if err != nil {
-//		panic(err)
-//	}
-//	if err != nil {
-//		panic(err)
-//	}
-//	defer res.Body.Close()
-//	body, err := ioutil.ReadAll(res.Body)
-//	if err != nil {
-//		panic(err)
-//	}
-//	fmt.Println("Response to request", res.Status, " ", body)
-//	time.Sleep(5 * time.Second)
-//	fetchJobPartStatus(guId, "0")
-//}
+
+func sendUploadRequestToSTE(guId string, partNumber uint32, sourceFileName string, targetfileName string) {
+	fmt.Println("Sending Upload Request TO STE")
+	url := "http://localhost:1337"
+	payload := common.CopyJobPartOrder{Version: 1,
+			ID: common.JobID(guId),
+			PartNum: common.PartNumber(partNumber),
+			Priority: HighJobPriority,
+			SourceType: common.Local,
+			DestinationType: common.Blob,
+			Transfers: []common.CopyTransfer{{sourceFileName, targetfileName, time.Now(), 12800340}},
+		OptionalAttributes: common.BlobTransferAttributes{BlockSizeinBytes: 4 * 1024 * 1024}}
+
+	payloadData, err := json.MarshalIndent(payload, "", "")
+	fmt.Println("Marshalled Data ", string(payloadData))
+	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payloadData))
+	if err != nil {
+		panic(err)
+	}
+	if err != nil {
+		panic(err)
+	}
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Response to request", res.Status, " ", body)
+	time.Sleep(5 * time.Second)
+	fetchJobPartStatus(guId, "0")
+}
 
 func sendStatusRequestToSTE(guid string, partNo string, transferIndex uint32, chunkIndex uint16){
 	guId,err := newUUID()
@@ -257,90 +250,90 @@ func newUUID() (string, error) {
 	return code, err
 }
 
-//
-//func main(){
-//	fmt.Println("Welcome to the version of Project 0.0")
-//
-//	var commandGiven = ""
-//	printCommand := flag.NewFlagSet("print" , flag.ExitOnError)
-//	sourceFileName := printCommand.String("src", "", "File Name to upload")
-//	targetFileName := printCommand.String("dst", "", "File Name to be copied to")
-//
-//	statusCommand := flag.NewFlagSet("status", flag.ExitOnError)
-//	guid := statusCommand.String("guid", "", "")
-//	partNo := statusCommand.String("part", "", "")
-//
-//	listCommand := flag.NewFlagSet("list", flag.ExitOnError)
-//	jobId := listCommand.String("jobId", "", "")
-//
-//	if len(os.Args) < 1 {
-//		fmt.Println("No Command Provided")
-//		os.Exit(1)
-//	}
-//	if len(os.Args) == 1{
-//		commandGiven = "normal"
-//	}else{
-//		commandGiven = os.Args[1]
-//	}
-//
-//	switch commandGiven {
-//	case "normal":
-//		cmd := exec.Command("./AZCopy.exe", "StartSTE")
-//		err := cmd.Start()
-//		if err != nil{
-//			panic(err)
-//			os.Exit(1)
-//		}
-//	case "debug":
-//		go func(){
-//			//InitTransferEngine()
-//		}()
-//	case "print":
-//		printCommand.Parse(os.Args[2:])
-//		if printCommand.Parsed(){
-//			if *targetFileName == "" {
-//				printCommand.PrintDefaults()
-//				os.Exit(1)
-//			}
-//			if *sourceFileName == "" {
-//				printCommand.PrintDefaults()
-//				os.Exit(1)
-//			}
-//		}
-//		guId,err := newUUID()
-//		if err != nil {
-//			panic(err)
-//		}
-//		sendUploadRequestToSTE(guId, 0, *sourceFileName, *targetFileName)
-//		sendUploadRequestToSTE(guId, 1, *sourceFileName, *targetFileName)
-//	case "status":
-//		statusCommand.Parse(os.Args[2:])
-//		if statusCommand.Parsed(){
-//			if *guid == "" {
-//				printCommand.PrintDefaults()
-//				os.Exit(1)
-//			}
-//			if *partNo == "" {
-//				fetchJobStatus(*guid)
-//			}else {
-//				fetchJobPartStatus(*guid, *partNo)
-//			}
-//		}
-//	case "list":
-//		listCommand.Parse(os.Args[2:])
-//		if listCommand.Parsed(){
-//			if *jobId == ""{
-//				listActiveJobs()
-//			}else{
-//				fmt.Println("getting job details")
-//				getJobDetails(*jobId)
-//			}
-//		}
-//	case "StartSTE":
-//		//InitTransferEngine()
-//
-//	default:
-//		flag.PrintDefaults()
-//		os.Exit(1)
-//	}
-//}
+
+func main(){
+	fmt.Println("Welcome to the version of Project 0.0")
+
+	var commandGiven = ""
+	printCommand := flag.NewFlagSet("print" , flag.ExitOnError)
+	sourceFileName := printCommand.String("src", "", "File Name to upload")
+	targetFileName := printCommand.String("dst", "", "File Name to be copied to")
+
+	statusCommand := flag.NewFlagSet("status", flag.ExitOnError)
+	guid := statusCommand.String("guid", "", "")
+	partNo := statusCommand.String("part", "", "")
+
+	listCommand := flag.NewFlagSet("list", flag.ExitOnError)
+	jobId := listCommand.String("jobId", "", "")
+
+	if len(os.Args) < 1 {
+		fmt.Println("No Command Provided")
+		os.Exit(1)
+	}
+	if len(os.Args) == 1{
+		commandGiven = "normal"
+	}else{
+		commandGiven = os.Args[1]
+	}
+
+	switch commandGiven {
+	case "normal":
+		cmd := exec.Command("./AZCopy.exe", "StartSTE")
+		err := cmd.Start()
+		if err != nil{
+			panic(err)
+			os.Exit(1)
+		}
+	case "debug":
+		go func(){
+			//InitTransferEngine()
+		}()
+	case "print":
+		printCommand.Parse(os.Args[2:])
+		if printCommand.Parsed(){
+			if *targetFileName == "" {
+				printCommand.PrintDefaults()
+				os.Exit(1)
+			}
+			if *sourceFileName == "" {
+				printCommand.PrintDefaults()
+				os.Exit(1)
+			}
+		}
+		guId,err := newUUID()
+		if err != nil {
+			panic(err)
+		}
+		sendUploadRequestToSTE(guId, 0, *sourceFileName, *targetFileName)
+		//sendUploadRequestToSTE(guId, 1, *sourceFileName, *targetFileName)
+	case "status":
+		statusCommand.Parse(os.Args[2:])
+		if statusCommand.Parsed(){
+			if *guid == "" {
+				printCommand.PrintDefaults()
+				os.Exit(1)
+			}
+			if *partNo == "" {
+				fetchJobStatus(*guid)
+			}else {
+				fetchJobPartStatus(*guid, *partNo)
+			}
+		}
+	case "list":
+		listCommand.Parse(os.Args[2:])
+		if listCommand.Parsed(){
+			if *jobId == ""{
+				listActiveJobs()
+			}else{
+				fmt.Println("getting job details")
+				getJobDetails(*jobId)
+			}
+		}
+	case "StartSTE":
+		//InitTransferEngine()
+
+	default:
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+}

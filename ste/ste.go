@@ -1,4 +1,4 @@
-package ste
+package main
 
 import (
 	"fmt"
@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"strconv"
+	"runtime"
 )
 
 var JobPartInfoMap = map[common.JobID]map[common.PartNumber]*JobPartPlanInfo{}
@@ -197,7 +198,7 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
 			return true
 	case payload.SourceType == common.Blob &&
 		payload.DestinationType == common.Local:
-		go ExecuteAZCopyDownload(payload)
+		ExecuteAZCopyDownload(payload)
 		return true
 	default:
 		fmt.Println("Command %d Type Not Supported by STE", payload)
@@ -471,6 +472,9 @@ func initializedChannels() (*CoordinatorChannels, *EEChannels){
 	// LowChunkMsgChannel queues low priority job part transfer chunk transactions
 	LowChunkMsgChannel := make(chan ChunkMsg, 500)
 
+	// Create suicide channel which is used to scale back on the number of workers
+	SuicideChannel := make(chan SuicideJob, 100)
+
 	transferEngineChannel := &CoordinatorChannels{
 		HighTransfer : HighTransferMsgChannel,
 		MedTransfer	: MedTransferMsgChannel,
@@ -484,6 +488,7 @@ func initializedChannels() (*CoordinatorChannels, *EEChannels){
 		HighChunkTransaction:HighChunkMsgChannel,
 		MedChunkTransaction:MedChunkMsgChannel,
 		LowChunkTransaction:LowChunkMsgChannel,
+		SuicideChannel: SuicideChannel,
 	}
 	return transferEngineChannel, executionEngineChanel
 }
@@ -506,12 +511,9 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 	}
 }
 
-func initializeExecutionEngine(execEngineChannels *EEChannels){
-
-}
-
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
-func InitializeSTE(){
+func main(){
+	runtime.GOMAXPROCS(4)
 	coordinatorChannel, execEngineChannels := initializedChannels()
 	initializeCoordinator(coordinatorChannel)
 	initializeExecutionEngine(execEngineChannels)

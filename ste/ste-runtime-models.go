@@ -1,4 +1,4 @@
-package ste
+package main
 
 import (
 	"context"
@@ -26,15 +26,20 @@ type TransferMsg struct {
 }
 
 type TransferMsgDetail struct {
+	JobId 			common.JobID
+	PartNumber 		common.PartNumber
 	TransferId      uint32
-	ChunkSize       uint16
+	ChunkSize       uint64
 	SourceType      common.LocationType
 	Source          string
 	DestinationType common.LocationType
 	Destination     string
+	TransferCtx		context.Context
+	TransferCancelFunc func()
 }
-type ChunkMsg struct {
 
+type ChunkMsg struct {
+	doTransfer chunkFunc
 }
 
 type CoordinatorChannels struct{
@@ -44,11 +49,15 @@ type CoordinatorChannels struct{
 }
 
 type EEChannels struct {
-	HighTransfer <- chan TransferMsg
-	MedTransfer <- chan TransferMsg
-	LowTransfer <- chan TransferMsg
-
+	HighTransfer         <- chan TransferMsg
+	MedTransfer          <- chan TransferMsg
+	LowTransfer          <- chan TransferMsg
 	HighChunkTransaction chan ChunkMsg
-	MedChunkTransaction chan ChunkMsg
-	LowChunkTransaction chan ChunkMsg
+	MedChunkTransaction  chan ChunkMsg
+	LowChunkTransaction  chan ChunkMsg
+	SuicideChannel       <- chan SuicideJob
 }
+
+type SuicideJob byte
+type chunkFunc func(int)
+type prologueFunc func(msg TransferMsgDetail, chunkChannel chan<- ChunkMsg)

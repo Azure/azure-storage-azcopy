@@ -1,4 +1,4 @@
-package ste
+package main
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"

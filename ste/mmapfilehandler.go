@@ -1,4 +1,4 @@
-package ste
+package main
 
 import (
 	"errors"
@@ -389,7 +389,7 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 
 	return JobPartPlanBlobData{uint8(len(contentType)), contentTypeBytes,
 								uint8(len(contentEncoding)), contentEncodingBytes,
-								uint16(len(metaData)), metaDataBytes, uint16(blockSize)}, nil
+								uint16(len(metaData)), metaDataBytes, uint64(blockSize)}, nil
 }
 
 func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32) (TransferMsgDetail){
@@ -402,6 +402,6 @@ func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transfe
 	destinationType := jPartPlanPointer.DstLocationType
 	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
 	chunkSize := jPartPlanPointer.BlobData.BlockSizeInKB
-	return TransferMsgDetail{transferEntryIndex, chunkSize, sourceType,
-											source, destinationType, destination}
+	return TransferMsgDetail{jobId, partNo,transferEntryIndex, chunkSize, sourceType,
+											source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx, jHandler.TrasnferInfo[transferEntryIndex].cancel}
 }

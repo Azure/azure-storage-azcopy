@@ -92,7 +92,7 @@ type BlobTransferAttributes struct {
 	Metadata                 string   //User-defined name-value pairs associated with the blob
 	NoGuessMimeType          bool // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool // when downloading, tell engine to set file's timestamp to timestamp of blob
-	BlockSizeinBytes         uint16
+	BlockSizeinBytes         uint64
 }
 
 // ExistingJobDetails represent the Job with JobId and

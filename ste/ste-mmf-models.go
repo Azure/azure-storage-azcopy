@@ -1,4 +1,4 @@
-package ste
+package main
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -30,7 +30,7 @@ type JobPartPlanBlobData struct {
 	ContentEncoding       [256]byte
 	MetaDataLength        uint16
 	MetaData              [1000]byte
-	BlockSizeInKB         uint16
+	BlockSizeInKB         uint64
 }
 
 type JobPartPlanTransfer struct {
