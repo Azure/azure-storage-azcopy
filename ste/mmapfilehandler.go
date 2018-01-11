@@ -10,8 +10,6 @@ import (
 	"reflect"
 	"context"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"io/ioutil"
-	"strings"
 )
 
 var currFileDirectory string = "."
@@ -183,27 +181,6 @@ func memoryMapTheJobFile(filename string)	(mmap.MMap){
 		panic(err)
 	}
 	return mMap
-}
-
-// fileAlreadyExists api determines whether file with fileName exists in directory dir or not
-// Returns true is file with fileName exists else returns false
-func fileAlreadyExists(fileName string, dir string) (bool, error){
-
-	// listing the content of directory dir
-	fileInfos, err := ioutil.ReadDir(dir)
-	if err != nil {
-		errorMsg := fmt.Sprintf(DirectoryListingError, dir)
-		return false, errors.New(errorMsg)
-	}
-
-	// iterating through each file and comparing the file name with given fileName
-	for index := range fileInfos {
-		if strings.Compare(fileName, fileInfos[index].Name()) == 0 {
-			errorMsg := fmt.Sprintf(FileAlreadyExists, fileName)
-			return true, errors.New(errorMsg)
-		}
-	}
-	return false, nil
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData

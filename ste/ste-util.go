@@ -14,6 +14,8 @@ import (
 	"strings"
 	"strconv"
 	"errors"
+	"unsafe"
+	"io/ioutil"
 )
 
 // parseStringToJobInfo api parses the file name to extract the job Id, part number and schema version number
@@ -78,52 +80,18 @@ func convertJobIdToByteFormat(jobIDString common.JobID) ([128 / 8]byte){
 
 // writeInterfaceDataToWriter api writes the content of given interface to the io writer
 func writeInterfaceDataToWriter( writer io.Writer, f interface{}, structSize uint64) (int, error){
-
-	// bytesWritten keeps the track of number of actual bytes written to the writer
-	var bytesWritten uint64 = 0
-
-	// nextOffset determines the next offset at which the next element should be written
-	var nextOffset uint64= 0
-
-	// currentOffset keeps the track of end offset till which have been written to the writer
-	var currentOffset uint64 = 0
-	var padBytes [8]byte
-	// get the num of elements in interface
-	var elements = reflect.ValueOf(f).Elem()
-	for val := 0; val < elements.NumField(); val++{
-		//get the alignment of type of element
-		align := elements.Type().Field(val).Type.FieldAlign()
-
-		//rounding up the current offset to next multiple of alignment
-		nextOffset = roundUp(currentOffset, uint64(align))
-
-		/*adding 0's for the difference of number of bytes between current offset and
-		next offset to align the element*/
-		err := binary.Write(writer, binary.LittleEndian, padBytes[0: (nextOffset - currentOffset)])
-		if err != nil {
-			return 0, err
-		}
-
-		bytesWritten += uint64(nextOffset - currentOffset)
-		valueOfField := elements.Field(val)
-		elementValue := reflect.ValueOf(valueOfField.Interface()).Interface()
-		sizeElementValue := uint64(valueOfField.Type().Size())
-
-		// writing the element value to the writer
-		err = binary.Write(writer, binary.LittleEndian, elementValue)
-		if err != nil {
-			return 0, err
-		}
-		bytesWritten += sizeElementValue
-		currentOffset = bytesWritten
+	rv := reflect.ValueOf(f)
+	var byteSliceStruct = struct {
+		addr uintptr
+		len int
+		cap int
+	}{uintptr(rv.Pointer()), int(structSize), int(structSize)}
+	structByteSlice := *(*[]byte)(unsafe.Pointer(&byteSliceStruct))
+	err := binary.Write(writer, binary.LittleEndian, structByteSlice)
+	if err != nil{
+		panic (err)
 	}
-
-	err := binary.Write(writer, binary.LittleEndian, padBytes[0: (structSize - bytesWritten)])
-	if err != nil {
-		return 0, err
-	}
-	bytesWritten += (structSize - bytesWritten)
-	return int(bytesWritten), nil
+	return int(structSize), nil
 }
 
 func convertJobIdBytesToString(jobId [128 /8]byte) (string){
@@ -198,6 +166,27 @@ func creatingTheBlockIds(numBlocks int) ([] string){
 		base64BlockIDs[index] = blockIDIntToBase64(index)
 	}
 	return base64BlockIDs
+}
+
+// fileAlreadyExists api determines whether file with fileName exists in directory dir or not
+// Returns true is file with fileName exists else returns false
+func fileAlreadyExists(fileName string, dir string) (bool, error){
+
+	// listing the content of directory dir
+	fileInfos, err := ioutil.ReadDir(dir)
+	if err != nil {
+		errorMsg := fmt.Sprintf(DirectoryListingError, dir)
+		return false, errors.New(errorMsg)
+	}
+
+	// iterating through each file and comparing the file name with given fileName
+	for index := range fileInfos {
+		if strings.Compare(fileName, fileInfos[index].Name()) == 0 {
+			errorMsg := fmt.Sprintf(FileAlreadyExists, fileName)
+			return true, errors.New(errorMsg)
+		}
+	}
+	return false, nil
 }
 
 func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32) (TransferMsgDetail){
