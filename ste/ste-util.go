@@ -210,3 +210,12 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 	}
 	jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 /8]byte{}, status)
 }
+
+func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8){
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+	if err != nil{
+		panic (err)
+	}
+	transferHeader := jHandler.Transfer(transferIndex)
+	transferHeader.Status = transferStatus
+}
