@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"context"
@@ -43,6 +43,11 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 
 	// step 4: compute the number of blocks and create a slice to hold the blockIDs of each chunk
 	downloadChunkSize := int64(transfer.ChunkSize)
+
+	if downloadChunkSize == 0 {
+		downloadChunkSize = defaultBlockSize
+	}
+
 	numOfBlocks := computeNumOfChunks(blobSize, downloadChunkSize)
 	blocksIds := make([]string, numOfBlocks)
 	blockIdCount := int32(0)

@@ -45,7 +45,7 @@ type CopyCmdArgsAndFlags struct {
 	WithSnapshots  bool
 
 	// options from flags
-	BlockSize                uint16
+	BlockSize                uint32
 	BlobType                 string
 	BlobTier                 string
 	Metadata                 string
@@ -92,7 +92,7 @@ type BlobTransferAttributes struct {
 	Metadata                 string   //User-defined name-value pairs associated with the blob
 	NoGuessMimeType          bool // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool // when downloading, tell engine to set file's timestamp to timestamp of blob
-	BlockSizeinBytes         uint64
+	BlockSizeinBytes         uint32
 }
 
 // ExistingJobDetails represent the Job with JobId and

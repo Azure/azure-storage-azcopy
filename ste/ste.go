@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"fmt"
@@ -155,21 +155,21 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 		}
 	}
 
-	// Test Cases
-	jobHandler.updateTheChunkInfo(0,0, crc, ChunkTransferStatusComplete)
-
-	jobHandler.updateTheChunkInfo(1,0, crc, ChunkTransferStatusComplete)
-
-	jobHandler.getChunkInfo(1,0)
-
-	cInfo := jobHandler.getChunkInfo(1,2)
-	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-
-	cInfo  = jobHandler.getChunkInfo(0,1)
-	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-
-	cInfo  = jobHandler.getChunkInfo(0,2)
-	fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
+	//// Test Cases
+	//jobHandler.updateTheChunkInfo(0,0, crc, ChunkTransferStatusComplete)
+	//
+	//jobHandler.updateTheChunkInfo(1,0, crc, ChunkTransferStatusComplete)
+	//
+	//jobHandler.getChunkInfo(1,0)
+	//
+	//cInfo := jobHandler.getChunkInfo(1,2)
+	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
+	//
+	//cInfo  = jobHandler.getChunkInfo(0,1)
+	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
+	//
+	//cInfo  = jobHandler.getChunkInfo(0,2)
+	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
 }
 
 func unMappingtheMemoryMapFile(mMap mmap.MMap, file *os.File){
@@ -455,8 +455,8 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 	}
 }
 
-// initializedChannels initializes the channels used further by coordinator and execution engine
-func initializedChannels() (*CoordinatorChannels, *EEChannels){
+// InitializedChannels initializes the channels used further by coordinator and execution engine
+func InitializedChannels() (*CoordinatorChannels, *EEChannels){
 	fmt.Println("Initializing Channels")
 	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	HighTransferMsgChannel := make(chan TransferMsg, 500)
@@ -514,7 +514,7 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
 func main(){
 	runtime.GOMAXPROCS(4)
-	coordinatorChannel, execEngineChannels := initializedChannels()
+	coordinatorChannel, execEngineChannels := InitializedChannels()
 	initializeCoordinator(coordinatorChannel)
-	initializeExecutionEngine(execEngineChannels)
+	InitializeExecutionEngine(execEngineChannels)
 }

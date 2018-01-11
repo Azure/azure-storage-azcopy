@@ -53,16 +53,20 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	}
 	jobPartOrder.ID = common.JobID(uuid)
 
+	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
-		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder)
+		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
-		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder)
+		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
 
 	return uuid
 }
 
-func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
+func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags,
+	jobPartOrderToFill *common.CopyJobPartOrder,
+	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder))  {
+
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Local
 	jobPartOrderToFill.DestinationType = common.Blob
@@ -117,7 +121,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 					jobPartOrderToFill.Transfers = Transfers //TODO make truth, more defensive, consider channel
 					jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 					partNumber += 1
-					DispatchJobPartOrder(jobPartOrderToFill)
+					dispatchJobPartOrderFunc(jobPartOrderToFill)
 					Transfers = []common.CopyTransfer{}
 					numInTransfers = 0
 				}
@@ -131,7 +135,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		}
 		jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 		jobPartOrderToFill.IsFinalPart = true
-		DispatchJobPartOrder(jobPartOrderToFill)
+		dispatchJobPartOrderFunc(jobPartOrderToFill)
 
 	} else { // upload single file
 
@@ -149,11 +153,14 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.PartNum = 0
 		jobPartOrderToFill.IsFinalPart = true
-		DispatchJobPartOrder(jobPartOrderToFill)
+		dispatchJobPartOrderFunc(jobPartOrderToFill)
 	}
 }
 
-func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
+func HandleDownloadFromWastoreToLocal(
+	commandLineInput *common.CopyCmdArgsAndFlags,
+	jobPartOrderToFill *common.CopyJobPartOrder,
+	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder))  {
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
@@ -207,7 +214,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.IsFinalPart = true
 		jobPartOrderToFill.PartNum = 0
-		DispatchJobPartOrder(jobPartOrderToFill)
+		dispatchJobPartOrderFunc(jobPartOrderToFill)
 	} else { // source is a container
 		if !destinationFileInfo.IsDir() {
 			panic("destination should be a directory")
@@ -240,7 +247,7 @@ func HandleDownloadFromWastoreToLocal(commandLineInput *common.CopyCmdArgsAndFla
 			if !marker.NotDone() { // if there is no more segment
 				jobPartOrderToFill.IsFinalPart = true
 			}
-			DispatchJobPartOrder(jobPartOrderToFill)
+			dispatchJobPartOrderFunc(jobPartOrderToFill)
 		}
 	}
 
@@ -262,11 +269,6 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl
 	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier
-}
-
-func DispatchJobPartOrder(jobPartOrder *common.CopyJobPartOrder)  {
-	order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
-	fmt.Println(string(order))
 }
 
 // newUUID generates a random UUID according to RFC 4122

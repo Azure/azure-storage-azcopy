@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"context"
@@ -11,7 +11,9 @@ import (
 	"time"
 )
 
-func initializeExecutionEngine(execEngineChannels *EEChannels) {
+const defaultBlockSize = 4 * 1024 * 1024
+
+func InitializeExecutionEngine(execEngineChannels *EEChannels) {
 	fmt.Println("INITIALIZING EXECUTION ENGINE STARTING!")
 	highChunk := execEngineChannels.HighChunkTransaction
 	highTransfer := execEngineChannels.HighTransfer

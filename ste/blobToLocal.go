@@ -1,4 +1,4 @@
-package main
+package ste
 
 import (
 	"context"
@@ -37,6 +37,11 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
 	downloadChunkSize := int64(transfer.ChunkSize)
+
+	if downloadChunkSize == 0 {
+		downloadChunkSize = defaultBlockSize
+	}
+
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
 		adjustedChunkSize := downloadChunkSize
