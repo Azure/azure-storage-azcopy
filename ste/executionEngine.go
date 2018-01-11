@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-const defaultBlockSize = 4 * 1024 * 1024
-
 func InitializeExecutionEngine(execEngineChannels *EEChannels) {
 	fmt.Println("INITIALIZING EXECUTION ENGINE STARTING!")
 	highChunk := execEngineChannels.HighChunkTransaction

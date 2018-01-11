@@ -366,6 +366,10 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 	//copying metadata string in fixed size byte array
 	copy(metaDataBytes[:], metaData)
 
+	if blockSize == 0 {
+		blockSize = common.DefaultBlockSize
+	}
+
 	return JobPartPlanBlobData{uint8(len(contentType)), contentTypeBytes,
 								uint8(len(contentEncoding)), contentEncodingBytes,
 								uint16(len(metaData)), metaDataBytes, uint64(blockSize)}, nil

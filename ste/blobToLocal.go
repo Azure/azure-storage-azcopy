@@ -38,10 +38,6 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
 	downloadChunkSize := int64(transfer.ChunkSize)
 
-	if downloadChunkSize == 0 {
-		downloadChunkSize = defaultBlockSize
-	}
-
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
 		adjustedChunkSize := downloadChunkSize
@@ -86,6 +82,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed")
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed)
 			return
 		}
 
@@ -97,6 +94,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because writing to file for startIndex of", startIndex, "has failed")
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed)
 			return
 		}
 
@@ -106,6 +104,8 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 			// step 4: this is the last block, perform EPILOGUE
 			fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
+
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusComplete)
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {
