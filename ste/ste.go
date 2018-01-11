@@ -512,7 +512,7 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 }
 
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
-func main(){
+func InitializeSTE(){
 	runtime.GOMAXPROCS(4)
 	coordinatorChannel, execEngineChannels := InitializedChannels()
 	initializeCoordinator(coordinatorChannel)

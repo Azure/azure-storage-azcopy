@@ -76,7 +76,9 @@ func init() {
 			fmt.Println("copy job starting: ")
 			jobId := handlers.HandleCopyCommand(commandLineInput)
 			fmt.Println("Job with id", jobId, "has started.")
-			time.Sleep(600 * time.Second)
+
+			//// wait until job finishes
+			//time.Sleep(600 * time.Second)
 		},
 	}
 

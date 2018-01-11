@@ -106,12 +106,12 @@ type JobOrderDetails struct {
 
 type JobProgressSummary struct {
 	CompleteJobOrdered                       bool
-	//JobStatus								 uint8
+	JobStatus								 Status
 	TotalNumberOfTransfer                    uint32
 	TotalNumberofTransferCompleted           uint32
 	TotalNumberofFailedTransfer				 uint32
-	NumberOfTransferCompletedafterCheckpoint uint32
-	NumberOfTransferFailedAfterCheckpoint    uint32
+	//NumberOfTransferCompletedafterCheckpoint uint32
+	//NumberOfTransferFailedAfterCheckpoint    uint32
 	PercentageProgress                       uint32
 	FailedTransfers                          []TransferStatus
 }
@@ -134,5 +134,12 @@ type TransferStatus struct {
 type TransfersStatus struct {
 	Status []TransferStatus
 }
+
+type Status uint8
+
+const (
+	StatusSuccess = 1
+	StatusFail = 2
+)
 
 const DefaultBlockSize = 100 * 1024 * 1024

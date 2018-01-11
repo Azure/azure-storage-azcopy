@@ -33,6 +33,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
+	"time"
 )
 
 const (
@@ -57,6 +58,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
+	}
+
+	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusSuccess; jobStatus = fetchJobStatus(uuid){
+		time.Sleep(2 * time.Second)
 	}
 
 	return uuid
