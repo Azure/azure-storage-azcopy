@@ -209,6 +209,7 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 		panic(err)
 	}
 	jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 /8]byte{}, status)
+	updateTransferStatus(jobId, partNo, transferEntryIndex, TransferStatusFailed)
 }
 
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8){
