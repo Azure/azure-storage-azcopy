@@ -245,34 +245,29 @@ func getJobStatus(jobId common.JobID, lastCheckPointTimeStamp uint64, resp *http
 
 		completeJobOrdered = completeJobOrdered || currentJobPartPlanInfo.IsFinalPart
 		progressSummary.TotalNumberOfTransfer += currentJobPartPlanInfo.NumTransfers
-
 		// iterating through all transfers for current partNo and job with given jobId
 		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++{
 
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 			transferHeader := jHandler.Transfer(index)
-
-			// if transferHeader completionTime is greater than lastCheckPointTimeStamp, it means the transfer was updated after lastCheckPointTimeStamp
-			if transferHeader.CompletionTime > lastCheckPointTimeStamp {
-				// check for completed transfer
-				if transferHeader.Status == TransferStatusComplete{
-					progressSummary.NumberOfTransferCompletedafterCheckpoint += 1
-				}else if transferHeader.Status == TransferStatusFailed{ // check for failed transfer
-					progressSummary.NumberOfTransferFailedAfterCheckpoint += 1
-					// getting the source and destination for failed transfer at position - index
-					source, destination := jHandler.getTransferSrcDstDetail(index)
-					// appending to list of failed transfer
-					failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, TransferStatusFailed})
-				}
-			}
 			// check for all completed transfer to calculate the progress percentage at the end
 			if transferHeader.Status == TransferStatusComplete{
 				progressSummary.TotalNumberofTransferCompleted += 1
 			}
 			if transferHeader.Status == TransferStatusFailed{
 				progressSummary.TotalNumberofFailedTransfer += 1
+				// getting the source and destination for failed transfer at position - index
+				source, destination := jHandler.getTransferSrcDstDetail(index)
+				// appending to list of failed transfer
+				failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, TransferStatusFailed})
 			}
 		}
+	}
+	 /*If each transfer in all parts of a job has either completed or failed and is not in active or inactive state, then job order is said to be completed
+	 if final part of job has been ordered.*/
+	if (progressSummary.TotalNumberOfTransfer == progressSummary.TotalNumberofFailedTransfer + progressSummary.TotalNumberofTransferCompleted) &&(
+		completeJobOrdered){
+			progressSummary.JobStatus = common.StatusCompleted
 	}
 	progressSummary.CompleteJobOrdered = completeJobOrdered
 	progressSummary.FailedTransfers = failedTransfers

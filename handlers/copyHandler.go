@@ -60,7 +60,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
 
-	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusSuccess; jobStatus = fetchJobStatus(uuid){
+	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid){
 		time.Sleep(2 * time.Second)
 	}
 

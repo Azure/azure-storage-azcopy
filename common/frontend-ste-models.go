@@ -138,8 +138,8 @@ type TransfersStatus struct {
 type Status uint8
 
 const (
-	StatusSuccess = 1
-	StatusFail = 2
+	StatusCompleted  = 1
+	StatusInProgress = 2
 )
 
 const DefaultBlockSize = 100 * 1024 * 1024

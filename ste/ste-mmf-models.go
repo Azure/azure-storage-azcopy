@@ -97,7 +97,6 @@ const (
 const (
 	TransferStatusInactive = 0
 	TransferStatusActive = 1
-	TransferStatusProgress = 2
 	TransferStatusComplete = 3
 	TransferStatusFailed = 4
 )
