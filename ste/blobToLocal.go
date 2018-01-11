@@ -75,9 +75,9 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64,
 	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32) chunkFunc {
 	return func(workerId int) {
-		transferIdentifierStr := fmt.Sprintf("jobId %d and partNum %d and transferId %d", jobId, partNum, transferId)
+		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
-		fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
+		//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
 
 		// step 1: perform get
 		get, err := blobURL.GetBlob(ctx, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)

@@ -5,6 +5,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"encoding/json"
 	"fmt"
+	"runtime"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
@@ -12,6 +13,7 @@ type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
 func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
 	coordinatorChannel, execEngineChannels := ste.InitializedChannels()
 	ste.InitializeExecutionEngine(execEngineChannels)
+	runtime.GOMAXPROCS(4)
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		marshalAndPrintJobPartOrder(jobPartOrder)

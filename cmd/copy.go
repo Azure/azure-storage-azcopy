@@ -26,6 +26,7 @@ import (
 	"errors"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"time"
 )
 
 // TODO check file size, max is 4.75TB
@@ -75,6 +76,7 @@ func init() {
 			fmt.Println("copy job starting: ")
 			jobId := handlers.HandleCopyCommand(commandLineInput)
 			fmt.Println("Job with id", jobId, "has started.")
+			time.Sleep(600 * time.Second)
 		},
 	}
 
