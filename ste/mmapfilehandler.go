@@ -319,15 +319,17 @@ func jobPartTojobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 
 // getNumChunks api returns the number of chunks depending on source Type and destination type
 func getNumChunks(transfer common.CopyTransfer, destBlobData JobPartPlanBlobData) uint16{
-	if destBlobData.BlockSizeInKB == 0{
-		errorMsg := fmt.Sprintf("invalid block size for transfer from %s to %s", transfer.Source, transfer.Destination)
-		panic(errors.New(errorMsg))
+	var blockSize = uint64(0)
+	if destBlobData.BlockSize == 0{
+		blockSize = common.DefaultBlockSize
+	} else{
+		blockSize = destBlobData.BlockSize
 	}
 	// TODO might overflow, check for 500000 as max
-	if uint64(transfer.SourceSize) % uint64(destBlobData.BlockSizeInKB) == 0 {
-		return uint16(uint64(transfer.SourceSize) / uint64(destBlobData.BlockSizeInKB))
+	if uint64(transfer.SourceSize) % blockSize == 0 {
+		return uint16(uint64(transfer.SourceSize) / blockSize)
 	}else{
-		return uint16(uint64(transfer.SourceSize) / uint64(destBlobData.BlockSizeInKB)) + 1
+		return uint16(uint64(transfer.SourceSize) / blockSize) + 1
 	}
 }
 

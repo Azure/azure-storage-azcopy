@@ -30,7 +30,7 @@ type JobPartPlanBlobData struct {
 	ContentEncoding       [256]byte
 	MetaDataLength        uint16
 	MetaData              [1000]byte
-	BlockSizeInKB         uint64
+	BlockSize             uint64
 }
 
 type JobPartPlanTransfer struct {
@@ -103,9 +103,9 @@ const (
 )
 
 const (
-	HighJobPriority = 3
-	MediumJobPriority = 2
-	LowJobPriority = 1
+	HighJobPriority = 0
+	MediumJobPriority = 1
+	LowJobPriority = 2
 	DefaultJobPriority = HighJobPriority
 )
 

@@ -134,3 +134,5 @@ type TransferStatus struct {
 type TransfersStatus struct {
 	Status []TransferStatus
 }
+
+const DefaultBlockSize = 4 * 1024 * 1024

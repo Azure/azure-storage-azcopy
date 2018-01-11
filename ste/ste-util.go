@@ -198,7 +198,7 @@ func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transfe
 	sourceType := jPartPlanPointer.SrcLocationType
 	destinationType := jPartPlanPointer.DstLocationType
 	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
-	chunkSize := jPartPlanPointer.BlobData.BlockSizeInKB
+	chunkSize := jPartPlanPointer.BlobData.BlockSize
 	return TransferMsgDetail{jobId, partNo,transferEntryIndex, chunkSize, sourceType,
 		source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx, jHandler.TrasnferInfo[transferEntryIndex].cancel}
 }
