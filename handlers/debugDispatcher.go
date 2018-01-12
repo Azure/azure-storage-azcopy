@@ -5,12 +5,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"encoding/json"
 	"fmt"
-	"runtime"
-	"time"
 	"net/http"
 	"bytes"
 	"io/ioutil"
-	"errors"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
@@ -19,7 +16,7 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
 	//coordinatorChannel, execEngineChannels := ste.InitializedChannels()
 	//ste.InitializeExecutionEngine(execEngineChannels)
 	//runtime.GOMAXPROCS(4)
-	ste.InitializeSTE()
+	go ste.InitializeSTE()
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
