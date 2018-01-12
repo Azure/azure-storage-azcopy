@@ -16,7 +16,59 @@ import (
 	"errors"
 	"unsafe"
 	"io/ioutil"
+	"sync"
 )
+
+type JobPartPlanInfoMap struct {
+	sync.RWMutex
+	internalMap map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
+}
+
+func (jMap *JobPartPlanInfoMap) LoadPartPlanMapforJob(jobId common.JobID) (map[common.PartNumber]*JobPartPlanInfo, bool) {
+	jMap.RLock()
+	partMap, ok := jMap.internalMap[jobId]
+	jMap.RUnlock()
+	return partMap, ok
+}
+
+func (jMap *JobPartPlanInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partNumber common.PartNumber) (*JobPartPlanInfo){
+	jMap.RLock()
+	partMap := jMap.internalMap[jobId]
+	if partMap == nil{
+		jMap.RUnlock()
+		return nil
+	}
+	jHandler := partMap[partNumber]
+	if jHandler == nil{
+		jMap.RUnlock()
+		return nil
+	}
+	fmt.Println("found the handler for job id and part number ", jobId, partNumber)
+	jMap.RUnlock()
+	return jHandler
+}
+
+func (jMap *JobPartPlanInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jHandler *JobPartPlanInfo) {
+	jMap.Lock()
+	partMap  := jMap.internalMap[jobId]
+	if partMap == nil { // there is no previous entry for given jobId
+	fmt.Println("there is no previous entry for given jobId", jobId)
+		partMap = make(map[common.PartNumber]*JobPartPlanInfo)
+		partMap[partNumber] = jHandler
+		jMap.internalMap[jobId] = partMap
+	}else{
+		fmt.Println("//there already exists some entry for given jobID", jobId)
+		//there already exists some entry for given jobID
+		jMap.internalMap[jobId][partNumber] = jHandler
+	}
+	jMap.Unlock()
+}
+
+func NewJobPartPlanInfoMap() (*JobPartPlanInfoMap) {
+	return &JobPartPlanInfoMap{
+		internalMap:make(map[common.JobID]map[common.PartNumber]*JobPartPlanInfo),
+	}
+}
 
 // parseStringToJobInfo api parses the file name to extract the job Id, part number and schema version number
 // Returns the JobId, PartNumber and data schema version
@@ -99,7 +151,7 @@ func convertJobIdBytesToString(jobId [128 /8]byte) (string){
 	return jobIdString
 }
 
-func reconstructTheExistingJobPart() (error){
+func reconstructTheExistingJobPart(jPartPlanInfoMap *JobPartPlanInfoMap) (error){
 	files := listFileWithExtension(".stev")
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
@@ -113,7 +165,7 @@ func reconstructTheExistingJobPart() (error){
 			return err
 		}
 		//fmt.Println("jobID & partno ", jobIdString, " ", partNumber, " ", versionNumber)
-		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, &JobPartInfoMap)
+		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jPartPlanInfoMap)
 	}
 	return nil
 }
@@ -189,8 +241,8 @@ func fileAlreadyExists(fileName string, dir string) (bool, error){
 	return false, nil
 }
 
-func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32) (TransferMsgDetail){
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, jPartPlanInfoMap *JobPartPlanInfoMap) (TransferMsgDetail){
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil{
 		panic(err)
 	}
@@ -200,19 +252,20 @@ func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transfe
 	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
 	chunkSize := jPartPlanPointer.BlobData.BlockSize
 	return TransferMsgDetail{jobId, partNo,transferEntryIndex, chunkSize, sourceType,
-		source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx, jHandler.TrasnferInfo[transferEntryIndex].cancel}
+		source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx,
+						jHandler.TrasnferInfo[transferEntryIndex].cancel, jPartPlanInfoMap}
 }
 
-func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8) {
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jPartPlanInfoMap *JobPartPlanInfoMap) {
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil{
 		panic(err)
 	}
 	jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 /8]byte{}, status)
 }
 
-func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8){
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobPartPlanInfoMap){
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil{
 		panic (err)
 	}

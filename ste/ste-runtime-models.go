@@ -23,6 +23,7 @@ type TransferMsg struct {
 	Id common.JobID
 	PartNumber common.PartNumber
 	TransferIndex uint32
+	JPartPlanInfoMap *JobPartPlanInfoMap
 }
 
 type TransferMsgDetail struct {
@@ -36,6 +37,7 @@ type TransferMsgDetail struct {
 	Destination     string
 	TransferCtx		context.Context
 	TransferCancelFunc func()
+	JobHandlerMap   *JobPartPlanInfoMap
 }
 
 type ChunkMsg struct {

@@ -11,52 +11,38 @@ import (
 	"strconv"
 	"runtime"
 )
-
-var JobPartInfoMap = map[common.JobID]map[common.PartNumber]*JobPartPlanInfo{}
 var steContext = context.Background()
 
 // putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID, partNo common.PartNumber,
-									jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo){
-	// get map[common.PartNumber]*JobPartPlanInfo for given jobId and part number
-	jPartMap := (*jPartInfoMap)[jobId]
-	// If no map exists, then creating a new map map[common.PartNumber]*JobPartPlanInfo for given jobId
-	if jPartMap == nil {
-		(*jPartInfoMap)[jobId] = make(map[common.PartNumber]*JobPartPlanInfo)
-		(*jPartInfoMap)[jobId][partNo] = jobHandler
-	}else { // if map exists for given jobId then putting JobPartPlanInfo Pointer for given part number
-		(*jPartInfoMap)[jobId][partNo] = jobHandler
-	}
+									jPartInfoMap *JobPartPlanInfoMap){
+	jPartInfoMap.StoreJobPartPlanInfo(jobId, partNo, jobHandler)
 }
 
 // getJobPartMapFromJobPartInfoMap api gets the map[common.PartNumber]*JobPartPlanInfo for given jobId and part number from map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
-										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo)  (jPartMap map[common.PartNumber]*JobPartPlanInfo){
-	jPartMap = (*jPartInfoMap)[jobId]
-	if jPartMap == nil{
-		return
+										jPartInfoMap *JobPartPlanInfoMap)  (jPartMap map[common.PartNumber]*JobPartPlanInfo){
+	jPartMap, ok := jPartInfoMap.LoadPartPlanMapforJob(jobId)
+	if !ok{
+		errorMsg := fmt.Sprintf("not part number exists for given jobId %s", jobId)
+		panic(errors.New(errorMsg))
 	}
 	return jPartMap
 }
 
 // getJobPartInfoHandlerFromMap
 func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
-										jPartInfoMap *map[common.JobID]map[common.PartNumber]*JobPartPlanInfo) (*JobPartPlanInfo, error){
-	jPartMap := (*jPartInfoMap)[jobId]
-	if jPartMap == nil{
-		err := fmt.Errorf(InvalidJobId, jobId)
-		return nil, err
-	}
-	jHandler := jPartMap[partNo]
+										jPartInfoMap *JobPartPlanInfoMap) (*JobPartPlanInfo, error){
+	jHandler := jPartInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNo)
 	if jHandler == nil{
-		err := fmt.Errorf(InvalidPartNo, partNo, jobId)
-		return nil, err
+		errorMsg := fmt.Sprintf("no jobPartPlanInfo handler exists for JobId %s and part number %d", jobId, partNo)
+		return nil, errors.New(errorMsg)
 	}
 	return jHandler, nil
 }
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *CoordinatorChannels){
+func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap){
 	/*
 		* Convert the blobdata to memory map compatible DestinationBlobData
 		* Create a file for JobPartOrder and write data into that file.
@@ -80,14 +66,14 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 		panic(err)
 	}
 
-	putJobPartInfoHandlerIntoMap(jobHandler, payload.ID, payload.PartNum, &JobPartInfoMap)
+	putJobPartInfoHandlerIntoMap(jobHandler, payload.ID, payload.PartNum, jPartPlanInfoMap)
 
 	if coordiatorChannels == nil{
 		panic(errors.New("channel not initialized"))
 	}
 	numTransfer := jobHandler.getJobPartPlanPointer().NumTransfers
 	for index := uint32(0); index < numTransfer; index ++{
-		transferMsg := TransferMsg{payload.ID, payload.PartNum, index}
+		transferMsg := TransferMsg{payload.ID, payload.PartNum, index, jPartPlanInfoMap}
 		switch payload.Priority{
 		case HighJobPriority:
 			coordiatorChannels.HighTransfer <- transferMsg
@@ -117,15 +103,15 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
 }
 
-func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels) (bool){
+func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap) (bool){
 	switch {
 	case payload.SourceType == common.Local &&
 		payload.DestinationType == common.Blob:
-			ExecuteNewCopyJobPartOrder(payload, coordintorChannels)
+			ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap)
 			return true
 	case payload.SourceType == common.Blob &&
 		payload.DestinationType == common.Local:
-		ExecuteNewCopyJobPartOrder(payload, coordintorChannels)
+		ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap)
 		return true
 	default:
 		fmt.Println("Command %d Type Not Supported by STE", payload)
@@ -145,11 +131,11 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
 	* PercentageProgress - job progress reported in terms of percentage
 	* FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func getJobStatus(jobId common.JobID, resp *http.ResponseWriter){
+func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
 
 	fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
-	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, &JobPartInfoMap)
+	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, jPartPlanInfoMap)
 
 	// if partNumber to JobPartPlanInfo Pointer map is nil, then returning error
 	if jPartMap == nil{
@@ -213,9 +199,9 @@ func getJobStatus(jobId common.JobID, resp *http.ResponseWriter){
 	(*resp).Write(jobProgressSummaryJson)
 }
 
-func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, resp *http.ResponseWriter) {
+func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter) {
 	// getJobPartInfoHandlerFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, &JobPartInfoMap)
+	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	// sending back the error status and error message in response
 	if err != nil{
 		(*resp).WriteHeader(http.StatusBadRequest)
@@ -249,25 +235,26 @@ func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, resp *http.R
 	(*resp).Write(tStatusJson)
 }
 
-func listExistingJobs(resp *http.ResponseWriter){
-	var jobIds []common.JobID
-	for jobId := range JobPartInfoMap{
-		jobIds = append(jobIds, jobId)
-	}
-	existingJobDetails := common.ExistingJobDetails{jobIds}
-	existingJobDetailsJson, err:= json.Marshal(existingJobDetails)
-	if err != nil{
-		(*resp).WriteHeader(http.StatusInternalServerError)
-		(*resp).Write([]byte("error marshalling the existing job list"))
-		return
-	}
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write(existingJobDetailsJson)
+func listExistingJobs(jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
+	//var jobIds []common.JobID
+	//partPlanMap := jPartPlanInfoMap.internalMap
+	//for jobId := range JobPartInfoMap{
+	//	jobIds = append(jobIds, jobId)
+	//}
+	//existingJobDetails := common.ExistingJobDetails{jobIds}
+	//existingJobDetailsJson, err:= json.Marshal(existingJobDetails)
+	//if err != nil{
+	//	(*resp).WriteHeader(http.StatusInternalServerError)
+	//	(*resp).Write([]byte("error marshalling the existing job list"))
+	//	return
+	//}
+	//(*resp).WriteHeader(http.StatusAccepted)
+	//(*resp).Write(existingJobDetailsJson)
 }
 
-func getJobOrderDetails(jobId common.JobID, resp *http.ResponseWriter){
+func getJobOrderDetails(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
-	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, &JobPartInfoMap)
+	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, jPartPlanInfoMap)
 
 	// if partNumber to JobPartPlanInfo Pointer map is nil, then returning error
 	if jPartMap == nil{
@@ -316,14 +303,14 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error){
 	return payload, nil
 }
 
-func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels){
+func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap){
 	switch req.Method {
 	case "GET":
 		var queryType = req.URL.Query()["type"][0]
 		switch queryType{
 		case "JobStatus":
 		var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-		getJobStatus(guUID, &resp)
+		getJobStatus(guUID, jPartPlanInfoMap, &resp)
 
 		case "PartStatus":
 			var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
@@ -334,13 +321,13 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			resp.Write([]byte(err.Error()))
 				return
 			}
-			getJobPartStatus(guUID, common.PartNumber(partNo), &resp)
+			getJobPartStatus(guUID, common.PartNumber(partNo), jPartPlanInfoMap, &resp)
 		case "JobListing":
-			listExistingJobs(&resp)
+			listExistingJobs(jPartPlanInfoMap, &resp)
 
 		case "JobDetail":
 			var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-			getJobOrderDetails(guUID, &resp)
+			getJobOrderDetails(guUID, jPartPlanInfoMap, &resp)
 
 		default:
 			resp.WriteHeader(http.StatusBadRequest)
@@ -353,7 +340,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte(UnsuccessfulAZCopyRequest + " : " + err.Error()))
 		}
-		isValid := validateAndRouteHttpPostRequest(jobRequestData, coordinatorChannels)
+		isValid := validateAndRouteHttpPostRequest(jobRequestData, coordinatorChannels, jPartPlanInfoMap)
 		if isValid {
 			resp.WriteHeader(http.StatusAccepted)
 			resp.Write([]byte(SuccessfulAZCopyRequest))
@@ -417,9 +404,10 @@ func InitializedChannels() (*CoordinatorChannels, *EEChannels){
  */
 func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 	fmt.Println("STORAGE TRANSFER ENGINE")
-	reconstructTheExistingJobPart()
+	jobHandlerMap := NewJobPartPlanInfoMap()
+	reconstructTheExistingJobPart(jobHandlerMap)
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		serveRequest(writer, request, coordinatorChannels)
+		serveRequest(writer, request, coordinatorChannels, jobHandlerMap)
 	})
 	err := http.ListenAndServe("localhost:1337", nil)
 	fmt.Print("Server Created")
