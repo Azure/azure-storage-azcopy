@@ -203,6 +203,7 @@ ClientBin/
 *.jfm
 *.pfx
 *.publishsettings
+*.db
 orleans.codegen.cs
 
 # Since there are multiple workflows, uncomment next line to ignore bower_components
@@ -292,4 +293,4 @@ __pycache__/
 *.xsd.cs
 
 # Project executable
-azure-storage-azcopy
+azure-storage-azcopy.exe

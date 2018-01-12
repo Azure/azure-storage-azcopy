@@ -72,7 +72,7 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 				transfer.TransferCtx,
 				transfer.TransferCancelFunc,
 				&localToBlockBlob.count,
-				&blocksIds),
+				&blocksIds, transfer.JobHandlerMap),
 		}
 		blockIdCount += 1
 	}
@@ -80,7 +80,7 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 
 // this generates a function which performs the uploading of a single chunk
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
-	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string) chunkFunc {
+	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jPartPlanInfoMap *JobPartPlanInfoMap) chunkFunc {
 	return func(workerId int) {
 		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
@@ -99,12 +99,12 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
-			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
-			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed)
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jPartPlanInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed, jPartPlanInfoMap)
 			return
 		}
 
-		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete)
+		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jPartPlanInfoMap)
 		// step 4: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 			// step 5: this is the last block, perform EPILOGUE
@@ -113,10 +113,10 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
 			if err != nil {
 				fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
-				updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed)
+				updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed, jPartPlanInfoMap)
 			}
 
-			updateTransferStatus(jobId, partNum, transferId, TransferStatusComplete)
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusComplete, jPartPlanInfoMap)
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {
