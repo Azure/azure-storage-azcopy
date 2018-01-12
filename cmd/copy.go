@@ -73,8 +73,11 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Println("copy job starting: ")
-			jobId := handlers.HandleCopyCommand(commandLineInput)
-			fmt.Println("Job with id", jobId, "has started.")
+			handlers.HandleCopyCommand(commandLineInput)
+			//fmt.Println("Job with id", jobId, "has started.")
+
+			//// wait until job finishes
+			//time.Sleep(600 * time.Second)
 		},
 	}
 

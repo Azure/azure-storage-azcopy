@@ -33,6 +33,7 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
+	"time"
 )
 
 const (
@@ -57,6 +58,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
+	}
+
+	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid){
+		time.Sleep(2 * time.Second)
 	}
 
 	return uuid
@@ -199,10 +204,12 @@ func HandleDownloadFromWastoreToLocal(
 			panic("Cannot get blob properties")
 		}
 
-		if destinationFileInfo.IsDir() { // destination is dir, therefore the file name needs to be generated
-			blobName := sourcePathParts[1]
-			commandLineInput.Destination = path.Join(commandLineInput.Destination, blobName)
-		}
+		//TODO figure out what to do when destination is dir for a single blob download
+		//unless file info tells us, it is impossible to know whether the destination is a dir
+		//if destinationFileInfo.IsDir() { // destination is dir, therefore the file name needs to be generated
+		//	blobName := sourcePathParts[1]
+		//	commandLineInput.Destination = path.Join(commandLineInput.Destination, blobName)
+		//}
 
 		singleTask := common.CopyTransfer{
 			Source: sourceUrl.String(),

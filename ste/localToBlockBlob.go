@@ -44,10 +44,6 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 	// step 4: compute the number of blocks and create a slice to hold the blockIDs of each chunk
 	downloadChunkSize := int64(transfer.ChunkSize)
 
-	if downloadChunkSize == 0 {
-		downloadChunkSize = defaultBlockSize
-	}
-
 	numOfBlocks := computeNumOfChunks(blobSize, downloadChunkSize)
 	blocksIds := make([]string, numOfBlocks)
 	blockIdCount := int32(0)
@@ -86,7 +82,7 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string) chunkFunc {
 	return func(workerId int) {
-		transferIdentifierStr := fmt.Sprintf("jobId %d and partNum %d and transferId %d", jobId, partNum, transferId)
+		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 		// step 1: generate block ID
 		blockId, _ := common.NewUUID()
@@ -94,7 +90,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 		// step 2: save the block ID into the list of block IDs
 		(*blockIds)[chunkId] = encodedBlockId
-		fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
+		//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
 		// step 3: perform put block
 		blockBlobUrl := blobURL.ToBlockBlobURL()
@@ -104,6 +100,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			cancelTransfer()
 			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed)
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed)
 			return
 		}
 
@@ -116,7 +113,10 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
 			if err != nil {
 				fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
+				updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed)
 			}
+
+			updateTransferStatus(jobId, partNum, transferId, TransferStatusComplete)
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {

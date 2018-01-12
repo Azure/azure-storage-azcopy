@@ -6,11 +6,7 @@ import (
 	"net/http"
 	"io/ioutil"
 	"errors"
-	"github.com/edsrzf/mmap-go"
-	"os"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"context"
-	"bytes"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"strconv"
 	"runtime"
@@ -18,58 +14,6 @@ import (
 
 var JobPartInfoMap = map[common.JobID]map[common.PartNumber]*JobPartPlanInfo{}
 var steContext = context.Background()
-
-func uploadTheBlocksSequentially(ctx context.Context, blobUrl azblob.BlockBlobURL,
-	memMap mmap.MMap, base64BlockIDs []string) (bool){
-
-	memMapByteLength := len(memMap)
-	bytesLeft := memMapByteLength
-	startOffset := 0
-	bytesPutInBlock := 0
-
-	totalNumBlocks := memMapByteLength / BLOCK_LENGTH
-
-	if(memMapByteLength % BLOCK_LENGTH) > 0 {
-		totalNumBlocks += 1
-	}
-	for blockIndex := 0 ; blockIndex < totalNumBlocks; blockIndex++{
-		var currBlock []byte
-		if bytesLeft <= 0 {
-			break
-		}
-		if bytesLeft < BLOCK_LENGTH {
-			currBlock = memMap[startOffset: startOffset + bytesLeft]
-			bytesPutInBlock = bytesLeft
-		}else{
-			currBlock = memMap[startOffset : startOffset + BLOCK_LENGTH]
-			bytesPutInBlock = BLOCK_LENGTH
-		}
-		result := uploadTheBlocks(ctx, blobUrl, base64BlockIDs[blockIndex], blockIndex, currBlock)
-		if !result {
-			fmt.Errorf("Uploading Failed For url %s and blockId %s with ", blobUrl.String(), base64BlockIDs[blockIndex])
-			return false
-		}
-		startOffset += bytesPutInBlock
-		bytesLeft -= bytesPutInBlock
-	}
-	return true
-}
-
-func uploadTheBlocks(ctx context.Context, blobURL azblob.BlockBlobURL,
-	blockID string, blockIndex int, dataBuffer []byte)  (bool){
-	if(ctx == nil) ||
-		(blobURL == azblob.BlockBlobURL{}) ||
-		(blockID == "") || (dataBuffer == nil){
-		panic ("STE: uploadTheBlocks Invalid params passed to the function")
-	}
-	_, err := blobURL.PutBlock(ctx, blockID, bytes.NewReader(dataBuffer), azblob.LeaseAccessConditions{})
-	if err != nil {
-		fmt.Println("Uploading Failed For url %s and blockId %s with err %s", blobURL.String(), blockID, err)
-		return false
-	}
-	fmt.Println("Uploading Successful For url ", blobURL.String(), " and block No ", blockIndex)
-	return true
-}
 
 // putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID, partNo common.PartNumber,
@@ -120,6 +64,7 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 		*  Create a JobPartInfo pointer for the new job and put it into the map
 		* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
+	 fmt.Println("New Job Part Order Request Received", payload.ID)
 	data := payload.OptionalAttributes
 	var crc [128/ 8]byte
 	copy(crc[:], CRC64BitExample)
@@ -172,24 +117,6 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
 }
 
-func unMappingtheMemoryMapFile(mMap mmap.MMap, file *os.File){
-	if mMap == nil {
-		panic("Unferenced Memory Map Byte Array Passed")
-	}
-	err := mMap.Unmap()
-	if err != nil {
-		panic(err)
-	}
-	err = file.Close()
-	if err != nil {
-		fmt.Println("File is Already CLosed.")
-	}
-}
-
-func ExecuteAZCopyDownload(payload common.CopyJobPartOrder){
-	fmt.Println("Executing the AZ Copy Download Request in different Go Routine ")
-}
-
 func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels) (bool){
 	switch {
 	case payload.SourceType == common.Local &&
@@ -198,7 +125,7 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
 			return true
 	case payload.SourceType == common.Blob &&
 		payload.DestinationType == common.Local:
-		ExecuteAZCopyDownload(payload)
+		ExecuteNewCopyJobPartOrder(payload, coordintorChannels)
 		return true
 	default:
 		fmt.Println("Command %d Type Not Supported by STE", payload)
@@ -218,8 +145,9 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
 	* PercentageProgress - job progress reported in terms of percentage
 	* FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func getJobStatus(jobId common.JobID, lastCheckPointTimeStamp uint64, resp *http.ResponseWriter){
+func getJobStatus(jobId common.JobID, resp *http.ResponseWriter){
 
+	fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, &JobPartInfoMap)
 
@@ -245,38 +173,33 @@ func getJobStatus(jobId common.JobID, lastCheckPointTimeStamp uint64, resp *http
 
 		completeJobOrdered = completeJobOrdered || currentJobPartPlanInfo.IsFinalPart
 		progressSummary.TotalNumberOfTransfer += currentJobPartPlanInfo.NumTransfers
-
 		// iterating through all transfers for current partNo and job with given jobId
 		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++{
 
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 			transferHeader := jHandler.Transfer(index)
-
-			// if transferHeader completionTime is greater than lastCheckPointTimeStamp, it means the transfer was updated after lastCheckPointTimeStamp
-			if transferHeader.CompletionTime > lastCheckPointTimeStamp {
-				// check for completed transfer
-				if transferHeader.Status == TransferStatusComplete{
-					progressSummary.NumberOfTransferCompletedafterCheckpoint += 1
-				}else if transferHeader.Status == TransferStatusFailed{ // check for failed transfer
-					progressSummary.NumberOfTransferFailedAfterCheckpoint += 1
-					// getting the source and destination for failed transfer at position - index
-					source, destination := jHandler.getTransferSrcDstDetail(index)
-					// appending to list of failed transfer
-					failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, TransferStatusFailed})
-				}
-			}
 			// check for all completed transfer to calculate the progress percentage at the end
 			if transferHeader.Status == TransferStatusComplete{
 				progressSummary.TotalNumberofTransferCompleted += 1
 			}
 			if transferHeader.Status == TransferStatusFailed{
 				progressSummary.TotalNumberofFailedTransfer += 1
+				// getting the source and destination for failed transfer at position - index
+				source, destination := jHandler.getTransferSrcDstDetail(index)
+				// appending to list of failed transfer
+				failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, TransferStatusFailed})
 			}
 		}
 	}
+	 /*If each transfer in all parts of a job has either completed or failed and is not in active or inactive state, then job order is said to be completed
+	 if final part of job has been ordered.*/
+	if (progressSummary.TotalNumberOfTransfer == progressSummary.TotalNumberofFailedTransfer + progressSummary.TotalNumberofTransferCompleted) &&(
+		completeJobOrdered){
+			progressSummary.JobStatus = common.StatusCompleted
+	}
 	progressSummary.CompleteJobOrdered = completeJobOrdered
 	progressSummary.FailedTransfers = failedTransfers
-	progressSummary.PercentageProgress = ( progressSummary.TotalNumberofTransferCompleted  + progressSummary.TotalNumberofFailedTransfer) / progressSummary.TotalNumberOfTransfer * 100
+	progressSummary.PercentageProgress = (( progressSummary.TotalNumberofTransferCompleted  + progressSummary.TotalNumberofFailedTransfer) *100)/ progressSummary.TotalNumberOfTransfer
 
 	// marshalling the JobProgressSummary struct to send back in response.
 	jobProgressSummaryJson, err := json.MarshalIndent(progressSummary, "", "")
@@ -400,13 +323,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 		switch queryType{
 		case "JobStatus":
 		var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-			checkPointTime, err := strconv.ParseUint(req.URL.Query()["CheckpointTime"][0], 10, 64)
-		if err != nil{
-			resp.WriteHeader(http.StatusBadRequest)
-			resp.Write([]byte(err.Error()))
-			return
-		}
-			getJobStatus(guUID, checkPointTime, &resp)
+		getJobStatus(guUID, &resp)
 
 		case "PartStatus":
 			var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
@@ -512,9 +429,9 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 }
 
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
-func main(){
+func InitializeSTE(){
 	runtime.GOMAXPROCS(4)
 	coordinatorChannel, execEngineChannels := InitializedChannels()
+	go InitializeExecutionEngine(execEngineChannels)
 	initializeCoordinator(coordinatorChannel)
-	InitializeExecutionEngine(execEngineChannels)
 }

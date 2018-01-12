@@ -11,15 +11,13 @@ import (
 	"time"
 )
 
-const defaultBlockSize = 4 * 1024 * 1024
-
 func InitializeExecutionEngine(execEngineChannels *EEChannels) {
 	fmt.Println("INITIALIZING EXECUTION ENGINE STARTING!")
 	highChunk := execEngineChannels.HighChunkTransaction
 	highTransfer := execEngineChannels.HighTransfer
 	suicideLine := execEngineChannels.SuicideChannel
 
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 100; i++ {
 		go engineWorker(i, highChunk, highTransfer, suicideLine)
 	}
 	//
@@ -74,7 +72,7 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					fmt.Println("Worker", workerId, "is processing TRANSFER job with jobId", transferMsg.Id, "and partNum", transferMsg.PartNumber, "and transferId", transferMsg.TransferIndex)
+					//fmt.Println("Worker", workerId, "is processing TRANSFER job with jobId", transferMsg.Id, "and partNum", transferMsg.PartNumber, "and transferId", transferMsg.TransferIndex)
 					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 					computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)(transferMsgDetail, highPriorityChunkChannel)
 				default:
