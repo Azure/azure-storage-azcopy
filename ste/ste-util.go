@@ -39,11 +39,6 @@ func (jMap *JobPartPlanInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID
 		return nil
 	}
 	jHandler := partMap[partNumber]
-	if jHandler == nil{
-		jMap.RUnlock()
-		return nil
-	}
-	fmt.Println("found the handler for job id and part number ", jobId, partNumber)
 	jMap.RUnlock()
 	return jHandler
 }
