@@ -17,7 +17,7 @@ func InitializeExecutionEngine(execEngineChannels *EEChannels) {
 	highTransfer := execEngineChannels.HighTransfer
 	suicideLine := execEngineChannels.SuicideChannel
 
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= 1; i++ {
 		go engineWorker(i, highChunk, highTransfer, suicideLine)
 	}
 	//
@@ -72,9 +72,15 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					fmt.Println("Worker", workerId, "is processing TRANSFER job with jobId", transferMsg.Id, "and partNum", transferMsg.PartNumber, "and transferId", transferMsg.TransferIndex)
+					logger := getLoggerFromJobPartPlanInfo(transferMsg.Id, transferMsg.PartNumber, transferMsg.JPartPlanInfoMap)
+					logger.Debug("Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.JPartPlanInfoMap)
-					computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)(transferMsgDetail, highPriorityChunkChannel)
+					prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
+					if prologueFunction == nil{
+						logger.Error("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
+						panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)))
+					}
+					prologueFunction(transferMsgDetail, highPriorityChunkChannel)
 				default:
 					// lower priorities should go here in the future
 					//fmt.Println("Worker", workerId, "is IDLE, sleeping for 0.01 sec zzzzzz")
@@ -93,7 +99,7 @@ func computePrologueFunc(sourceLocationType, destinationLocationType common.Loca
 	case sourceLocationType == common.Local && destinationLocationType == common.Blob: // upload from local to Azure
 		return localToBlockBlob{}.prologue
 	default:
-		panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", sourceLocationType, destinationLocationType)))
+		return nil
 	}
 }
 

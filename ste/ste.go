@@ -42,7 +42,7 @@ func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 }
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
-func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap){
+func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap){
 	/*
 		* Convert the blobdata to memory map compatible DestinationBlobData
 		* Create a file for JobPartOrder and write data into that file.
@@ -50,7 +50,7 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 		*  Create a JobPartInfo pointer for the new job and put it into the map
 		* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
-	 fmt.Println("New Job Part Order Request Received", payload.ID)
+	 //fmt.Println("New Job Part Order Request Received", payload.ID)
 	data := payload.OptionalAttributes
 	var crc [128/ 8]byte
 	copy(crc[:], CRC64BitExample)
@@ -65,11 +65,18 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	if err != nil {
 		panic(err)
 	}
-
+	logger := getLoggerForJobId(payload.ID, jobToLoggerMap)
+	if logger == nil{
+		logger = new(common.Logger)
+		logger.Initialize(payload.LogVerbosity, payload.ID)
+		jobToLoggerMap.StoreLoggerForJob(payload.ID, logger)
+	}
+	jobHandler.Logger = logger
+	jobHandler.Logger.Info("new job part order received with job Id %s and part number %d", payload.ID, payload.PartNum)
 	putJobPartInfoHandlerIntoMap(jobHandler, payload.ID, payload.PartNum, jPartPlanInfoMap)
 
 	if coordiatorChannels == nil{
-		panic(errors.New("channel not initialized"))
+		jobHandler.Logger.Error("coordinator channels not initialized properly")
 	}
 	numTransfer := jobHandler.getJobPartPlanPointer().NumTransfers
 	for index := uint32(0); index < numTransfer; index ++{
@@ -77,12 +84,14 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 		switch payload.Priority{
 		case HighJobPriority:
 			coordiatorChannels.HighTransfer <- transferMsg
+			jobHandler.Logger.Debug("successfully scheduled transfer %v with priority %v for Job %v and part number %v", index, payload.Priority, string(payload.ID), payload.PartNum)
 		case MediumJobPriority:
 			coordiatorChannels.MedTransfer <- transferMsg
 		case LowJobPriority:
 			coordiatorChannels.LowTransfer <- transferMsg
 		default:
-			fmt.Println("invalid job part order priority")
+			jobHandler.Logger.Debug("invalid job part order priority %d for given Job Id %s and part number %d and transfer Index %d", payload.Priority, payload.ID, payload.PartNum, index)
+			fmt.Println()
 		}
 	}
 
@@ -103,15 +112,15 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
 }
 
-func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap) (bool){
+func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap) (bool){
 	switch {
 	case payload.SourceType == common.Local &&
 		payload.DestinationType == common.Blob:
-			ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap)
+			ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap, jobToLoggerMap)
 			return true
 	case payload.SourceType == common.Blob &&
 		payload.DestinationType == common.Local:
-		ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap)
+		ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap, jobToLoggerMap)
 		return true
 	default:
 		fmt.Println("Command %d Type Not Supported by STE", payload)
@@ -303,7 +312,7 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error){
 	return payload, nil
 }
 
-func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap){
+func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap){
 	switch req.Method {
 	case "GET":
 		var queryType = req.URL.Query()["type"][0]
@@ -340,7 +349,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte(UnsuccessfulAZCopyRequest + " : " + err.Error()))
 		}
-		isValid := validateAndRouteHttpPostRequest(jobRequestData, coordinatorChannels, jPartPlanInfoMap)
+		isValid := validateAndRouteHttpPostRequest(jobRequestData, coordinatorChannels, jPartPlanInfoMap, jobToLoggerMap)
 		if isValid {
 			resp.WriteHeader(http.StatusAccepted)
 			resp.Write([]byte(SuccessfulAZCopyRequest))
@@ -405,9 +414,10 @@ func InitializedChannels() (*CoordinatorChannels, *EEChannels){
 func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 	fmt.Println("STORAGE TRANSFER ENGINE")
 	jobHandlerMap := NewJobPartPlanInfoMap()
+	jobLoggerMap := NewJobToLoggerMap()
 	reconstructTheExistingJobPart(jobHandlerMap)
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		serveRequest(writer, request, coordinatorChannels, jobHandlerMap)
+		serveRequest(writer, request, coordinatorChannels, jobHandlerMap, jobLoggerMap)
 	})
 	err := http.ListenAndServe("localhost:1337", nil)
 	fmt.Print("Server Created")

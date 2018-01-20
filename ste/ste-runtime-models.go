@@ -6,6 +6,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+
 type TransferInfo struct {
 	ctx context.Context
 	cancel context.CancelFunc
@@ -17,6 +18,7 @@ type JobPartPlanInfo struct {
 	cancel       context.CancelFunc
 	memMap       mmap.MMap
 	TrasnferInfo []TransferInfo
+	Logger 		*common.Logger
 }
 
 type TransferMsg struct {

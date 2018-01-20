@@ -19,6 +19,31 @@ import (
 	"sync"
 )
 
+
+type JobToLoggerMap struct {
+	sync.RWMutex
+	internalMap map[common.JobID]*common.Logger
+}
+
+func (jLogger *JobToLoggerMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
+	jLogger.RLock()
+	logger := jLogger.internalMap[jobId]
+	jLogger.RUnlock()
+	return logger
+}
+
+func (jLogger *JobToLoggerMap) StoreLoggerForJob(jobId common.JobID, logger *common.Logger) {
+	jLogger.Lock()
+	jLogger.internalMap[jobId] = logger
+	jLogger.Unlock()
+}
+
+func NewJobToLoggerMap() (*JobToLoggerMap){
+	return &JobToLoggerMap{
+		internalMap:make(map[common.JobID]*common.Logger),
+	}
+}
+
 type JobPartPlanInfoMap struct {
 	sync.RWMutex
 	internalMap map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
@@ -47,12 +72,10 @@ func (jMap *JobPartPlanInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNum
 	jMap.Lock()
 	partMap  := jMap.internalMap[jobId]
 	if partMap == nil { // there is no previous entry for given jobId
-	fmt.Println("there is no previous entry for given jobId", jobId)
 		partMap = make(map[common.PartNumber]*JobPartPlanInfo)
 		partMap[partNumber] = jHandler
 		jMap.internalMap[jobId] = partMap
 	}else{
-		fmt.Println("//there already exists some entry for given jobID", jobId)
 		//there already exists some entry for given jobID
 		jMap.internalMap[jobId][partNumber] = jHandler
 	}
@@ -165,21 +188,6 @@ func reconstructTheExistingJobPart(jPartPlanInfoMap *JobPartPlanInfoMap) (error)
 	return nil
 }
 
-
-func roundUp(numToRound uint64, multipleOf uint64) (uint64){
-	if multipleOf <= 1{
-		return numToRound
-	}
-	if numToRound == 0 {
-		return 0
-	}
-	remainder := numToRound % multipleOf
-	if remainder == 0{
-		return numToRound;
-	}
-	return numToRound + multipleOf - remainder
-}
-
 func listFileWithExtension(ext string) []os.FileInfo {
 	pathS, err := os.Getwd()
 	if err != nil {
@@ -256,7 +264,8 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 	if err != nil{
 		panic(err)
 	}
-	jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 /8]byte{}, status)
+	resultMessage := jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 /8]byte{}, status)
+	jHandler.Logger.Debug("%s for jobId %s and part number %d", resultMessage, jobId, partNo)
 }
 
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobPartPlanInfoMap){
@@ -266,4 +275,18 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 	}
 	transferHeader := jHandler.Transfer(transferIndex)
 	transferHeader.Status = transferStatus
+}
+
+func getLoggerForJobId(jobId common.JobID, loggerMap *JobToLoggerMap) (*common.Logger) {
+	logger := loggerMap.LoadLoggerForJob(jobId)
+	return logger
+}
+
+func getLoggerFromJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, infoMap *JobPartPlanInfoMap) (*common.Logger){
+	jobHandler := infoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
+	if jobHandler == nil{
+		errorMessage := fmt.Sprintf("jobpartplaninfo map does not have jobpartplaninfo handler for jobId %s and part number %d", jobId, partNumber)
+		panic (errors.New(errorMessage))
+	}
+	return jobHandler.Logger
 }

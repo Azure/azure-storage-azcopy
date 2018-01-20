@@ -54,6 +54,7 @@ type CopyCmdArgsAndFlags struct {
 	NoGuessMimeType          bool
 	PreserveLastModifiedTime bool
 	Acl                      string
+	LogVerbosity			uint8
 }
 
 // define the different types of sources/destinations
@@ -82,6 +83,7 @@ type CopyJobPartOrder struct {
 	SourceType LocationType
 	DestinationType LocationType
 	Transfers []CopyTransfer
+	LogVerbosity LogSeverity
 	OptionalAttributes BlobTransferAttributes
 }
 

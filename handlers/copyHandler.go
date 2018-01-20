@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	NumOfFilesPerUploadJobPart = 5
+	NumOfFilesPerUploadJobPart = 2
 )
 
 // handles the copy command
@@ -63,7 +63,6 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid){
 		time.Sleep(2 * time.Second)
 	}
-
 	return uuid
 }
 
@@ -272,6 +271,7 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	}
 
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
+	jobPartOrderToFill.LogVerbosity = common.LogSeverity(commandLineInput.LogVerbosity)
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl
 	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier

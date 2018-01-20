@@ -102,5 +102,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.NoGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
+	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging level", uint8(common.LOG_DEBUG_LEVEL), "defines the log verbosity to be saved to log file")
 }
 
