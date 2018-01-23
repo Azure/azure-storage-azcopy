@@ -8,8 +8,8 @@ import (
 	"errors"
 	"context"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strconv"
 	"runtime"
+	"math"
 )
 var steContext = context.Background()
 
@@ -24,7 +24,7 @@ func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 										jPartInfoMap *JobPartPlanInfoMap)  (jPartMap map[common.PartNumber]*JobPartPlanInfo){
 	jPartMap, ok := jPartInfoMap.LoadPartPlanMapforJob(jobId)
 	if !ok{
-		errorMsg := fmt.Sprintf("not part number exists for given jobId %s", jobId)
+		errorMsg := fmt.Sprintf("no part number exists for given jobId %s", jobId)
 		panic(errors.New(errorMsg))
 	}
 	return jPartMap
@@ -129,7 +129,7 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
 	return false
 }
 
-// getJobStatus api returns the job progress summary of an active job
+// getJobSummary api returns the job progress summary of an active job
 /*
 	* Return following Properties in Job Progress Summary
 	* CompleteJobOrdered - determines whether final part of job has been ordered or not
@@ -140,7 +140,7 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
 	* PercentageProgress - job progress reported in terms of percentage
 	* FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
+func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
 
 	fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
@@ -174,15 +174,15 @@ func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 			transferHeader := jHandler.Transfer(index)
 			// check for all completed transfer to calculate the progress percentage at the end
-			if transferHeader.Status == TransferStatusComplete{
+			if transferHeader.Status == common.TransferStatusComplete{
 				progressSummary.TotalNumberofTransferCompleted += 1
 			}
-			if transferHeader.Status == TransferStatusFailed{
+			if transferHeader.Status == common.TransferStatusFailed{
 				progressSummary.TotalNumberofFailedTransfer += 1
 				// getting the source and destination for failed transfer at position - index
 				source, destination := jHandler.getTransferSrcDstDetail(index)
 				// appending to list of failed transfer
-				failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, TransferStatusFailed})
+				failedTransfers = append(failedTransfers, common.TransferStatus{source, destination, common.TransferStatusFailed})
 			}
 		}
 	}
@@ -208,34 +208,38 @@ func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp
 	(*resp).Write(jobProgressSummaryJson)
 }
 
-func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter) {
+func getTransferList(jobId common.JobID, expectedStatus common.Status, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter) {
 	// getJobPartInfoHandlerFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
+	jPartMap, ok := jPartPlanInfoMap.LoadPartPlanMapforJob(jobId)
 	// sending back the error status and error message in response
-	if err != nil{
+	if !ok{
 		(*resp).WriteHeader(http.StatusBadRequest)
-		(*resp).Write([]byte(err.Error()))
+		(*resp).Write([]byte(fmt.Sprintf("invalid jobId %s", jobId)))
 		return
 	}
-	// jPartPlan represents the memory map JobPartPlanHeader for given jobid and part number
-	jPartPlan := jHandler.getJobPartPlanPointer()
-	numTransfer := jPartPlan.NumTransfers
+	var transferList []common.TransferStatus
+	for _, jHandler := range jPartMap{
+		// jPartPlan represents the memory map JobPartPlanHeader for given jobid and part number
+		jPartPlan := jHandler.getJobPartPlanPointer()
+		numTransfer := jPartPlan.NumTransfers
 
-	// trasnferStatusList represents the list containing number of transfer for given jobid and part number
-	transferStatusList := make([]common.TransferStatus, numTransfer)
-	for index := uint32(0); index < numTransfer; index ++{
-		// getting transfer header of transfer at index index for given jobId and part number
-		transferEntry := jHandler.Transfer(index)
-		// getting source and destination of a transfer at index index for given jobId and part number.
-		source, destination := jHandler.getTransferSrcDstDetail(index)
-		transferStatusList[index].Status = transferEntry.Status
-		transferStatusList[index].Src = source
-		transferStatusList[index].Dst = destination
+		// trasnferStatusList represents the list containing number of transfer for given jobid and part number
+		for index := uint32(0); index < numTransfer; index ++{
+			// getting transfer header of transfer at index index for given jobId and part number
+			transferEntry := jHandler.Transfer(index)
+			// if the expected status is not to list all transfer and status of current transfer is not equal to the expected status, then we skip this transfer
+			if expectedStatus != common.TranferStatusAll && transferEntry.Status != expectedStatus{
+				continue
+			}
+			// getting source and destination of a transfer at index index for given jobId and part number.
+			source, destination := jHandler.getTransferSrcDstDetail(index)
+			transferList = append(transferList, common.TransferStatus{source, destination, transferEntry.Status})
+		}
 	}
 	// marshalling the TransfersStatus Struct to send back in response to front-end
-	tStatusJson, err := json.MarshalIndent(common.TransfersStatus{transferStatusList}, "", "")
+	tStatusJson, err := json.MarshalIndent(common.TransfersStatus{transferList}, "", "")
 	if err != nil{
-		result := fmt.Sprintf(TransferStatusMarshallingError, jobId, partNo)
+		result := fmt.Sprintf("error marshalling the transfer status for Job Id %s", jobId)
 		(*resp).WriteHeader(http.StatusInternalServerError)
 		(*resp).Write([]byte(result))
 		return
@@ -245,20 +249,17 @@ func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, jPartPlanInf
 }
 
 func listExistingJobs(jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
-	//var jobIds []common.JobID
-	//partPlanMap := jPartPlanInfoMap.internalMap
-	//for jobId := range JobPartInfoMap{
-	//	jobIds = append(jobIds, jobId)
-	//}
-	//existingJobDetails := common.ExistingJobDetails{jobIds}
-	//existingJobDetailsJson, err:= json.Marshal(existingJobDetails)
-	//if err != nil{
-	//	(*resp).WriteHeader(http.StatusInternalServerError)
-	//	(*resp).Write([]byte("error marshalling the existing job list"))
-	//	return
-	//}
-	//(*resp).WriteHeader(http.StatusAccepted)
-	//(*resp).Write(existingJobDetailsJson)
+	jobIds := jPartPlanInfoMap.LoadExistingJobIds()
+
+	existingJobDetails := common.ExistingJobDetails{jobIds}
+	existingJobDetailsJson, err:= json.Marshal(existingJobDetails)
+	if err != nil{
+		(*resp).WriteHeader(http.StatusInternalServerError)
+		(*resp).Write([]byte("error marshalling the existing job list"))
+		return
+	}
+	(*resp).WriteHeader(http.StatusAccepted)
+	(*resp).Write(existingJobDetailsJson)
 }
 
 func getJobOrderDetails(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
@@ -315,32 +316,19 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error){
 func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap){
 	switch req.Method {
 	case "GET":
-		var queryType = req.URL.Query()["type"][0]
-		switch queryType{
-		case "JobStatus":
-		var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-		getJobStatus(guUID, jPartPlanInfoMap, &resp)
-
-		case "PartStatus":
-			var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-			partNoString := req.URL.Query()["Part"][0]
-			partNo, err := strconv.ParseUint(partNoString, 10, 32)
+		var params = req.URL.Query()["command"][0]
+		listCommand := []byte(params)
+		var lsCommand common.ListJobPartsTransfers
+		err := json.Unmarshal(listCommand,  &lsCommand)
 		if err != nil{
-			resp.WriteHeader(http.StatusBadRequest)
-			resp.Write([]byte(err.Error()))
-				return
-			}
-			getJobPartStatus(guUID, common.PartNumber(partNo), jPartPlanInfoMap, &resp)
-		case "JobListing":
+			panic(err)
+		}
+		if lsCommand.JobId == "" {
 			listExistingJobs(jPartPlanInfoMap, &resp)
-
-		case "JobDetail":
-			var guUID common.JobID = common.JobID(req.URL.Query()["GUID"][0])
-			getJobOrderDetails(guUID, jPartPlanInfoMap, &resp)
-
-		default:
-			resp.WriteHeader(http.StatusBadRequest)
-			resp.Write([]byte("operation not supported"))
+		}else if lsCommand.ExpectedTransferStatus == math.MaxUint8{
+			getJobSummary(lsCommand.JobId, jPartPlanInfoMap, &resp)
+		}else{
+			getTransferList(lsCommand.JobId, lsCommand.ExpectedTransferStatus, jPartPlanInfoMap, &resp)
 		}
 
 	case "POST":

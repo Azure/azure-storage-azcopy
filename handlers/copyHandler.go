@@ -60,6 +60,9 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
 
+	if commandLineInput.IsaBackgroundOp {
+		return uuid
+	}
 	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid){
 		time.Sleep(2 * time.Second)
 	}
@@ -272,6 +275,7 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
 	jobPartOrderToFill.LogVerbosity = common.LogSeverity(commandLineInput.LogVerbosity)
+	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl
 	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier

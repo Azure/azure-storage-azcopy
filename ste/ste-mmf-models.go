@@ -6,7 +6,7 @@ import (
 
 //These constant defines the various types of source and destination of the transfers
 
-const dataSchemaVersion = 1 // To be Incremented every time when we release azcopy with changed dataschema
+const dataSchemaVersion = 0 // To be Incremented every time when we release azcopy with changed dataschema
 
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
@@ -39,7 +39,7 @@ type JobPartPlanTransfer struct {
 	DstLength      uint16
 	ChunkNum       uint16
 	ModifiedTime   uint32
-	Status         uint8
+	Status         common.Status
 	SourceSize     uint64
 	CompletionTime uint64
 }
@@ -94,12 +94,7 @@ const (
 	ChunkTransferStatusFailed = 4
 )
 
-const (
-	TransferStatusInactive = 0
-	TransferStatusActive = 1
-	TransferStatusComplete = 3
-	TransferStatusFailed = 4
-)
+
 
 const (
 	HighJobPriority = 0

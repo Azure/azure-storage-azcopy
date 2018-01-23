@@ -23,7 +23,6 @@ package main
 import (
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"os"
-	"fmt"
 	"os/exec"
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
@@ -37,14 +36,12 @@ func main() {
 	}
 	switch mode {
 	case "normal":
-		fmt.Println("starting the transfer engine in out proc mode")
 		newProcessCommand := exec.Command("./azure-storage-azcopy.exe", "non-debug")
 		err := newProcessCommand.Start()
 		if err != nil{
 			panic(err)
 			os.Exit(1)
 		}
-		fmt.Println("started the transfer engine in out proc mode")
 	case "debug":
 		go ste.InitializeSTE()
 		cmd.Execute()

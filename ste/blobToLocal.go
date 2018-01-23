@@ -83,7 +83,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			cancelTransfer()
 			logger.Debug("worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jPartPlanInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed, jPartPlanInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jPartPlanInfoMap)
 			return
 		}
 
@@ -96,7 +96,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			logger.Debug("worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 			//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because writing to file for startIndex of", startIndex, "has failed")
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jPartPlanInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed,  jPartPlanInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed,  jPartPlanInfoMap)
 			return
 		}
 
@@ -108,7 +108,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			logger.Debug("worker %d is concluding download Transfer job with %s after processing chunkId %d", workerId, transferIdentifierStr, chunkId)
 			//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 
-			updateTransferStatus(jobId, partNum, transferId, TransferStatusComplete, jPartPlanInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jPartPlanInfoMap)
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {

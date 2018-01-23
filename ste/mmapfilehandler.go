@@ -250,7 +250,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentTransferEntry := JobPartPlanTransfer{currentTransferChunkOffset, uint16(len(jobPartOrder.Transfers[index].Source)),
 			uint16(len(jobPartOrder.Transfers[index].Destination)),
 			getNumChunks(jobPartOrder.Transfers[index], data),
-			uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()), TransferStatusInactive, uint64(jobPartOrder.Transfers[index].SourceSize), 0}
+			uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()), common.TransferStatusActive, uint64(jobPartOrder.Transfers[index].SourceSize), 0}
 		numBytesWritten, err = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		if err != nil{
 			panic(err)

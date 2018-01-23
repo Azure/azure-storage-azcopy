@@ -22,6 +22,8 @@ package common
 
 import (
 	"time"
+	"errors"
+	"fmt"
 )
 type JobID string   //todo -- to uuid
 type PartNumber uint32
@@ -53,22 +55,15 @@ type CopyCmdArgsAndFlags struct {
 	ContentEncoding          string
 	NoGuessMimeType          bool
 	PreserveLastModifiedTime bool
+	IsaBackgroundOp          bool
 	Acl                      string
-	LogVerbosity			uint8
+	LogVerbosity             uint8
 }
 
 // ListCmdArgsAndFlags represents the raw list command input from the user
 type ListCmdArgsAndFlags struct {
 	JobId		string
-	PartNum     string
-	// flag to list only active jobs
-	ListOnlyActiveJobs bool
-	// flag to list only active transfers of a job
-	ListOnlyActiveTransfers bool
-	// flag to list only failed transfers of a job
-	ListOnlyFailedTransfers bool
-	// flag to list only complete transfers of a job
-	ListOnlyCompletedTransfers bool
+	TransferStatus string
 }
 
 // define the different types of sources/destinations
@@ -89,29 +84,22 @@ type CopyTransfer struct {
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
-	Version uint32 // version of the azcopy
-	ID JobID   // Guid - job identifier    //todo use uuid from go sdk
-	PartNum PartNumber // part number of the job
-	IsFinalPart bool // to determine the final part for a specific job
-	Priority uint8 // priority of the task
-	SourceType LocationType
-	DestinationType LocationType
-	Transfers []CopyTransfer
-	LogVerbosity LogSeverity
+	Version            uint32 // version of the azcopy
+	ID                 JobID   // Guid - job identifier    //todo use uuid from go sdk
+	PartNum            PartNumber // part number of the job
+	IsFinalPart        bool // to determine the final part for a specific job
+	Priority           uint8 // priority of the task
+	SourceType         LocationType
+	DestinationType    LocationType
+	Transfers          []CopyTransfer
+	LogVerbosity       LogSeverity
+	IsaBackgroundOp    bool
 	OptionalAttributes BlobTransferAttributes
 }
 
 type ListJobPartsTransfers struct{
 	JobId		JobID
-	PartNum     uint32
-	// flag to list only active jobs
-	ListOnlyActiveJobs bool
-	// flag to list only active transfers of a job
-	ListOnlyActiveTransfers bool
-	// flag to list only failed transfers of a job
-	ListOnlyFailedTransfers bool
-	// flag to list only complete transfers of a job
-	ListOnlyCompletedTransfers bool
+	ExpectedTransferStatus Status
 }
 
 // This struct represents the optional attribute for blob request header
@@ -157,7 +145,7 @@ type JobPartDetails struct{
 type TransferStatus struct {
 	Src string
 	Dst string
-	Status uint8
+	TransferStatus Status
 }
 
 type TransfersStatus struct {
@@ -171,4 +159,40 @@ const (
 	StatusInProgress = 2
 )
 
+const (
+	TransferStatusActive = 0
+	TransferStatusComplete = 1
+	TransferStatusFailed = 2
+	TranferStatusAll = 255
+)
+
+func TransferStatusStringToStatusCode(status string) (Status){
+	switch status{
+	case "TransferStatusActive":
+		return 0
+	case "TransferStatusComplete":
+		return 1
+	case "TransferStatusFailed" :
+		return 2
+	case "TranferStatusAll":
+		return 255
+	default:
+		panic(errors.New(fmt.Sprintf("invalid expected transfer status %s. Valid status are TransferStatusActive, TransferStatusComplete, TransferStatusFailed TranferStatusAll", status)))
+	}
+}
+
+func TransferStatusCodeToString(status Status) (string) {
+	switch status {
+	case 0:
+		return "TransferStatusActive"
+	case 1:
+		return "TransferStatusComplete"
+	case 2:
+		return "TransferStatusFailed"
+	case 255:
+		return "TranferStatusAll"
+	default:
+		panic(errors.New(fmt.Sprintf("invalid expected transfer status code %d. Valid status are 0, 1, 2, 255", status)))
+	}
+}
 const DefaultBlockSize = 4 * 1024 * 1024

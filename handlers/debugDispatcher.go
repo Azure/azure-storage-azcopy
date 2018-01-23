@@ -1,13 +1,14 @@
 package handlers
 
 import (
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"bytes"
 	"io/ioutil"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"math"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
@@ -16,7 +17,7 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
 	//coordinatorChannel, execEngineChannels := ste.InitializedChannels()
 	//ste.InitializeExecutionEngine(execEngineChannels)
 	//runtime.GOMAXPROCS(4)
-	//go ste.InitializeSTE()
+	go ste.InitializeSTE()
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
@@ -52,9 +53,13 @@ func fetchJobStatus(jobId string) (common.Status){
 	if err != nil{
 		panic(err)
 	}
+	lsCommand := common.ListJobPartsTransfers{JobId:common.JobID(jobId),PartNum: math.MaxUint32,}
+	lsCommandMarshalled, err := json.Marshal(lsCommand)
+	if err != nil{
+		panic(err)
+	}
 	q := req.URL.Query()
-	q.Add("type", "JobStatus")
-	q.Add("GUID", jobId)
+	q.Add("command", string(lsCommandMarshalled))
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := client.Do(req)
@@ -71,17 +76,5 @@ func fetchJobStatus(jobId string) (common.Status){
 	if err != nil{
 		panic(err)
 	}
-	var summary common.JobProgressSummary
-	json.Unmarshal(body, &summary)
-	fmt.Println("-----------------Progress Summary for JobId ", jobId," ------------------")
-	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfer)
-	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
-	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)
-	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
-	fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
-	for index := 0; index < len(summary.FailedTransfers); index++ {
-		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
-		fmt.Println(message)
-	}
-	return summary.JobStatus
+	return PrintJobProgressSummary(body, jobId)
 }

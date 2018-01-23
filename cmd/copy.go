@@ -47,7 +47,7 @@ func init() {
   - Coming soon: Transfer files from Azure Storage to Google Storage.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the only arguments to this command should be a source and destination
-			if len(args) != 2 {
+			if len(args) < 2 {
 				return errors.New("this command requires source and destination")
 			}
 
@@ -101,6 +101,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.ContentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.NoGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
+	cpCmd.PersistentFlags().BoolVar(&commandLineInput.IsaBackgroundOp, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging level", uint8(common.LOG_DEBUG_LEVEL), "defines the log verbosity to be saved to log file")
 }

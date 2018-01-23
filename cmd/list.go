@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/spf13/cobra"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -49,26 +48,15 @@ func init() {
 			* list jobId partNum -- lists all the transfers of an existing job part order
 			*/
 			jobId := ""
-			partNum := ""
-
+			// if there is more than one argument passed, then it is taken as a jobId
             if len(args) > 0{
             	jobId = args[0]
 			}
-			if len(args) > 1{
-				partNum = args[1]
-			}
-
 			commandLineInput.JobId = jobId
-			commandLineInput.PartNum = partNum
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("copy job starting: ")
 			handlers.HandleListCommand(commandLineInput)
-			//fmt.Println("Job with id", jobId, "has started.")
-
-			//// wait until job finishes
-			//time.Sleep(600 * time.Second)
 		},
 	}
 
@@ -77,9 +65,5 @@ func init() {
 	// define the flags relevant to the ls command
 
 	// filters
-	lsCmd.PersistentFlags().BoolVar(&commandLineInput.ListOnlyActiveJobs, "listOnlyActiveJobs", false, "Filter: lists specifics of only active jobs.")
-	lsCmd.PersistentFlags().BoolVar(&commandLineInput.ListOnlyActiveTransfers, "listOnlyActiveTransfers", false, "Filter: lists only active transfers of a job.")
-	lsCmd.PersistentFlags().BoolVar(&commandLineInput.ListOnlyCompletedTransfers, "listOnlyCompletedTransfers", false, "Filter: lists only completed transfers of a job.")
-	lsCmd.PersistentFlags().BoolVar(&commandLineInput.ListOnlyFailedTransfers, "listOnlyFailedTransfers", false, "Filter: lists only failed transfers of a job .")
+	lsCmd.PersistentFlags().StringVar(&commandLineInput.TransferStatus, "with-status", "all", "Filter: list transfers of job only with this status")
 }
-

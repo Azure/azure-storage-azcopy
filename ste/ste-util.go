@@ -56,6 +56,16 @@ func (jMap *JobPartPlanInfoMap) LoadPartPlanMapforJob(jobId common.JobID) (map[c
 	return partMap, ok
 }
 
+func (jMap *JobPartPlanInfoMap) PrintTheMapEntries() () {
+	jMap.RLock()
+	for jobId, partMap := range jMap.internalMap{
+		fmt.Println("job id ", jobId)
+		for partNumber, _ := range partMap{
+			fmt.Println("part number ", partNumber)
+		}
+	}
+	jMap.RUnlock()
+}
 func (jMap *JobPartPlanInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partNumber common.PartNumber) (*JobPartPlanInfo){
 	jMap.RLock()
 	partMap := jMap.internalMap[jobId]
@@ -66,6 +76,16 @@ func (jMap *JobPartPlanInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID
 	jHandler := partMap[partNumber]
 	jMap.RUnlock()
 	return jHandler
+}
+
+func (jMap *JobPartPlanInfoMap) LoadExistingJobIds() ([] common.JobID){
+	jMap.RLock()
+	var existingJobs []common.JobID
+	for jobId, _ := range jMap.internalMap{
+		existingJobs = append(existingJobs, jobId)
+	}
+	jMap.RUnlock()
+	return existingJobs
 }
 
 func (jMap *JobPartPlanInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jHandler *JobPartPlanInfo) {
@@ -170,13 +190,16 @@ func convertJobIdBytesToString(jobId [128 /8]byte) (string){
 }
 
 func reconstructTheExistingJobPart(jPartPlanInfoMap *JobPartPlanInfoMap) (error){
-	files := listFileWithExtension(".stev")
+	versionIdString := fmt.Sprintf("%05d", dataSchemaVersion)
+	files := listFileWithExtension(".stev" + versionIdString)
+	fmt.Println("no files to reconstruct ", len(files))
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
 		jobIdString, partNumber, versionNumber := parseStringToJobInfo(fileName)
-		if versionNumber != dataSchemaVersion{
-			continue
-		}
+		fmt.Println("data schema number ", versionNumber)
+		//if versionNumber != dataSchemaVersion{
+		//	continue
+		//}
 		jobHandler := new(JobPartPlanInfo)
 		err := jobHandler.initialize(steContext, fileName)
 		if err != nil{
@@ -274,7 +297,7 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 		panic (err)
 	}
 	transferHeader := jHandler.Transfer(transferIndex)
-	transferHeader.Status = transferStatus
+	transferHeader.Status = common.Status(transferStatus)
 }
 
 func getLoggerForJobId(jobId common.JobID, loggerMap *JobToLoggerMap) (*common.Logger) {
