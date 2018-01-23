@@ -8,7 +8,6 @@ import (
 	"time"
 	"github.com/edsrzf/mmap-go"
 	"encoding/base64"
-	"fmt"
 	"bytes"
 	"sync/atomic"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -82,7 +81,7 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jPartPlanInfoMap *JobPartPlanInfoMap) chunkFunc {
 	return func(workerId int) {
-		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
+		//transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 		// step 1: generate block ID
 		blockId, _ := common.NewUUID()
@@ -98,21 +97,23 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 		if err != nil {
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
-			fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
+			//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jPartPlanInfoMap)
 			updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed, jPartPlanInfoMap)
 			return
 		}
 
 		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jPartPlanInfoMap)
+		updateThroughputCounter(chunkSize)
+
 		// step 4: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 			// step 5: this is the last block, perform EPILOGUE
-			fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
+			//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
 
 			_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
 			if err != nil {
-				fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
+				//fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
 				updateTransferStatus(jobId, partNum, transferId, TransferStatusFailed, jPartPlanInfoMap)
 			}
 
@@ -120,7 +121,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {
-				fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
+				//fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
 			}
 
 		}

@@ -47,12 +47,12 @@ func (jMap *JobPartPlanInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNum
 	jMap.Lock()
 	partMap  := jMap.internalMap[jobId]
 	if partMap == nil { // there is no previous entry for given jobId
-	fmt.Println("there is no previous entry for given jobId", jobId)
+	//fmt.Println("there is no previous entry for given jobId", jobId)
 		partMap = make(map[common.PartNumber]*JobPartPlanInfo)
 		partMap[partNumber] = jHandler
 		jMap.internalMap[jobId] = partMap
 	}else{
-		fmt.Println("//there already exists some entry for given jobID", jobId)
+		//fmt.Println("//there already exists some entry for given jobID", jobId)
 		//there already exists some entry for given jobID
 		jMap.internalMap[jobId][partNumber] = jHandler
 	}
@@ -103,7 +103,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 		errMsg := fmt.Sprintf("error parsing the mememory map file name %s", s)
 		panic(errors.New(errMsg))
 	}
-	fmt.Println(" string ", common.JobID(jobIdString), " ", common.PartNumber(partNo64), " ", common.Version(versionNo64))
+	//fmt.Println(" string ", common.JobID(jobIdString), " ", common.PartNumber(partNo64), " ", common.Version(versionNo64))
 	return common.JobID(jobIdString), common.PartNumber(partNo64), common.Version(versionNo64)
 }
 

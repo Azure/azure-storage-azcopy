@@ -120,7 +120,7 @@ func (job *JobPartPlanInfo) Transfer(index uint32) (*JobPartPlanTransfer){
 func (job *JobPartPlanInfo)updateTheChunkInfo(transferIndex uint32, chunkIndex uint16,
 													crc [128 / 8]byte, status uint8) {
 	// get memory map JobPartPlanHeader
-	jPartPlan := job.getJobPartPlanPointer()
+	//jPartPlan := job.getJobPartPlanPointer()
 
 	// get memory map JobPartPlanTransferChunk Header
 	cInfo := job.getChunkInfo(transferIndex, chunkIndex)
@@ -130,8 +130,8 @@ func (job *JobPartPlanInfo)updateTheChunkInfo(transferIndex uint32, chunkIndex u
 
 	//updating the chunk status with given status
 	cInfo.Status = status
-	result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
-	fmt.Println(result)
+	//result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
+	//fmt.Println(result)
 }
 
 // getChunkInfo returns the memory map JobPartPlanTransferChunkHeader for given transfer and chunk index of JobPartOrder

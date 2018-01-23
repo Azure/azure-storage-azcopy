@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	tm "github.com/buger/goterm"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"encoding/json"
@@ -8,27 +9,26 @@ import (
 	"net/http"
 	"bytes"
 	"io/ioutil"
+	"time"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
 
 func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
-	//coordinatorChannel, execEngineChannels := ste.InitializedChannels()
-	//ste.InitializeExecutionEngine(execEngineChannels)
-	//runtime.GOMAXPROCS(4)
 	go ste.InitializeSTE()
+	time.Sleep(time.Second * 2)
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
-		fmt.Println("=============================================================")
-		fmt.Println("The following job part order was generated:")
-		fmt.Println(string(order))
+		//fmt.Println("=============================================================")
+		//fmt.Println("The following job part order was generated:")
+		//fmt.Println(string(order))
 		sendUploadRequestToSTE(order)
 	}
 }
 
 func sendUploadRequestToSTE(payload []byte) {
-	fmt.Println("Sending Upload Request TO STE")
+	//fmt.Println("Sending Upload Request TO STE")
 	url := "http://localhost:1337"
 
 	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payload))
@@ -37,11 +37,11 @@ func sendUploadRequestToSTE(payload []byte) {
 	}
 
 	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	_, err = ioutil.ReadAll(res.Body)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Response to request", res.Status, " ", body)
+	//fmt.Println("Response to request", res.Status, " ", body)
 }
 
 
@@ -73,15 +73,26 @@ func fetchJobStatus(jobId string) (common.Status){
 	}
 	var summary common.JobProgressSummary
 	json.Unmarshal(body, &summary)
-	fmt.Println("-----------------Progress Summary for JobId ", jobId," ------------------")
-	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfer)
-	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
-	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)
-	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
-	fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
+
+	tm.Clear()
+	tm.MoveCursor(1,1)
+
+	tm.Println("----------------- Progress Summary for JobId", jobId,"------------------")
+	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfer)
+	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
+	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
+	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)
+
+	tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
+	tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
+
+
 	for index := 0; index < len(summary.FailedTransfers); index++ {
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
 		fmt.Println(message)
 	}
+
+	tm.Flush()
+
 	return summary.JobStatus
 }

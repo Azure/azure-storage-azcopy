@@ -10,8 +10,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"strconv"
 	"runtime"
+	"time"
+	"sync/atomic"
 )
 var steContext = context.Background()
+var realTimeThroughputCounter = throughputState {lastCheckedBytes:0, currentBytes:0, lastCheckedTime:time.Now()}
 
 // putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID, partNo common.PartNumber,
@@ -50,7 +53,7 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 		*  Create a JobPartInfo pointer for the new job and put it into the map
 		* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
-	 fmt.Println("New Job Part Order Request Received", payload.ID)
+	 //fmt.Println("New Job Part Order Request Received", payload.ID)
 	data := payload.OptionalAttributes
 	var crc [128/ 8]byte
 	copy(crc[:], CRC64BitExample)
@@ -133,7 +136,7 @@ func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintor
  */
 func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
 
-	fmt.Println("received a get job order status request for JobId ", jobId)
+	//fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, jPartPlanInfoMap)
 
@@ -151,8 +154,8 @@ func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp
 	var failedTransfers []common.TransferStatus
 
 	progressSummary := common.JobProgressSummary{}
-	for partNo, jHandler := range jPartMap{
-		fmt.Println("part no ", partNo)
+	for _, jHandler := range jPartMap{
+		//fmt.Println("part no ", partNo)
 
 		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
 		currentJobPartPlanInfo := jHandler.getJobPartPlanPointer()
@@ -187,6 +190,16 @@ func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp
 	progressSummary.FailedTransfers = failedTransfers
 	progressSummary.PercentageProgress = (( progressSummary.TotalNumberofTransferCompleted  + progressSummary.TotalNumberofFailedTransfer) *100)/ progressSummary.TotalNumberOfTransfer
 
+	// get the throughput counts
+	numOfBytesTransferredSinceLastCheckpoint := atomic.LoadInt64(&realTimeThroughputCounter.currentBytes) - realTimeThroughputCounter.lastCheckedBytes
+	if numOfBytesTransferredSinceLastCheckpoint == 0 {
+		progressSummary.ThroughputInBytesPerSeconds = 0
+	} else {
+		progressSummary.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) / time.Since(realTimeThroughputCounter.lastCheckedTime).Seconds()
+	}
+	// update the throughput state
+	snapshotThroughputCounter()
+
 	// marshalling the JobProgressSummary struct to send back in response.
 	jobProgressSummaryJson, err := json.MarshalIndent(progressSummary, "", "")
 	if err != nil{
@@ -197,6 +210,15 @@ func getJobStatus(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp
 	}
 	(*resp).WriteHeader(http.StatusAccepted)
 	(*resp).Write(jobProgressSummaryJson)
+}
+
+func updateThroughputCounter(numBytes int64) {
+	atomic.AddInt64(&realTimeThroughputCounter.currentBytes, numBytes)
+}
+
+func snapshotThroughputCounter() {
+	realTimeThroughputCounter.lastCheckedBytes = atomic.LoadInt64(&realTimeThroughputCounter.currentBytes)
+	realTimeThroughputCounter.lastCheckedTime = time.Now()
 }
 
 func getJobPartStatus(jobId common.JobID, partNo common.PartNumber, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter) {
@@ -361,7 +383,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 
 // InitializedChannels initializes the channels used further by coordinator and execution engine
 func InitializedChannels() (*CoordinatorChannels, *EEChannels){
-	fmt.Println("Initializing Channels")
+
 	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	HighTransferMsgChannel := make(chan TransferMsg, 500)
 	// MedTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
@@ -403,7 +425,7 @@ func InitializedChannels() (*CoordinatorChannels, *EEChannels){
 	* creater a server listening on port 1337 for job part order requests from front end
  */
 func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
-	fmt.Println("STORAGE TRANSFER ENGINE")
+
 	jobHandlerMap := NewJobPartPlanInfoMap()
 	reconstructTheExistingJobPart(jobHandlerMap)
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {

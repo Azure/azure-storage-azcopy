@@ -114,6 +114,7 @@ type JobProgressSummary struct {
 	//NumberOfTransferFailedAfterCheckpoint    uint32
 	PercentageProgress                       uint32
 	FailedTransfers                          []TransferStatus
+	ThroughputInBytesPerSeconds				 float64
 }
 
 type JobProgressQuery struct {

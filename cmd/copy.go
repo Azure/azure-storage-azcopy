@@ -72,7 +72,7 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("copy job starting: ")
+			fmt.Println("transfer engine initializing...")
 			handlers.HandleCopyCommand(commandLineInput)
 			//fmt.Println("Job with id", jobId, "has started.")
 
