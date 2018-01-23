@@ -16,7 +16,7 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
 	//coordinatorChannel, execEngineChannels := ste.InitializedChannels()
 	//ste.InitializeExecutionEngine(execEngineChannels)
 	//runtime.GOMAXPROCS(4)
-	go ste.InitializeSTE()
+	//go ste.InitializeSTE()
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")

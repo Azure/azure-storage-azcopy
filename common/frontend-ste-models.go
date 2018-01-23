@@ -57,6 +57,20 @@ type CopyCmdArgsAndFlags struct {
 	LogVerbosity			uint8
 }
 
+// ListCmdArgsAndFlags represents the raw list command input from the user
+type ListCmdArgsAndFlags struct {
+	JobId		string
+	PartNum     string
+	// flag to list only active jobs
+	ListOnlyActiveJobs bool
+	// flag to list only active transfers of a job
+	ListOnlyActiveTransfers bool
+	// flag to list only failed transfers of a job
+	ListOnlyFailedTransfers bool
+	// flag to list only complete transfers of a job
+	ListOnlyCompletedTransfers bool
+}
+
 // define the different types of sources/destinations
 type LocationType uint8
 const (
@@ -85,6 +99,19 @@ type CopyJobPartOrder struct {
 	Transfers []CopyTransfer
 	LogVerbosity LogSeverity
 	OptionalAttributes BlobTransferAttributes
+}
+
+type ListJobPartsTransfers struct{
+	JobId		JobID
+	PartNum     uint32
+	// flag to list only active jobs
+	ListOnlyActiveJobs bool
+	// flag to list only active transfers of a job
+	ListOnlyActiveTransfers bool
+	// flag to list only failed transfers of a job
+	ListOnlyFailedTransfers bool
+	// flag to list only complete transfers of a job
+	ListOnlyCompletedTransfers bool
 }
 
 // This struct represents the optional attribute for blob request header
