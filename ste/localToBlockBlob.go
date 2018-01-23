@@ -8,10 +8,10 @@ import (
 	"time"
 	"github.com/edsrzf/mmap-go"
 	"encoding/base64"
-	"fmt"
 	"bytes"
 	"sync/atomic"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"fmt"
 )
 
 type localToBlockBlob struct {
@@ -107,6 +107,8 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 		}
 
 		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jPartPlanInfoMap)
+		updateThroughputCounter(chunkSize)
+
 		// step 4: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 			// step 5: this is the last block, perform EPILOGUE

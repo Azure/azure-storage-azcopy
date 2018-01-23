@@ -12,47 +12,13 @@ import (
 )
 
 func InitializeExecutionEngine(execEngineChannels *EEChannels) {
-	fmt.Println("INITIALIZING EXECUTION ENGINE STARTING!")
 	highChunk := execEngineChannels.HighChunkTransaction
 	highTransfer := execEngineChannels.HighTransfer
 	suicideLine := execEngineChannels.SuicideChannel
 
-	for i := 1; i <= 1; i++ {
+	for i := 1; i <= 5; i++ {
 		go engineWorker(i, highChunk, highTransfer, suicideLine)
 	}
-	//
-	//// download
-	//highTransfer <- transferMsg{
-	//	id: 1,
-	//	chunkSize: 4 * 1024 * 1024,
-	//
-	//	Source: "https://azcopynextgendev2.blob.core.windows.net/testcontainer/Testy_PPT1.pptx?st=2017-12-07T00%3A27%3A00Z&se=2018-12-08T00%3A27%3A00Z&sp=rwdl&sv=2016-05-31&sr=c&sig=D9xT4VAKVAHQYosYzKDY%2FaMhBrTIvlcxLORsPst6%2BuM%3D",
-	//	SourceType: common.Blob,
-	//
-	//	Destination: filepath.Join("/Users/Zed/Documents/test-download", "result10.pptx"),
-	//	DestinationType: common.Local,
-	//}
-	//
-	//// upload
-	//highTransfer <- transferMsg{
-	//	id:        2,
-	//	chunkSize: 4 * 1024 * 1024,
-	//
-	//	Destination:     "http://azcopynextgendev2.blob.core.windows.net/testcontainer/yolo.pdf?st=2017-12-07T00%3A27%3A00Z&se=2018-12-08T00%3A27%3A00Z&sp=rwdl&sv=2016-05-31&sr=c&sig=D9xT4VAKVAHQYosYzKDY%2FaMhBrTIvlcxLORsPst6%2BuM%3D",
-	//	DestinationType: common.Blob,
-	//
-	//	Source:     filepath.Join("/Users/Zed/Documents/test-upload", "test.pdf"),
-	//	SourceType: common.Local,
-	//}
-
-	//// wait a bit and kill one worker
-	//time.Sleep(10 * time.Second)
-	//suicideLine <- 0
-	//
-	//// wait a bit and add one worker
-	//time.Sleep(10 * time.Second)
-	//fmt.Println("NEW WORKER IN TOWN!")
-	//go engineWorker(3, highChunk, highTransfer, suicideLine)
 }
 
 // general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs

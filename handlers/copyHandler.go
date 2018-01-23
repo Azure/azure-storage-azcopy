@@ -64,7 +64,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		return uuid
 	}
 	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid){
-		time.Sleep(2 * time.Second)
+		time.Sleep(time.Second)
 	}
 	return uuid
 }
@@ -149,7 +149,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		if !strings.Contains(destinationUrl.Path[1:], "/") {
 			destinationUrl.Path = fmt.Sprintf("%s/%s", destinationUrl.Path, sourceFileInfo.Name())
 		}
-		fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String(), "with size", sourceFileInfo.Size())
+		//fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String(), "with size", sourceFileInfo.Size())
 		singleTask := common.CopyTransfer{
 			Source:           commandLineInput.Source,
 			Destination:      destinationUrl.String(),

@@ -6,10 +6,10 @@ import (
 	"net/url"
 	"time"
 	"github.com/edsrzf/mmap-go"
-	"fmt"
 	"io"
 	"sync/atomic"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"fmt"
 )
 
 type blobToLocal struct{
@@ -101,6 +101,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 		}
 
 		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jPartPlanInfoMap)
+		updateThroughputCounter(chunkSize)
 
 		// step 3: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {

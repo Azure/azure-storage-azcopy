@@ -146,7 +146,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 		errMsg := fmt.Sprintf("error parsing the mememory map file name %s", s)
 		panic(errors.New(errMsg))
 	}
-	fmt.Println(" string ", common.JobID(jobIdString), " ", common.PartNumber(partNo64), " ", common.Version(versionNo64))
+	//fmt.Println(" string ", common.JobID(jobIdString), " ", common.PartNumber(partNo64), " ", common.Version(versionNo64))
 	return common.JobID(jobIdString), common.PartNumber(partNo64), common.Version(versionNo64)
 }
 

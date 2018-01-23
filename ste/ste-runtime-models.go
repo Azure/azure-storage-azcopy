@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/edsrzf/mmap-go"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"time"
 )
 
 
@@ -65,3 +66,9 @@ type EEChannels struct {
 type SuicideJob byte
 type chunkFunc func(int)
 type prologueFunc func(msg TransferMsgDetail, chunkChannel chan<- ChunkMsg)
+
+type throughputState struct {
+	lastCheckedTime time.Time
+	lastCheckedBytes int64
+	currentBytes int64
+}

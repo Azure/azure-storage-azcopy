@@ -130,6 +130,7 @@ func (job *JobPartPlanInfo)updateTheChunkInfo(transferIndex uint32, chunkIndex u
 
 	//updating the chunk status with given status
 	cInfo.Status = status
+
 	result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
 	return result
 }
