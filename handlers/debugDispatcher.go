@@ -53,7 +53,7 @@ func fetchJobStatus(jobId string) (common.Status){
 	if err != nil{
 		panic(err)
 	}
-	lsCommand := common.ListJobPartsTransfers{JobId:common.JobID(jobId),PartNum: math.MaxUint32,}
+	lsCommand := common.ListJobPartsTransfers{JobId:common.JobID(jobId),ExpectedTransferStatus:math.MaxUint8}
 	lsCommandMarshalled, err := json.Marshal(lsCommand)
 	if err != nil{
 		panic(err)

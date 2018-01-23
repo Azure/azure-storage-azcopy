@@ -163,7 +163,7 @@ const (
 	TransferStatusActive = 0
 	TransferStatusComplete = 1
 	TransferStatusFailed = 2
-	TranferStatusAll = 255
+	TranferStatusAll = 254
 )
 
 func TransferStatusStringToStatusCode(status string) (Status){
@@ -175,7 +175,7 @@ func TransferStatusStringToStatusCode(status string) (Status){
 	case "TransferStatusFailed" :
 		return 2
 	case "TranferStatusAll":
-		return 255
+		return 254
 	default:
 		panic(errors.New(fmt.Sprintf("invalid expected transfer status %s. Valid status are TransferStatusActive, TransferStatusComplete, TransferStatusFailed TranferStatusAll", status)))
 	}

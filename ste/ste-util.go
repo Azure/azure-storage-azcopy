@@ -195,8 +195,7 @@ func reconstructTheExistingJobPart(jPartPlanInfoMap *JobPartPlanInfoMap) (error)
 	fmt.Println("no files to reconstruct ", len(files))
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
-		jobIdString, partNumber, versionNumber := parseStringToJobInfo(fileName)
-		fmt.Println("data schema number ", versionNumber)
+		jobIdString, partNumber, _ := parseStringToJobInfo(fileName)
 		//if versionNumber != dataSchemaVersion{
 		//	continue
 		//}

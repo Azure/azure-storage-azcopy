@@ -27,7 +27,6 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	if err != nil{
 		panic(err)
 	}
-	fmt.Println("marshalled command ", string(marshalledCommand))
 	q := req.URL.Query()
 	q.Add("command", string(marshalledCommand))
 	req.URL.RawQuery = q.Encode()
@@ -45,7 +44,6 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	if err != nil{
 		panic(err)
 	}
-	var result interface{}
 	if listOrder.JobId == ""{
 		PrintExistingJobIds(body)
 	}else if commandLineInput.TransferStatus == "" {
@@ -53,9 +51,6 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	}else{
 		PrintJobTransfers(body, commandLineInput.JobId)
 	}
-
-	json.Unmarshal(body, &result)
-	fmt.Println("Result Interface ", result)
 }
 
 
@@ -66,8 +61,8 @@ func PrintExistingJobIds(data []byte){
 		panic(err)
 	}
 	fmt.Println("Existing Jobs ")
-	for job := range jobs.JobIds{
-		fmt.Println(job)
+	for index := 0; index < len(jobs.JobIds); index++{
+		fmt.Println(jobs.JobIds[index])
 	}
 }
 
