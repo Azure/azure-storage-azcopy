@@ -19,12 +19,16 @@ import (
 	"sync"
 )
 
-
+// JobToLoggerMap are the Synchronous Map to hold logger instance mapped to jobId
+// Provides the thread safe Load and Store Method
 type JobToLoggerMap struct {
+	// Read Write Mutex
 	sync.RWMutex
+	// map for job Id to logger
 	internalMap map[common.JobID]*common.Logger
 }
 
+// LoadLoggerForJob returns the logger instance for given JobId in thread-safe manner
 func (jLogger *JobToLoggerMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
 	jLogger.RLock()
 	logger := jLogger.internalMap[jobId]
@@ -32,23 +36,30 @@ func (jLogger *JobToLoggerMap) LoadLoggerForJob(jobId common.JobID) (*common.Log
 	return logger
 }
 
+// StoreLoggerForJob stores the logger instance for given JobId in thread-safe manner
 func (jLogger *JobToLoggerMap) StoreLoggerForJob(jobId common.JobID, logger *common.Logger) {
 	jLogger.Lock()
 	jLogger.internalMap[jobId] = logger
 	jLogger.Unlock()
 }
 
+// NewJobToLoggerMap returns a new instance of synchronous JobToLoggerMap for holding logger instances mapped to JobIds
 func NewJobToLoggerMap() (*JobToLoggerMap){
 	return &JobToLoggerMap{
 		internalMap:make(map[common.JobID]*common.Logger),
 	}
 }
 
+// JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
+// Provides the thread safe Load and Store Method
 type JobPartPlanInfoMap struct {
+	// ReadWrite Mutex
 	sync.RWMutex
+	// map jobId -->[partNo -->JobPartPlanInfo Pointer]
 	internalMap map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 }
 
+// LoadPartPlanMapforJob returns the map of PartNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
 func (jMap *JobPartPlanInfoMap) LoadPartPlanMapforJob(jobId common.JobID) (map[common.PartNumber]*JobPartPlanInfo, bool) {
 	jMap.RLock()
 	partMap, ok := jMap.internalMap[jobId]
@@ -56,16 +67,7 @@ func (jMap *JobPartPlanInfoMap) LoadPartPlanMapforJob(jobId common.JobID) (map[c
 	return partMap, ok
 }
 
-func (jMap *JobPartPlanInfoMap) PrintTheMapEntries() () {
-	jMap.RLock()
-	for jobId, partMap := range jMap.internalMap{
-		fmt.Println("job id ", jobId)
-		for partNumber, _ := range partMap{
-			fmt.Println("part number ", partNumber)
-		}
-	}
-	jMap.RUnlock()
-}
+// LoadJobPartPlanInfoForJobPart returns the JobPartPlanInfo Pointer for given combination of JobId and part number in thread-safe manner.
 func (jMap *JobPartPlanInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partNumber common.PartNumber) (*JobPartPlanInfo){
 	jMap.RLock()
 	partMap := jMap.internalMap[jobId]
@@ -78,6 +80,7 @@ func (jMap *JobPartPlanInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID
 	return jHandler
 }
 
+// LoadExistingJobIds returns the list of existing JobIds for which there are entries in the internal map in thread-safe manner.
 func (jMap *JobPartPlanInfoMap) LoadExistingJobIds() ([] common.JobID){
 	jMap.RLock()
 	var existingJobs []common.JobID
@@ -88,6 +91,7 @@ func (jMap *JobPartPlanInfoMap) LoadExistingJobIds() ([] common.JobID){
 	return existingJobs
 }
 
+// StoreJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
 func (jMap *JobPartPlanInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jHandler *JobPartPlanInfo) {
 	jMap.Lock()
 	partMap  := jMap.internalMap[jobId]
@@ -102,6 +106,7 @@ func (jMap *JobPartPlanInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNum
 	jMap.Unlock()
 }
 
+// NewJobPartPlanInfoMap returns a new instance of synchronous JobPartPlanInfoMap to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
 func NewJobPartPlanInfoMap() (*JobPartPlanInfoMap) {
 	return &JobPartPlanInfoMap{
 		internalMap:make(map[common.JobID]map[common.PartNumber]*JobPartPlanInfo),
@@ -150,6 +155,8 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 	return common.JobID(jobIdString), common.PartNumber(partNo64), common.Version(versionNo64)
 }
 
+// formatJobInfoToString builds the JobPart file name using the given JobId, part number and data schema version
+// fileName format := $jobId-$partnumber.stev$dataschemaversion
 func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) (string){
 	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
@@ -157,7 +164,7 @@ func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) (string){
 	return fileName
 }
 
-
+// convertJobIdToByteFormat converts the JobId from string format to 16 byte array
 func convertJobIdToByteFormat(jobIDString common.JobID) ([128 / 8]byte){
 	var jobID [128 /8] byte
 	guIdBytes, err := hex.DecodeString(string(jobIDString))
@@ -189,27 +196,28 @@ func convertJobIdBytesToString(jobId [128 /8]byte) (string){
 	return jobIdString
 }
 
+// reconstructTheExistingJobPart reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
 func reconstructTheExistingJobPart(jPartPlanInfoMap *JobPartPlanInfoMap) (error){
 	versionIdString := fmt.Sprintf("%05d", dataSchemaVersion)
+	// list memory map files with .stev$dataschemaVersion to avoid the reconstruction of old schema version memory map file
 	files := listFileWithExtension(".stev" + versionIdString)
-	fmt.Println("no files to reconstruct ", len(files))
 	for index := 0; index < len(files) ; index++{
 		fileName := files[index].Name()
+		// extracting the jobId and part number from file name
 		jobIdString, partNumber, _ := parseStringToJobInfo(fileName)
-		//if versionNumber != dataSchemaVersion{
-		//	continue
-		//}
+		// creating a new JobPartPlanInfo pointer and initializing it
 		jobHandler := new(JobPartPlanInfo)
 		err := jobHandler.initialize(steContext, fileName)
 		if err != nil{
 			return err
 		}
-		//fmt.Println("jobID & partno ", jobIdString, " ", partNumber, " ", versionNumber)
+		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jPartPlanInfoMap)
 	}
 	return nil
 }
 
+// listFileWithExtension list all files in the current directory that has given extension
 func listFileWithExtension(ext string) []os.FileInfo {
 	pathS, err := os.Getwd()
 	if err != nil {
@@ -228,22 +236,6 @@ func listFileWithExtension(ext string) []os.FileInfo {
 	return files
 }
 
-func creatingTheBlockIds(numBlocks int) ([] string){
-	blockIDBinaryToBase64 := func(blockID []byte) string { return base64.StdEncoding.EncodeToString(blockID) }
-
-	blockIDIntToBase64 := func(blockID int) string {
-		binaryBlockID := (&[4]byte{})[:] // All block IDs are 4 bytes long
-		binary.LittleEndian.PutUint32(binaryBlockID, uint32(blockID))
-		return blockIDBinaryToBase64(binaryBlockID)
-	}
-
-	base64BlockIDs := make([]string, numBlocks)
-
-	for index := 0; index < numBlocks ; index++ {
-		base64BlockIDs[index] = blockIDIntToBase64(index)
-	}
-	return base64BlockIDs
-}
 
 // fileAlreadyExists api determines whether file with fileName exists in directory dir or not
 // Returns true is file with fileName exists else returns false
@@ -252,25 +244,28 @@ func fileAlreadyExists(fileName string, dir string) (bool, error){
 	// listing the content of directory dir
 	fileInfos, err := ioutil.ReadDir(dir)
 	if err != nil {
-		errorMsg := fmt.Sprintf(DirectoryListingError, dir)
+		errorMsg := fmt.Sprintf("not able to list contents of directory %s", dir)
 		return false, errors.New(errorMsg)
 	}
 
 	// iterating through each file and comparing the file name with given fileName
 	for index := range fileInfos {
 		if strings.Compare(fileName, fileInfos[index].Name()) == 0 {
-			errorMsg := fmt.Sprintf(FileAlreadyExists, fileName)
+			errorMsg := fmt.Sprintf("file %s already exists", fileName)
 			return true, errors.New(errorMsg)
 		}
 	}
 	return false, nil
 }
 
+// getTransferMsgDetail returns the details of a transfer for given JobId, part number and transfer index
 func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, jPartPlanInfoMap *JobPartPlanInfoMap) (TransferMsgDetail){
+	// jHandler is the JobPartPlanInfo Pointer for given JobId and part number
 	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil{
 		panic(err)
 	}
+	// jPartPlanPointer is the memory map JobPartPlan for given JobId and part number
 	jPartPlanPointer := jHandler.getJobPartPlanPointer()
 	sourceType := jPartPlanPointer.SrcLocationType
 	destinationType := jPartPlanPointer.DstLocationType
@@ -281,6 +276,7 @@ func getTransferMsgDetail (jobId common.JobID, partNo common.PartNumber, transfe
 						jHandler.TrasnferInfo[transferEntryIndex].cancel, jPartPlanInfoMap}
 }
 
+// updateChunkInfo updates the chunk at given chunkIndex for given JobId, partNumber and transfer
 func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jPartPlanInfoMap *JobPartPlanInfoMap) {
 	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil{
@@ -290,6 +286,7 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 	jHandler.Logger.Debug("%s for jobId %s and part number %d", resultMessage, jobId, partNo)
 }
 
+// updateTransferStatus updates the status of given transfer for given jobId and partNumber
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobPartPlanInfoMap){
 	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil{
@@ -299,11 +296,13 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 	transferHeader.Status = common.Status(transferStatus)
 }
 
+// getLoggerForJobId returns the logger instance for a given JobId
 func getLoggerForJobId(jobId common.JobID, loggerMap *JobToLoggerMap) (*common.Logger) {
 	logger := loggerMap.LoadLoggerForJob(jobId)
 	return logger
 }
 
+// getLoggerFromJobPartPlanInfo returns the logger instance for given JobId and partNumber
 func getLoggerFromJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, infoMap *JobPartPlanInfoMap) (*common.Logger){
 	jobHandler := infoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 	if jobHandler == nil{

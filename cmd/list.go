@@ -44,8 +44,8 @@ func init() {
 			// the list command does not require necessarily to have an argument
 			/*
 			* list -- lists all the existing jobs
-			* list jobId -- lists all the part numbers of an existing job
-			* list jobId partNum -- lists all the transfers of an existing job part order
+			* list jobId -- lists the progress summary of the job for given jobId
+			* list jobId --with-status -- lists all the transfers of an existing job which has the given status
 			*/
 			jobId := ""
 			// if there is more than one argument passed, then it is taken as a jobId
@@ -65,5 +65,5 @@ func init() {
 	// define the flags relevant to the ls command
 
 	// filters
-	lsCmd.PersistentFlags().StringVar(&commandLineInput.TransferStatus, "with-status", "TranferStatusAll", "Filter: list transfers of job only with this status")
+	lsCmd.PersistentFlags().StringVar(&commandLineInput.TransferStatus, "with-status", "", "Filter: list transfers of job only with this status")
 }

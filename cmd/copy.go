@@ -26,6 +26,7 @@ import (
 	"errors"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"net/http"
 )
 
 // TODO check file size, max is 4.75TB
@@ -72,7 +73,6 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("transfer engine initializing...")
 			handlers.HandleCopyCommand(commandLineInput)
 			//fmt.Println("Job with id", jobId, "has started.")
 

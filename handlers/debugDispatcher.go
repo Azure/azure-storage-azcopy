@@ -23,11 +23,11 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
 		//fmt.Println("=============================================================")
 		//fmt.Println("The following job part order was generated:")
 		//fmt.Println(string(order))
-		sendUploadRequestToSTE(order)
+		sendJobPartOrderToSTE(order)
 	}
 }
 
-func sendUploadRequestToSTE(payload []byte) {
+func sendJobPartOrderToSTE(payload []byte) {
 	//fmt.Println("Sending Upload Request TO STE")
 	url := "http://localhost:1337"
 

@@ -48,7 +48,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 // shutDownHandler unmaps the memory map file for given JobPartOrder
 func (job *JobPartPlanInfo)shutDownHandler(){
 	if job.memMap == nil {
-		panic(errors.New(MemoryMapFileUnmappedAlreadyError))
+		panic(errors.New("memory map file already unmapped. Map it again to use further"))
 	}
 	err := job.memMap.Unmap()
 	if err != nil {
@@ -131,7 +131,7 @@ func (job *JobPartPlanInfo)updateTheChunkInfo(transferIndex uint32, chunkIndex u
 	//updating the chunk status with given status
 	cInfo.Status = status
 
-	result := fmt.Sprintf(TransferEntryChunkUpdateSuccess, chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
+	result := fmt.Sprintf("updated the chunk %d of transfer %d of Job %s", chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
 	return result
 }
 
@@ -269,7 +269,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentTransferEntry := transferEntryList[index]
 		//compares the calculated start offset and actual start offset for chunk headers of a transfer
 		if currentEndOffsetOfFile != transferEntryOffsets[index]{
-			errorMsg := fmt.Sprintf(TransferTaskOffsetCalculationError, transferEntryOffsets[index],
+			errorMsg := fmt.Sprintf("calculated offset %d and actual offset %d of Job %s part %d and transfer entry %d does not match", transferEntryOffsets[index],
 											currentEndOffsetOfFile, convertJobIdBytesToString(jPartPlan.Id), jPartPlan.PartNum,index)
 			panic(errors.New(errorMsg))
 		}
@@ -345,17 +345,17 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 	metaData := data.Metadata
 	// check to verify whether content-length exceeds maximum content encoding length or not
 	if len(contentEncoding) > MAX_SIZE_CONTENT_ENCODING {
-		return JobPartPlanBlobData{}, errors.New(ContentEncodingLengthError)
+		return JobPartPlanBlobData{}, errors.New(fmt.Sprintf("size %d of content encoding exceeds the max content-encoding size %d", len(contentEncoding), MAX_SIZE_CONTENT_ENCODING))
 	}
 
 	// check to verify whether content-length exceeds maximum content type length or not
 	if len(contentType) > MAX_SIZE_CONTENT_TYPE {
-		return JobPartPlanBlobData{}, errors.New(ContentTypeLengthError)
+		return JobPartPlanBlobData{}, errors.New(fmt.Sprintf("size %d of content type exceeds the max content type size %d", len(contentType), MAX_SIZE_CONTENT_TYPE))
 	}
 
 	// check to verify whether meta data length exceeds maximum length or not
 	if len(metaData) > MAX_SIZE_META_DATA {
-		return JobPartPlanBlobData{}, errors.New(MetaDataLengthError)
+		return JobPartPlanBlobData{}, errors.New(fmt.Sprintf("size %d of metadata exceeds the max metadata size %d", len(metaData), MAX_SIZE_META_DATA))
 	}
 
 	// copying contentType string in fixed size byte array

@@ -27,27 +27,28 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
+func startTranferEngine(){
+	newProcessCommand := exec.Command("./azure-storage-azcopy.exe", "non-debug")
+	err := newProcessCommand.Start()
+	if err != nil{
+		panic(err)
+		os.Exit(1)
+	}
+}
+
 func main() {
 	var mode = ""
-	if len(os.Args) == 1 {
-		mode = "normal"
-	}else{
+	if len(os.Args) > 1{
 		mode = os.Args[1]
 	}
 	switch mode {
-	case "normal":
-		newProcessCommand := exec.Command("./azure-storage-azcopy.exe", "non-debug")
-		err := newProcessCommand.Start()
-		if err != nil{
-			panic(err)
-			os.Exit(1)
-		}
 	case "debug":
 		go ste.InitializeSTE()
 		cmd.Execute()
 	case "non-debug":
 		ste.InitializeSTE()
 	default:
+		startTranferEngine()
 		cmd.Execute()
 	}
 }

@@ -60,6 +60,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
 
+	fmt.Println("Job with id", uuid, "has started.")
 	if commandLineInput.IsaBackgroundOp {
 		return uuid
 	}

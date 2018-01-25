@@ -1,3 +1,23 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package ste
 
 import (
@@ -12,6 +32,7 @@ import (
 	"math"
 	"time"
 	"sync/atomic"
+	"os"
 )
 var steContext = context.Background()
 var realTimeThroughputCounter = throughputState {lastCheckedBytes:0, currentBytes:0, lastCheckedTime:time.Now()}
@@ -33,7 +54,7 @@ func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 	return jPartMap
 }
 
-// getJobPartInfoHandlerFromMap
+// getJobPartInfoHandlerFromMap returns the JobPartPlanInfo Pointer for the combination of JobId and part number
 func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 										jPartInfoMap *JobPartPlanInfoMap) (*JobPartPlanInfo, error){
 	jHandler := jPartInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNo)
@@ -45,31 +66,49 @@ func getJobPartInfoHandlerFromMap(jobId common.JobID, partNo common.PartNumber,
 }
 
 // ExecuteNewCopyJobPartOrder api executes a new job part order
+/*
+* payload -- It is the input data for new job part order.
+* coordiatorChannels -- coordinator channels has the High, Med and Low transfer msg channel to schedule the incoming transfers.
+* jPartPlanInfoMap -- Map to hold JobPartPlanInfo reference for combination of JobId and part number.
+* jobToLoggerMap -- Map to hold the logger instance specific to a job
+ */
 func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap){
 	/*
-		* Convert the blobdata to memory map compatible DestinationBlobData
+		* Convert the optional attributes of job part order to memory map compatible DestinationBlobData
 		* Create a file for JobPartOrder and write data into that file.
 		* Initialize the JobPartOrder
-		*  Create a JobPartInfo pointer for the new job and put it into the map
+		* Initializes the logger for the new job
+		*  Create a JobPartPlanInfo pointer for the new job and put it into the map
 		* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
-	 //fmt.Println("New Job Part Order Request Received", payload.ID)
+
 	data := payload.OptionalAttributes
-	var crc [128/ 8]byte
-	copy(crc[:], CRC64BitExample)
+
+	// Converting the optional attributes of job part order to memory map compatible DestinationBlobData
 	destBlobData, err := dataToDestinationBlobData(data)
 	if err != nil {
 		panic(err)
 	}
+	// Creating a file for JobPartOrder and write data into that file.
 	fileName := createJobPartPlanFile(payload, destBlobData)
+
+	// Creating JobPartPlanInfo reference for new job part order
 	var jobHandler  = new(JobPartPlanInfo)
+
+	// creating context with cancel for the new job
 	jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
+
+	// Initializing the JobPartPlanInfo for new job
 	err = (jobHandler).initialize(jobHandler.ctx, fileName)
 	if err != nil {
 		panic(err)
 	}
+
+	// Initializing the logger for new job
+	// If there already exists a logger for the same job, then same logger is used.
 	logger := getLoggerForJobId(payload.ID, jobToLoggerMap)
 	if logger == nil{
+		// If there is no previous logger instance for the new job, then a new logger instance is Initialized
 		logger = new(common.Logger)
 		logger.Initialize(payload.LogVerbosity, payload.ID)
 		jobToLoggerMap.StoreLoggerForJob(payload.ID, logger)
@@ -78,9 +117,10 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	jobHandler.Logger.Info("new job part order received with job Id %s and part number %d", payload.ID, payload.PartNum)
 	putJobPartInfoHandlerIntoMap(jobHandler, payload.ID, payload.PartNum, jPartPlanInfoMap)
 
-	if coordiatorChannels == nil{
+	if coordiatorChannels == nil{ // If the coordinator transfer channels are initialized properly, then incoming transfers can't be scheduled with current instance of transfer engine.
 		jobHandler.Logger.Error("coordinator channels not initialized properly")
 	}
+	// Scheduling each transfer in the new job according to the priority of the job
 	numTransfer := jobHandler.getJobPartPlanPointer().NumTransfers
 	for index := uint32(0); index < numTransfer; index ++{
 		transferMsg := TransferMsg{payload.ID, payload.PartNum, index, jPartPlanInfoMap}
@@ -94,42 +134,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 			coordiatorChannels.LowTransfer <- transferMsg
 		default:
 			jobHandler.Logger.Debug("invalid job part order priority %d for given Job Id %s and part number %d and transfer Index %d", payload.Priority, payload.ID, payload.PartNum, index)
-			fmt.Println()
 		}
 	}
-
-	//// Test Cases
-	//jobHandler.updateTheChunkInfo(0,0, crc, ChunkTransferStatusComplete)
-	//
-	//jobHandler.updateTheChunkInfo(1,0, crc, ChunkTransferStatusComplete)
-	//
-	//jobHandler.getChunkInfo(1,0)
-	//
-	//cInfo := jobHandler.getChunkInfo(1,2)
-	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-	//
-	//cInfo  = jobHandler.getChunkInfo(0,1)
-	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-	//
-	//cInfo  = jobHandler.getChunkInfo(0,2)
-	//fmt.Println("Chunk Crc ", string(cInfo.BlockId[:]), " ",cInfo.Status)
-}
-
-func validateAndRouteHttpPostRequest(payload common.CopyJobPartOrder, coordintorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap) (bool){
-	switch {
-	case payload.SourceType == common.Local &&
-		payload.DestinationType == common.Blob:
-			ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap, jobToLoggerMap)
-			return true
-	case payload.SourceType == common.Blob &&
-		payload.DestinationType == common.Local:
-		ExecuteNewCopyJobPartOrder(payload, coordintorChannels, jPartPlanInfoMap, jobToLoggerMap)
-		return true
-	default:
-		fmt.Println("Command %d Type Not Supported by STE", payload)
-		return false
-	}
-	return false
 }
 
 // getJobSummary api returns the job progress summary of an active job
@@ -230,6 +236,7 @@ func snapshotThroughputCounter() {
 	realTimeThroughputCounter.lastCheckedTime = time.Now()
 }
 
+// getTransferList api returns the list of transfer with specific status for given jobId in http response
 func getTransferList(jobId common.JobID, expectedStatus common.Status, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter) {
 	// getJobPartInfoHandlerFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
 	jPartMap, ok := jPartPlanInfoMap.LoadPartPlanMapforJob(jobId)
@@ -270,9 +277,12 @@ func getTransferList(jobId common.JobID, expectedStatus common.Status, jPartPlan
 	(*resp).Write(tStatusJson)
 }
 
+// listExistingJobs returns the jobId of all the jobs existing in the current instance of azcopy
 func listExistingJobs(jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
+	// get the list of all the jobId from the JobPartPlanInfoMap
 	jobIds := jPartPlanInfoMap.LoadExistingJobIds()
 
+	// building the ExistingJobDetails for sending response back to front-end
 	existingJobDetails := common.ExistingJobDetails{jobIds}
 	existingJobDetailsJson, err:= json.Marshal(existingJobDetails)
 	if err != nil{
@@ -284,89 +294,68 @@ func listExistingJobs(jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseW
 	(*resp).Write(existingJobDetailsJson)
 }
 
-func getJobOrderDetails(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, resp *http.ResponseWriter){
-	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
-	jPartMap := getJobPartMapFromJobPartInfoMap(jobId, jPartPlanInfoMap)
-
-	// if partNumber to JobPartPlanInfo Pointer map is nil, then returning error
-	if jPartMap == nil{
-		(*resp).WriteHeader(http.StatusBadRequest)
-		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
-		(*resp).Write([]byte(errorMsg))
-		return
-	}
-	var jobPartDetails []common.JobPartDetails
-	for partNo, jHandler := range jPartMap{
-		jPartDetails := common.JobPartDetails{}
-		jPartDetails.PartNum = partNo
-		var trasnferList []common.TransferStatus
-		currentJobPartPlanInfo := jHandler.getJobPartPlanPointer()
-		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++{
-			source, destination :=	jHandler.getTransferSrcDstDetail(index)
-			trasnferList = append(trasnferList, common.TransferStatus{source, destination, jHandler.Transfer(index).Status})
-		}
-		jPartDetails.TransferDetails = trasnferList
-		jobPartDetails = append(jobPartDetails, jPartDetails)
-	}
-	jobPartDetailJson, err := json.MarshalIndent(common.JobOrderDetails{jobPartDetails}, "", "")
-	if err != nil{
-		result := fmt.Sprintf("error marshalling the job detail for Job Id %s", jobId)
-		(*resp).WriteHeader(http.StatusInternalServerError)
-		(*resp).Write([]byte(result))
-		return
-	}
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write(jobPartDetailJson)
-}
-
+// parsePostHttpRequest parses the incoming CopyJobPartOrder request
 func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error){
 	var payload common.CopyJobPartOrder
 	if req.Body == nil{
-		return payload, errors.New(InvalidHttpRequestBody)
+		return payload, errors.New("the http Request Does not have a valid body definition")
 	}
 	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		return payload, errors.New(HttpRequestBodyReadError)
+		return payload, errors.New("error reading the HTTP Request Body")
 	}
 	err = json.Unmarshal(body, &payload)
 	if err != nil {
-		return payload, errors.New(HttpRequestUnmarshalError)
+		return payload, errors.New("error UnMarshalling the HTTP Request Body")
 	}
 	return payload, nil
 }
 
+// serveRequest process the incoming http request
+/*
+	* resp -- It is the http response write for send back the response for the http request
+    * req  -- It is the new http request received
+	* coordinatorChannels -- These are the High, Med and Low transfer channels for scheduling the incoming transfer. These channel are required in case of New JobPartOrder request
+    * jobToLoggerMap -- This Map holds the logger instance for each job
+ */
 func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobPartPlanInfoMap, jobToLoggerMap *JobToLoggerMap){
 	switch req.Method {
 	case "GET":
-		var params = req.URL.Query()["command"][0]
-		listCommand := []byte(params)
-		var lsCommand common.ListJobPartsTransfers
-		err := json.Unmarshal(listCommand,  &lsCommand)
-		if err != nil{
-			panic(err)
-		}
-		if lsCommand.JobId == "" {
-			listExistingJobs(jPartPlanInfoMap, &resp)
-		}else if lsCommand.ExpectedTransferStatus == math.MaxUint8{
-			getJobSummary(lsCommand.JobId, jPartPlanInfoMap, &resp)
-		}else{
-			getTransferList(lsCommand.JobId, lsCommand.ExpectedTransferStatus, jPartPlanInfoMap, &resp)
+		// request type defines the type of GET request supported by transfer engine
+		// currently Transfer Engine is supporting list and kill type of GET request
+		// list type is used by the request for list commands
+		// kill type is used when frontend wants the existing instance of transfer engine to kill itself
+		var requestType = req.URL.Query()["Type"][0]
+		switch requestType {
+		case "list":
+			var params= req.URL.Query()["command"][0]
+			listCommand := []byte(params)
+			var lsCommand common.ListJobPartsTransfers
+			err := json.Unmarshal(listCommand, &lsCommand)
+			if err != nil {
+				panic(err)
+			}
+			if lsCommand.JobId == "" {
+				listExistingJobs(jPartPlanInfoMap, &resp)
+			} else if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
+				getJobSummary(lsCommand.JobId, jPartPlanInfoMap, &resp)
+			} else {
+				getTransferList(lsCommand.JobId, lsCommand.ExpectedTransferStatus, jPartPlanInfoMap, &resp)
+			}
+		case "kill":
+			fmt.Println("killing the transfer engine as per the request")
+			os.Exit(1)
 		}
 
 	case "POST":
 		jobRequestData, err := parsePostHttpRequest(req)
 		if err != nil {
 			resp.WriteHeader(http.StatusBadRequest)
-			resp.Write([]byte(UnsuccessfulAZCopyRequest + " : " + err.Error()))
+			resp.Write([]byte("Not able to trigger the AZCopy request" + " : " + err.Error()))
 		}
-		isValid := validateAndRouteHttpPostRequest(jobRequestData, coordinatorChannels, jPartPlanInfoMap, jobToLoggerMap)
-		if isValid {
-			resp.WriteHeader(http.StatusAccepted)
-			resp.Write([]byte(SuccessfulAZCopyRequest))
-		} else{
-			resp.WriteHeader(http.StatusBadRequest)
-			resp.Write([]byte(UnsuccessfulAZCopyRequest))
-		}
+		ExecuteNewCopyJobPartOrder(jobRequestData, coordinatorChannels, jPartPlanInfoMap, jobToLoggerMap)
+		resp.WriteHeader(http.StatusBadRequest)
+		resp.Write([]byte("Not able to trigger the AZCopy request"))
 	case "PUT":
 
 	case "DELETE":
@@ -374,7 +363,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 	default:
 		fmt.Println("Operation Not Supported by STE")
 		resp.WriteHeader(http.StatusBadRequest)
-		resp.Write([]byte(UnsuccessfulAZCopyRequest))
+		resp.Write([]byte("Not able to trigger the AZCopy request"))
 	}
 }
 
@@ -421,7 +410,7 @@ func InitializedChannels() (*CoordinatorChannels, *EEChannels){
 	* reconstructs the existing job using job part file on disk
 	* creater a server listening on port 1337 for job part order requests from front end
  */
-func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
+func initializeCoordinator(coordinatorChannels *CoordinatorChannels) (error){
 
 	jobHandlerMap := NewJobPartPlanInfoMap()
 	jobLoggerMap := NewJobToLoggerMap()
@@ -434,12 +423,13 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels) {
 	if err != nil{
 		fmt.Print("Server already initialized")
 	}
+	return err
 }
 
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
-func InitializeSTE(){
+func InitializeSTE() (error){
 	runtime.GOMAXPROCS(4)
 	coordinatorChannel, execEngineChannels := InitializedChannels()
 	go InitializeExecutionEngine(execEngineChannels)
-	initializeCoordinator(coordinatorChannel)
+	return initializeCoordinator(coordinatorChannel)
 }
