@@ -27,6 +27,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
+// startTranferEngine api starts the transfer engine as an Independent Process that listens on port 1337
 func startTranferEngine(){
 	newProcessCommand := exec.Command("./azure-storage-azcopy.exe", "non-debug")
 	err := newProcessCommand.Start()
