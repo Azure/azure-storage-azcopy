@@ -21,13 +21,14 @@
 package common
 
 import (
-	"time"
 	"errors"
 	"fmt"
+	"time"
 )
-type JobID string   //todo -- to uuid
+
+type JobID string //todo -- to uuid
 type PartNumber uint32
-type Version	uint32
+type Version uint32
 type Status uint8
 
 // represents the raw copy command input from the user
@@ -37,7 +38,7 @@ type CopyCmdArgsAndFlags struct {
 	Destination string
 
 	// inferred from arguments
-	SourceType LocationType
+	SourceType      LocationType
 	DestinationType LocationType
 
 	// filters from flags
@@ -63,15 +64,16 @@ type CopyCmdArgsAndFlags struct {
 
 // ListCmdArgsAndFlags represents the raw list command input from the user
 type ListCmdArgsAndFlags struct {
-	JobId		string
+	JobId          string
 	TransferStatus string
 }
 
 // define the different types of sources/destinations
 type LocationType uint8
+
 const (
-	Local LocationType = 0
-	Blob LocationType = 1
+	Local   LocationType = 0
+	Blob    LocationType = 1
 	Unknown LocationType = 2
 )
 
@@ -80,16 +82,16 @@ type CopyTransfer struct {
 	Source           string
 	Destination      string
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
-	SourceSize     	 int64    // size of the source entity in bytes
+	SourceSize       int64     // size of the source entity in bytes
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
-	Version            uint32 // version of the azcopy
-	ID                 JobID   // Guid - job identifier    //todo use uuid from go sdk
+	Version            uint32     // version of the azcopy
+	ID                 JobID      // Guid - job identifier    //todo use uuid from go sdk
 	PartNum            PartNumber // part number of the job
-	IsFinalPart        bool // to determine the final part for a specific job
-	Priority           uint8 // priority of the task
+	IsFinalPart        bool       // to determine the final part for a specific job
+	Priority           uint8      // priority of the task
 	SourceType         LocationType
 	DestinationType    LocationType
 	Transfers          []CopyTransfer
@@ -99,51 +101,51 @@ type CopyJobPartOrder struct {
 }
 
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
-type ListJobPartsTransfers struct{
-	JobId		JobID
+type ListJobPartsTransfers struct {
+	JobId                  JobID
 	ExpectedTransferStatus Status
 }
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
-	ContentType              string   //The content type specified for the blob.
-	ContentEncoding          string  //Specifies which content encodings have been applied to the blob.
-	Metadata                 string   //User-defined name-value pairs associated with the blob
-	NoGuessMimeType          bool // represents user decision to interpret the content-encoding from source file
-	PreserveLastModifiedTime bool // when downloading, tell engine to set file's timestamp to timestamp of blob
+	ContentType              string //The content type specified for the blob.
+	ContentEncoding          string //Specifies which content encodings have been applied to the blob.
+	Metadata                 string //User-defined name-value pairs associated with the blob
+	NoGuessMimeType          bool   // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime bool   // when downloading, tell engine to set file's timestamp to timestamp of blob
 	BlockSizeinBytes         uint32
 }
 
 // ExistingJobDetails represent the Job with JobId and
 type ExistingJobDetails struct {
-	JobIds [] JobID
+	JobIds []JobID
 }
 
 // represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
 type JobProgressSummary struct {
-	CompleteJobOrdered                       bool
-	JobStatus								 Status
-	TotalNumberOfTransfer                    uint32
-	TotalNumberofTransferCompleted           uint32
-	TotalNumberofFailedTransfer				 uint32
+	CompleteJobOrdered             bool
+	JobStatus                      Status
+	TotalNumberOfTransfer          uint32
+	TotalNumberofTransferCompleted uint32
+	TotalNumberofFailedTransfer    uint32
 	//NumberOfTransferCompletedafterCheckpoint uint32
 	//NumberOfTransferFailedAfterCheckpoint    uint32
-	PercentageProgress                       uint32
-	FailedTransfers                          []TransferStatus
-	ThroughputInBytesPerSeconds				 float64
+	PercentageProgress          uint32
+	FailedTransfers             []TransferStatus
+	ThroughputInBytesPerSeconds float64
 }
 
 // represents the Status and details of a single transfer
 type TransferStatus struct {
-	Src string
-	Dst string
+	Src            string
+	Dst            string
 	TransferStatus Status
 }
+
 // represents the list of Status and details of number of transfers
 type TransfersStatus struct {
 	Status []TransferStatus
 }
-
 
 const (
 	StatusCompleted  = 1
@@ -152,20 +154,20 @@ const (
 
 // These constants defines the various states of transfer
 const (
-	TransferStatusActive = 0  // Active Transfers
-	TransferStatusComplete = 1 // Completed Transfers
-	TransferStatusFailed = 2 // Failed Transfers
-	TranferStatusAll = 254  // All types of Transfer (Active | Complete | Failed)
+	TransferStatusActive   = 0   // Active Transfers
+	TransferStatusComplete = 1   // Completed Transfers
+	TransferStatusFailed   = 2   // Failed Transfers
+	TranferStatusAll       = 254 // All types of Transfer (Active | Complete | Failed)
 )
 
 // TransferStatusStringToStatusCode returns the Transfer Status Code given for Transfer Status
-func TransferStatusStringToStatusCode(status string) (Status){
-	switch status{
+func TransferStatusStringToStatusCode(status string) Status {
+	switch status {
 	case "TransferStatusActive":
 		return 0
 	case "TransferStatusComplete":
 		return 1
-	case "TransferStatusFailed" :
+	case "TransferStatusFailed":
 		return 2
 	case "TranferStatusAll":
 		return 254
@@ -175,7 +177,7 @@ func TransferStatusStringToStatusCode(status string) (Status){
 }
 
 // TransferStatusCodeToString returns the Transfer Status for given status Code
-func TransferStatusCodeToString(status Status) (string) {
+func TransferStatusCodeToString(status Status) string {
 	switch status {
 	case 0:
 		return "TransferStatusActive"
@@ -189,4 +191,5 @@ func TransferStatusCodeToString(status Status) (string) {
 		panic(errors.New(fmt.Sprintf("invalid expected transfer status code %d. Valid status are 0, 1, 2, 255", status)))
 	}
 }
+
 const DefaultBlockSize = 4 * 1024 * 1024

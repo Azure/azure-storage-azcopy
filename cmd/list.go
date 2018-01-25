@@ -21,9 +21,9 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"github.com/spf13/cobra"
 )
 
 // TODO check file size, max is 4.75TB
@@ -32,10 +32,10 @@ func init() {
 
 	// lsCmd represents the ls command
 	lsCmd := &cobra.Command{
-		Use:   "list",
-		Aliases: []string{"ls"},
+		Use:        "list",
+		Aliases:    []string{"ls"},
 		SuggestFor: []string{"lst", "lt", "ist"}, //TODO why does message appear twice on the console
-		Short: "list(ls) lists the specifics of an existing job.",
+		Short:      "list(ls) lists the specifics of an existing job.",
 		Long: `list(ls) lists the specifics of an existing job. The most common cases are:
   - lists all the existing jobs.
   - lists all the part numbers of an existing jobs.
@@ -46,11 +46,11 @@ func init() {
 			* list -- lists all the existing jobs
 			* list jobId -- lists the progress summary of the job for given jobId
 			* list jobId --with-status -- lists all the transfers of an existing job which has the given status
-			*/
+			 */
 			jobId := ""
 			// if there is more than one argument passed, then it is taken as a jobId
-            if len(args) > 0{
-            	jobId = args[0]
+			if len(args) > 0 {
+				jobId = args[0]
 			}
 			commandLineInput.JobId = jobId
 			return nil

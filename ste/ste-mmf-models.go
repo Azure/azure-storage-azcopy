@@ -10,15 +10,15 @@ const dataSchemaVersion = 0 // To be Incremented every time when we release azco
 
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
-	Version uint32 // represent the version of data schema format of header
-	Id [128 / 8] byte
-	PartNum uint32
-	IsFinalPart bool
-	Priority uint8
+	Version            uint32 // represent the version of data schema format of header
+	Id                 [128 / 8]byte
+	PartNum            uint32
+	IsFinalPart        bool
+	Priority           uint8
 	TTLAfterCompletion uint32
-	SrcLocationType common.LocationType
-	DstLocationType common.LocationType
-	NumTransfers uint32
+	SrcLocationType    common.LocationType
+	DstLocationType    common.LocationType
+	NumTransfers       uint32
 	//Status uint8
 	BlobData JobPartPlanBlobData
 }
@@ -46,31 +46,28 @@ type JobPartPlanTransfer struct {
 	CompletionTime uint64
 }
 
-
 type JobPartPlanTransferChunk struct {
 	BlockId [128 / 8]byte
-	Status uint8
+	Status  uint8
 }
 
 const (
 	ChunkTransferStatusInactive = 0
-	ChunkTransferStatusActive = 1
+	ChunkTransferStatusActive   = 1
 	ChunkTransferStatusProgress = 2
 	ChunkTransferStatusComplete = 3
-	ChunkTransferStatusFailed = 4
+	ChunkTransferStatusFailed   = 4
 )
 
-
-
 const (
-	HighJobPriority = 0
-	MediumJobPriority = 1
-	LowJobPriority = 2
+	HighJobPriority    = 0
+	MediumJobPriority  = 1
+	LowJobPriority     = 2
 	DefaultJobPriority = HighJobPriority
 )
 
 const (
-	MAX_SIZE_CONTENT_TYPE = 256
+	MAX_SIZE_CONTENT_TYPE     = 256
 	MAX_SIZE_CONTENT_ENCODING = 256
-	MAX_SIZE_META_DATA = 1000
+	MAX_SIZE_META_DATA        = 1000
 )

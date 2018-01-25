@@ -1,9 +1,9 @@
 package common
 
 import (
-	"io"
-	"fmt"
 	"crypto/rand"
+	"fmt"
+	"io"
 )
 
 // NewUUID generates a random UUID according to RFC 4122

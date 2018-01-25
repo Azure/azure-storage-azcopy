@@ -2,17 +2,17 @@ package ste
 
 import (
 	"context"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"net/url"
-	"time"
 	"github.com/edsrzf/mmap-go"
 	"io"
+	"net/url"
 	"sync/atomic"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"fmt"
+	"time"
 )
 
-type blobToLocal struct{
+type blobToLocal struct {
 	// count the number of chunks that are done
 	count uint32
 }
@@ -68,8 +68,8 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 }
 
 // this generates a function which performs the downloading of a single chunk
-func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64,
-	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jPartPlanInfoMap *JobPartPlanInfoMap) chunkFunc {
+func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64,
+	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jPartPlanInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerFromJobPartPlanInfo(jobId, partNum, jPartPlanInfoMap)
 		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
@@ -88,7 +88,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 		}
 
 		// step2: write the body into the memory mapped file directly
-		bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex: startIndex + chunkSize])
+		bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex:startIndex+chunkSize])
 		get.Body().Close()
 		if int64(bytesRead) != chunkSize || err != nil {
 			// cancel entire transfer because this chunk has failed
@@ -96,7 +96,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber,transfer
 			logger.Debug("worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 			//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because writing to file for startIndex of", startIndex, "has failed")
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jPartPlanInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed,  jPartPlanInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jPartPlanInfoMap)
 			return
 		}
 

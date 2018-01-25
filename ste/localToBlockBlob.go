@@ -1,17 +1,17 @@
 package ste
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/edsrzf/mmap-go"
 	"net/url"
 	"os"
-	"time"
-	"github.com/edsrzf/mmap-go"
-	"encoding/base64"
-	"bytes"
 	"sync/atomic"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"fmt"
+	"time"
 )
 
 type localToBlockBlob struct {
@@ -80,7 +80,7 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 
 // this generates a function which performs the uploading of a single chunk
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
-	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jPartPlanInfoMap *JobPartPlanInfoMap) chunkFunc {
+	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jPartPlanInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerFromJobPartPlanInfo(jobId, partNum, jPartPlanInfoMap)
 		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
@@ -95,7 +95,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 		// step 3: perform put block
 		blockBlobUrl := blobURL.ToBlockBlobURL()
-		_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex: startIndex + chunkSize]), azblob.LeaseAccessConditions{})
+		_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), azblob.LeaseAccessConditions{})
 		if err != nil {
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()

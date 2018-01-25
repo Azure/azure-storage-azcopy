@@ -21,18 +21,18 @@
 package handlers
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"os"
-	"fmt"
-	"io/ioutil"
-	"path"
-	"net/url"
-	"strings"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"log"
 	"context"
 	"crypto/rand"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"io"
+	"io/ioutil"
+	"log"
+	"net/url"
+	"os"
+	"path"
+	"strings"
 	"time"
 )
 
@@ -64,7 +64,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	if commandLineInput.IsaBackgroundOp {
 		return uuid
 	}
-	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid){
+	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
 		time.Sleep(time.Second)
 	}
 	return uuid
@@ -72,7 +72,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 
 func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrder,
-	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder))  {
+	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {
 
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Local
@@ -103,7 +103,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		}
 
 		// make sure this is a container url
-		if strings.Contains(destinationUrl.Path[1:], "/"){
+		if strings.Contains(destinationUrl.Path[1:], "/") {
 			panic("destination is not a valid container url")
 		}
 
@@ -120,7 +120,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 					Source:           path.Join(commandLineInput.Source, f.Name()),
 					Destination:      destinationUrl.String(),
 					LastModifiedTime: f.ModTime(),
-					SourceSize:      f.Size(),
+					SourceSize:       f.Size(),
 				})
 				numInTransfers += 1
 
@@ -155,7 +155,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 			Source:           commandLineInput.Source,
 			Destination:      destinationUrl.String(),
 			LastModifiedTime: sourceFileInfo.ModTime(),
-			SourceSize:      sourceFileInfo.Size(),
+			SourceSize:       sourceFileInfo.Size(),
 		}
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.PartNum = 0
@@ -167,7 +167,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 func HandleDownloadFromWastoreToLocal(
 	commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrder,
-	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder))  {
+	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
@@ -185,7 +185,7 @@ func HandleDownloadFromWastoreToLocal(
 
 		// create the destination if it does not exist
 		if os.IsNotExist(err) {
-			if len(sourcePathParts) <  2 { // create the directory if the source is a container
+			if len(sourcePathParts) < 2 { // create the directory if the source is a container
 				err = os.MkdirAll(commandLineInput.Destination, os.ModePerm)
 				if err != nil {
 					panic("failed to create the destination on the local file system")
@@ -215,10 +215,10 @@ func HandleDownloadFromWastoreToLocal(
 		//}
 
 		singleTask := common.CopyTransfer{
-			Source: sourceUrl.String(),
-			Destination: commandLineInput.Destination,
-			LastModifiedTime:blobProperties.LastModified(),
-			SourceSize:blobProperties.ContentLength(),
+			Source:           sourceUrl.String(),
+			Destination:      commandLineInput.Destination,
+			LastModifiedTime: blobProperties.LastModified(),
+			SourceSize:       blobProperties.ContentLength(),
 		}
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.IsFinalPart = true
@@ -248,7 +248,7 @@ func HandleDownloadFromWastoreToLocal(
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
 				sourceUrl.Path = cleanContainerPath + "/" + blobInfo.Name
-				Transfers = append(Transfers, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime:blobInfo.Properties.LastModified, SourceSize:*blobInfo.Properties.ContentLength})
+				Transfers = append(Transfers, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime: blobInfo.Properties.LastModified, SourceSize: *blobInfo.Properties.ContentLength})
 			}
 			jobPartOrderToFill.Transfers = Transfers
 			jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
@@ -264,13 +264,13 @@ func HandleDownloadFromWastoreToLocal(
 	commandLineInput.BlobType = ""
 }
 
-func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder)  {
+func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder) {
 	optionalAttributes := common.BlobTransferAttributes{
-		BlockSizeinBytes: commandLineInput.BlockSize,
-		ContentType: commandLineInput.ContentType,
-		ContentEncoding: commandLineInput.ContentEncoding,
-		Metadata: commandLineInput.Metadata,
-		NoGuessMimeType: commandLineInput.NoGuessMimeType,
+		BlockSizeinBytes:         commandLineInput.BlockSize,
+		ContentType:              commandLineInput.ContentType,
+		ContentEncoding:          commandLineInput.ContentEncoding,
+		Metadata:                 commandLineInput.Metadata,
+		NoGuessMimeType:          commandLineInput.NoGuessMimeType,
 		PreserveLastModifiedTime: commandLineInput.PreserveLastModifiedTime,
 	}
 
@@ -295,4 +295,3 @@ func newUUID() (string, error) {
 	uuid[6] = uuid[6]&^0xf0 | 0x40
 	return fmt.Sprintf("%x%x%x%x%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
-

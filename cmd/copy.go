@@ -21,12 +21,10 @@
 package cmd
 
 import (
-	"fmt"
-	"github.com/spf13/cobra"
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"net/http"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"github.com/spf13/cobra"
 )
 
 // TODO check file size, max is 4.75TB
@@ -35,10 +33,10 @@ func init() {
 
 	// cpCmd represents the cp command
 	cpCmd := &cobra.Command{
-		Use:   "copy",
-		Aliases: []string{"cp", "c"},
+		Use:        "copy",
+		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
-		Short: "copy(cp) moves data between two places.",
+		Short:      "copy(cp) moves data between two places.",
 		Long: `copy(cp) moves data between two places. The most common cases are:
   - Upload local files/directories into Azure Storage.
   - Download blobs/container from Azure Storage to local file system.
@@ -105,4 +103,3 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging level", uint8(common.LOG_DEBUG_LEVEL), "defines the log verbosity to be saved to log file")
 }
-

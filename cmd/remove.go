@@ -28,11 +28,11 @@ import (
 
 // deleteCmd represents the delete command
 var deleteCmd = &cobra.Command{
-	Use:   "remove",
-	Aliases: []string{"rm", "r"},
+	Use:        "remove",
+	Aliases:    []string{"rm", "r"},
 	SuggestFor: []string{"delete", "del"},
-	Short: "Coming soon: remove(rm) deletes blobs or containers in Azure Storage.",
-	Long: `Coming soon: remove(rm) deletes blobs or containers in Azure Storage.`,
+	Short:      "Coming soon: remove(rm) deletes blobs or containers in Azure Storage.",
+	Long:       `Coming soon: remove(rm) deletes blobs or containers in Azure Storage.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("delete called, but not implemented yet.")
 	},

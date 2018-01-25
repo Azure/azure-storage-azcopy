@@ -28,10 +28,10 @@ import (
 
 // syncCmd represents the sync command
 var syncCmd = &cobra.Command{
-	Use:   "sync",
+	Use:     "sync",
 	Aliases: []string{"sc", "s"},
-	Short: "Coming soon: sync replicates source to the destination location.",
-	Long: `Coming soon: sync replicates source to the destination location.`,
+	Short:   "Coming soon: sync replicates source to the destination location.",
+	Long:    `Coming soon: sync replicates source to the destination location.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("sync called, but not implemented.")
 	},

@@ -21,9 +21,9 @@
 package cmd
 
 import (
-	"os"
-	"net/url"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"net/url"
+	"os"
 )
 
 func determineLocaltionType(stringToParse string) common.LocationType {
@@ -42,14 +42,14 @@ func IsLocalPath(path string) bool {
 	_, err := os.Stat(path)
 	// in case the path does not exist yet, an err is returned
 	// we need to make sure that it is indeed just a local path that does not exist yet, and not a url
-	if err == nil || (!IsUrl(path) && os.IsNotExist(err)){
+	if err == nil || (!IsUrl(path) && os.IsNotExist(err)) {
 		return true
 	}
 	return false
 }
 
 // verify if givenUrl is a valid url
-func IsUrl(givenUrl string) bool{
+func IsUrl(givenUrl string) bool {
 	u, err := url.Parse(givenUrl)
 	// attempting to parse the url validates whether a given string is a valid url
 	if err != nil {

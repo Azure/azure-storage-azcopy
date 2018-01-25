@@ -3,19 +3,19 @@ package handlers
 import (
 	tm "github.com/buger/goterm"
 	//"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"bytes"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"math"
+	"net/http"
 	"time"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
 
-func generateCoordinatorScheduleFunc() coordinatorScheduleFunc{
+func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 	time.Sleep(time.Second * 2)
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
@@ -44,17 +44,16 @@ func sendJobPartOrderToSTE(payload []byte) {
 	//fmt.Println("Response to request", res.Status, " ", body)
 }
 
-
-func fetchJobStatus(jobId string) (common.Status){
+func fetchJobStatus(jobId string) common.Status {
 	url := "http://localhost:1337"
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
-	lsCommand := common.ListJobPartsTransfers{JobId:common.JobID(jobId),ExpectedTransferStatus:math.MaxUint8}
+	lsCommand := common.ListJobPartsTransfers{JobId: common.JobID(jobId), ExpectedTransferStatus: math.MaxUint8}
 	lsCommandMarshalled, err := json.Marshal(lsCommand)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 	q := req.URL.Query()
@@ -62,7 +61,7 @@ func fetchJobStatus(jobId string) (common.Status){
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := client.Do(req)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 	if resp.StatusCode != http.StatusAccepted {
@@ -71,17 +70,17 @@ func fetchJobStatus(jobId string) (common.Status){
 	}
 
 	defer resp.Body.Close()
-	body, err:= ioutil.ReadAll(resp.Body)
-	if err != nil{
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
 		panic(err)
 	}
 	var summary common.JobProgressSummary
 	json.Unmarshal(body, &summary)
 
 	tm.Clear()
-	tm.MoveCursor(1,1)
+	tm.MoveCursor(1, 1)
 
-	tm.Println("----------------- Progress Summary for JobId", jobId,"------------------")
+	tm.Println("----------------- Progress Summary for JobId", jobId, "------------------")
 	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfer)
 	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
 	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
@@ -89,7 +88,6 @@ func fetchJobStatus(jobId string) (common.Status){
 
 	tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
 	tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
-
 
 	for index := 0; index < len(summary.FailedTransfers); index++ {
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)

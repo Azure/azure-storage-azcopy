@@ -2,15 +2,14 @@ package ste
 
 import (
 	"context"
-	"github.com/edsrzf/mmap-go"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/edsrzf/mmap-go"
 	"time"
 )
 
-
 type TransferInfo struct {
-	ctx context.Context
-	cancel context.CancelFunc
+	ctx                context.Context
+	cancel             context.CancelFunc
 	NumChunksCompleted uint16
 }
 
@@ -19,48 +18,48 @@ type JobPartPlanInfo struct {
 	cancel       context.CancelFunc
 	memMap       mmap.MMap
 	TrasnferInfo []TransferInfo
-	Logger 		*common.Logger
+	Logger       *common.Logger
 }
 
 type TransferMsg struct {
-	Id common.JobID
-	PartNumber common.PartNumber
-	TransferIndex uint32
-	JPartPlanInfoMap *JobPartPlanInfoMap
+	Id               common.JobID
+	PartNumber       common.PartNumber
+	TransferIndex    uint32
+	JPartPlanInfoMap *JobsInfoMap
 }
 
 type TransferMsgDetail struct {
-	JobId 			common.JobID
-	PartNumber 		common.PartNumber
-	TransferId      uint32
-	ChunkSize       uint64
-	SourceType      common.LocationType
-	Source          string
-	DestinationType common.LocationType
-	Destination     string
-	TransferCtx		context.Context
+	JobId              common.JobID
+	PartNumber         common.PartNumber
+	TransferId         uint32
+	ChunkSize          uint64
+	SourceType         common.LocationType
+	Source             string
+	DestinationType    common.LocationType
+	Destination        string
+	TransferCtx        context.Context
 	TransferCancelFunc func()
-	JobHandlerMap   *JobPartPlanInfoMap
+	JobHandlerMap      *JobsInfoMap
 }
 
 type ChunkMsg struct {
 	doTransfer chunkFunc
 }
 
-type CoordinatorChannels struct{
-	HighTransfer chan <- TransferMsg
-	MedTransfer chan <- TransferMsg
-	LowTransfer chan <- TransferMsg
+type CoordinatorChannels struct {
+	HighTransfer chan<- TransferMsg
+	MedTransfer  chan<- TransferMsg
+	LowTransfer  chan<- TransferMsg
 }
 
 type EEChannels struct {
-	HighTransfer         <- chan TransferMsg
-	MedTransfer          <- chan TransferMsg
-	LowTransfer          <- chan TransferMsg
+	HighTransfer         <-chan TransferMsg
+	MedTransfer          <-chan TransferMsg
+	LowTransfer          <-chan TransferMsg
 	HighChunkTransaction chan ChunkMsg
 	MedChunkTransaction  chan ChunkMsg
 	LowChunkTransaction  chan ChunkMsg
-	SuicideChannel       <- chan SuicideJob
+	SuicideChannel       <-chan SuicideJob
 }
 
 type SuicideJob byte
@@ -68,7 +67,7 @@ type chunkFunc func(int)
 type prologueFunc func(msg TransferMsgDetail, chunkChannel chan<- ChunkMsg)
 
 type throughputState struct {
-	lastCheckedTime time.Time
+	lastCheckedTime  time.Time
 	lastCheckedBytes int64
-	currentBytes int64
+	currentBytes     int64
 }

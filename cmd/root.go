@@ -35,7 +35,7 @@ var cfgFile string
 var rootCmd = &cobra.Command{
 	Use:   "azs",
 	Short: "AZS is a CLI tool that moves data into/out of Azure Storage.",
-	Long: `AZS is a CLI tool that moves data into/out of Azure Storage. Please refer to the Github README for more info.`,
+	Long:  `AZS is a CLI tool that moves data into/out of Azure Storage. Please refer to the Github README for more info.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },
@@ -50,7 +50,7 @@ func Execute() {
 	}
 }
 
-func init() { 
+func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Here you will define your flags and configuration settings.

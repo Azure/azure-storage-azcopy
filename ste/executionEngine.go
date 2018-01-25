@@ -14,9 +14,12 @@ import (
 func InitializeExecutionEngine(execEngineChannels *EEChannels) {
 	highChunk := execEngineChannels.HighChunkTransaction
 	highTransfer := execEngineChannels.HighTransfer
+	// TODO add the other channels
 	suicideLine := execEngineChannels.SuicideChannel
 
+	// TODO change this
 	for i := 1; i <= 5; i++ {
+		// TODO take struct instead
 		go engineWorker(i, highChunk, highTransfer, suicideLine)
 	}
 }
@@ -42,7 +45,7 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 					logger.Debug("Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.JPartPlanInfoMap)
 					prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
-					if prologueFunction == nil{
+					if prologueFunction == nil {
 						logger.Error("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
 						panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)))
 					}
