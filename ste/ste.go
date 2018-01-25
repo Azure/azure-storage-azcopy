@@ -200,6 +200,8 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobPartPlanInfoMap, res
 	if (progressSummary.TotalNumberOfTransfer == progressSummary.TotalNumberofFailedTransfer + progressSummary.TotalNumberofTransferCompleted) &&(
 		completeJobOrdered){
 			progressSummary.JobStatus = common.StatusCompleted
+	}else{
+		progressSummary.JobStatus = common.StatusInProgress
 	}
 	progressSummary.CompleteJobOrdered = completeJobOrdered
 	progressSummary.FailedTransfers = failedTransfers

@@ -28,8 +28,9 @@ import (
 type JobID string   //todo -- to uuid
 type PartNumber uint32
 type Version	uint32
+type Status uint8
 
-// represents the raw input from the user
+// represents the raw copy command input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
 	Source      string
@@ -97,6 +98,7 @@ type CopyJobPartOrder struct {
 	OptionalAttributes BlobTransferAttributes
 }
 
+// represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListJobPartsTransfers struct{
 	JobId		JobID
 	ExpectedTransferStatus Status
@@ -117,10 +119,7 @@ type ExistingJobDetails struct {
 	JobIds [] JobID
 }
 
-type JobOrderDetails struct {
-	PartsDetail []JobPartDetails
-}
-
+// represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
 type JobProgressSummary struct {
 	CompleteJobOrdered                       bool
 	JobStatus								 Status
@@ -134,39 +133,32 @@ type JobProgressSummary struct {
 	ThroughputInBytesPerSeconds				 float64
 }
 
-type JobProgressQuery struct {
-	JobId JobID
-	LastCheckPointTimestamp uint64
-}
-type JobPartDetails struct{
-	PartNum PartNumber
-	TransferDetails []TransferStatus
-}
-
+// represents the Status and details of a single transfer
 type TransferStatus struct {
 	Src string
 	Dst string
 	TransferStatus Status
 }
-
+// represents the list of Status and details of number of transfers
 type TransfersStatus struct {
 	Status []TransferStatus
 }
 
-type Status uint8
 
 const (
 	StatusCompleted  = 1
 	StatusInProgress = 2
 )
 
+// These constants defines the various states of transfer
 const (
-	TransferStatusActive = 0
-	TransferStatusComplete = 1
-	TransferStatusFailed = 2
-	TranferStatusAll = 254
+	TransferStatusActive = 0  // Active Transfers
+	TransferStatusComplete = 1 // Completed Transfers
+	TransferStatusFailed = 2 // Failed Transfers
+	TranferStatusAll = 254  // All types of Transfer (Active | Complete | Failed)
 )
 
+// TransferStatusStringToStatusCode returns the Transfer Status Code given for Transfer Status
 func TransferStatusStringToStatusCode(status string) (Status){
 	switch status{
 	case "TransferStatusActive":
@@ -182,6 +174,7 @@ func TransferStatusStringToStatusCode(status string) (Status){
 	}
 }
 
+// TransferStatusCodeToString returns the Transfer Status for given status Code
 func TransferStatusCodeToString(status Status) (string) {
 	switch status {
 	case 0:

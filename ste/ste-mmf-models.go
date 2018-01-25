@@ -10,7 +10,7 @@ const dataSchemaVersion = 0 // To be Incremented every time when we release azco
 
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
-	Version uint32 // represent the version of data schema format
+	Version uint32 // represent the version of data schema format of header
 	Id [128 / 8] byte
 	PartNum uint32
 	IsFinalPart bool
@@ -23,6 +23,7 @@ type JobPartPlanHeader struct {
 	BlobData JobPartPlanBlobData
 }
 
+// JobPartPlan represent the header of Job Part's Optional Attributes in Memory Map File
 type JobPartPlanBlobData struct {
 	ContentTypeLength     uint8
 	ContentType           [256]byte
@@ -33,6 +34,7 @@ type JobPartPlanBlobData struct {
 	BlockSize             uint64
 }
 
+// JobPartPlan represent the header of Job Part's Transfer in Memory Map File
 type JobPartPlanTransfer struct {
 	Offset         uint64
 	SrcLength      uint16
@@ -45,8 +47,6 @@ type JobPartPlanTransfer struct {
 }
 
 
-
-//todo comments
 type JobPartPlanTransferChunk struct {
 	BlockId [128 / 8]byte
 	Status uint8
