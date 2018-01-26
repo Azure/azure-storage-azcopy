@@ -81,7 +81,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 		if err != nil {
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
-			logger.Debug("worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
+			logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
 			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
 			return
@@ -93,8 +93,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 		if int64(bytesRead) != chunkSize || err != nil {
 			// cancel entire transfer because this chunk has failed
 			cancelTransfer()
-			logger.Debug("worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-			//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because writing to file for startIndex of", startIndex, "has failed")
+			logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
 			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
 			return
@@ -106,15 +105,18 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 		// step 3: check if this is the last chunk
 		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 			// step 4: this is the last block, perform EPILOGUE
-			logger.Debug("worker %d is concluding download Transfer job with %s after processing chunkId %d", workerId, transferIdentifierStr, chunkId)
+			logger.Logf(common.LogInfo,
+				"worker %d is concluding download Transfer job with %s after processing chunkId %d",
+					workerId, transferIdentifierStr, chunkId)
 			//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 
 			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobInfoMap)
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {
-				logger.Error("worker %v failed to conclude Transfer job with %v after processing chunkId %v", workerId, transferIdentifierStr, chunkId)
-				//fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
+				logger.Logf(common.LogError,
+					"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
+						workerId, transferIdentifierStr, chunkId)
 			}
 		}
 	}

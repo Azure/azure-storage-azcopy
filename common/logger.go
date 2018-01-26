@@ -28,6 +28,26 @@ const (
 	LogInfo
 )
 
+// logLevelToString converts the Loglevel severity to appropriate loglevel string
+func logLevelToString(level LogLevel) (string){
+	switch level {
+	case LogNone:
+		return ""
+	case LogFatal:
+		return "ERROR"
+	case LogPanic:
+		return "ERROR"
+	case LogError:
+		return "ERROR"
+	case LogWarning:
+		return "WARNING"
+	case LogInfo:
+		return "INFO"
+	default:
+		return ""
+	}
+}
+
 // Logger is struct holding Information of log file for specific Job
 // Each Job has its own logger instance. For all the parts of same Job, logs are logged in one file
 type Logger struct {
@@ -48,34 +68,15 @@ func (logger *Logger) Initialize(severity LogLevel, fileName string) {
 	logger.LogFile = file
 }
 
-// TODO take severity as argument
-// TODO rename to Logf
-// Debug writes the debug level logs to the file.
-func (logger *Logger) Debug(format string, a ...interface{}) {
-	// If the severity of current logger instance is less than DEBUG, then logs will not logged
-	if logger.Severity < LogInfo {
+// Logf api checks the log severity of current logger instance and writes the given
+// logs to the filename of the current logger instance.
+// If log severity of current logger instance is less than given severity, no logs
+// will be written to the log file
+func (logger *Logger) Logf(severity LogLevel, format string, a ...interface{}){
+	if severity > logger.Severity{
 		return
 	}
 	log.SetOutput(logger.LogFile)
-	debugMsg := fmt.Sprintf("DEBUG: "+format, a...)
-	log.Println(debugMsg)
-}
-
-// Info writes the info level logs to the file.
-func (logger *Logger) Info(format string, a ...interface{}) {
-	// If the severity of current logger instance is less than INFO, then logs will not logged
-	if logger.Severity < LogInfo {
-		return
-	}
-	log.SetOutput(logger.LogFile)
-	infoMsg := fmt.Sprintf("INFO: "+format, a...)
-	log.Println(infoMsg)
-}
-
-// Error writes the Error level logs to the file.
-func (logger *Logger) Error(format string, a ...interface{}) {
-	// Error logs are always logged to the file irrespective to the severity of current logger instance.
-	log.SetOutput(logger.LogFile)
-	errorMsg := fmt.Sprintf("ERROR: "+format, a...)
-	log.Println(errorMsg)
+	logMsg := fmt.Sprintf(logLevelToString(severity) + ":"+format, a...)
+	log.Println(logMsg)
 }

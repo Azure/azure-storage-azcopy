@@ -34,7 +34,6 @@ import (
 	"path"
 	"strings"
 	"time"
-	"os/signal"
 )
 
 const (

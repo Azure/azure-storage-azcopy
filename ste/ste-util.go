@@ -160,7 +160,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
-	fileName := string(jobPartOrder.ID) + "-" + partNoString + ".stev" + versionIdString
+	fileName := string(jobPartOrder.ID) + "-" + partNoString + ".steV" + versionIdString
 	return fileName
 }
 
@@ -196,28 +196,23 @@ func convertJobIdBytesToString(jobId [128 / 8]byte) string {
 	return jobIdString
 }
 
-// TODO group jobInfo-related functions into a separate file
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
-// TODO clean up return statement
-func reconstructTheExistingJobParts(jPartPlanInfoMap *JobsInfoMap) error {
+func reconstructTheExistingJobParts(jPartPlanInfoMap *JobsInfoMap) {
 	versionIdString := fmt.Sprintf("%05d", dataSchemaVersion)
-	// list memory map files with .stev$dataschemaVersion to avoid the reconstruction of old schema version memory map file
-	// TODO make v upper case
-	files := listFileWithExtension(".stev" + versionIdString)
+	// list memory map files with .steV$dataschemaVersion to avoid the reconstruction of old schema version memory map file
+	files := listFileWithExtension(".steV" + versionIdString)
 	for index := 0; index < len(files); index++ {
 		fileName := files[index].Name()
 		// extracting the jobId and part number from file name
 		jobIdString, partNumber, _ := parseStringToJobInfo(fileName)
 		// creating a new JobPartPlanInfo pointer and initializing it
 		jobHandler := new(JobPartPlanInfo)
-		err := jobHandler.initialize(steContext, fileName)
-		if err != nil {
-			panic(err)
-		}
+		// Initializing the JobPartPlanInfo for existing Job file
+		jobHandler.initialize(steContext, fileName)
+
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jPartPlanInfoMap)
 	}
-	return nil
 }
 
 // listFileWithExtension list all files in the current directory that has given extension
@@ -263,7 +258,7 @@ func fileAlreadyExists(fileName string, dir string) (bool, error) {
 // getTransferMsgDetail returns the details of a transfer for given JobId, part number and transfer index
 func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, jPartPlanInfoMap *JobsInfoMap) TransferMsgDetail {
 	// jHandler is the JobPartPlanInfo Pointer for given JobId and part number
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
+	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil {
 		panic(err)
 	}
@@ -279,18 +274,18 @@ func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transfer
 }
 
 // updateChunkInfo updates the chunk at given chunkIndex for given JobId, partNumber and transfer
-func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jPartPlanInfoMap *JobsInfoMap) {
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
+func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jobsInfoMap *JobsInfoMap) {
+	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jobsInfoMap)
 	if err != nil {
 		panic(err)
 	}
 	resultMessage := jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 / 8]byte{}, status)
-	getLoggerForJobId(jobId, jPartPlanInfoMap).Debug("%s for jobId %s and part number %d", resultMessage, jobId, partNo)
+	getLoggerForJobId(jobId, jobsInfoMap).Logf(common.LogInfo, "%s for jobId %s and part number %d", resultMessage, jobId, partNo)
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
-	jHandler, err := getJobPartInfoHandlerFromMap(jobId, partNo, jPartPlanInfoMap)
+	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil {
 		panic(err)
 	}

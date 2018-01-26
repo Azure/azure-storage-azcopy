@@ -101,5 +101,5 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.IsaBackgroundOp, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging level", uint8(common.LOG_DEBUG_LEVEL), "defines the log verbosity to be saved to log file")
+	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging level", uint8(common.LogWarning), "defines the log verbosity to be saved to log file")
 }

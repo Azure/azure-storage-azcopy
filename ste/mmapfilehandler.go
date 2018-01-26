@@ -16,7 +16,7 @@ var currFileDirectory string = "."
 
 // initialize func initializes the JobPartPlanInfo handler for given JobPartOrder
 // TODO clean up return statement, panic in case of error?
-func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName string) error {
+func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName string) {
 
 	/*
 	 *       creates the job context with cancel using the given context
@@ -43,7 +43,6 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 		transferInfo[index] = TransferInfo{transferCtx, transferCancel, 0}
 	}
 	job.TrasnferInfo = transferInfo
-	return nil
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder
@@ -323,7 +322,6 @@ func getNumChunks(transfer common.CopyTransfer, destBlobData JobPartPlanBlobData
 	} else {
 		blockSize = destBlobData.BlockSize
 	}
-	// TODO might overflow, check for 500000 as max
 	if uint64(transfer.SourceSize)%blockSize == 0 {
 		return uint16(uint64(transfer.SourceSize) / blockSize)
 	} else {
