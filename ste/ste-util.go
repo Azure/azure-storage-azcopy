@@ -21,42 +21,12 @@ import (
 // TODO: new logger for AZCOPY, in addition to job level logs
 // TODO: correlate logging levels between SDK and AZCOPY
 
-
-// JobToLoggerMap are the Synchronous Map to hold logger instance mapped to jobId
-// Provides the thread safe Load and Store Method
-type JobToLoggerMap struct {
-	// Read Write Mutex
-	sync.RWMutex
-	// map for job Id to logger
-	internalMap map[common.JobID]*common.Logger
-}
-
-// LoadLoggerForJob returns the logger instance for given JobId in thread-safe manner
-func (jLogger *JobToLoggerMap) LoadLoggerForJob(jobId common.JobID) *common.Logger {
-	jLogger.RLock()
-	logger := jLogger.internalMap[jobId]
-	jLogger.RUnlock()
-	return logger
-}
-
-// StoreLoggerForJob stores the logger instance for given JobId in thread-safe manner
-func (jLogger *JobToLoggerMap) StoreLoggerForJob(jobId common.JobID, logger *common.Logger) {
-	jLogger.Lock()
-	jLogger.internalMap[jobId] = logger
-	jLogger.Unlock()
-}
-
-// NewJobToLoggerMap returns a new instance of synchronous JobToLoggerMap for holding logger instances mapped to JobIds
-func NewJobToLoggerMap() *JobToLoggerMap {
-	return &JobToLoggerMap{
-		internalMap: make(map[common.JobID]*common.Logger),
-	}
-}
-
-// A map from part numbers to job part plan info stored in memory
-// TODO make map[common.PartNumber]*JobPartPlanInfo into part of a struct, which also contains logger
+// JobInfo contains JobPartsMap and Logger
+// JobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
+// Logger is the logger instance for a given JobId
 type JobInfo struct {
 	JobPartsMap map[common.PartNumber]*JobPartPlanInfo
+	Logger *common.Logger
 }
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
@@ -65,15 +35,18 @@ type JobsInfoMap struct {
 	// ReadWrite Mutex
 	sync.RWMutex
 	// map jobId -->[partNo -->JobPartPlanInfo Pointer]
-	internalMap map[common.JobID]JobPartsMap
+	internalMap map[common.JobID]*JobInfo
 }
 
-// LoadPartPlanMapforJob returns the map of PartNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
-func (jMap *JobsInfoMap) LoadPartPlanMapforJob(jobId common.JobID) (JobPartsMap, bool) {
+// LoadJobPartsMapForJob returns the map of PartNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
+func (jMap *JobsInfoMap) LoadJobPartsMapForJob(jobId common.JobID) (map[common.PartNumber]*JobPartPlanInfo, bool) {
 	jMap.RLock()
-	partMap, ok := jMap.internalMap[jobId]
+	jobInfo, ok := jMap.internalMap[jobId]
 	jMap.RUnlock()
-	return partMap, ok
+	if !ok{
+		return nil, ok
+	}
+	return jobInfo.JobPartsMap, ok
 }
 
 // LoadJobPartPlanInfoForJobPart returns the JobPartPlanInfo Pointer for given combination of JobId and part number in thread-safe manner.
@@ -84,7 +57,7 @@ func (jMap *JobsInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partN
 		jMap.RUnlock()
 		return nil
 	}
-	jHandler := partMap[partNumber]
+	jHandler := partMap.JobPartsMap[partNumber]
 	jMap.RUnlock()
 	return jHandler
 }
@@ -101,24 +74,42 @@ func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
 }
 
 // StoreJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
-func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jHandler *JobPartPlanInfo) {
+func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity common.LogLevel, jHandler *JobPartPlanInfo) {
 	jMap.Lock()
-	partMap := jMap.internalMap[jobId]
-	if partMap == nil { // there is no previous entry for given jobId
-		partMap = make(map[common.PartNumber]*JobPartPlanInfo)
-		partMap[partNumber] = jHandler
-		jMap.internalMap[jobId] = partMap
-	} else {
-		//there already exists some entry for given jobID
-		jMap.internalMap[jobId][partNumber] = jHandler
+	jobInfo := jMap.internalMap[jobId]
+	// If there is no JobInfo instance for given jobId
+	if jobInfo == nil{
+		jobInfo := new (JobInfo)
+		jobInfo.JobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
+	}else if jobInfo.JobPartsMap == nil{
+		// If the current JobInfo instance for given jobId has not JobPartsMap initialized
+		jobInfo.JobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
 	}
+	// If there is no logger instance for the current Job,
+	// initialize the logger instance with log severity and jobId
+	// log filename is $JobId.log
+	if jobInfo.Logger == nil{
+		jobInfo.Logger = new(common.Logger)
+		jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
+	}
+	jobInfo.JobPartsMap[partNumber] = jHandler
 	jMap.Unlock()
 }
 
+// LoadLoggerForJob loads the logger instance for given jobId in thread safe manner
+func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
+	jMap.RLock()
+	jobInfo := jMap.internalMap[jobId]
+	if jobInfo == nil{
+		return nil
+	}else{
+		return jobInfo.Logger
+	}
+}
 // NewJobPartPlanInfoMap returns a new instance of synchronous JobsInfoMap to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
 func NewJobPartPlanInfoMap() *JobsInfoMap {
 	return &JobsInfoMap{
-		internalMap: make(map[common.JobID]JobPartsMap),
+		internalMap: make(map[common.JobID]*JobInfo),
 	}
 }
 
@@ -224,7 +215,7 @@ func reconstructTheExistingJobParts(jPartPlanInfoMap *JobsInfoMap) error {
 			panic(err)
 		}
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
-		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jPartPlanInfoMap)
+		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jPartPlanInfoMap)
 	}
 	return nil
 }
@@ -294,7 +285,7 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 		panic(err)
 	}
 	resultMessage := jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 / 8]byte{}, status)
-	jHandler.Logger.Debug("%s for jobId %s and part number %d", resultMessage, jobId, partNo)
+	getLoggerForJobId(jobId, jPartPlanInfoMap).Debug("%s for jobId %s and part number %d", resultMessage, jobId, partNo)
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber
@@ -308,17 +299,7 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 }
 
 // getLoggerForJobId returns the logger instance for a given JobId
-func getLoggerForJobId(jobId common.JobID, loggerMap *JobToLoggerMap) *common.Logger {
-	logger := loggerMap.LoadLoggerForJob(jobId)
+func getLoggerForJobId(jobId common.JobID, jobsInfoMap *JobsInfoMap) *common.Logger {
+	logger := jobsInfoMap.LoadLoggerForJob(jobId)
 	return logger
-}
-
-// getLoggerFromJobPartPlanInfo returns the logger instance for given JobId and partNumber
-func getLoggerFromJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, infoMap *JobsInfoMap) *common.Logger {
-	jobHandler := infoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
-	if jobHandler == nil {
-		errorMessage := fmt.Sprintf("jobpartplaninfo map does not have jobpartplaninfo handler for jobId %s and part number %d", jobId, partNumber)
-		panic(errors.New(errorMessage))
-	}
-	return jobHandler.Logger
 }

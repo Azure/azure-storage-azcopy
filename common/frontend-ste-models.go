@@ -95,7 +95,7 @@ type CopyJobPartOrder struct {
 	SourceType         LocationType
 	DestinationType    LocationType
 	Transfers          []CopyTransfer
-	LogVerbosity       LogSeverity
+	LogVerbosity       LogLevel
 	IsaBackgroundOp    bool
 	OptionalAttributes BlobTransferAttributes
 }

@@ -19,6 +19,7 @@ type JobPartPlanHeader struct {
 	SrcLocationType    common.LocationType
 	DstLocationType    common.LocationType
 	NumTransfers       uint32
+	LogSeverity 	   common.LogLevel
 	//Status uint8
 	BlobData JobPartPlanBlobData
 }

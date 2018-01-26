@@ -6,27 +6,39 @@ import (
 	"os"
 )
 
-type LogSeverity uint8
+type LogLevel uint8
 
-// TODO reuse go-sdk's definitions
 const (
-	LOG_ERROR_LEVEL LogSeverity = 0
-	LOG_INFO_LEVEL  LogSeverity = 1
-	LOG_DEBUG_LEVEL LogSeverity = 2
+	// LogNone tells a logger not to log any entries passed to it.
+	LogNone LogLevel = iota
+
+	// LogFatal tells a logger to log all LogFatal entries passed to it.
+	LogFatal
+
+	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
+	LogPanic
+
+	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
+	LogError
+
+	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogWarning
+
+	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogInfo
 )
 
 // Logger is struct holding Information of log file for specific Job
 // Each Job has its own logger instance. For all the parts of same Job, logs are logged in one file
 type Logger struct {
-	Severity    LogSeverity
+	Severity    LogLevel
 	LogFileName string
 	LogFile     *os.File
 }
 
 // Initializes the logger instance for given JobId with given Log Severity
-func (logger *Logger) Initialize(severity LogSeverity, jobID JobID) {
+func (logger *Logger) Initialize(severity LogLevel, fileName string) {
 	logger.Severity = severity
-	fileName := fmt.Sprintf("%s.log", jobID)
 	logger.LogFileName = fileName
 	// Creates the log file if it does not exists already else opens the file in append mode.
 	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -41,7 +53,7 @@ func (logger *Logger) Initialize(severity LogSeverity, jobID JobID) {
 // Debug writes the debug level logs to the file.
 func (logger *Logger) Debug(format string, a ...interface{}) {
 	// If the severity of current logger instance is less than DEBUG, then logs will not logged
-	if logger.Severity <= LOG_DEBUG_LEVEL {
+	if logger.Severity < LogInfo {
 		return
 	}
 	log.SetOutput(logger.LogFile)
@@ -52,7 +64,7 @@ func (logger *Logger) Debug(format string, a ...interface{}) {
 // Info writes the info level logs to the file.
 func (logger *Logger) Info(format string, a ...interface{}) {
 	// If the severity of current logger instance is less than INFO, then logs will not logged
-	if logger.Severity <= LOG_INFO_LEVEL {
+	if logger.Severity < LogInfo {
 		return
 	}
 	log.SetOutput(logger.LogFile)

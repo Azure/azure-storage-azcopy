@@ -34,6 +34,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"os/signal"
 )
 
 const (
@@ -61,11 +62,8 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	}
 
 	fmt.Println("Job with id", uuid, "has started.")
-	if commandLineInput.IsaBackgroundOp {
-		return uuid
-	}
 	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
-		time.Sleep(time.Second)
+		time.Sleep(2 * time.Second)
 	}
 	return uuid
 }
@@ -275,7 +273,7 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	}
 
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
-	jobPartOrderToFill.LogVerbosity = common.LogSeverity(commandLineInput.LogVerbosity)
+	jobPartOrderToFill.LogVerbosity = common.LogLevel(commandLineInput.LogVerbosity)
 	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl

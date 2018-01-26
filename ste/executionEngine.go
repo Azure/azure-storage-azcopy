@@ -41,9 +41,9 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					logger := getLoggerFromJobPartPlanInfo(transferMsg.Id, transferMsg.PartNumber, transferMsg.JPartPlanInfoMap)
+					logger := getLoggerForJobId(transferMsg.Id, transferMsg.JInfoMap)
 					logger.Debug("Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
-					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.JPartPlanInfoMap)
+					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.JInfoMap)
 					prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
 					if prologueFunction == nil {
 						logger.Error("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)

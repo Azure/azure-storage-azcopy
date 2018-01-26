@@ -18,14 +18,13 @@ type JobPartPlanInfo struct {
 	cancel       context.CancelFunc
 	memMap       mmap.MMap
 	TrasnferInfo []TransferInfo
-	Logger       *common.Logger
 }
 
 type TransferMsg struct {
-	Id               common.JobID
-	PartNumber       common.PartNumber
-	TransferIndex    uint32
-	JPartPlanInfoMap *JobsInfoMap
+	Id            common.JobID
+	PartNumber    common.PartNumber
+	TransferIndex uint32
+	JInfoMap      *JobsInfoMap
 }
 
 type TransferMsgDetail struct {

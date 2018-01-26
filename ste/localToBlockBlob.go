@@ -80,9 +80,9 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 
 // this generates a function which performs the uploading of a single chunk
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
-	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jPartPlanInfoMap *JobsInfoMap) chunkFunc {
+	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
-		logger := getLoggerFromJobPartPlanInfo(jobId, partNum, jPartPlanInfoMap)
+		logger := getLoggerForJobId(jobId, jobsInfoMap)
 		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 		// step 1: generate block ID
@@ -101,12 +101,12 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			cancelTransfer()
 			logger.Debug("worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 			//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
-			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jPartPlanInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jPartPlanInfoMap)
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 			return
 		}
 
-		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jPartPlanInfoMap)
+		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobsInfoMap)
 		updateThroughputCounter(chunkSize)
 
 		// step 4: check if this is the last chunk
@@ -119,10 +119,10 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			if err != nil {
 				logger.Error("Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s", workerId, transferIdentifierStr, chunkId, string(err.Error()))
 				//fmt.Println("Worker", workerId, "failed to conclude TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "due to err", err)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jPartPlanInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 			}
 
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jPartPlanInfoMap)
+			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
 
 			err := memoryMappedFile.Unmap()
 			if err != nil {

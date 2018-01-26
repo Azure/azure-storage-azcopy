@@ -21,44 +21,31 @@
 package main
 
 import (
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
 	"os/exec"
-	"runtime"
 )
 
-// spawnSte api starts the transfer engine as an Independent Process that listens on port 1337
-func spawnSte() {
-	// TODO rename the modes to: inproc, outofproc, ste
-	// TODO move this code
-	newProcessCommand := exec.Command(os.Args[0], "non-debug")
-	err := newProcessCommand.Start()
-	if err != nil {
-		panic(err)
-		os.Exit(1)
-	}
-}
-
 func main() {
-	fmt.Println("NUM OF MAX PROCS", runtime.GOMAXPROCS(-1), "and num of CPU", runtime.CPUProfile())
-
-	// if the number of arguments is equal to 1, it means the user has not passed any extra arguments
-	// the help page should be displayed and then exit immediately
 	if len(os.Args) == 1 {
 		cmd.Execute()
 		return
 	}
-
 	switch os.Args[1] {
-	case "debug": // STE is launched in process
+	case "inproc": // STE is launched in process
 		go ste.InitializeSTE()
 		cmd.Execute()
-	case "non-debug": // the program is being launched as the STE, the init function runs on main go-routine
+	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
 		ste.InitializeSTE()
 	default:
-		spawnSte()
+		// STE is launched as an independent process
+		newProcessCommand := exec.Command(os.Args[0], "ste")
+		err := newProcessCommand.Start()
+		if err != nil {
+			panic(err)
+			os.Exit(1)
+		}
 		cmd.Execute()
 	}
 }

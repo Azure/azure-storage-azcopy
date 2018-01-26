@@ -2,7 +2,6 @@ package handlers
 
 import (
 	tm "github.com/buger/goterm"
-	//"github.com/Azure/azure-storage-azcopy/ste"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -20,9 +19,6 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
-		//fmt.Println("=============================================================")
-		//fmt.Println("The following job part order was generated:")
-		//fmt.Println(string(order))
 		sendJobPartOrderToSTE(order)
 	}
 }
