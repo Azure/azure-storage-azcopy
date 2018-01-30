@@ -42,7 +42,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 		transferCtx, transferCancel := context.WithCancel(job.ctx)
 		transferInfo[index] = TransferInfo{transferCtx, transferCancel, 0}
 	}
-	job.TrasnferInfo = transferInfo
+	job.TransferInfo = transferInfo
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder

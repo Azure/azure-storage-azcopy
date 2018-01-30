@@ -16,8 +16,9 @@ type TransferInfo struct {
 type JobPartPlanInfo struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
+	fileName     string
 	memMap       mmap.MMap
-	TrasnferInfo []TransferInfo
+	TransferInfo []TransferInfo
 }
 
 type TransferMsg struct {

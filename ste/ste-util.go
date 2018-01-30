@@ -107,6 +107,7 @@ func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
 	}
 }
 
+// DeleteJobInfoForJobId api deletes an entry of given JobId the JobsInfoMap
 func (jMap *JobsInfoMap) DeleteJobInfoForJobId(jobId common.JobID) {
 	jMap.Lock()
 	delete(jMap.internalMap, jobId)
@@ -217,6 +218,8 @@ func reconstructTheExistingJobParts(jPartPlanInfoMap *JobsInfoMap) {
 		// Initializing the JobPartPlanInfo for existing Job file
 		jobHandler.initialize(steContext, fileName)
 
+		jobHandler.fileName = fileName
+
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jPartPlanInfoMap)
 	}
@@ -276,8 +279,8 @@ func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transfer
 	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
 	chunkSize := jPartPlanPointer.BlobData.BlockSize
 	return TransferMsgDetail{jobId, partNo, transferEntryIndex, chunkSize, sourceType,
-		source, destinationType, destination, jHandler.TrasnferInfo[transferEntryIndex].ctx,
-		jHandler.TrasnferInfo[transferEntryIndex].cancel, jPartPlanInfoMap}
+		source, destinationType, destination, jHandler.TransferInfo[transferEntryIndex].ctx,
+		jHandler.TransferInfo[transferEntryIndex].cancel, jPartPlanInfoMap}
 }
 
 // updateChunkInfo updates the chunk at given chunkIndex for given JobId, partNumber and transfer

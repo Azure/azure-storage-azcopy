@@ -96,6 +96,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	// Creating JobPartPlanInfo reference for new job part order
 	var jobHandler = new(JobPartPlanInfo)
 
+	jobHandler.fileName = fileName
+
 	// creating context with cancel for the new job
 	jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
 
@@ -129,8 +131,31 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	}
 }
 
-func cleanUpJob(jobId common.JobID, jobsInfoMap JobsInfoMap){
+// cleanUpJob api unmaps all the memory map JobPartFile and deletes the JobPartFile
+func cleanUpJob(jobId common.JobID, jobsInfoMap *JobsInfoMap){
+	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
+	if !ok{
+		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
+	}
+	for _, jobHandler := range jPartMap{
+		// unmapping the memory map JobPart file
+		err := jobHandler.memMap.Unmap()
+		if err != nil{
+			errorMsg := fmt.Sprintf("error unmapping the memory map file %s. Failed with following error %s", jobHandler.fileName, err.Error())
+			getLoggerForJobId(jobId, jobsInfoMap).Logf(common.LogError, errorMsg)
+			panic(errors.New(errorMsg))
+		}
+		// deleting the JobPartFile
+		err = os.Remove(jobHandler.fileName)
+		if err != nil{
+			errorMsg := fmt.Sprintf("error removing the job part file %s. Failed with following error %s", jobHandler.fileName, err.Error())
+			getLoggerForJobId(jobId, jobsInfoMap).Logf(common.LogError, errorMsg)
+			panic(errors.New(errorMsg))
+		}
+	}
 
+	// deletes the entry for given JobId from Map
+	jobsInfoMap.DeleteJobInfoForJobId(jobId)
 }
 
 // ExecuteCancelJobOrder api cancel a job with given JobId
@@ -193,6 +218,8 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp *h
 	for _, jHandler := range jPartMap{
 		jHandler.cancel()
 	}
+	// cleaning up the job
+	cleanUpJob(jobId, jobsInfoMap)
 	(*resp).WriteHeader(http.StatusAccepted)
 	(*resp).Write([]byte(fmt.Sprintf("succesfully cancelled job with JobId %s", jobId)))
 }
