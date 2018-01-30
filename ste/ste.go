@@ -129,6 +129,74 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	}
 }
 
+func cleanUpJob(jobId common.JobID, jobsInfoMap JobsInfoMap){
+
+}
+
+// ExecuteCancelJobOrder api cancel a job with given JobId
+/* A Job cannot be cancelled in following cases
+	* If the Job has not been ordered completely
+    * If all the transfers in the Job are either failed or completed, then Job cannot be cancelled
+ */
+func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
+	if !ok{
+		(*resp).WriteHeader(http.StatusBadRequest)
+		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
+		(*resp).Write([]byte(errorMsg))
+		return
+	}
+
+	// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
+	var completeJobOrdered bool = false
+	// totalNumberOfTransfers determines the total number of transfers in all parts of the given Job
+	var totalNumberOfTransfers uint32 = 0
+	// totalNumberOfTransfersCompleted determines the total number of completed transfers in all parts of the given Job
+	var totalNumberOfTransfersCompleted uint32 = 0
+	// totalNumberOfTransfersFailed determines the total number of failed transfers in all parts of the given Job
+	var totalNumberOfTransfersFailed uint32 = 0
+	for _, jHandler := range jPartMap {
+		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
+		currentJobPartPlanInfo := jHandler.getJobPartPlanPointer()
+
+		completeJobOrdered = completeJobOrdered || currentJobPartPlanInfo.IsFinalPart
+		totalNumberOfTransfers += currentJobPartPlanInfo.NumTransfers
+		// iterating through all transfers for current partNo and job with given jobId
+		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++ {
+
+			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
+			transferHeader := jHandler.Transfer(index)
+			// check for all completed transfer to calculate the progress percentage at the end
+			if transferHeader.Status == common.TransferStatusComplete {
+				totalNumberOfTransfersCompleted ++
+			}
+			if transferHeader.Status == common.TransferStatusFailed {
+				totalNumberOfTransfersFailed ++
+			}
+		}
+	}
+	// If the job has not been ordered completely, then job cannot be cancelled
+	if !completeJobOrdered{
+		(*resp).WriteHeader(http.StatusBadRequest)
+		errorMsg := fmt.Sprintf("job with JobId %s hasn't been ordered completely", jobId)
+		(*resp).Write([]byte(errorMsg))
+		return
+	}
+	// If all parts of the job has either completed or failed, then job cannot be cancelled since it is already finished
+	if totalNumberOfTransfers == (totalNumberOfTransfersFailed + totalNumberOfTransfersCompleted){
+		(*resp).WriteHeader(http.StatusBadRequest)
+		errorMsg := fmt.Sprintf("job with JobId %s is already completed, hence cannot cancel the job", jobId)
+		(*resp).Write([]byte(errorMsg))
+		return
+	}
+	// Iterating through all JobPartPlanInfo pointers and cancelling each part of the given Job
+	for _, jHandler := range jPartMap{
+		jHandler.cancel()
+	}
+	(*resp).WriteHeader(http.StatusAccepted)
+	(*resp).Write([]byte(fmt.Sprintf("succesfully cancelled job with JobId %s", jobId)))
+}
+
 // getJobSummary api returns the job progress summary of an active job
 /*
 * Return following Properties in Job Progress Summary

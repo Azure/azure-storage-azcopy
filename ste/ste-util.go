@@ -106,6 +106,13 @@ func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
 		return jobInfo.Logger
 	}
 }
+
+func (jMap *JobsInfoMap) DeleteJobInfoForJobId(jobId common.JobID) {
+	jMap.Lock()
+	delete(jMap.internalMap, jobId)
+	jMap.Unlock()
+}
+
 // NewJobPartPlanInfoMap returns a new instance of synchronous JobsInfoMap to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
 func NewJobPartPlanInfoMap() *JobsInfoMap {
 	return &JobsInfoMap{
