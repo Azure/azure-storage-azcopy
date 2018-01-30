@@ -46,14 +46,19 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 						"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
 							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.JInfoMap)
-					prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
-					if prologueFunction == nil {
-						logger.Logf(common.LogError,
-							"Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
+					select{
+					case <- transferMsgDetail.TransferCtx.Done():
+						continue
+					default:
+						prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
+						if prologueFunction == nil {
+							logger.Logf(common.LogError,
+								"Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
 								transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
-						panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)))
+							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)))
+						}
+						prologueFunction(transferMsgDetail, highPriorityChunkChannel)
 					}
-					prologueFunction(transferMsgDetail, highPriorityChunkChannel)
 				default:
 					// lower priorities should go here in the future
 					//fmt.Println("Worker", workerId, "is IDLE, sleeping for 0.01 sec zzzzzz")

@@ -8,6 +8,28 @@ import (
 
 const dataSchemaVersion = 0 // To be Incremented every time when we release azcopy with changed dataschema
 
+type JobStatusCode uint8
+
+const (
+	// Job is currently executing
+	InProgress JobStatusCode = 0
+
+	// Job is currently paused and no transfer of Job is currently executing
+	Paused JobStatusCode = 1
+)
+
+// getJobStatusStringFromCode api returns the Job Status string for given Job Status Code
+func getJobStatusStringFromCode(status JobStatusCode) (statusString string){
+	switch status {
+	case InProgress:
+		return "InProgress"
+	case Paused:
+		return "Paused"
+	default:
+		return
+	}
+}
+
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
 	Version            uint32 // represent the version of data schema format of header
@@ -19,9 +41,9 @@ type JobPartPlanHeader struct {
 	SrcLocationType    common.LocationType
 	DstLocationType    common.LocationType
 	NumTransfers       uint32
-	LogSeverity 	   common.LogLevel
-	//Status uint8
-	BlobData JobPartPlanBlobData
+	LogSeverity        common.LogLevel
+	JobStatus          JobStatusCode
+	BlobData           JobPartPlanBlobData
 }
 
 // JobPartPlan represent the header of Job Part's Optional Attributes in Memory Map File

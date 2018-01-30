@@ -82,60 +82,66 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
-		logger := getLoggerForJobId(jobId, jobsInfoMap)
-		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
-
-		// step 1: generate block ID
-		blockId, _ := common.NewUUID()
-		encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
-
-		// step 2: save the block ID into the list of block IDs
-		(*blockIds)[chunkId] = encodedBlockId
-		//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
-
-		// step 3: perform put block
-		blockBlobUrl := blobURL.ToBlockBlobURL()
-		_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), azblob.LeaseAccessConditions{})
-		if err != nil {
-			// cancel entire transfer because this chunk has failed
-			cancelTransfer()
-			logger.Logf(common.LogInfo,
-				"worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed",
-					workerId, transferIdentifierStr, chunkId, startIndex)
-			//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
-			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+		select{
+		case <- ctx.Done():
 			return
-		}
+		default:
+			logger := getLoggerForJobId(jobId, jobsInfoMap)
+			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
-		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobsInfoMap)
-		updateThroughputCounter(chunkSize)
+			// step 1: generate block ID
+			blockId, _ := common.NewUUID()
+			encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
 
-		// step 4: check if this is the last chunk
-		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
-			// step 5: this is the last block, perform EPILOGUE
-			logger.Logf(common.LogInfo,
-				"worker %d is concluding download Transfer job with %s after processing chunkId %d with blocklist %s",
-					workerId, transferIdentifierStr, chunkId, *blockIds)
-			//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
+			// step 2: save the block ID into the list of block IDs
+			(*blockIds)[chunkId] = encodedBlockId
+			//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
-			_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
+			// step 3: perform put block
+			blockBlobUrl := blobURL.ToBlockBlobURL()
+			_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), azblob.LeaseAccessConditions{})
 			if err != nil {
-				logger.Logf(common.LogError,
-					"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
-						workerId, transferIdentifierStr, chunkId, string(err.Error()))
+				// cancel entire transfer because this chunk has failed
+				cancelTransfer()
+				logger.Logf(common.LogInfo,
+					"worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed",
+					workerId, transferIdentifierStr, chunkId, startIndex)
+				//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
+				updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				return
 			}
 
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobsInfoMap)
+			updateThroughputCounter(chunkSize)
 
-			err := memoryMappedFile.Unmap()
-			if err != nil {
-				logger.Logf(common.LogError,
-					"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
+			// step 4: check if this is the last chunk
+			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+				// step 5: this is the last block, perform EPILOGUE
+				logger.Logf(common.LogInfo,
+					"worker %d is concluding download Transfer job with %s after processing chunkId %d with blocklist %s",
+					workerId, transferIdentifierStr, chunkId, *blockIds)
+				//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
+
+				_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
+				if err != nil {
+					logger.Logf(common.LogError,
+						"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
+						workerId, transferIdentifierStr, chunkId, string(err.Error()))
+					updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				}
+
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
+
+				err := memoryMappedFile.Unmap()
+				if err != nil {
+					logger.Logf(common.LogError,
+						"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
 						workerId, transferIdentifierStr, chunkId)
-			}
+				}
 
+			}
 		}
+
 	}
 }

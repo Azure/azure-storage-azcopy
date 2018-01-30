@@ -102,7 +102,7 @@ package ste
 //	}
 //	checkPointTime := time.Now()
 //	q := req.URL.Query()
-//	q.Add("type", "JobStatus")
+//	q.Add("type", "JobStatusCode")
 //	q.Add("GUID", jobId)
 //	q.Add("CheckpointTime", strconv.FormatUint(uint64(checkPointTime.Nanosecond()), 10))
 //	req.URL.RawQuery = q.Encode()

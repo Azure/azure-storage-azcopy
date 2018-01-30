@@ -72,52 +72,59 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jobInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobInfoMap)
-		transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
-
-		//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
-
-		// step 1: perform get
-		get, err := blobURL.GetBlob(ctx, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
-		if err != nil {
-			// cancel entire transfer because this chunk has failed
-			cancelTransfer()
-			logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
+		select {
+		case <- ctx.Done():
+			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled", transferId, jobId, partNum)
 			return
-		}
+		default:
+			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
-		// step2: write the body into the memory mapped file directly
-		bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex:startIndex+chunkSize])
-		get.Body().Close()
-		if int64(bytesRead) != chunkSize || err != nil {
-			// cancel entire transfer because this chunk has failed
-			cancelTransfer()
-			logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
-			return
-		}
+			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
 
-		updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobInfoMap)
-		updateThroughputCounter(chunkSize)
-
-		// step 3: check if this is the last chunk
-		if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
-			// step 4: this is the last block, perform EPILOGUE
-			logger.Logf(common.LogInfo,
-				"worker %d is concluding download Transfer job with %s after processing chunkId %d",
-					workerId, transferIdentifierStr, chunkId)
-			//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
-
-			updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobInfoMap)
-
-			err := memoryMappedFile.Unmap()
+			// step 1: perform get
+			get, err := blobURL.GetBlob(ctx, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
 			if err != nil {
-				logger.Logf(common.LogError,
-					"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
+				// cancel entire transfer because this chunk has failed
+				cancelTransfer()
+				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
+				updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
+				return
+			}
+
+			// step2: write the body into the memory mapped file directly
+			bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex:startIndex+chunkSize])
+			get.Body().Close()
+			if int64(bytesRead) != chunkSize || err != nil {
+				// cancel entire transfer because this chunk has failed
+				cancelTransfer()
+				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
+				updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
+				return
+			}
+
+			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobInfoMap)
+			updateThroughputCounter(chunkSize)
+
+			// step 3: check if this is the last chunk
+			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+				// step 4: this is the last block, perform EPILOGUE
+				logger.Logf(common.LogInfo,
+					"worker %d is concluding download Transfer job with %s after processing chunkId %d",
+					workerId, transferIdentifierStr, chunkId)
+				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
+
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobInfoMap)
+
+				err := memoryMappedFile.Unmap()
+				if err != nil {
+					logger.Logf(common.LogError,
+						"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
 						workerId, transferIdentifierStr, chunkId)
+				}
 			}
 		}
+
 	}
 }

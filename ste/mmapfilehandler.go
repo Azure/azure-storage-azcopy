@@ -310,7 +310,7 @@ func jobPartTojobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 	jPartInFile := JobPartPlanHeader{versionID, jobID, uint32(partNo),
 		jobPart.IsFinalPart, DefaultJobPriority, TTA,
 		jobPart.SourceType, jobPart.DestinationType,
-		numTransfer, jobPart.LogVerbosity, data}
+		numTransfer, jobPart.LogVerbosity, Paused, data}
 	return jPartInFile
 }
 
