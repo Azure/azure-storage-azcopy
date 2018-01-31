@@ -76,10 +76,10 @@ func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
 // StoreJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
 func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity common.LogLevel, jHandler *JobPartPlanInfo) {
 	jMap.Lock()
-	jobInfo := jMap.internalMap[jobId]
+	var jobInfo = jMap.internalMap[jobId]
 	// If there is no JobInfo instance for given jobId
 	if jobInfo == nil{
-		jobInfo := new (JobInfo)
+		jobInfo = new (JobInfo)
 		jobInfo.JobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
 	}else if jobInfo.JobPartsMap == nil{
 		// If the current JobInfo instance for given jobId has not JobPartsMap initialized
@@ -89,10 +89,13 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	// initialize the logger instance with log severity and jobId
 	// log filename is $JobId.log
 	if jobInfo.Logger == nil{
-		jobInfo.Logger = new(common.Logger)
-		jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
+		logger := new(common.Logger)
+		logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
+		jobInfo.Logger = logger
+		//jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 	}
 	jobInfo.JobPartsMap[partNumber] = jHandler
+	jMap.internalMap[jobId] = jobInfo
 	jMap.Unlock()
 }
 
@@ -100,6 +103,7 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
 	jMap.RLock()
 	jobInfo := jMap.internalMap[jobId]
+	jMap.RUnlock()
 	if jobInfo == nil{
 		return nil
 	}else{
@@ -306,5 +310,8 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 // getLoggerForJobId returns the logger instance for a given JobId
 func getLoggerForJobId(jobId common.JobID, jobsInfoMap *JobsInfoMap) *common.Logger {
 	logger := jobsInfoMap.LoadLoggerForJob(jobId)
+	if logger == nil{
+		panic(errors.New(fmt.Sprintf("no logger instance initialized for jobId %s", jobId)))
+	}
 	return logger
 }

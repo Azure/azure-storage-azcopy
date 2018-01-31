@@ -59,8 +59,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
-
 	fmt.Println("Job with id", uuid, "has started.")
+	if commandLineInput.IsaBackgroundOp {
+		return uuid
+	}
 	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
 		time.Sleep(2 * time.Second)
 	}

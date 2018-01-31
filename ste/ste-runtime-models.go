@@ -25,7 +25,7 @@ type TransferMsg struct {
 	Id            common.JobID
 	PartNumber    common.PartNumber
 	TransferIndex uint32
-	JInfoMap      *JobsInfoMap
+	InfoMap       *JobsInfoMap
 }
 
 type TransferMsgDetail struct {

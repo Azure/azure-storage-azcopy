@@ -39,13 +39,14 @@ func main() {
 	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
 		ste.InitializeSTE()
 	default:
-		// STE is launched as an independent process
+		 //STE is launched as an independent process
 		newProcessCommand := exec.Command(os.Args[0], "ste")
 		err := newProcessCommand.Start()
 		if err != nil {
 			panic(err)
 			os.Exit(1)
 		}
+		//go ste.InitializeSTE()
 		cmd.Execute()
 	}
 }

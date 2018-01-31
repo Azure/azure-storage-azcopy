@@ -509,7 +509,7 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error) {
 	* coordinatorChannels -- These are the High, Med and Low transfer channels for scheduling the incoming transfer. These channel are required in case of New JobPartOrder request
     * jobToLoggerMap -- This Map holds the logger instance for each job
 */
-func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jPartPlanInfoMap *JobsInfoMap) {
+func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jobsInfoMap *JobsInfoMap) {
 	switch req.Method {
 	case http.MethodGet:
 		// request type defines the type of GET request supported by transfer engine
@@ -527,15 +527,15 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 				panic(err)
 			}
 			if lsCommand.JobId == "" {
-				listExistingJobs(jPartPlanInfoMap, &resp)
+				listExistingJobs(jobsInfoMap, &resp)
 			} else if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
-				getJobSummary(lsCommand.JobId, jPartPlanInfoMap, &resp)
+				getJobSummary(lsCommand.JobId, jobsInfoMap, &resp)
 			} else {
-				getTransferList(lsCommand.JobId, lsCommand.ExpectedTransferStatus, jPartPlanInfoMap, &resp)
+				getTransferList(lsCommand.JobId, lsCommand.ExpectedTransferStatus, jobsInfoMap, &resp)
 			}
-		case "kill":
-			fmt.Println("killing the transfer engine as per the request")
-			os.Exit(1)
+		case "cancel":
+			var jobId = req.URL.Query()["jobId"][0]
+			ExecuteCancelJobOrder(common.JobID(jobId), jobsInfoMap, false, &resp)
 		}
 
 	case http.MethodPost:
@@ -544,7 +544,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte("Not able to trigger the AZCopy request" + " : " + err.Error()))
 		}
-		ExecuteNewCopyJobPartOrder(jobRequestData, coordinatorChannels, jPartPlanInfoMap)
+		ExecuteNewCopyJobPartOrder(jobRequestData, coordinatorChannels, jobsInfoMap)
 		resp.WriteHeader(http.StatusBadRequest)
 		resp.Write([]byte("Not able to trigger the AZCopy request"))
 	case http.MethodPut:

@@ -53,6 +53,7 @@ func fetchJobStatus(jobId string) common.Status {
 		panic(err)
 	}
 	q := req.URL.Query()
+	q.Add("Type", "list")
 	q.Add("command", string(lsCommandMarshalled))
 	req.URL.RawQuery = q.Encode()
 

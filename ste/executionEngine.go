@@ -41,11 +41,11 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					logger := getLoggerForJobId(transferMsg.Id, transferMsg.JInfoMap)
+					logger := getLoggerForJobId(transferMsg.Id, transferMsg.InfoMap)
 					logger.Logf(common.LogInfo,
 						"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
 							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
-					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.JInfoMap)
+					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.InfoMap)
 					select{
 					case <- transferMsgDetail.TransferCtx.Done():
 						continue

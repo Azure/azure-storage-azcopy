@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TODO check file size, max is 4.75TB
 func init() {
 	commandLineInput := common.ListCmdArgsAndFlags{}
 
