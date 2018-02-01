@@ -43,39 +43,56 @@ func init() {
   - Coming soon: Transfer files from Amazon S3 to Azure Storage.
   - Coming soon: Transfer files from Azure Storage to Amazon S3.
   - Coming soon: Transfer files from Google Storage to Azure Storage.
-  - Coming soon: Transfer files from Azure Storage to Google Storage.`,
+  - Coming soon: Transfer files from Azure Storage to Google Storage.
+
+Usage:
+  - azcopy cp <source> <destination> --flags
+    - Source and destination can either be local file/directory path, or blob/container URL with a SAS token.
+  - <command which pumps data to stdout> | azcopy cp <blob_url> --flags
+    - This command accepts data from stdin and uploads it to a blob.
+  - azcopy cp <blob_url> --flags > <destination_file_path>
+    - This command downloads a blob and outputs it on stdout.
+`,
 		Args: func(cmd *cobra.Command, args []string) error {
-			// the only arguments to this command should be a source and destination
-			if len(args) < 2 {
-				return errors.New("this command requires source and destination")
+			if len(args) == 1 { // redirection
+				sourceType := determineLocaltionType(args[0])
+				if sourceType != common.Blob {
+					return errors.New("the provided blob URL for redirection is not valid")
+				}
+				commandLineInput.BlobUrlForRedirection = args[0]
+
+			} else if len(args) == 2 { // normal copy
+				sourceType := determineLocaltionType(args[0])
+				if sourceType == common.Unknown {
+					return errors.New("the provided source is invalid")
+				}
+
+				destinationType := determineLocaltionType(args[1])
+				if destinationType == common.Unknown {
+					return errors.New("the provided destination is invalid")
+				}
+
+				if sourceType == common.Blob && destinationType == common.Blob || sourceType == common.Local && destinationType == common.Local {
+					return errors.New("the provided source/destination pair is invalid")
+				}
+
+				commandLineInput.Source = args[0]
+				commandLineInput.Destination = args[1]
+				commandLineInput.SourceType = sourceType
+				commandLineInput.DestinationType = destinationType
+
+			} else { // wrong number of arguments
+				return errors.New("wrong number of arguments, please refer to help page on usage of this command")
 			}
 
-			sourceType := determineLocaltionType(args[0])
-			if sourceType == common.Unknown {
-				return errors.New("the provided source is invalid")
-			}
-
-			destinationType := determineLocaltionType(args[1])
-			if destinationType == common.Unknown {
-				return errors.New("the provided destination is invalid")
-			}
-
-			if sourceType == common.Blob && destinationType == common.Blob || sourceType == common.Local && destinationType == common.Local {
-				return errors.New("the provided source/destination pair is invalid")
-			}
-
-			commandLineInput.Source = args[0]
-			commandLineInput.Destination = args[1]
-			commandLineInput.SourceType = sourceType
-			commandLineInput.DestinationType = destinationType
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			handlers.HandleCopyCommand(commandLineInput)
-			//fmt.Println("Job with id", jobId, "has started.")
-
-			//// wait until job finishes
-			//time.Sleep(600 * time.Second)
+			if len(args) == 1 {
+				handlers.HandleRedirectionCommand(commandLineInput)
+			} else {
+				handlers.HandleCopyCommand(commandLineInput)
+			}
 		},
 	}
 

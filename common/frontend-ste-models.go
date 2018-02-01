@@ -127,6 +127,7 @@ type CopyCmdArgsAndFlags struct {
 	// from arguments
 	Source      string
 	Destination string
+	BlobUrlForRedirection string
 
 	// inferred from arguments
 	SourceType      LocationType
