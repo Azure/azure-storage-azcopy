@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
+	"golang.org/x/net/context"
 )
 
 // TODO: new logger for AZCOPY, in addition to job level logs
@@ -288,23 +289,37 @@ func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transfer
 }
 
 // updateChunkInfo updates the chunk at given chunkIndex for given JobId, partNumber and transfer
-func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jobsInfoMap *JobsInfoMap) {
-	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jobsInfoMap)
-	if err != nil {
-		panic(err)
-	}
-	resultMessage := jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 / 8]byte{}, status)
-	getLoggerForJobId(jobId, jobsInfoMap).Logf(common.LogInfo, "%s for jobId %s and part number %d", resultMessage, jobId, partNo)
+func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jobsInfoMap *JobsInfoMap, transferCtx context.Context) {
+	//select {
+	//case <- transferCtx.Done():
+	//	return
+	//default:
+	//	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jobsInfoMap)
+	//	if err != nil {
+	//		panic(err)
+	//	}
+	//	resultMessage := jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 / 8]byte{}, status)
+	//	getLoggerForJobId(jobId, jobsInfoMap).Logf(common.LogInfo, "%s for jobId %s and part number %d", resultMessage, jobId, partNo)
+	//}
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber
-func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
-	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
-	if err != nil {
-		panic(err)
+func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap, ctx context.Context) {
+	select {
+	case <- ctx.Done():
+		return
+	default:
+		jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
+		if err != nil {
+			panic(err)
+		}
+		transferHeader := jHandler.Transfer(transferIndex)
+		if transferHeader == nil{
+			getLoggerForJobId(jobId, jPartPlanInfoMap).Logf(common.LogWarning, "no transfer header found for JobId %s part number %d and transfer index %d", jobId, partNo, transferIndex)
+			return
+		}
+		transferHeader.Status = common.Status(transferStatus)
 	}
-	transferHeader := jHandler.Transfer(transferIndex)
-	transferHeader.Status = common.Status(transferStatus)
 }
 
 // getLoggerForJobId returns the logger instance for a given JobId

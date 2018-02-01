@@ -87,8 +87,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-				updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap, ctx)
 				return
 			}
 
@@ -99,12 +98,9 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-				updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobInfoMap)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap, ctx)
 				return
 			}
-
-			updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobInfoMap)
 			updateThroughputCounter(chunkSize)
 
 			// step 3: check if this is the last chunk
@@ -115,7 +111,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 					workerId, transferIdentifierStr, chunkId)
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobInfoMap, ctx)
 
 				err := memoryMappedFile.Unmap()
 				if err != nil {

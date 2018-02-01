@@ -5,6 +5,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/edsrzf/mmap-go"
 	"time"
+	"sync"
 )
 
 type TransferInfo struct {
@@ -14,6 +15,7 @@ type TransferInfo struct {
 }
 
 type JobPartPlanInfo struct {
+	sync.RWMutex
 	ctx          context.Context
 	cancel       context.CancelFunc
 	fileName     string
@@ -26,6 +28,7 @@ type TransferMsg struct {
 	PartNumber    common.PartNumber
 	TransferIndex uint32
 	InfoMap       *JobsInfoMap
+	TransferContext context.Context
 }
 
 type TransferMsgDetail struct {

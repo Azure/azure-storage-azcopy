@@ -15,7 +15,6 @@ import (
 var currFileDirectory string = "."
 
 // initialize func initializes the JobPartPlanInfo handler for given JobPartOrder
-// TODO clean up return statement, panic in case of error?
 func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName string) {
 
 	/*
@@ -46,19 +45,21 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder
-func (job *JobPartPlanInfo) shutDownHandler() {
+func (job *JobPartPlanInfo) shutDownHandler() (error){
+	job.Lock()
 	if job.memMap == nil {
-		panic(errors.New("memory map file already unmapped. Map it again to use further"))
+		return errors.New(fmt.Sprintf("memory map file %s already unmapped. Map it again to use further", job.fileName))
 	}
 	err := job.memMap.Unmap()
 	if err != nil {
-		panic(err)
+		return err
 	}
+	job.Unlock()
+	return nil
 }
 
 // getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 func (job *JobPartPlanInfo) getJobPartPlanPointer() *JobPartPlanHeader {
-
 	// memMap represents the slice of memory map file of JobPartOrder
 	var memMap []byte = job.memMap
 
@@ -69,7 +70,6 @@ func (job *JobPartPlanInfo) getJobPartPlanPointer() *JobPartPlanHeader {
 
 // getTransferSrcDstDetail return the source and destination string for a transfer at given transferIndex in JobPartOrder
 func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (source, destination string) {
-
 	// get JobPartPlanTransfer Header of transfer in JobPartOrder at given index
 	tEntry := job.Transfer(entryIndex)
 	if tEntry == nil {
@@ -97,10 +97,15 @@ func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (source, 
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
 func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
-
+	job.RLock()
+	if job.memMap == nil{
+		job.RUnlock()
+		return nil
+	}
 	// get memory map JobPartPlan Header Pointer
 	jPartPlan := job.getJobPartPlanPointer()
 	if index >= jPartPlan.NumTransfers {
+		job.RUnlock()
 		panic(errors.New("transfer %d of JobPart %s does not exists. Transfer Index exceeds number of transfer for this JobPart"))
 	}
 
@@ -112,27 +117,28 @@ func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
 
 	// Casting Slice into transfer header Pointer
 	tEntry := (*JobPartPlanTransfer)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&transferEntrySlice)).Data))
+	job.RUnlock()
 	return tEntry
 }
 
 // updateTheChunkInfo api updates the memory map JobPartPlanTransferHeader for transfer and chunk at given index
-func (job *JobPartPlanInfo) updateTheChunkInfo(transferIndex uint32, chunkIndex uint16,
-	crc [128 / 8]byte, status uint8) string {
-	// get memory map JobPartPlanHeader
-	jPartPlan := job.getJobPartPlanPointer()
-
-	// get memory map JobPartPlanTransferChunk Header
-	cInfo := job.getChunkInfo(transferIndex, chunkIndex)
-
-	//copy the given CRC into chunk's blockId
-	copy(cInfo.BlockId[:], crc[:])
-
-	//updating the chunk status with given status
-	cInfo.Status = status
-
-	result := fmt.Sprintf("updated the chunk %d of transfer %d of Job %s", chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
-	return result
-}
+//func (job *JobPartPlanInfo) updateTheChunkInfo(transferIndex uint32, chunkIndex uint16,
+//	crc [128 / 8]byte, status uint8) string {
+//	// get memory map JobPartPlanHeader
+//	jPartPlan := job.getJobPartPlanPointer()
+//
+//	// get memory map JobPartPlanTransferChunk Header
+//	cInfo := job.getChunkInfo(transferIndex, chunkIndex)
+//
+//	//copy the given CRC into chunk's blockId
+//	copy(cInfo.BlockId[:], crc[:])
+//
+//	//updating the chunk status with given status
+//	cInfo.Status = status
+//
+//	result := fmt.Sprintf("updated the chunk %d of transfer %d of Job %s", chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
+//	return result
+//}
 
 // getChunkInfo returns the memory map JobPartPlanTransferChunkHeader for given transfer and chunk index of JobPartOrder
 func (job JobPartPlanInfo) getChunkInfo(transferIndex uint32, chunkIndex uint16) *JobPartPlanTransferChunk {

@@ -45,11 +45,12 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 					logger.Logf(common.LogInfo,
 						"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
 							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
-					transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.InfoMap)
 					select{
-					case <- transferMsgDetail.TransferCtx.Done():
+					case <- transferMsg.TransferContext.Done():
+						logger.Logf(common.LogInfo, "Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 						continue
 					default:
+						transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.InfoMap)
 						prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
 						if prologueFunction == nil {
 							logger.Logf(common.LogError,
