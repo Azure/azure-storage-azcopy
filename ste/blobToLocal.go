@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sync/atomic"
 	"time"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type blobToLocal struct {
@@ -26,6 +27,11 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 			TryTimeout:    time.Second * 60,
 			RetryDelay:    time.Second * 1,
 			MaxRetryDelay: time.Second * 3,
+		},
+		Log:pipeline.LogOptions{
+			Log: func (l pipeline.LogLevel, msg string){
+				logSDKLogs(transfer.JobId, transfer.JobHandlerMap, common.LogLevel(l), msg)
+			},
 		},
 	})
 	u, _ := url.Parse(transfer.Source)

@@ -340,3 +340,12 @@ func getLoggerForJobId(jobId common.JobID, jobsInfoMap *JobsInfoMap) *common.Log
 	}
 	return logger
 }
+
+// logSDKLogs api is used as callback passed in azure pipeline passed to sdk to write the sdk log to respective Job log file
+func logSDKLogs(jobId common.JobID, jobsInfoMap *JobsInfoMap, logLevel common.LogLevel, msg string){
+	logger := getLoggerForJobId(jobId, jobsInfoMap)
+	if logger == nil{
+		panic(errors.New(fmt.Sprintf("logger instance for jobId %s not initialized properly ", jobId)))
+	}
+	logger.Logf(logLevel, msg)
+}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type localToBlockBlob struct {
@@ -30,7 +31,13 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 			RetryDelay:    time.Second * 1,
 			MaxRetryDelay: time.Second * 3,
 		},
+		Log:pipeline.LogOptions{
+			Log: func (l pipeline.LogLevel, msg string){
+				logSDKLogs(transfer.JobId, transfer.JobHandlerMap, common.LogLevel(l), msg)
+			},
+		},
 	})
+
 	u, _ := url.Parse(transfer.Destination)
 	blobUrl := azblob.NewBlobURL(*u, p)
 
@@ -106,6 +113,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
 			// step 3: perform put block
+
 			blockBlobUrl := blobURL.ToBlockBlobURL()
 			_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), azblob.LeaseAccessConditions{})
 			if err != nil {
