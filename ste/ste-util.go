@@ -16,8 +16,9 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
-	"golang.org/x/net/context"
+	//"golang.org/x/net/context"
 	"sync/atomic"
+	"context"
 )
 
 // TODO: new logger for AZCOPY, in addition to job level logs

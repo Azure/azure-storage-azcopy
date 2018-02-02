@@ -97,6 +97,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId, partNum)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
 			return
@@ -155,7 +156,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 					return
 				}
-
+				logger.Logf(common.LogInfo, "transfer %d of Job %s and part number %d has completed successfully", transferId, jobId, partNum)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 

@@ -42,9 +42,6 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
 					logger := getLoggerForJobId(transferMsg.Id, transferMsg.InfoMap)
-					logger.Logf(common.LogInfo,
-						"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
-							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 					select{
 					case <- transferMsg.TransferContext.Done():
 						logger.Logf(common.LogInfo, "Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
@@ -52,10 +49,13 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 						if jobInfoForTransfer == nil{
 							logger.Logf(common.LogError, "invalid jobInfo reference for jobId %s and part number %d", transferMsg.Id, transferMsg.PartNumber)
 						}
-						updateTransferStatus(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, common.TransferStatusComplete, transferMsg.InfoMap)
+						updateTransferStatus(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, common.TransferStatusFailed, transferMsg.InfoMap)
 						jobInfoForTransfer.UpdateNumTransferDone()
 						continue
 					default:
+						logger.Logf(common.LogInfo,
+							"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
+							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 						transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.InfoMap)
 						prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
 						if prologueFunction == nil {

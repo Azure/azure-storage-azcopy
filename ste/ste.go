@@ -83,11 +83,6 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
 
-	if len(payload.Transfers) < 1{
-		(*resp).WriteHeader(http.StatusBadRequest)
-		(*resp).Write([]byte("copy command with 0 transfer requested"))
-		return
-	}
 	data := payload.OptionalAttributes
 
 	// Converting the optional attributes of job part order to memory map compatible DestinationBlobData
@@ -156,6 +151,16 @@ func getJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap) (JobStatusCode){
 	return status
 }
 
+// setJobStatus api set the current status of given JobId to given jobStatus
+func setJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, jobStatus JobStatusCode) {
+	logger := getLoggerForJobId(jobId, jobsInfoMap)
+	jobInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0)
+	if jobInfo == nil{
+		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
+	}
+	jobInfo.getJobPartPlanPointer().JobStatus = jobStatus
+	logger.Logf(common.LogInfo, "set job status of JobId %s to %s", jobId, getJobStatusStringFromCode(jobStatus))
+}
 // changeJobStatus changes the status of Job in all parts of Job order to given status
 func changeJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, status JobStatusCode){
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
@@ -228,6 +233,7 @@ func ExecuteResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordin
 			// If the current transfer has already completed, then no need to reschedule it
 			if jobInfo.Transfer(uint32(index)).Status == common.TransferStatusComplete{
 				logger.Logf(common.LogInfo, "Transfer %d of Job %s and part num %d already completed, hence not rescheduling it", index, jobId, partNumber)
+				jobInfo.NumTransferComplete ++
 				continue
 			}
 			jobInfo.TransferInfo[index].ctx, jobInfo.TransferInfo[index].cancel = context.WithCancel(jobInfo.ctx)
@@ -256,6 +262,7 @@ func ExecuteResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordin
 			}
 		}
 	}
+	setJobStatus(jobId, jobsInfoMap, InProgress)
 	logger.Logf(common.LogInfo, "Job %s resumed and has been rescheduled", jobId)
 	(*resp).WriteHeader(http.StatusAccepted)
 	(*resp).Write([]byte(fmt.Sprintf("Job %s successfully resumed", jobId)))
@@ -309,9 +316,6 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 		return
 	}
 
-	for partno, _ := range jPartMap{
-		logger.Logf(common.LogInfo, "part no %d", partno)
-	}
 	// Iterating through all JobPartPlanInfo pointers and cancelling each part of the given Job
 	for _, jHandler := range jPartMap{
 		jHandler.cancel()
@@ -338,9 +342,6 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 		allJobsCompleted = true
 		time.Sleep(500 * time.Millisecond)
 		logger.Logf(common.LogInfo, "all job parts of job %s not cancelled yet", jobId)
-		for partno, _ := range jPartMap{
-			logger.Logf(common.LogInfo, "part no %d", partno)
-		}
 	}
 
 	// If the Job is paused but not cancelled

@@ -192,4 +192,4 @@ func TransferStatusCodeToString(status Status) string {
 	}
 }
 
-const DefaultBlockSize = 100 * 1024 * 1024
+const DefaultBlockSize = 4 * 1024 * 1024
