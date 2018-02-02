@@ -21,33 +21,40 @@
 package main
 
 import (
-	//"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os"
-	//"os/exec"
+	"github.com/Azure/azure-storage-azcopy/cmd"
+	"os"
+	"os/exec"
+	"syscall"
 )
 
 func main() {
-	//if len(os.Args) == 1 {
-	//	cmd.Execute()
-	//	return
-	//}
-	//switch os.Args[1] {
-	//case "inproc": // STE is launched in process
-	//	go ste.InitializeSTE()
-	//	cmd.Execute()
-	//case "ste": // the program is being launched as the STE, the init function runs on main go-routine
-	//	ste.InitializeSTE()
-	//default:
-	//	 //STE is launched as an independent process
-	//	newProcessCommand := exec.Command(os.Args[0], "ste")
-	//	err := newProcessCommand.Start()
-	//	if err != nil {
-	//		panic(err)
-	//		os.Exit(1)
-	//	}
-	//	//go ste.InitializeSTE()
-	//	cmd.Execute()
-	//}
-	ste.InitializeSTE()
+	if len(os.Args) == 1 {
+		cmd.Execute()
+		return
+	}
+	switch os.Args[1] {
+	case "inproc": // STE is launched in process
+		go ste.InitializeSTE()
+		cmd.Execute()
+	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
+		ste.InitializeSTE()
+	default:
+		 //STE is launched as an independent process
+		//args := append(os.Args, "ste")
+		//args = append(os.Args, "--detached")
+		newProcessCommand := exec.Command(os.Args[0], "ste")
+		// to create the child process in new process group to avoid receiving signals from parent process
+		newProcessCommand.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+		}
+		err := newProcessCommand.Start()
+		if err != nil {
+			panic(err)
+			os.Exit(1)
+		}
+		//go ste.InitializeSTE()
+		cmd.Execute()
+	}
+	//ste.InitializeSTE()
 }

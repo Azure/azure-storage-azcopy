@@ -20,6 +20,8 @@ type blobToLocal struct {
 
 func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel chan<- ChunkMsg) {
 	// step 1: get blob size
+	logger := getLoggerForJobId(transfer.JobId, transfer.JobHandlerMap)
+
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
 			Policy:        azblob.RetryPolicyExponential,
@@ -30,7 +32,10 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 		},
 		Log:pipeline.LogOptions{
 			Log: func (l pipeline.LogLevel, msg string){
-				logSDKLogs(transfer.JobId, transfer.JobHandlerMap, common.LogLevel(l), msg)
+				logger.Logf(l, msg)
+			},
+			MinimumLevelToLog: func() pipeline.LogLevel {
+				return logger.Severity
 			},
 		},
 	})

@@ -2,6 +2,7 @@ package ste
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 //These constant defines the various types of source and destination of the transfers
@@ -44,7 +45,7 @@ type JobPartPlanHeader struct {
 	SrcLocationType    common.LocationType
 	DstLocationType    common.LocationType
 	NumTransfers       uint32
-	LogSeverity        common.LogLevel
+	LogSeverity        pipeline.LogLevel
 	JobStatus          JobStatusCode
 	BlobData           JobPartPlanBlobData
 }

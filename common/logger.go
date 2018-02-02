@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
-
-type LogLevel uint8
 
 const (
 	// LogNone tells a logger not to log any entries passed to it.
-	LogNone LogLevel = iota
+	LogNone pipeline.LogLevel = iota
 
 	// LogFatal tells a logger to log all LogFatal entries passed to it.
 	LogFatal
@@ -29,7 +28,7 @@ const (
 )
 
 // logLevelToString converts the Loglevel severity to appropriate loglevel string
-func logLevelToString(level LogLevel) (string){
+func logLevelToString(level pipeline.LogLevel) (string){
 	switch level {
 	case LogNone:
 		return ""
@@ -51,13 +50,13 @@ func logLevelToString(level LogLevel) (string){
 // Logger is struct holding Information of log file for specific Job
 // Each Job has its own logger instance. For all the parts of same Job, logs are logged in one file
 type Logger struct {
-	Severity    LogLevel
+	Severity    pipeline.LogLevel
 	LogFileName string
 	LogFile     *os.File
 }
 
 // Initializes the logger instance for given JobId with given Log Severity
-func (logger *Logger) Initialize(severity LogLevel, fileName string) {
+func (logger *Logger) Initialize(severity pipeline.LogLevel, fileName string) {
 	logger.Severity = severity
 	logger.LogFileName = fileName
 	// Creates the log file if it does not exists already else opens the file in append mode.
@@ -72,7 +71,7 @@ func (logger *Logger) Initialize(severity LogLevel, fileName string) {
 // logs to the filename of the current logger instance.
 // If log severity of current logger instance is less than given severity, no logs
 // will be written to the log file
-func (logger *Logger) Logf(severity LogLevel, format string, a ...interface{}){
+func (logger *Logger) Logf(severity pipeline.LogLevel, format string, a ...interface{}){
 	if severity > logger.Severity{
 		return
 	}

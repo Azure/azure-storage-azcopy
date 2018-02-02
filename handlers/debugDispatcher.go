@@ -74,7 +74,7 @@ func fetchJobStatus(jobId string) common.Status {
 	var summary common.JobProgressSummary
 	json.Unmarshal(body, &summary)
 
-	tm.Clear()
+	//tm.Clear()
 	tm.MoveCursor(1, 1)
 
 	tm.Println("----------------- Progress Summary for JobId", jobId, "------------------")

@@ -22,6 +22,8 @@ type localToBlockBlob struct {
 
 // this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
 func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, chunkChannel chan<- ChunkMsg) {
+
+	logger := getLoggerForJobId(transfer.JobId, transfer.JobHandlerMap)
 	// step 1: create pipeline for the destination blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -33,7 +35,10 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 		},
 		Log:pipeline.LogOptions{
 			Log: func (l pipeline.LogLevel, msg string){
-				logSDKLogs(transfer.JobId, transfer.JobHandlerMap, common.LogLevel(l), msg)
+				logger.Logf(l, msg)
+			},
+			MinimumLevelToLog: func() pipeline.LogLevel {
+				return logger.Severity
 			},
 		},
 	})

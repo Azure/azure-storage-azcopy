@@ -19,6 +19,7 @@ import (
 	//"golang.org/x/net/context"
 	"sync/atomic"
 	"context"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // TODO: new logger for AZCOPY, in addition to job level logs
@@ -77,7 +78,7 @@ func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
 }
 
 // StoreJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
-func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity common.LogLevel, jHandler *JobPartPlanInfo) {
+func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity pipeline.LogLevel, jHandler *JobPartPlanInfo) {
 	jMap.Lock()
 	var jobInfo = jMap.internalMap[jobId]
 	// If there is no JobInfo instance for given jobId
@@ -340,13 +341,4 @@ func getLoggerForJobId(jobId common.JobID, jobsInfoMap *JobsInfoMap) *common.Log
 		panic(errors.New(fmt.Sprintf("no logger instance initialized for jobId %s", jobId)))
 	}
 	return logger
-}
-
-// logSDKLogs api is used as callback passed in azure pipeline passed to sdk to write the sdk log to respective Job log file
-func logSDKLogs(jobId common.JobID, jobsInfoMap *JobsInfoMap, logLevel common.LogLevel, msg string){
-	logger := getLoggerForJobId(jobId, jobsInfoMap)
-	if logger == nil{
-		panic(errors.New(fmt.Sprintf("logger instance for jobId %s not initialized properly ", jobId)))
-	}
-	logger.Logf(logLevel, msg)
 }

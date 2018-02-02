@@ -34,6 +34,8 @@ import (
 	"path"
 	"strings"
 	"time"
+	"os/signal"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 const (
@@ -63,10 +65,36 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	if commandLineInput.IsaBackgroundOp {
 		return uuid
 	}
-	
-	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
-		time.Sleep(2 * time.Second)
+
+	// created a signal channel to receive the Interrupt and Kill signal send to OS
+	cancelChannel := make(chan os.Signal, 1)
+	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
+
+	// timeOut channel will receive a message after every 2 seconds
+	timeOut := time.After(2 * time.Second)
+
+	// Waiting for signals from either cancelChannel or timeOut Channel. If no signal received, will sleep for 100 milliseconds
+	fmt.Println("listening for commands")
+	for {
+		select {
+		case <-cancelChannel:
+			fmt.Println("fetching cancel signal")
+			HandleCancelCommand(common.JobID(uuid))
+			os.Exit(1)
+		case <-timeOut:
+			fmt.Println("fetching job status")
+			jobStatus := fetchJobStatus(uuid)
+			if jobStatus == common.StatusCompleted{
+				break
+			}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
 	}
+	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
+	//	time.Sleep(2 * time.Second)
+	//}
 	return uuid
 }
 
@@ -275,7 +303,7 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	}
 
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
-	jobPartOrderToFill.LogVerbosity = common.LogLevel(commandLineInput.LogVerbosity)
+	jobPartOrderToFill.LogVerbosity = pipeline.LogLevel(commandLineInput.LogVerbosity)
 	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl

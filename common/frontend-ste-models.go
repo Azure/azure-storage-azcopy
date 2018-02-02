@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type JobID string //todo -- to uuid
@@ -95,7 +96,7 @@ type CopyJobPartOrder struct {
 	SourceType         LocationType
 	DestinationType    LocationType
 	Transfers          []CopyTransfer
-	LogVerbosity       LogLevel
+	LogVerbosity       pipeline.LogLevel
 	IsaBackgroundOp    bool
 	OptionalAttributes BlobTransferAttributes
 }

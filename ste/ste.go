@@ -32,6 +32,7 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 var steContext = context.Background()
@@ -39,7 +40,7 @@ var realTimeThroughputCounter = throughputState{lastCheckedBytes: 0, currentByte
 
 // putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID,
-	partNo common.PartNumber, jobLogVerbosity common.LogLevel, jPartInfoMap *JobsInfoMap) {
+	partNo common.PartNumber, jobLogVerbosity pipeline.LogLevel, jPartInfoMap *JobsInfoMap) {
 	jPartInfoMap.StoreJobPartPlanInfo(jobId, partNo, jobLogVerbosity, jobHandler)
 }
 
@@ -151,18 +152,8 @@ func getJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap) (JobStatusCode){
 	return status
 }
 
-// setJobStatus api set the current status of given JobId to given jobStatus
-func setJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, jobStatus JobStatusCode) {
-	logger := getLoggerForJobId(jobId, jobsInfoMap)
-	jobInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0)
-	if jobInfo == nil{
-		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
-	}
-	jobInfo.getJobPartPlanPointer().JobStatus = jobStatus
-	logger.Logf(common.LogInfo, "set job status of JobId %s to %s", jobId, getJobStatusStringFromCode(jobStatus))
-}
-// changeJobStatus changes the status of Job in all parts of Job order to given status
-func changeJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, status JobStatusCode){
+// setJobStatus changes the status of Job in all parts of Job order to given status
+func setJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, status JobStatusCode){
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	// loading the part map for given jobId
 	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
@@ -347,7 +338,7 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 	// If the Job is paused but not cancelled
 	if isPaused{
 		// change the JobStatus from InProgress to Paused State
-		changeJobStatus(jobId, jobsInfoMap, Paused)
+		setJobStatus(jobId, jobsInfoMap, Paused)
 	}else{ // If the Job is not paused but cancelled
 		// cleaning up the job from JobsInfoMap and removing the JobPartsFile
 		cleanUpJob(jobId, jobsInfoMap)
