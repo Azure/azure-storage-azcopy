@@ -69,12 +69,18 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 
 // this generates a function which performs the downloading of a single chunk
 func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64,
-	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jobInfoMap *JobsInfoMap) chunkFunc {
+	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
-		logger := getLoggerForJobId(jobId, jobInfoMap)
+		logger := getLoggerForJobId(jobId, jobsInfoMap)
 		select {
 		case <- ctx.Done():
-			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled", transferId, jobId, partNum)
+			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
+			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+				logger.Logf(common.LogInfo,
+					"worker %d is finalizing cancellation of job %s and part number %d",
+					workerId, jobId, partNum)
+				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+			}
 			return
 		default:
 			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
@@ -87,7 +93,13 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap, ctx)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+					logger.Logf(common.LogInfo,
+						"worker %d is finalizing cancellation of job %s and part number %d",
+						workerId, jobId, partNum)
+					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+				}
 				return
 			}
 
@@ -98,7 +110,13 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobInfoMap, ctx)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+					logger.Logf(common.LogInfo,
+						"worker %d is finalizing cancellation of job %s and part number %d",
+						workerId, jobId, partNum)
+					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+				}
 				return
 			}
 			updateThroughputCounter(chunkSize)
@@ -111,8 +129,11 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 					workerId, transferIdentifierStr, chunkId)
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobInfoMap, ctx)
-
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
+				logger.Logf(common.LogInfo,
+					"worker %d is finalizing cancellation of job %s and part number %d",
+					workerId, jobId, partNum)
+				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 				err := memoryMappedFile.Unmap()
 				if err != nil {
 					logger.Logf(common.LogError,

@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	NumOfFilesPerUploadJobPart = 2
+	NumOfFilesPerUploadJobPart = 3
 )
 
 // handles the copy command
@@ -63,6 +63,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	if commandLineInput.IsaBackgroundOp {
 		return uuid
 	}
+	
 	for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
 		time.Sleep(2 * time.Second)
 	}

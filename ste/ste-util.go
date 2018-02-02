@@ -17,6 +17,7 @@ import (
 	"sync"
 	"unsafe"
 	"golang.org/x/net/context"
+	"sync/atomic"
 )
 
 // TODO: new logger for AZCOPY, in addition to job level logs
@@ -304,11 +305,7 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber
-func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap, ctx context.Context) {
-	select {
-	case <- ctx.Done():
-		return
-	default:
+func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
 		jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
 		if err != nil {
 			panic(err)
@@ -319,6 +316,19 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 			return
 		}
 		transferHeader.Status = common.Status(transferStatus)
+}
+
+func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
+	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNumber, jobsInfoMap)
+	if err != nil {
+		panic(err)
+	}
+	jPartPlanInfo := jHandler.getJobPartPlanPointer()
+	if jPartPlanInfo == nil{
+		panic(errors.New(fmt.Sprintf("job part plan reference nil for Job %s and part number %d", jobId, partNumber)))
+	}
+	if atomic.AddUint32(&jHandler.NumTransferComplete, 1) == jPartPlanInfo.NumTransfers{
+		jPartPlanInfo.JobStatus = Completed
 	}
 }
 

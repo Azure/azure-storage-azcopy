@@ -82,11 +82,19 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
+		logger := getLoggerForJobId(jobId, jobsInfoMap)
 		select{
 		case <- ctx.Done():
+			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
+			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+				logger.Logf(common.LogInfo,
+					"worker %d is finalizing cancellation of job %s and part number %d",
+					workerId, jobId, partNum)
+				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+			}
 			return
 		default:
-			logger := getLoggerForJobId(jobId, jobsInfoMap)
+
 			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 			// step 1: generate block ID
@@ -108,7 +116,14 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					workerId, transferIdentifierStr, chunkId, startIndex)
 				//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap, ctx)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+					logger.Logf(common.LogInfo,
+						"worker %d is finalizing cancellation of job %s and part number %d",
+						workerId, jobId, partNum)
+					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+				}
 				return
 			}
 
@@ -128,10 +143,13 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					logger.Logf(common.LogError,
 						"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
 						workerId, transferIdentifierStr, chunkId, string(err.Error()))
-					updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap, ctx)
+					updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+					return
 				}
 
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap, ctx)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
+				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
 				err := memoryMappedFile.Unmap()
 				if err != nil {

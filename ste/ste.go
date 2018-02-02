@@ -83,6 +83,11 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	* Schedule the transfers of Job by putting them into Transfermsg channels.
 	 */
 
+	if len(payload.Transfers) < 1{
+		(*resp).WriteHeader(http.StatusBadRequest)
+		(*resp).Write([]byte("copy command with 0 transfer requested"))
+		return
+	}
 	data := payload.OptionalAttributes
 
 	// Converting the optional attributes of job part order to memory map compatible DestinationBlobData
@@ -92,7 +97,6 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	}
 	// Creating a file for JobPartOrder and write data into that file.
 	fileName := createJobPartPlanFile(payload, destBlobData)
-
 	// Creating JobPartPlanInfo reference for new job part order
 	var jobHandler = new(JobPartPlanInfo)
 
@@ -109,6 +113,7 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordiatorChann
 	if coordiatorChannels == nil { // If the coordinator transfer channels are initialized properly, then incoming transfers can't be scheduled with current instance of transfer engine.
 		getLoggerForJobId(payload.ID, jobsInfoMap).Logf(common.LogError, "coordinator channels not initialized properly")
 	}
+
 	// Scheduling each transfer in the new job according to the priority of the job
 	numTransfer := jobHandler.getJobPartPlanPointer().NumTransfers
 	for index := uint32(0); index < numTransfer; index++ {
@@ -269,35 +274,21 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 		(*resp).Write([]byte(errorMsg))
 		return
 	}
-
+	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
 	var completeJobOrdered bool = false
-	// totalNumberOfTransfers determines the total number of transfers in all parts of the given Job
-	var totalNumberOfTransfers uint32 = 0
-	// totalNumberOfTransfersCompleted determines the total number of completed transfers in all parts of the given Job
-	var totalNumberOfTransfersCompleted uint32 = 0
-	// totalNumberOfTransfersFailed determines the total number of failed transfers in all parts of the given Job
-	var totalNumberOfTransfersFailed uint32 = 0
+	var jobOrderDone bool = true
 	for _, jHandler := range jPartMap {
 		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
 		currentJobPartPlanInfo := jHandler.getJobPartPlanPointer()
 
 		completeJobOrdered = completeJobOrdered || currentJobPartPlanInfo.IsFinalPart
-		totalNumberOfTransfers += currentJobPartPlanInfo.NumTransfers
-		// iterating through all transfers for current partNo and job with given jobId
-		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++ {
 
-			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
-			transferHeader := jHandler.Transfer(index)
-			// check for all completed transfer to calculate the progress percentage at the end
-			if transferHeader.Status == common.TransferStatusComplete {
-				totalNumberOfTransfersCompleted ++
-			}
-			if transferHeader.Status == common.TransferStatusFailed {
-				totalNumberOfTransfersFailed ++
-			}
+		if currentJobPartPlanInfo.JobStatus != Completed{
+			jobOrderDone = false
 		}
 	}
+
 	// If the job has not been ordered completely, then job cannot be cancelled
 	if !completeJobOrdered{
 		(*resp).WriteHeader(http.StatusBadRequest)
@@ -306,7 +297,7 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 		return
 	}
 	// If all parts of the job has either completed or failed, then job cannot be cancelled since it is already finished
-	if totalNumberOfTransfers == (totalNumberOfTransfersFailed + totalNumberOfTransfersCompleted){
+	if jobOrderDone{
 		errorMsg := ""
 		(*resp).WriteHeader(http.StatusBadRequest)
 		if isPaused{
@@ -317,9 +308,39 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 		(*resp).Write([]byte(errorMsg))
 		return
 	}
+
+	for partno, _ := range jPartMap{
+		logger.Logf(common.LogInfo, "part no %d", partno)
+	}
 	// Iterating through all JobPartPlanInfo pointers and cancelling each part of the given Job
 	for _, jHandler := range jPartMap{
 		jHandler.cancel()
+	}
+
+	// allJobsCompleted represent a boolean variable that is set to false if any single part of Job is not completed yet after cancelling the JobOrder
+	var allJobsCompleted = true
+	for {
+		// Iterating through each JobPartPlanPointer of each part of Job Order
+		for partNumber, jHandler := range jPartMap{
+			// if JobPart order is not complete, then set allJobsCompleted to false.
+			if jHandler.getJobPartPlanPointer().JobStatus != Completed{
+				logger.Logf(common.LogInfo, "part %d of Job %s not completely cancelled yet", partNumber, jobId)
+				allJobsCompleted = false
+			}
+		}
+		// If allJobsCompleted is true after iterating through each JobPart order of the job, then it means that all JobParts have been completed
+		// and then exit the outer loop
+		if allJobsCompleted{
+			logger.Logf(common.LogInfo, "all job part of job %d cancelled", jobId)
+			break
+		}
+		// If any one of the JobPart is still not complete, then reset the allJobsCompleted flag, sleep of half second and iterate through each JobPartOrder again
+		allJobsCompleted = true
+		time.Sleep(500 * time.Millisecond)
+		logger.Logf(common.LogInfo, "all job parts of job %s not cancelled yet", jobId)
+		for partno, _ := range jPartMap{
+			logger.Logf(common.LogInfo, "part no %d", partno)
+		}
 	}
 
 	// If the Job is paused but not cancelled

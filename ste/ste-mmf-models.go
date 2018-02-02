@@ -11,11 +11,14 @@ const dataSchemaVersion = 0 // To be Incremented every time when we release azco
 type JobStatusCode uint8
 
 const (
-	// Job is currently executing
+	// Job Part is currently executing
 	InProgress JobStatusCode = 0
 
-	// Job is currently paused and no transfer of Job is currently executing
+	// Job Part is currently paused and no transfer of Job is currently executing
 	Paused JobStatusCode = 1
+
+	// Job Part has completed and no transfer of JobPart is currently executing
+	Completed JobStatusCode = 2
 )
 
 // getJobStatusStringFromCode api returns the Job Status string for given Job Status Code
