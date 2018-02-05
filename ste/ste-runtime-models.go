@@ -13,7 +13,6 @@ type TransferInfo struct {
 	NumChunksCompleted uint16
 }
 
-
 // TODO comments on all struct
 type JobPartPlanInfo struct {
 	ctx                        context.Context

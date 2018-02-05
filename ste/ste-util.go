@@ -22,15 +22,13 @@ import (
 	"sync/atomic"
 )
 
-// TODO: new logger for AZCOPY, in addition to job level logs
-// TODO: correlate logging levels between SDK and AZCOPY
-
 // JobInfo contains JobPartsMap and Logger
 // JobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
 // Logger is the logger instance for a given JobId
 type JobInfo struct {
-	JobPartsMap map[common.PartNumber]*JobPartPlanInfo
-	Logger      *common.Logger
+	JobPartsMap       map[common.PartNumber]*JobPartPlanInfo
+	NumberOfPartsDone uint32
+	Logger            *common.Logger
 }
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
@@ -306,7 +304,7 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 	//}
 }
 
-// updateTransferStatus updates the status of given transfer for given jobId and partNumber
+// updateTransferStatus updates the status of given transfer for given jobId and partNumber in thread safe manner
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
 	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
 	if err != nil {
@@ -317,7 +315,13 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 		getLoggerForJobId(jobId, jPartPlanInfoMap).Logf(common.LogWarning, "no transfer header found for JobId %s part number %d and transfer index %d", jobId, partNo, transferIndex)
 		return
 	}
-	transferHeader.Status = common.Status(transferStatus)
+	// If the status of transfer is failed, then it means that one of the chunk has failed
+	// and there is no need to update the status
+	if atomic.LoadUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status))) == common.TransferStatusFailed{
+		return
+	}
+	atomic.StoreUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status)), *(*uintptr)(unsafe.Pointer(&transferStatus)))
+	//transferHeader.Status = common.Status(transferStatus)
 }
 
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {

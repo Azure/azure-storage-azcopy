@@ -95,19 +95,16 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobsInfoMap)
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil{
 			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId, partNum)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				//updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
-			return
-		default:
-
+		}else{
 			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 			// step 1: generate block ID
@@ -146,6 +143,10 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 			// step 4: check if this is the last chunk
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+				// If the transfer gets cancelled before the putblock list
+				if ctx.Err() != nil{
+					return
+				}
 				// step 5: this is the last block, perform EPILOGUE
 				logger.Logf(common.LogInfo,
 					"worker %d is concluding download Transfer job with %s after processing chunkId %d with blocklist %s",
@@ -174,6 +175,5 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 			}
 		}
-
 	}
 }

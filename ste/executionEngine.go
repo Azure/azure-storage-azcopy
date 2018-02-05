@@ -42,18 +42,13 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
 					logger := getLoggerForJobId(transferMsg.Id, transferMsg.InfoMap)
-					if transferMsg.TransferContext.Err() != nil {
-
-					}
-					select {
-					//TODO use if in case of select
-					case <-transferMsg.TransferContext.Done():
+					// If the transfer Msg has been cancelled,
+					if transferMsg.TransferContext.Err() != nil{
 						logger.Logf(common.LogInfo, "Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
 						jobInfoForTransfer := transferMsg.InfoMap.LoadJobPartPlanInfoForJobPart(transferMsg.Id, transferMsg.PartNumber)
-						updateTransferStatus(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, common.TransferStatusFailed, transferMsg.InfoMap)
+						//updateTransferStatus(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, common.TransferStatusFailed, transferMsg.InfoMap)
 						jobInfoForTransfer.UpdateNumTransferDone()
-						continue
-					default:
+					} else{
 						logger.Logf(common.LogInfo,
 							"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
 							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
