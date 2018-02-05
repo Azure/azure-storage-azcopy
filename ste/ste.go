@@ -213,6 +213,7 @@ func ExecuteResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordin
 		(*resp).WriteHeader(http.StatusBadRequest)
 		(*resp).Write([]byte(fmt.Sprintf("Job %s is already %s", jobId, getJobStatusStringFromCode(currentJobStatus))))
 	}
+	// set job status to InProgress
 	setJobStatus(jobId, jobsInfoMap, InProgress)
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
@@ -260,6 +261,16 @@ func ExecuteResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordin
 			jobInfo.NumberOfPartsDone ++
 		}
 	}
+	// If all the number of parts that are already done equals the total number of parts in Job
+	// No need to resume the Job since there are no transfer to reschedules
+	if jobInfo.NumberOfPartsDone == jobsInfoMap.GetNumberOfPartsForJob(jobId){
+		logger.Logf(common.LogInfo, "all parts of Job %s are already complete and no transfer needs to be rescheduled")
+		setJobStatus(jobId, jobsInfoMap, Completed)
+		(*resp).WriteHeader(http.StatusAccepted)
+		(*resp).Write([]byte(fmt.Sprintf("Job %s was already complete hence no need to resume it", jobId)))
+		return
+	}
+
 	logger.Logf(common.LogInfo, "Job %s resumed and has been rescheduled", jobId)
 	(*resp).WriteHeader(http.StatusAccepted)
 	(*resp).Write([]byte(fmt.Sprintf("Job %s successfully resumed", jobId)))
