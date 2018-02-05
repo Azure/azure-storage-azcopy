@@ -83,17 +83,14 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobsInfoMap)
-		select {
-		case <-ctx.Done():
-			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
+		if ctx.Err() != nil{
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId, partNum)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
-			return
-		default:
+		}else {
 			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
@@ -153,6 +150,5 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				}
 			}
 		}
-
 	}
 }

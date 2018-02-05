@@ -8,7 +8,6 @@ import (
 	"github.com/edsrzf/mmap-go"
 	"os"
 	"reflect"
-	"sync/atomic"
 	"time"
 	"unsafe"
 )
@@ -116,17 +115,6 @@ func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
 	// Casting Slice into transfer header Pointer
 	tEntry := (*JobPartPlanTransfer)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&transferEntrySlice)).Data))
 	return tEntry
-}
-
-//TODO add comments
-func (job *JobPartPlanInfo) UpdateNumTransferDone() {
-	jPartPlanPointer := job.getJobPartPlanPointer()
-	if jPartPlanPointer == nil {
-		panic(errors.New("uninitialized job part plan pointer"))
-	}
-	if atomic.AddUint32(&(job.NumberOfTransfersCompleted), 1) == jPartPlanPointer.NumTransfers {
-		jPartPlanPointer.JobStatus = Completed
-	}
 }
 
 // updateTheChunkInfo api updates the memory map JobPartPlanTransferHeader for transfer and chunk at given index
@@ -324,7 +312,7 @@ func jobPartTojobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 	jPartInFile := JobPartPlanHeader{versionID, jobID, uint32(partNo),
 		jobPart.IsFinalPart, DefaultJobPriority, TTA,
 		jobPart.SourceType, jobPart.DestinationType,
-		numTransfer, jobPart.LogVerbosity, Paused, data}
+		numTransfer, jobPart.LogVerbosity, InProgress, data}
 	return jPartInFile
 }
 

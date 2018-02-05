@@ -18,8 +18,11 @@ const (
 	// Job Part is currently paused and no transfer of Job is currently executing
 	Paused JobStatusCode = 1
 
+	// Job Part is cancelled and all transfers of the JobPart are cancelled
+	Cancelled JobStatusCode = 2
+
 	// Job Part has completed and no transfer of JobPart is currently executing
-	Completed JobStatusCode = 2
+	Completed JobStatusCode = 3
 )
 
 // getJobStatusStringFromCode api returns the Job Status string for given Job Status Code

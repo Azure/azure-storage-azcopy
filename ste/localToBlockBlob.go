@@ -145,6 +145,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				// If the transfer gets cancelled before the putblock list
 				if ctx.Err() != nil{
+					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 					return
 				}
 				// step 5: this is the last block, perform EPILOGUE
