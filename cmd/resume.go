@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-azcopy/handlers"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -15,7 +15,7 @@ func init() {
 		Use:        "resume",
 		SuggestFor: []string{"resme", "esume", "resue"},
 		Short:      "resume resumes the existing job for given JobId",
-		Long: `resume resumes the existing job for given JobId`,
+		Long:       `resume resumes the existing job for given JobId`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the resume command requires necessarily to have an argument
 			// resume jobId -- resumes all the parts of an existing job for given jobId

@@ -13,20 +13,22 @@ type TransferInfo struct {
 	NumChunksCompleted uint16
 }
 
+
+// TODO comments on all struct
 type JobPartPlanInfo struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	fileName     string
-	memMap       mmap.MMap
-	TransferInfo []TransferInfo
-	NumTransferComplete uint32
+	ctx                        context.Context
+	cancel                     context.CancelFunc
+	fileName                   string
+	memMap                     mmap.MMap
+	TransferInfo               []TransferInfo
+	NumberOfTransfersCompleted uint32
 }
 
 type TransferMsg struct {
-	Id            common.JobID
-	PartNumber    common.PartNumber
-	TransferIndex uint32
-	InfoMap       *JobsInfoMap
+	Id              common.JobID
+	PartNumber      common.PartNumber
+	TransferIndex   uint32
+	InfoMap         *JobsInfoMap
 	TransferContext context.Context
 }
 

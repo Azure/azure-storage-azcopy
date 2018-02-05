@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/edsrzf/mmap-go"
@@ -10,7 +11,6 @@ import (
 	"net/url"
 	"sync/atomic"
 	"time"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type blobToLocal struct {
@@ -30,8 +30,8 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 			RetryDelay:    time.Second * 1,
 			MaxRetryDelay: time.Second * 3,
 		},
-		Log:pipeline.LogOptions{
-			Log: func (l pipeline.LogLevel, msg string){
+		Log: pipeline.LogOptions{
+			Log: func(l pipeline.LogLevel, msg string) {
 				logger.Logf(l, msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
@@ -84,9 +84,9 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobsInfoMap)
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
-			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId, partNum)
@@ -105,7 +105,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
-				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
 						"worker %d is finalizing cancellation of job %s and part number %d",
 						workerId, jobId, partNum)
@@ -122,7 +122,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
-				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
 						"worker %d is finalizing cancellation of job %s and part number %d",
 						workerId, jobId, partNum)

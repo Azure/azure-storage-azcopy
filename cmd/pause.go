@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-azcopy/handlers"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -15,7 +15,7 @@ func init() {
 		Use:        "pause",
 		SuggestFor: []string{"pase", "ause", "paue"},
 		Short:      "pause pauses the existing job for given JobId",
-		Long: `pause pauses the existing job for given JobId`,
+		Long:       `pause pauses the existing job for given JobId`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the pause command requires necessarily to have an argument
 			// pause jobId -- pause all the parts of an existing job for given jobId

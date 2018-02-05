@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/edsrzf/mmap-go"
@@ -12,7 +13,6 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type localToBlockBlob struct {
@@ -33,8 +33,8 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 			RetryDelay:    time.Second * 1,
 			MaxRetryDelay: time.Second * 3,
 		},
-		Log:pipeline.LogOptions{
-			Log: func (l pipeline.LogLevel, msg string){
+		Log: pipeline.LogOptions{
+			Log: func(l pipeline.LogLevel, msg string) {
 				logger.Logf(l, msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
@@ -95,10 +95,10 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobsInfoMap)
-		select{
-		case <- ctx.Done():
+		select {
+		case <-ctx.Done():
 			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
-			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId, partNum)
@@ -132,7 +132,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 				logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
-				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks{
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
 						"worker %d is finalizing cancellation of job %s and part number %d",
 						workerId, jobId, partNum)

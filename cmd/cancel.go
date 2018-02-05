@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-azcopy/handlers"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -15,7 +15,7 @@ func init() {
 		Use:        "cancel",
 		SuggestFor: []string{"cancl", "ancl", "cacl"},
 		Short:      "cancel cancels the existing job for given JobId",
-		Long: `cancel cancels the existing job for given JobId`,
+		Long:       `cancel cancels the existing job for given JobId`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the cancel command requires necessarily to have an argument
 			// cancel jobId -- cancel all the parts of an existing job for given jobId

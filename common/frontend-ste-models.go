@@ -23,8 +23,8 @@ package common
 import (
 	"errors"
 	"fmt"
-	"time"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"time"
 )
 
 type JobID string //todo -- to uuid

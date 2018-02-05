@@ -8,9 +8,9 @@ import (
 	"github.com/edsrzf/mmap-go"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"time"
 	"unsafe"
-	"sync/atomic"
 )
 
 var currFileDirectory string = "."
@@ -44,11 +44,11 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	}
 	job.TransferInfo = transferInfo
 
-	job.NumTransferComplete = 0
+	job.NumberOfTransfersCompleted = 0
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder
-func (job *JobPartPlanInfo) shutDownHandler() (error){
+func (job *JobPartPlanInfo) shutDownHandler() error {
 	if job.memMap == nil {
 		return errors.New(fmt.Sprintf("memory map file %s already unmapped. Map it again to use further", job.fileName))
 	}
@@ -98,7 +98,7 @@ func (job *JobPartPlanInfo) getTransferSrcDstDetail(entryIndex uint32) (source, 
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
 func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
-	if job.memMap == nil{
+	if job.memMap == nil {
 		return nil
 	}
 	// get memory map JobPartPlan Header Pointer
@@ -118,12 +118,13 @@ func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
 	return tEntry
 }
 
-func (job *JobPartPlanInfo) UpdateNumTransferDone(){
+//TODO add comments
+func (job *JobPartPlanInfo) UpdateNumTransferDone() {
 	jPartPlanPointer := job.getJobPartPlanPointer()
-	if jPartPlanPointer == nil{
+	if jPartPlanPointer == nil {
 		panic(errors.New("uninitialized job part plan pointer"))
 	}
-	if atomic.AddUint32(&(job.NumTransferComplete), 1) ==jPartPlanPointer.NumTransfers{
+	if atomic.AddUint32(&(job.NumberOfTransfersCompleted), 1) == jPartPlanPointer.NumTransfers {
 		jPartPlanPointer.JobStatus = Completed
 	}
 }

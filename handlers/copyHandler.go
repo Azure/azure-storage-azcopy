@@ -24,6 +24,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"io"
@@ -31,11 +32,10 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/signal"
 	"path"
 	"strings"
 	"time"
-	"os/signal"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 const (
@@ -85,7 +85,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		case <-timeOut:
 			fmt.Println("fetching job status")
 			jobStatus := fetchJobStatus(uuid)
-			if jobStatus == common.StatusCompleted{
+			if jobStatus == common.StatusCompleted {
 				break
 			}
 		default:

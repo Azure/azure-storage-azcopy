@@ -1,11 +1,11 @@
 package handlers
 
 import (
-	tm "github.com/buger/goterm"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	tm "github.com/buger/goterm"
 	"io/ioutil"
 	"math"
 	"net/http"

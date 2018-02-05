@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"net/http"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
+	"net/http"
 )
 
 // handles the cancel command

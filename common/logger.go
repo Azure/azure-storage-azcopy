@@ -2,9 +2,9 @@ package common
 
 import (
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"log"
 	"os"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 const (
@@ -28,7 +28,7 @@ const (
 )
 
 // logLevelToString converts the Loglevel severity to appropriate loglevel string
-func logLevelToString(level pipeline.LogLevel) (string){
+func logLevelToString(level pipeline.LogLevel) string {
 	switch level {
 	case LogNone:
 		return ""
@@ -71,11 +71,11 @@ func (logger *Logger) Initialize(severity pipeline.LogLevel, fileName string) {
 // logs to the filename of the current logger instance.
 // If log severity of current logger instance is less than given severity, no logs
 // will be written to the log file
-func (logger *Logger) Logf(severity pipeline.LogLevel, format string, a ...interface{}){
-	if severity > logger.Severity{
+func (logger *Logger) Logf(severity pipeline.LogLevel, format string, a ...interface{}) {
+	if severity > logger.Severity {
 		return
 	}
 	log.SetOutput(logger.LogFile)
-	logMsg := fmt.Sprintf(logLevelToString(severity) + ":"+format, a...)
+	logMsg := fmt.Sprintf(logLevelToString(severity)+":"+format, a...)
 	log.Println(logMsg)
 }

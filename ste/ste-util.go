@@ -17,9 +17,9 @@ import (
 	"sync"
 	"unsafe"
 	//"golang.org/x/net/context"
-	"sync/atomic"
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"sync/atomic"
 )
 
 // TODO: new logger for AZCOPY, in addition to job level logs
@@ -30,7 +30,7 @@ import (
 // Logger is the logger instance for a given JobId
 type JobInfo struct {
 	JobPartsMap map[common.PartNumber]*JobPartPlanInfo
-	Logger *common.Logger
+	Logger      *common.Logger
 }
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
@@ -47,7 +47,7 @@ func (jMap *JobsInfoMap) LoadJobPartsMapForJob(jobId common.JobID) (map[common.P
 	jMap.RLock()
 	jobInfo, ok := jMap.internalMap[jobId]
 	jMap.RUnlock()
-	if !ok{
+	if !ok {
 		return nil, ok
 	}
 	return jobInfo.JobPartsMap, ok
@@ -82,17 +82,17 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	jMap.Lock()
 	var jobInfo = jMap.internalMap[jobId]
 	// If there is no JobInfo instance for given jobId
-	if jobInfo == nil{
-		jobInfo = new (JobInfo)
+	if jobInfo == nil {
+		jobInfo = new(JobInfo)
 		jobInfo.JobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
-	}else if jobInfo.JobPartsMap == nil{
+	} else if jobInfo.JobPartsMap == nil {
 		// If the current JobInfo instance for given jobId has not JobPartsMap initialized
 		jobInfo.JobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
 	}
 	// If there is no logger instance for the current Job,
 	// initialize the logger instance with log severity and jobId
 	// log filename is $JobId.log
-	if jobInfo.Logger == nil{
+	if jobInfo.Logger == nil {
 		logger := new(common.Logger)
 		logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 		jobInfo.Logger = logger
@@ -104,13 +104,13 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 }
 
 // LoadLoggerForJob loads the logger instance for given jobId in thread safe manner
-func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) (*common.Logger){
+func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) *common.Logger {
 	jMap.RLock()
 	jobInfo := jMap.internalMap[jobId]
 	jMap.RUnlock()
-	if jobInfo == nil{
+	if jobInfo == nil {
 		return nil
-	}else{
+	} else {
 		return jobInfo.Logger
 	}
 }
@@ -308,16 +308,16 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
-		jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
-		if err != nil {
-			panic(err)
-		}
-		transferHeader := jHandler.Transfer(transferIndex)
-		if transferHeader == nil{
-			getLoggerForJobId(jobId, jPartPlanInfoMap).Logf(common.LogWarning, "no transfer header found for JobId %s part number %d and transfer index %d", jobId, partNo, transferIndex)
-			return
-		}
-		transferHeader.Status = common.Status(transferStatus)
+	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
+	if err != nil {
+		panic(err)
+	}
+	transferHeader := jHandler.Transfer(transferIndex)
+	if transferHeader == nil {
+		getLoggerForJobId(jobId, jPartPlanInfoMap).Logf(common.LogWarning, "no transfer header found for JobId %s part number %d and transfer index %d", jobId, partNo, transferIndex)
+		return
+	}
+	transferHeader.Status = common.Status(transferStatus)
 }
 
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
@@ -326,10 +326,10 @@ func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber
 		panic(err)
 	}
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
-	if jPartPlanInfo == nil{
+	if jPartPlanInfo == nil {
 		panic(errors.New(fmt.Sprintf("job part plan reference nil for Job %s and part number %d", jobId, partNumber)))
 	}
-	if atomic.AddUint32(&jHandler.NumTransferComplete, 1) == jPartPlanInfo.NumTransfers{
+	if atomic.AddUint32(&jHandler.NumberOfTransfersCompleted, 1) == jPartPlanInfo.NumTransfers {
 		jPartPlanInfo.JobStatus = Completed
 	}
 }
@@ -337,7 +337,7 @@ func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber
 // getLoggerForJobId returns the logger instance for a given JobId
 func getLoggerForJobId(jobId common.JobID, jobsInfoMap *JobsInfoMap) *common.Logger {
 	logger := jobsInfoMap.LoadLoggerForJob(jobId)
-	if logger == nil{
+	if logger == nil {
 		panic(errors.New(fmt.Sprintf("no logger instance initialized for jobId %s", jobId)))
 	}
 	return logger

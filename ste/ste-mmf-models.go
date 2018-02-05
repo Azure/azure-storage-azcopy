@@ -1,8 +1,8 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 //These constant defines the various types of source and destination of the transfers
@@ -23,7 +23,7 @@ const (
 )
 
 // getJobStatusStringFromCode api returns the Job Status string for given Job Status Code
-func getJobStatusStringFromCode(status JobStatusCode) (statusString string){
+func getJobStatusStringFromCode(status JobStatusCode) (statusString string) {
 	switch status {
 	case InProgress:
 		return "InProgress"

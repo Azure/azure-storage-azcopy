@@ -21,8 +21,8 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
 	"os/exec"
 	"syscall"
@@ -40,7 +40,7 @@ func main() {
 	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
 		ste.InitializeSTE()
 	default:
-		 //STE is launched as an independent process
+		//STE is launched as an independent process
 		//args := append(os.Args, "ste")
 		//args = append(os.Args, "--detached")
 		newProcessCommand := exec.Command(os.Args[0], "ste")
