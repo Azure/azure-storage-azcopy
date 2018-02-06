@@ -154,11 +154,12 @@ const (
 )
 
 // These constants defines the various states of transfer
+// TODO : add comments
 const (
-	TransferStatusActive   = 0   // Active Transfers
-	TransferStatusComplete = 1   // Completed Transfers
-	TransferStatusFailed   = 2   // Failed Transfers
-	TranferStatusAll       = 254 // All types of Transfer (Active | Complete | Failed)
+	TransferStatusActive   Status = 0   // Active Transfers
+	TransferStatusComplete Status = 1   // Completed Transfers
+	TransferStatusFailed   Status = 2   // Failed Transfers
+	TransferStatusAny      Status = Status(254) // All types of Transfer (Active | Complete | Failed)
 )
 
 // TransferStatusStringToStatusCode returns the Transfer Status Code given for Transfer Status
@@ -170,10 +171,10 @@ func TransferStatusStringToStatusCode(status string) Status {
 		return 1
 	case "TransferStatusFailed":
 		return 2
-	case "TranferStatusAll":
+	case "TransferStatusAny":
 		return 254
 	default:
-		panic(errors.New(fmt.Sprintf("invalid expected transfer status %s. Valid status are TransferStatusActive, TransferStatusComplete, TransferStatusFailed TranferStatusAll", status)))
+		panic(errors.New(fmt.Sprintf("invalid expected transfer status %s. Valid status are TransferStatusActive, TransferStatusComplete, TransferStatusFailed TransferStatusAny", status)))
 	}
 }
 
@@ -187,7 +188,7 @@ func TransferStatusCodeToString(status Status) string {
 	case 2:
 		return "TransferStatusFailed"
 	case 255:
-		return "TranferStatusAll"
+		return "TransferStatusAny"
 	default:
 		panic(errors.New(fmt.Sprintf("invalid expected transfer status code %d. Valid status are 0, 1, 2, 255", status)))
 	}

@@ -55,6 +55,7 @@ func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 	return jPartMap
 }
 
+//TODO : remove error
 // getJobPartInfoReferenceFromMap returns the JobPartPlanInfo Pointer for the combination of JobId and part number
 func getJobPartInfoReferenceFromMap(jobId common.JobID, partNo common.PartNumber,
 	jPartInfoMap *JobsInfoMap) (*JobPartPlanInfo, error) {
@@ -281,6 +282,8 @@ func ExecuteResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordin
 	* If the Job has not been ordered completely
     * If all the transfers in the Job are either failed or completed, then Job cannot be cancelled
 */
+
+//TODO : create different apis for pause and resume and then call this api
 func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused bool, resp *http.ResponseWriter) {
 	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
 	if !ok {
@@ -308,6 +311,7 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 		return
 	}
 	// If all parts of the job has either completed or failed, then job cannot be cancelled since it is already finished
+	// TODO: atomic load and store of job status
 	jPartPlanHeaderForPart0 := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
 	if jPartPlanHeaderForPart0.JobStatus == Completed {
 		errorMsg := ""
@@ -364,12 +368,11 @@ func ExecuteCancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPause
 	(*resp).WriteHeader(http.StatusAccepted)
 	resultMsg := ""
 	if isPaused {
-		logger.Logf(common.LogInfo, "pause Job %s in progress", jobId)
 		resultMsg = fmt.Sprintf("succesfully pausing job with JobId %s", jobId)
 	} else {
-		logger.Logf(common.LogInfo, "cancelling Job %s in progress", jobId)
 		resultMsg = fmt.Sprintf("succesfully cancelling job with JobId %s", jobId)
 	}
+	logger.Logf(common.LogInfo, resultMsg)
 	(*resp).Write([]byte(resultMsg))
 }
 
@@ -414,6 +417,7 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http
 		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++ {
 
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
+			// TODO : atomic load and store transfer status
 			transferHeader := jHandler.Transfer(index)
 			// check for all completed transfer to calculate the progress percentage at the end
 			if transferHeader.Status == common.TransferStatusComplete {
@@ -430,6 +434,7 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http
 	}
 	/*If each transfer in all parts of a job has either completed or failed and is not in active or inactive state, then job order is said to be completed
 	if final part of job has been ordered.*/
+	//TODO : get job status through atomic load and store
 	if (progressSummary.TotalNumberOfTransfer == progressSummary.TotalNumberofFailedTransfer+progressSummary.TotalNumberofTransferCompleted) && (completeJobOrdered) {
 		progressSummary.JobStatus = common.StatusCompleted
 	} else {
@@ -471,7 +476,7 @@ func snapshotThroughputCounter() {
 }
 
 // getTransferList api returns the list of transfer with specific status for given jobId in http response
-func getTransferList(jobId common.JobID, expectedStatus common.Status, jPartPlanInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+func getTransferList(jobId common.JobID, ofStatus common.Status, jPartPlanInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
 	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
 	jPartMap, ok := jPartPlanInfoMap.LoadJobPartsMapForJob(jobId)
 	// sending back the error status and error message in response
@@ -484,22 +489,23 @@ func getTransferList(jobId common.JobID, expectedStatus common.Status, jPartPlan
 	for _, jHandler := range jPartMap {
 		// jPartPlan represents the memory map JobPartPlanHeader for given jobid and part number
 		jPartPlan := jHandler.getJobPartPlanPointer()
-		numTransfer := jPartPlan.NumTransfers
+		//numTransfer := jPartPlan.NumTransfers
 
 		// trasnferStatusList represents the list containing number of transfer for given jobid and part number
-		for index := uint32(0); index < numTransfer; index++ {
+		for index := uint32(0); index < jPartPlan.NumTransfers; index++ {
 			// getting transfer header of transfer at index index for given jobId and part number
 			transferEntry := jHandler.Transfer(index)
 			// if the expected status is not to list all transfer and status of current transfer is not equal to the expected status, then we skip this transfer
-			if expectedStatus != common.TranferStatusAll && transferEntry.Status != expectedStatus {
+			if ofStatus != common.TransferStatusAny && transferEntry.Status != ofStatus {
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.
 			source, destination := jHandler.getTransferSrcDstDetail(index)
-			transferList = append(transferList, common.TransferStatus{source, destination, transferEntry.Status})
+			transferList = append(transferList, common.TransferStatus{Src:source, Dst:destination, TransferStatus:transferEntry.Status})
 		}
 	}
 	// marshalling the TransfersStatus Struct to send back in response to front-end
+	// TODO : add field names while initializing struct
 	tStatusJson, err := json.MarshalIndent(common.TransfersStatus{transferList}, "", "")
 	if err != nil {
 		result := fmt.Sprintf("error marshalling the transfer status for Job Id %s", jobId)

@@ -35,6 +35,8 @@ type JobInfo struct {
 // Provides the thread safe Load and Store Method
 type JobsInfoMap struct {
 	// ReadWrite Mutex
+
+	//TODO add name to rw mutex
 	sync.RWMutex
 	// map jobId -->[partNo -->JobPartPlanInfo Pointer]
 	internalMap map[common.JobID]*JobInfo
@@ -78,7 +80,9 @@ func (jMap *JobsInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partN
 // LoadExistingJobIds returns the list of existing JobIds for which there are entries in the internal map in thread-safe manner.
 func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
 	jMap.RLock()
-	var existingJobs []common.JobID
+	//TODO : make existing job as array of size of len
+	existingJobs := make([]common.JobID, len(jMap.internalMap))
+	//var existingJobs []common.JobID
 	for jobId, _ := range jMap.internalMap {
 		existingJobs = append(existingJobs, jobId)
 	}
@@ -214,8 +218,10 @@ func convertJobIdToByteFormat(jobIDString common.JobID) [128 / 8]byte {
 }
 
 // writeInterfaceDataToWriter api writes the content of given interface to the io writer
-func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint64) (int, error) {
+func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint64) (int) {
 	rv := reflect.ValueOf(f)
+	//TODO: reflect.sliceHeader
+	//TODO : use reflect.sizeof
 	var byteSliceStruct = struct {
 		addr uintptr
 		len  int
@@ -226,7 +232,7 @@ func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint
 	if err != nil {
 		panic(err)
 	}
-	return int(structSize), nil
+	return int(structSize)
 }
 
 func convertJobIdBytesToString(jobId [128 / 8]byte) string {
@@ -247,12 +253,13 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap) {
 		jobHandler := new(JobPartPlanInfo)
 		// Initializing the JobPartPlanInfo for existing Job file
 		jobHandler.initialize(steContext, fileName)
-
+		//TODO add api to schedule transfer on basis on JobStatus
 		jobHandler.fileName = fileName
 
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jobsInfoMap)
 
+		// TODO atomic load and store of job status
 		// If the Job was cancelled, but cleanup was not done for the Job, cleaning up the jobfile
 		if jobHandler.getJobPartPlanPointer().JobStatus == Cancelled{
 			cleanUpJob(jobIdString, jobsInfoMap)
@@ -281,6 +288,7 @@ func listFileWithExtension(ext string) []os.FileInfo {
 
 // fileAlreadyExists api determines whether file with fileName exists in directory dir or not
 // Returns true is file with fileName exists else returns false
+//TODO : check guid in the map
 func fileAlreadyExists(fileName string, dir string) (bool, error) {
 
 	// listing the content of directory dir
@@ -333,20 +341,21 @@ func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntry
 	//}
 }
 
+// TODO change the status to uint32 and then do atomic load and store
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber in thread safe manner
 func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
 	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
-	if err != nil {
-		panic(err)
-	}
+
 	transferHeader := jHandler.Transfer(transferIndex)
+	// TODO: get rid of the nil
 	if transferHeader == nil {
 		getLoggerForJobId(jobId, jPartPlanInfoMap).Logf(common.LogWarning, "no transfer header found for JobId %s part number %d and transfer index %d", jobId, partNo, transferIndex)
 		return
 	}
+	// TODO: get rid of the check
 	// If the status of transfer is failed, then it means that one of the chunk has failed
 	// and there is no need to update the status
-	if atomic.LoadUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status))) == common.TransferStatusFailed{
+	if (*uint8)atomic.LoadUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status))) == common.TransferStatusFailed{
 		return
 	}
 	atomic.StoreUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status)), *(*uintptr)(unsafe.Pointer(&transferStatus)))
@@ -356,10 +365,8 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
-	if jobInfo == nil{
-		panic(errors.New(fmt.Sprintf("null JobInfo reference for JobId %s", jobId)))
-	}
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
+	//TODO atomic load and store attached with private variable
 	totalNumberOfPartsDone := atomic.LoadUint32(&jobInfo.NumberOfPartsDone)
 	logger.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
 	if atomic.AddUint32(&jobInfo.NumberOfPartsDone, 1) == numPartsForJob{
@@ -379,14 +386,10 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 // all transfers of Job Part have either paused, cancelled or completed
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
-	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNumber, jobsInfoMap)
-	if err != nil {
-		panic(err)
-	}
+	//TODO make getJobPartInfoReferenceFromMap api to panic in case of error
+	jHandler, _ := getJobPartInfoReferenceFromMap(jobId, partNumber, jobsInfoMap)
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
-	if jPartPlanInfo == nil {
-		panic(errors.New(fmt.Sprintf("job part plan reference nil for Job %s and part number %d", jobId, partNumber)))
-	}
+	//TODO : atomic load and store attached with private variable
 	totalNumberofTransfersCompleted := atomic.LoadUint32(&jHandler.NumberOfTransfersCompleted)
 	logger.Logf(common.LogInfo, "total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted)
 	if atomic.AddUint32(&jHandler.NumberOfTransfersCompleted, 1) == jPartPlanInfo.NumTransfers {

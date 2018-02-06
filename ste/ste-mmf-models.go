@@ -26,6 +26,7 @@ const (
 )
 
 // getJobStatusStringFromCode api returns the Job Status string for given Job Status Code
+//TODO implement the string interface
 func getJobStatusStringFromCode(status JobStatusCode) (statusString string) {
 	switch status {
 	case InProgress:
@@ -49,6 +50,8 @@ type JobPartPlanHeader struct {
 	DstLocationType    common.LocationType
 	NumTransfers       uint32
 	LogSeverity        pipeline.LogLevel
+	// TODO : make it private and add comments *.*.*
+	// TODO : add getter and setter
 	JobStatus          JobStatusCode
 	BlobData           JobPartPlanBlobData
 }
@@ -81,6 +84,7 @@ type JobPartPlanTransferChunk struct {
 	Status  uint8
 }
 
+// TODO : do not need it
 const (
 	ChunkTransferStatusInactive = 0
 	ChunkTransferStatusActive   = 1
