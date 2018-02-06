@@ -3,13 +3,31 @@ package ste
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"sync/atomic"
+	"google.golang.org/genproto/googleapis/cloud/dataproc/v1"
+	"os"
 )
 
 //These constant defines the various types of source and destination of the transfers
 
 const dataSchemaVersion = 0 // To be Incremented every time when we release azcopy with changed dataschema
 
-type JobStatusCode uint8
+type JobStatusCode uint32
+
+func (status JobStatusCode) String() (statusString string){
+	switch uint32(status){
+	case 0:
+		return "InProgress"
+	case 1:
+		return "JobPaused"
+	case 2:
+		return "JobCancelled"
+	case 3:
+		return "JobCompleted"
+	default:
+		return "InvalidStatusCode"
+	}
+}
 
 const (
 	// Job Part is currently executing
@@ -25,35 +43,31 @@ const (
 	Completed JobStatusCode = 3
 )
 
-// getJobStatusStringFromCode api returns the Job Status string for given Job Status Code
-//TODO implement the string interface
-func getJobStatusStringFromCode(status JobStatusCode) (statusString string) {
-	switch status {
-	case InProgress:
-		return "InProgress"
-	case Paused:
-		return "Paused"
-	default:
-		return
-	}
-}
-
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
 	Version            uint32 // represent the version of data schema format of header
-	Id                 [128 / 8]byte
-	PartNum            uint32
-	IsFinalPart        bool
-	Priority           uint8
-	TTLAfterCompletion uint32
-	SrcLocationType    common.LocationType
-	DstLocationType    common.LocationType
-	NumTransfers       uint32
-	LogSeverity        pipeline.LogLevel
-	// TODO : make it private and add comments *.*.*
-	// TODO : add getter and setter
-	JobStatus          JobStatusCode
-	BlobData           JobPartPlanBlobData
+	Id                 [128 / 8]byte // represents the 18 byte JobId
+	PartNum            uint32 // represents the part number of the JobOrder
+	IsFinalPart        bool // represents whether this part is final part or not
+	Priority           uint8 // represents the priority of JobPart order (High, Medium and Low)
+	TTLAfterCompletion uint32 // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
+	SrcLocationType    common.LocationType // represents type of source location
+	DstLocationType    common.LocationType // represents type of destination location
+	NumTransfers       uint32 // represents the number of transfer the JobPart order has
+	LogSeverity        pipeline.LogLevel // represent the log verbosity level of logs for the specific Job
+	BlobData           JobPartPlanBlobData // represent the optional attributes of JobPart Order
+	// jobStatus represents the current status of JobPartPlan
+	// It can have these possible values - InProgress, Paused, Cancelled and Completed
+	// jobStatus is a private member whose value can be accessed by getJobStatus and setJobStatus
+	jobStatus          JobStatusCode
+}
+
+func (jPartPlanHeader *JobPartPlanHeader) getJobStatus() (JobStatusCode){
+	return JobStatusCode(atomic.LoadUint32((*uint32)(&jPartPlanHeader.jobStatus)))
+}
+
+func (jPartPlanHeader *JobPartPlanHeader)setJobStatus(status JobStatusCode) {
+	atomic.StoreUint32((*uint32)(&jPartPlanHeader.jobStatus), uint32(status))
 }
 
 // JobPartPlan represent the header of Job Part's Optional Attributes in Memory Map File

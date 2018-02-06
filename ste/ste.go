@@ -148,7 +148,7 @@ func getJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap) JobStatusCode {
 	if jobInfo == nil {
 		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
 	}
-	status := jobInfo.getJobPartPlanPointer().JobStatus
+	status := jobInfo.getJobPartPlanPointer().getJobStatus()
 	logger.Logf(common.LogInfo, "current job status of JobId %s is %s", jobId, getJobStatusStringFromCode(status))
 	return status
 }
@@ -162,7 +162,7 @@ func setJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, status JobStatus
 		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
 	}
 	// changing the JobPart status to given status
-	jPartPlanHeader.JobStatus = status
+	jPartPlanHeader.setJobStatus(status)
 	logger.Logf(common.LogInfo, "changed the status of Job %s to status %s", jobId, getJobStatusStringFromCode(status))
 }
 
@@ -212,7 +212,7 @@ func ExecuteResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordin
 	currentJobStatus := getJobStatus(jobId, jobsInfoMap)
 	if currentJobStatus == InProgress || currentJobStatus == Completed {
 		(*resp).WriteHeader(http.StatusBadRequest)
-		(*resp).Write([]byte(fmt.Sprintf("Job %s is already %s", jobId, getJobStatusStringFromCode(currentJobStatus))))
+		(*resp).Write([]byte(fmt.Sprintf("Job %s is already %s", jobId, currentJobStatus.String())))
 	}
 	// set job status to InProgress
 	setJobStatus(jobId, jobsInfoMap, InProgress)
