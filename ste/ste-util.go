@@ -35,18 +35,16 @@ type JobInfo struct {
 // Provides the thread safe Load and Store Method
 type JobsInfoMap struct {
 	// ReadWrite Mutex
-
-	//TODO add name to rw mutex
-	sync.RWMutex
+	lock sync.RWMutex
 	// map jobId -->[partNo -->JobPartPlanInfo Pointer]
 	internalMap map[common.JobID]*JobInfo
 }
 
 // LoadJobPartsMapForJob returns the map of PartNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
 func (jMap *JobsInfoMap) LoadJobPartsMapForJob(jobId common.JobID) (map[common.PartNumber]*JobPartPlanInfo, bool) {
-	jMap.RLock()
+	jMap.lock.RLock()
 	jobInfo, ok := jMap.internalMap[jobId]
-	jMap.RUnlock()
+	jMap.lock.RUnlock()
 	if !ok {
 		return nil, ok
 	}
@@ -55,9 +53,9 @@ func (jMap *JobsInfoMap) LoadJobPartsMapForJob(jobId common.JobID) (map[common.P
 
 // LoadJobInfoForJob returns the JobInfo pointer stored in JobsInfoMap for given JobId in thread-safe manner.
 func (jMap *JobsInfoMap) LoadJobInfoForJob(jobId common.JobID) (*JobInfo) {
-	jMap.RLock()
+	jMap.lock.RLock()
 	jobInfo, ok := jMap.internalMap[jobId]
-	jMap.RUnlock()
+	jMap.lock.RUnlock()
 	if !ok {
 		return nil
 	}
@@ -66,46 +64,46 @@ func (jMap *JobsInfoMap) LoadJobInfoForJob(jobId common.JobID) (*JobInfo) {
 
 // LoadJobPartPlanInfoForJobPart returns the JobPartPlanInfo Pointer for given combination of JobId and part number in thread-safe manner.
 func (jMap *JobsInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partNumber common.PartNumber) *JobPartPlanInfo {
-	jMap.RLock()
+	jMap.lock.RLock()
 	partMap := jMap.internalMap[jobId]
 	if partMap == nil {
-		jMap.RUnlock()
+		jMap.lock.RUnlock()
 		return nil
 	}
 	jHandler := partMap.JobPartsMap[partNumber]
-	jMap.RUnlock()
+	jMap.lock.RUnlock()
 	return jHandler
 }
 
 // LoadExistingJobIds returns the list of existing JobIds for which there are entries in the internal map in thread-safe manner.
 func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
-	jMap.RLock()
+	jMap.lock.RLock()
 	//TODO : make existing job as array of size of len
 	existingJobs := make([]common.JobID, len(jMap.internalMap))
 	//var existingJobs []common.JobID
 	for jobId, _ := range jMap.internalMap {
 		existingJobs = append(existingJobs, jobId)
 	}
-	jMap.RUnlock()
+	jMap.lock.RUnlock()
 	return existingJobs
 }
 
 // GetNumberOfPartsForJob returns the number of part order for job with given JobId
 func (jMap *JobsInfoMap) GetNumberOfPartsForJob(jobId common.JobID) (uint32){
-	jMap.RLock()
+	jMap.lock.RLock()
 	jobInfo := jMap.internalMap[jobId]
 	if jobInfo == nil{
-		jMap.RUnlock()
+		jMap.lock.RUnlock()
 		return 0
 	}
 	partMap := jobInfo.JobPartsMap
-	jMap.RUnlock()
+	jMap.lock.RUnlock()
 	return uint32(len(partMap))
 }
 
 // StoreJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
 func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity pipeline.LogLevel, jHandler *JobPartPlanInfo) {
-	jMap.Lock()
+	jMap.lock.Lock()
 	var jobInfo = jMap.internalMap[jobId]
 	// If there is no JobInfo instance for given jobId
 	if jobInfo == nil {
@@ -126,14 +124,14 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	}
 	jobInfo.JobPartsMap[partNumber] = jHandler
 	jMap.internalMap[jobId] = jobInfo
-	jMap.Unlock()
+	jMap.lock.Unlock()
 }
 
 // LoadLoggerForJob loads the logger instance for given jobId in thread safe manner
 func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) *common.Logger {
-	jMap.RLock()
+	jMap.lock.RLock()
 	jobInfo := jMap.internalMap[jobId]
-	jMap.RUnlock()
+	jMap.lock.RUnlock()
 	if jobInfo == nil {
 		return nil
 	} else {
@@ -143,9 +141,9 @@ func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) *common.Logger {
 
 // DeleteJobInfoForJobId api deletes an entry of given JobId the JobsInfoMap
 func (jMap *JobsInfoMap) DeleteJobInfoForJobId(jobId common.JobID) {
-	jMap.Lock()
+	jMap.lock.Lock()
 	delete(jMap.internalMap, jobId)
-	jMap.Unlock()
+	jMap.lock.Unlock()
 }
 
 // NewJobPartPlanInfoMap returns a new instance of synchronous JobsInfoMap to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
@@ -220,15 +218,11 @@ func convertJobIdToByteFormat(jobIDString common.JobID) [128 / 8]byte {
 // writeInterfaceDataToWriter api writes the content of given interface to the io writer
 func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint64) (int) {
 	rv := reflect.ValueOf(f)
-	//TODO: reflect.sliceHeader
-	//TODO : use reflect.sizeof
-	var byteSliceStruct = struct {
-		addr uintptr
-		len  int
-		cap  int
-	}{uintptr(rv.Pointer()), int(structSize), int(structSize)}
-	structByteSlice := *(*[]byte)(unsafe.Pointer(&byteSliceStruct))
-	err := binary.Write(writer, binary.LittleEndian, structByteSlice)
+	interfaceSlice := reflect.SliceHeader{Data:rv.Pointer(),
+						Len:int(structSize),
+						Cap:int(structSize)}
+	interfaceByteSlice := *(*[]byte)(unsafe.Pointer(&interfaceSlice))
+	err := binary.Write(writer, binary.LittleEndian, interfaceByteSlice)
 	if err != nil {
 		panic(err)
 	}
@@ -241,7 +235,7 @@ func convertJobIdBytesToString(jobId [128 / 8]byte) string {
 }
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
-func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap) {
+func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannels *CoordinatorChannels) {
 	versionIdString := fmt.Sprintf("%05d", dataSchemaVersion)
 	// list memory map files with .steV$dataschemaVersion to avoid the reconstruction of old schema version memory map file
 	files := listFileWithExtension(".steV" + versionIdString)
@@ -253,20 +247,39 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap) {
 		jobHandler := new(JobPartPlanInfo)
 		// Initializing the JobPartPlanInfo for existing Job file
 		jobHandler.initialize(steContext, fileName)
-		//TODO add api to schedule transfer on basis on JobStatus
-		jobHandler.fileName = fileName
 
+		scheduleTransfers(jobIdString, partNumber, jobsInfoMap, coordinatorChannels)
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
 		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jobsInfoMap)
 
-		// TODO atomic load and store of job status
 		// If the Job was cancelled, but cleanup was not done for the Job, cleaning up the jobfile
-		if jobHandler.getJobPartPlanPointer().JobStatus == Cancelled{
+		if jobHandler.getJobPartPlanPointer().getJobStatus() == Cancelled{
 			cleanUpJob(jobIdString, jobsInfoMap)
 		}
 	}
+	// checking for cancelled jobs and to cleanup those jobs
+	// this api is called to ensure that no cancelled jobs exists in in-memory
+	// this api is called to ensure that no cancelled jobs exists in in-memory
+	checkCancelledJobsInJobMap(jobsInfoMap)
 }
 
+// checkCancelledJobsInJobMap api checks the JobPartPlan header of part 0 of each job
+// JobPartPlan header of part 0 of each job determines the actual status of each job
+// if the job status is cancelled, then it cleans up the job
+func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfoMap){
+	jobIds := jobsInfoMap.LoadExistingJobIds()
+	for index := 0; index < len(jobIds); index++ {
+		// getting the jobInfo for part 0 of current jobId
+		// since the status of Job is determined by the job status in JobPartPlan header of part 0
+		jobInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobIds[index], 0)
+
+		// if the jobstatus in JobPartPlan header of part 0 is cancelled and cleanup wasn't successful
+		// cleaning up the job now
+		if jobInfo.getJobPartPlanPointer().getJobStatus() == Cancelled{
+			cleanUpJob(jobIds[index], jobsInfoMap)
+		}
+	}
+}
 // listFileWithExtension list all files in the current directory that has given extension
 func listFileWithExtension(ext string) []os.FileInfo {
 	pathS, err := os.Getwd()
@@ -309,57 +322,27 @@ func fileAlreadyExists(fileName string, dir string) (bool, error) {
 }
 
 // getTransferMsgDetail returns the details of a transfer for given JobId, part number and transfer index
-func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, jPartPlanInfoMap *JobsInfoMap) TransferMsgDetail {
+func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, jobsInfoMap *JobsInfoMap) TransferMsgDetail {
 	// jHandler is the JobPartPlanInfo Pointer for given JobId and part number
-	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
-	if err != nil {
-		panic(err)
-	}
+	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNo)
+
 	// jPartPlanPointer is the memory map JobPartPlan for given JobId and part number
 	jPartPlanPointer := jHandler.getJobPartPlanPointer()
+
 	sourceType := jPartPlanPointer.SrcLocationType
 	destinationType := jPartPlanPointer.DstLocationType
 	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
 	chunkSize := jPartPlanPointer.BlobData.BlockSize
 	return TransferMsgDetail{jobId, partNo, transferEntryIndex, chunkSize, sourceType,
 		source, destinationType, destination, jHandler.TransferInfo[transferEntryIndex].ctx,
-		jHandler.TransferInfo[transferEntryIndex].cancel, jPartPlanInfoMap}
+		jHandler.TransferInfo[transferEntryIndex].cancel, jobsInfoMap}
 }
 
-// updateChunkInfo updates the chunk at given chunkIndex for given JobId, partNumber and transfer
-func updateChunkInfo(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, chunkIndex uint16, status uint8, jobsInfoMap *JobsInfoMap, transferCtx context.Context) {
-	//select {
-	//case <- transferCtx.Done():
-	//	return
-	//default:
-	//	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jobsInfoMap)
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	//	resultMessage := jHandler.updateTheChunkInfo(transferEntryIndex, chunkIndex, [128 / 8]byte{}, status)
-	//	getLoggerForJobId(jobId, jobsInfoMap).Logf(common.LogInfo, "%s for jobId %s and part number %d", resultMessage, jobId, partNo)
-	//}
-}
-
-// TODO change the status to uint32 and then do atomic load and store
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber in thread safe manner
-func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus uint8, jPartPlanInfoMap *JobsInfoMap) {
-	jHandler, err := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
-
+func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus TransferStatus, jPartPlanInfoMap *JobsInfoMap) {
+	jHandler := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
 	transferHeader := jHandler.Transfer(transferIndex)
-	// TODO: get rid of the nil
-	if transferHeader == nil {
-		getLoggerForJobId(jobId, jPartPlanInfoMap).Logf(common.LogWarning, "no transfer header found for JobId %s part number %d and transfer index %d", jobId, partNo, transferIndex)
-		return
-	}
-	// TODO: get rid of the check
-	// If the status of transfer is failed, then it means that one of the chunk has failed
-	// and there is no need to update the status
-	if (*uint8)atomic.LoadUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status))) == common.TransferStatusFailed{
-		return
-	}
-	atomic.StoreUintptr((*uintptr)(unsafe.Pointer(&transferHeader.Status)), *(*uintptr)(unsafe.Pointer(&transferStatus)))
-	//transferHeader.Status = common.Status(transferStatus)
+	transferHeader.setTransferStatus(transferStatus)
 }
 
 func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
@@ -372,11 +355,11 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 	if atomic.AddUint32(&jobInfo.NumberOfPartsDone, 1) == numPartsForJob{
 		logger.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
-		if jPartHeader.JobStatus == Cancelled{
+		if jPartHeader.getJobStatus() == Cancelled{
 			logger.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
 			cleanUpJob(jobId, jobsInfoMap)
-		}else if jPartHeader.JobStatus == InProgress{
-			jPartHeader.JobStatus = Completed
+		}else if jPartHeader.getJobStatus() == InProgress{
+			jPartHeader.getJobStatus() = Completed
 		}
 	}
 }
@@ -386,8 +369,7 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 // all transfers of Job Part have either paused, cancelled or completed
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
-	//TODO make getJobPartInfoReferenceFromMap api to panic in case of error
-	jHandler, _ := getJobPartInfoReferenceFromMap(jobId, partNumber, jobsInfoMap)
+	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
 	//TODO : atomic load and store attached with private variable
 	totalNumberofTransfersCompleted := atomic.LoadUint32(&jHandler.NumberOfTransfersCompleted)

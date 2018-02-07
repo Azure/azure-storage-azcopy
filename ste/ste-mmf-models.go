@@ -29,6 +29,38 @@ func (status JobStatusCode) String() (statusString string){
 	}
 }
 
+type TransferStatus uint32
+
+func (status TransferStatus) String() (statusString string){
+	switch uint32(status){
+	case 0:
+		return "InProgress"
+	case 1:
+		return "TransferComplete"
+	case 2:
+		return "TransferFailed"
+	case 254:
+		return "TransferAny"
+	default:
+		return "InvalidStatusCode"
+	}
+}
+
+const (
+	// Transfer is currently executing or cancelled before failure or successful execution
+	TransferInProgress TransferStatus = 0
+
+	// Transfer has completed successfully
+	TransferComplete   TransferStatus = 1
+
+	// Transfer has failed due to some error. This status does represent the state when transfer is cancelled
+	TransferFailed     TransferStatus = 2
+
+	// Transfer is any of the three possible state (InProgress, Completer or Failed)
+
+	TransferAny        TransferStatus = TransferStatus(254)
+)
+
 const (
 	// Job Part is currently executing
 	InProgress JobStatusCode = 0
@@ -88,24 +120,20 @@ type JobPartPlanTransfer struct {
 	DstLength      uint16
 	ChunkNum       uint16
 	ModifiedTime   uint32
-	Status         common.Status
 	SourceSize     uint64
 	CompletionTime uint64
+	transferStatus TransferStatus
 }
 
-type JobPartPlanTransferChunk struct {
-	BlockId [128 / 8]byte
-	Status  uint8
+// getTransferStatus returns the transfer status of current transfer of job part atomically
+func (jPartPlanTransfer *JobPartPlanTransfer) getTransferStatus() (TransferStatus){
+	return TransferStatus(atomic.LoadUint32((*uint32)(&jPartPlanTransfer.transferStatus)))
 }
 
-// TODO : do not need it
-const (
-	ChunkTransferStatusInactive = 0
-	ChunkTransferStatusActive   = 1
-	ChunkTransferStatusProgress = 2
-	ChunkTransferStatusComplete = 3
-	ChunkTransferStatusFailed   = 4
-)
+// getTransferStatus sets the transfer status of current transfer to given status atomically
+func (jPartPlanTransfer *JobPartPlanTransfer) setTransferStatus(status TransferStatus){
+	atomic.StoreUint32((*uint32)(&jPartPlanTransfer.transferStatus), uint32(status))
+}
 
 const (
 	HighJobPriority    = 0

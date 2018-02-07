@@ -25,12 +25,13 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
-type JobID string //todo -- to uuid
+type JobID uuid
 type PartNumber uint32
 type Version uint32
-type Status uint8
+type Status uint32
 
 // represents the raw copy command input from the user
 type CopyCmdArgsAndFlags struct {
@@ -89,7 +90,7 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version            uint32     // version of the azcopy
-	ID                 JobID      // Guid - job identifier    //todo use uuid from go sdk
+	ID                 string      // Guid - job identifier    //todo use uuid from go sdk
 	PartNum            PartNumber // part number of the job
 	IsFinalPart        bool       // to determine the final part for a specific job
 	Priority           uint8      // priority of the task
@@ -103,7 +104,7 @@ type CopyJobPartOrder struct {
 
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListJobPartsTransfers struct {
-	JobId                  JobID
+	JobId                  string
 	ExpectedTransferStatus Status
 }
 
@@ -119,79 +120,38 @@ type BlobTransferAttributes struct {
 
 // ExistingJobDetails represent the Job with JobId and
 type ExistingJobDetails struct {
-	JobIds []JobID
+	JobIds []string
 }
 
 // represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
 type JobProgressSummary struct {
 	CompleteJobOrdered             bool
-	JobStatus                      Status
+	JobStatus                      ste.JobStatusCode
 	TotalNumberOfTransfer          uint32
 	TotalNumberofTransferCompleted uint32
 	TotalNumberofFailedTransfer    uint32
 	//NumberOfTransferCompletedafterCheckpoint uint32
 	//NumberOfTransferFailedAfterCheckpoint    uint32
 	PercentageProgress          uint32
-	FailedTransfers             []TransferStatus
+	FailedTransfers             []TransferDetail
 	ThroughputInBytesPerSeconds float64
 }
 
-// represents the Status and details of a single transfer
-type TransferStatus struct {
+// represents the Details and details of a single transfer
+type TransferDetail struct {
 	Src            string
 	Dst            string
 	TransferStatus Status
 }
 
-// represents the list of Status and details of number of transfers
-type TransfersStatus struct {
-	Status []TransferStatus
+// represents the list of Details and details of number of transfers
+type TransfersDetail struct {
+	Details []TransferDetail
 }
 
 const (
 	StatusCompleted  = 1
 	StatusInProgress = 2
 )
-
-// These constants defines the various states of transfer
-// TODO : add comments
-const (
-	TransferStatusActive   Status = 0   // Active Transfers
-	TransferStatusComplete Status = 1   // Completed Transfers
-	TransferStatusFailed   Status = 2   // Failed Transfers
-	TransferStatusAny      Status = Status(254) // All types of Transfer (Active | Complete | Failed)
-)
-
-// TransferStatusStringToStatusCode returns the Transfer Status Code given for Transfer Status
-func TransferStatusStringToStatusCode(status string) Status {
-	switch status {
-	case "TransferStatusActive":
-		return 0
-	case "TransferStatusComplete":
-		return 1
-	case "TransferStatusFailed":
-		return 2
-	case "TransferStatusAny":
-		return 254
-	default:
-		panic(errors.New(fmt.Sprintf("invalid expected transfer status %s. Valid status are TransferStatusActive, TransferStatusComplete, TransferStatusFailed TransferStatusAny", status)))
-	}
-}
-
-// TransferStatusCodeToString returns the Transfer Status for given status Code
-func TransferStatusCodeToString(status Status) string {
-	switch status {
-	case 0:
-		return "TransferStatusActive"
-	case 1:
-		return "TransferStatusComplete"
-	case 2:
-		return "TransferStatusFailed"
-	case 255:
-		return "TransferStatusAny"
-	default:
-		panic(errors.New(fmt.Sprintf("invalid expected transfer status code %d. Valid status are 0, 1, 2, 255", status)))
-	}
-}
 
 const DefaultBlockSize = 4 * 1024 * 1024

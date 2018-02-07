@@ -34,7 +34,7 @@ import (
 // dispatches the list order to the storage engine
 func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	listOrder := common.ListJobPartsTransfers{}
-	listOrder.JobId = common.JobID(commandLineInput.JobId)
+	listOrder.JobId = commandLineInput.JobId
 	// if the expected status is given by User, then it is converted to the respective Transfer status code
 	if commandLineInput.TransferStatus != "" {
 		listOrder.ExpectedTransferStatus = common.TransferStatusStringToStatusCode(commandLineInput.TransferStatus)
@@ -99,15 +99,15 @@ func PrintExistingJobIds(data []byte) {
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
 func PrintJobTransfers(data []byte, jobId string) {
-	var transfers common.TransfersStatus
+	var transfers common.TransfersDetail
 	err := json.Unmarshal(data, &transfers)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", jobId))
-	for index := 0; index < len(transfers.Status); index++ {
-		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", transfers.Status[index].Src, transfers.Status[index].Dst,
-			common.TransferStatusCodeToString(transfers.Status[index].TransferStatus)))
+	for index := 0; index < len(transfers.Details); index++ {
+		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", transfers.Details[index].Src, transfers.Details[index].Dst,
+			common.TransferStatusCodeToString(transfers.Details[index].TransferStatus)))
 	}
 }
 

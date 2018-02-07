@@ -165,10 +165,10 @@ package ste
 //	if err != nil{
 //		return err
 //	}
-//	var status common.TransfersStatus
+//	var status common.TransfersDetail
 //	json.Unmarshal(body, &status)
 //	for index := 0; index < len(status.Status); index++{
-//		message := fmt.Sprintf("Source %s  Destination %s Status %d", status.Status[index].Src, status.Status[index].Dst, status.Status[index].Status)
+//		message := fmt.Sprintf("Source %s  Destination %s Details %d", status.Details[index].Src, status.Details[index].Dst, status.Details[index].Details)
 //		fmt.Println(message)
 //	}
 //	return nil

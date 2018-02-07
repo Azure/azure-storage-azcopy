@@ -22,12 +22,10 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -49,11 +47,11 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	ApplyFlags(&commandLineInput, &jobPartOrder)
 
 	// generate job id
-	uuid, err := newUUID()
-	if err != nil {
+	uuid := common.NewUUID()
+	if uuid.String() == "" {
 		panic("Failed to generate job id")
 	}
-	jobPartOrder.ID = common.JobID(uuid)
+	jobPartOrder.ID = common.JobID(uuid.String())
 
 	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
@@ -63,7 +61,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	}
 	fmt.Println("Job with id", uuid, "has started.")
 	if commandLineInput.IsaBackgroundOp {
-		return uuid
+		return uuid.String()
 	}
 
 	// created a signal channel to receive the Interrupt and Kill signal send to OS
@@ -308,18 +306,4 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl
 	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier
-}
-
-// newUUID generates a random UUID according to RFC 4122
-func newUUID() (string, error) {
-	uuid := make([]byte, 16)
-	n, err := io.ReadFull(rand.Reader, uuid)
-	if n != len(uuid) || err != nil {
-		return "", err
-	}
-	// variant bits; see section 4.1.1
-	uuid[8] = uuid[8]&^0xc0 | 0x80
-	// version 4 (pseudo-random); see section 4.1.3
-	uuid[6] = uuid[6]&^0xf0 | 0x40
-	return fmt.Sprintf("%x%x%x%x%x", uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:]), nil
 }
