@@ -124,11 +124,11 @@ package ste
 //	json.Unmarshal(body, &summary)
 //	fmt.Println("-----------------Progress Summary for JobId ", jobId," ------------------")
 //	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfer)
-//	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
+//	fmt.Println("Total Number of Transfer JobCompleted ", summary.TotalNumberofTransferCompleted)
 //	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)
 //	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
 //	fmt.Println("Last CheckPoint Time ", checkPointTime)
-//	fmt.Println("Number of Transfer Completed After CheckPoint", summary.NumberOfTransferCompletedafterCheckpoint)
+//	fmt.Println("Number of Transfer JobCompleted After CheckPoint", summary.NumberOfTransferCompletedafterCheckpoint)
 //	fmt.Println("Number of Transfer Failed After CheckPoint", summary.NumberOfTransferFailedAfterCheckpoint)
 //	fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
 //	for index := 0; index < len(summary.FailedTransfers); index++ {

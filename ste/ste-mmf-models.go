@@ -18,7 +18,7 @@ type JobStatusCode uint32
 func (status JobStatusCode) String() (statusString string){
 	switch uint32(status){
 	case 0:
-		return "InProgress"
+		return "JobInProgress"
 	case 1:
 		return "JobPaused"
 	case 2:
@@ -32,16 +32,16 @@ func (status JobStatusCode) String() (statusString string){
 
 const (
 	// Job Part is currently executing
-	InProgress JobStatusCode = 0
+	JobInProgress JobStatusCode = 0
 
 	// Job Part is currently paused and no transfer of Job is currently executing
-	Paused JobStatusCode = 1
+	JobPaused JobStatusCode = 1
 
 	// Job Part is cancelled and all transfers of the JobPart are cancelled
-	Cancelled JobStatusCode = 2
+	JobCancelled JobStatusCode = 2
 
 	// Job Part has completed and no transfer of JobPart is currently executing
-	Completed JobStatusCode = 3
+	JobCompleted JobStatusCode = 3
 )
 
 // JobPartPlan represent the header of Job Part's Memory Map File
@@ -58,7 +58,7 @@ type JobPartPlanHeader struct {
 	LogSeverity        pipeline.LogLevel // represent the log verbosity level of logs for the specific Job
 	BlobData           JobPartPlanBlobData // represent the optional attributes of JobPart Order
 	// jobStatus represents the current status of JobPartPlan
-	// It can have these possible values - InProgress, Paused, Cancelled and Completed
+	// It can have these possible values - JobInProgress, JobPaused, JobCancelled and JobCompleted
 	// jobStatus is a private member whose value can be accessed by getJobStatus and setJobStatus
 	jobStatus          JobStatusCode
 }
@@ -75,12 +75,17 @@ func (jPartPlanHeader *JobPartPlanHeader)setJobStatus(status JobStatusCode) {
 
 // JobPartPlan represent the header of Job Part's Optional Attributes in Memory Map File
 type JobPartPlanBlobData struct {
+	// Specifies the length of MIME content type of the blob
 	ContentTypeLength     uint8
+	// Specifies the MIME content type of the blob. The default type is application/octet-stream
 	ContentType           [256]byte
+	// Specifies length of content encoding which have been applied to the blob.
 	ContentEncodingLength uint8
+    // Specifies which content encodings have been applied to the blob.
 	ContentEncoding       [256]byte
 	MetaDataLength        uint16
 	MetaData              [1000]byte
+	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize             uint64
 }
 

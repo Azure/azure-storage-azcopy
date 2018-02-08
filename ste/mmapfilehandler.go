@@ -234,7 +234,7 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 	jPartInFile := JobPartPlanHeader{Version:versionID, Id:jobID, PartNum:uint32(partNo),
 		IsFinalPart:jobPart.IsFinalPart, Priority:DefaultJobPriority, TTLAfterCompletion:uint32(time.Now().Nanosecond()),
 		SrcLocationType:jobPart.SourceType, DstLocationType:jobPart.DestinationType,
-		NumTransfers:numTransfer, LogSeverity:jobPart.LogVerbosity, BlobData:data, jobStatus:InProgress}
+		NumTransfers:numTransfer, LogSeverity:jobPart.LogVerbosity, BlobData:data, jobStatus: JobInProgress}
 	return jPartInFile
 }
 

@@ -262,7 +262,7 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannel
 
 
 		// If the Job was cancelled, but cleanup was not done for the Job, cleaning up the jobfile
-		if jobHandler.getJobPartPlanPointer().getJobStatus() == Cancelled{
+		if jobHandler.getJobPartPlanPointer().getJobStatus() == JobCancelled {
 			cleanUpJob(jobId, jobsInfoMap)
 		}
 	}
@@ -284,7 +284,7 @@ func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfoMap){
 
 		// if the jobstatus in JobPartPlan header of part 0 is cancelled and cleanup wasn't successful
 		// cleaning up the job now
-		if jobInfo.getJobPartPlanPointer().getJobStatus() == Cancelled{
+		if jobInfo.getJobPartPlanPointer().getJobStatus() == JobCancelled {
 			cleanUpJob(jobIds[index], jobsInfoMap)
 		}
 	}
@@ -356,11 +356,11 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 	if atomic.AddUint32(&jobInfo.numberOfPartsDone, 1) == numPartsForJob{
 		logger.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
-		if jPartHeader.getJobStatus() == Cancelled{
+		if jPartHeader.getJobStatus() == JobCancelled {
 			logger.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
 			cleanUpJob(jobId, jobsInfoMap)
-		}else if jPartHeader.getJobStatus() == InProgress{
-			jPartHeader.setJobStatus(Completed)
+		}else if jPartHeader.getJobStatus() == JobInProgress {
+			jPartHeader.setJobStatus(JobCompleted)
 		}
 	}
 }

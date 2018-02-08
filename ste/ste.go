@@ -244,7 +244,7 @@ func cleanUpJob(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 
 // ResumeJobOrder resumes the JobOrder for given JobId
 /*
-	* Checks the current JobStatus of the Job and if it is in InProgress, then send the HTTP Response
+	* Checks the current JobStatus of the Job and if it is in JobInProgress, then send the HTTP Response
     * Iterate through each JobPartOrder of the Job and refresh the cancelled context of the JobPart Order
 	* Iterate through each transfer of JobPart order and refresh the cancelled context of the transfer
     * Reschedule each transfer again into the transfer msg channel depending on the priority of the channel
@@ -258,12 +258,12 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorCha
 		return
 	}
 	currentJobStatus := getJobStatus(jobId, jobsInfoMap)
-	if currentJobStatus == InProgress || currentJobStatus == Completed {
+	if currentJobStatus == JobInProgress || currentJobStatus == JobCompleted {
 		(*resp).WriteHeader(http.StatusBadRequest)
 		(*resp).Write([]byte(fmt.Sprintf("Job %s is already %s", jobId, currentJobStatus.String())))
 	}
-	// set job status to InProgress
-	setJobStatus(jobId, jobsInfoMap, InProgress)
+	// set job status to JobInProgress
+	setJobStatus(jobId, jobsInfoMap, JobInProgress)
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	for partNumber, jPartPlanInfo := range jPartMap {
@@ -281,7 +281,7 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorCha
 	// No need to resume the Job since there are no transfer to reschedule
 	if jobInfo.numberOfPartsDone == jobsInfoMap.GetNumberOfPartsForJob(jobId){
 		logger.Logf(common.LogInfo, "all parts of Job %s are already complete and no transfer needs to be rescheduled")
-		setJobStatus(jobId, jobsInfoMap, Completed)
+		setJobStatus(jobId, jobsInfoMap, JobCompleted)
 		(*resp).WriteHeader(http.StatusAccepted)
 		(*resp).Write([]byte(fmt.Sprintf("Job %s was already complete hence no need to resume it", jobId)))
 		return
@@ -335,7 +335,7 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 	}
 	// If all parts of the job has either completed or failed, then job cannot be cancelled since it is already finished
 	jPartPlanHeaderForPart0 := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
-	if jPartPlanHeaderForPart0.getJobStatus() == Completed {
+	if jPartPlanHeaderForPart0.getJobStatus() == JobCompleted {
 		errorMsg := ""
 		(*resp).WriteHeader(http.StatusBadRequest)
 		if isPaused {
@@ -347,9 +347,9 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 		return
 	}
 	if isPaused{
-		setJobStatus(jobId, jobsInfoMap, Paused)
+		setJobStatus(jobId, jobsInfoMap, JobPaused)
 	}else{
-		setJobStatus(jobId, jobsInfoMap, Cancelled)
+		setJobStatus(jobId, jobsInfoMap, JobCancelled)
 	}
 	// Iterating through all JobPartPlanInfo pointers and cancelling each part of the given Job
 	for _, jHandler := range jPartMap {
@@ -425,9 +425,9 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http
 	/*If each transfer in all parts of a job has either completed or failed and is not in active or inactive state, then job order is said to be completed
 	if final part of job has been ordered.*/
 	if (progressSummary.TotalNumberOfTransfer == progressSummary.TotalNumberofFailedTransfer+progressSummary.TotalNumberofTransferCompleted) && (completeJobOrdered) {
-		progressSummary.JobStatus = Completed.String()
+		progressSummary.JobStatus = JobCompleted.String()
 	} else {
-		progressSummary.JobStatus = InProgress.String()
+		progressSummary.JobStatus = JobInProgress.String()
 	}
 	progressSummary.CompleteJobOrdered = completeJobOrdered
 	progressSummary.FailedTransfers = failedTransfers
