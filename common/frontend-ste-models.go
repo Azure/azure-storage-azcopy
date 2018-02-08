@@ -21,17 +21,62 @@
 package common
 
 import (
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
-	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
-type JobID uuid
+type JobID UUID
+
 type PartNumber uint32
 type Version uint32
 type Status uint32
+
+type TransferStatus uint32
+
+func (status TransferStatus) String() (statusString string){
+	switch uint32(status){
+	case 0:
+		return "InProgress"
+	case 1:
+		return "TransferComplete"
+	case 2:
+		return "TransferFailed"
+	case 254:
+		return "TransferAny"
+	default:
+		return "InvalidStatusCode"
+	}
+}
+
+const (
+	// Transfer is currently executing or cancelled before failure or successful execution
+	TransferInProgress TransferStatus = 0
+
+	// Transfer has completed successfully
+	TransferComplete   TransferStatus = 1
+
+	// Transfer has failed due to some error. This status does represent the state when transfer is cancelled
+	TransferFailed     TransferStatus = 2
+
+	// Transfer is any of the three possible state (InProgress, Completer or Failed)
+	TransferAny        TransferStatus = TransferStatus(254)
+)
+
+func TransferStatusStringToCode(statusString string) (TransferStatus){
+	switch statusString{
+	case "TransferInProgress":
+		return TransferInProgress
+	case "TransferComplete":
+		return TransferComplete
+	case "TransferFailed":
+		return TransferFailed
+	case "TransferAny":
+		return TransferAny
+	default:
+		panic(fmt.Errorf("invalid status string %s", statusString))
+	}
+}
 
 // represents the raw copy command input from the user
 type CopyCmdArgsAndFlags struct {
@@ -66,8 +111,8 @@ type CopyCmdArgsAndFlags struct {
 
 // ListCmdArgsAndFlags represents the raw list command input from the user
 type ListCmdArgsAndFlags struct {
-	JobId          string
-	TransferStatus string
+	JobId    string
+	OfStatus string
 }
 
 // define the different types of sources/destinations
@@ -90,7 +135,7 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version            uint32     // version of the azcopy
-	ID                 string      // Guid - job identifier    //todo use uuid from go sdk
+	ID                 string      // Guid - job identifier    //todo use UUID from go sdk
 	PartNum            PartNumber // part number of the job
 	IsFinalPart        bool       // to determine the final part for a specific job
 	Priority           uint8      // priority of the task
@@ -105,7 +150,7 @@ type CopyJobPartOrder struct {
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListJobPartsTransfers struct {
 	JobId                  string
-	ExpectedTransferStatus Status
+	ExpectedTransferStatus TransferStatus
 }
 
 // This struct represents the optional attribute for blob request header
@@ -120,13 +165,13 @@ type BlobTransferAttributes struct {
 
 // ExistingJobDetails represent the Job with JobId and
 type ExistingJobDetails struct {
-	JobIds []string
+	JobIds []JobID
 }
 
 // represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
 type JobProgressSummary struct {
 	CompleteJobOrdered             bool
-	JobStatus                      ste.JobStatusCode
+	JobStatus                      string
 	TotalNumberOfTransfer          uint32
 	TotalNumberofTransferCompleted uint32
 	TotalNumberofFailedTransfer    uint32
@@ -141,17 +186,12 @@ type JobProgressSummary struct {
 type TransferDetail struct {
 	Src            string
 	Dst            string
-	TransferStatus Status
+	TransferStatus string
 }
 
 // represents the list of Details and details of number of transfers
 type TransfersDetail struct {
 	Details []TransferDetail
 }
-
-const (
-	StatusCompleted  = 1
-	StatusInProgress = 2
-)
 
 const DefaultBlockSize = 4 * 1024 * 1024

@@ -5,13 +5,26 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"net/http"
+	"encoding/json"
 )
 
 // handles the cancel command
 // dispatches the cancel Job order to the storage engine
-func HandleCancelCommand(jobId common.JobID) {
+func HandleCancelCommand(jobIdString string) {
 	url := "http://localhost:1337"
 	client := &http.Client{}
+
+	jobId, err := common.ParseUUID(jobIdString)
+	if err != nil{
+		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
+		return
+	}
+
+	marshaledJobId, err := json.Marshal(jobId)
+	if err != nil{
+		fmt.Println("error marshalling the jobId ", jobIdString)
+		return
+	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -20,7 +33,7 @@ func HandleCancelCommand(jobId common.JobID) {
 	// Type defines the type of GET request processed by the transfer engine
 	q.Add("Type", "cancel")
 	// command defines the actual list command serialized to byte array
-	q.Add("jobId", string(jobId))
+	q.Add("jobId", string(marshaledJobId))
 	req.URL.RawQuery = q.Encode()
 	resp, err := client.Do(req)
 	if err != nil {
@@ -42,9 +55,22 @@ func HandleCancelCommand(jobId common.JobID) {
 
 // handles the pause command
 // dispatches the pause Job order to the storage engine
-func HandlePauseCommand(jobId common.JobID) {
+func HandlePauseCommand(jobIdString string) {
 	url := "http://localhost:1337"
 	client := &http.Client{}
+
+	jobId, err := common.ParseUUID(jobIdString)
+	if err != nil{
+		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
+		return
+	}
+
+	marshaledJobId, err := json.Marshal(jobId)
+	if err != nil{
+		fmt.Println("error marshalling the jobId ", jobIdString)
+		return
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -53,7 +79,7 @@ func HandlePauseCommand(jobId common.JobID) {
 	// Type defines the type of GET request processed by the transfer engine
 	q.Add("Type", "pause")
 	// command defines the actual list command serialized to byte array
-	q.Add("jobId", string(jobId))
+	q.Add("jobId", string(marshaledJobId))
 	req.URL.RawQuery = q.Encode()
 	resp, err := client.Do(req)
 	if err != nil {
@@ -75,9 +101,22 @@ func HandlePauseCommand(jobId common.JobID) {
 
 // handles the resume command
 // dispatches the resume Job order to the storage engine
-func HandleResumeCommand(jobId common.JobID) {
+func HandleResumeCommand(jobIdString string) {
 	url := "http://localhost:1337"
 	client := &http.Client{}
+
+	jobId, err := common.ParseUUID(jobIdString)
+	if err != nil{
+		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
+		return
+	}
+
+	marshaledJobId, err := json.Marshal(jobId)
+	if err != nil{
+		fmt.Println("error marshalling the jobId ", jobIdString)
+		return
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -86,7 +125,7 @@ func HandleResumeCommand(jobId common.JobID) {
 	// Type defines the type of GET request processed by the transfer engine
 	q.Add("Type", "resume")
 	// command defines the actual list command serialized to byte array
-	q.Add("jobId", string(jobId))
+	q.Add("jobId", string(marshaledJobId))
 	req.URL.RawQuery = q.Encode()
 	resp, err := client.Do(req)
 	if err != nil {

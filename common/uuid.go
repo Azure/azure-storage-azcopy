@@ -15,11 +15,11 @@ const (
 )
 
 // A UUID representation compliant with specification in RFC 4122 document.
-type uuid [16]byte
+type UUID [16]byte
 
-// NewUUID returns a new uuid using RFC 4122 algorithm.
-func NewUUID() (u uuid) {
-	u = uuid{}
+// NewUUID returns a new UUID using RFC 4122 algorithm.
+func NewUUID() (u UUID) {
+	u = UUID{}
 	// Set all bits to randomly (or pseudo-randomly) chosen values.
 	_, err := rand.Read(u[:])
 	if err != nil {
@@ -33,15 +33,19 @@ func NewUUID() (u uuid) {
 }
 
 // String returns an unparsed version of the generated UUID sequence.
-func (u uuid) String() string {
+func (u UUID) String() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:])
 }
 
 // ParseUUID parses a string formatted as "003020100-0504-0706-0809-0a0b0c0d0e0f"
 // or "{03020100-0504-0706-0809-0a0b0c0d0e0f}" into a UUID.
-func ParseUUID(uuidStr string) uuid {
-	char := func(hexString string) byte {
-		i, _ := strconv.ParseUint(hexString, 16, 8)
+func ParseUUID(uuidStr string) (UUID, error) {
+	var hexEncodeErr error = nil
+	char := func(hexString string) (byte) {
+		i, err := strconv.ParseUint(hexString, 16, 8)
+		if err != nil{
+			hexEncodeErr = err
+		}
 		return byte(i)
 	}
 	if uuidStr[0] == '{' {
@@ -50,7 +54,7 @@ func ParseUUID(uuidStr string) uuid {
 	// 03020100 - 05 04 - 07 06 - 08 09 - 0a 0b 0c 0d 0e 0f
 	//             1 11 1 11 11 1 12 22 2 22 22 22 33 33 33
 	// 01234567 8 90 12 3 45 67 8 90 12 3 45 67 89 01 23 45
-	uuidVal := uuid{
+	uuidVal := UUID{
 		char(uuidStr[0:2]),
 		char(uuidStr[2:4]),
 		char(uuidStr[4:6]),
@@ -72,9 +76,13 @@ func ParseUUID(uuidStr string) uuid {
 		char(uuidStr[32:34]),
 		char(uuidStr[34:36]),
 	}
-	return uuidVal
+	if hexEncodeErr != nil{
+		return UUID{}, hexEncodeErr
+	}else{
+		return uuidVal, nil
+	}
 }
 
-func (u uuid) bytes() []byte {
+func (u UUID) bytes() []byte {
 	return u[:]
 }

@@ -2,13 +2,12 @@ package cmd
 
 import (
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	var commandLineInput common.JobID = ""
+	var commandLineInput = ""
 
 	// pauseCmd represents the pause command
 	pauseCmd := &cobra.Command{
@@ -24,7 +23,7 @@ func init() {
 			if len(args) != 1 {
 				return errors.New("this command only requires jobId")
 			}
-			commandLineInput = common.JobID(args[0])
+			commandLineInput = (args[0])
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {

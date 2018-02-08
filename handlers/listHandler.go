@@ -31,13 +31,30 @@ import (
 )
 
 // handles the list command
-// dispatches the list order to the storage engine
+// dispatches the list order to theZiyi Wang storage engine
 func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	listOrder := common.ListJobPartsTransfers{}
-	listOrder.JobId = commandLineInput.JobId
+
+	// checking if the jobId passed is valid or not
+	if commandLineInput.JobId != ""{
+		jobId , err := common.ParseUUID(commandLineInput.JobId)
+		if err != nil{
+			fmt.Println("invalid jobId passed to list the respective job info")
+			return
+		}
+		marshaledJobId, err := json.Marshal(jobId)
+		if err != nil{
+			fmt.Println("error marshalling the jobId")
+			return
+		}
+		listOrder.JobId = string(marshaledJobId)
+	}else{
+		listOrder.JobId = ""
+	}
+
 	// if the expected status is given by User, then it is converted to the respective Transfer status code
-	if commandLineInput.TransferStatus != "" {
-		listOrder.ExpectedTransferStatus = common.TransferStatusStringToStatusCode(commandLineInput.TransferStatus)
+	if commandLineInput.OfStatus != "" {
+		listOrder.ExpectedTransferStatus = common.TransferStatusStringToCode(commandLineInput.OfStatus)
 	} else {
 		// if the expected status is not given by user, it is set to 255
 		listOrder.ExpectedTransferStatus = math.MaxUint8
@@ -77,7 +94,7 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	// list Order command requested the list of existing jobs
 	if listOrder.JobId == "" {
 		PrintExistingJobIds(body)
-	} else if commandLineInput.TransferStatus == "" { //list Order command requested the progress summary of an existing job
+	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
 		PrintJobProgressSummary(body, commandLineInput.JobId)
 	} else { //list Order command requested the list of specific transfer of an existing job
 		PrintJobTransfers(body, commandLineInput.JobId)
@@ -93,7 +110,7 @@ func PrintExistingJobIds(data []byte) {
 	}
 	fmt.Println("Existing Jobs ")
 	for index := 0; index < len(jobs.JobIds); index++ {
-		fmt.Println(jobs.JobIds[index])
+		fmt.Println(common.UUID(jobs.JobIds[index]).String())
 	}
 }
 
@@ -107,12 +124,12 @@ func PrintJobTransfers(data []byte, jobId string) {
 	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", jobId))
 	for index := 0; index < len(transfers.Details); index++ {
 		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", transfers.Details[index].Src, transfers.Details[index].Dst,
-			common.TransferStatusCodeToString(transfers.Details[index].TransferStatus)))
+			transfers.Details[index].TransferStatus))
 	}
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
-func PrintJobProgressSummary(summaryData []byte, jobId string) (status common.Status) {
+func PrintJobProgressSummary(summaryData []byte, jobId string)  {
 	var summary common.JobProgressSummary
 	err := json.Unmarshal(summaryData, &summary)
 	if err != nil {
@@ -129,5 +146,4 @@ func PrintJobProgressSummary(summaryData []byte, jobId string) (status common.St
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
 		fmt.Println(message)
 	}
-	return summary.JobStatus
 }

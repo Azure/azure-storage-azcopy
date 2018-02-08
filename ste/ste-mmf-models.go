@@ -4,8 +4,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"sync/atomic"
-	"google.golang.org/genproto/googleapis/cloud/dataproc/v1"
-	"os"
 )
 
 //These constant defines the various types of source and destination of the transfers
@@ -28,38 +26,6 @@ func (status JobStatusCode) String() (statusString string){
 		return "InvalidStatusCode"
 	}
 }
-
-type TransferStatus uint32
-
-func (status TransferStatus) String() (statusString string){
-	switch uint32(status){
-	case 0:
-		return "InProgress"
-	case 1:
-		return "TransferComplete"
-	case 2:
-		return "TransferFailed"
-	case 254:
-		return "TransferAny"
-	default:
-		return "InvalidStatusCode"
-	}
-}
-
-const (
-	// Transfer is currently executing or cancelled before failure or successful execution
-	TransferInProgress TransferStatus = 0
-
-	// Transfer has completed successfully
-	TransferComplete   TransferStatus = 1
-
-	// Transfer has failed due to some error. This status does represent the state when transfer is cancelled
-	TransferFailed     TransferStatus = 2
-
-	// Transfer is any of the three possible state (InProgress, Completer or Failed)
-
-	TransferAny        TransferStatus = TransferStatus(254)
-)
 
 const (
 	// Job Part is currently executing
@@ -122,16 +88,16 @@ type JobPartPlanTransfer struct {
 	ModifiedTime   uint32
 	SourceSize     uint64
 	CompletionTime uint64
-	transferStatus TransferStatus
+	transferStatus common.TransferStatus
 }
 
 // getTransferStatus returns the transfer status of current transfer of job part atomically
-func (jPartPlanTransfer *JobPartPlanTransfer) getTransferStatus() (TransferStatus){
-	return TransferStatus(atomic.LoadUint32((*uint32)(&jPartPlanTransfer.transferStatus)))
+func (jPartPlanTransfer *JobPartPlanTransfer) getTransferStatus() (common.TransferStatus){
+	return common.TransferStatus(atomic.LoadUint32((*uint32)(&jPartPlanTransfer.transferStatus)))
 }
 
 // getTransferStatus sets the transfer status of current transfer to given status atomically
-func (jPartPlanTransfer *JobPartPlanTransfer) setTransferStatus(status TransferStatus){
+func (jPartPlanTransfer *JobPartPlanTransfer) setTransferStatus(status common.TransferStatus){
 	atomic.StoreUint32((*uint32)(&jPartPlanTransfer.transferStatus), uint32(status))
 }
 

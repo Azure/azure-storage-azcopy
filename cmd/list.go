@@ -64,5 +64,5 @@ func init() {
 	// define the flags relevant to the ls command
 
 	// filters
-	lsCmd.PersistentFlags().StringVar(&commandLineInput.TransferStatus, "with-status", "", "Filter: list transfers of job only with this status")
+	lsCmd.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "Filter: list transfers of job only with this status")
 }

@@ -2,12 +2,10 @@ package ste
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,10 +14,9 @@ import (
 	"strings"
 	"sync"
 	"unsafe"
-	//"golang.org/x/net/context"
-	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"sync/atomic"
+	"encoding/json"
 )
 
 // JobInfo contains JobPartsMap and Logger
@@ -78,11 +75,10 @@ func (jMap *JobsInfoMap) LoadJobPartPlanInfoForJobPart(jobId common.JobID, partN
 // LoadExistingJobIds returns the list of existing JobIds for which there are entries in the internal map in thread-safe manner.
 func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
 	jMap.lock.RLock()
-	//TODO : make existing job as array of size of len
 	existingJobs := make([]common.JobID, len(jMap.internalMap))
-	//var existingJobs []common.JobID
+	index := 0
 	for jobId, _ := range jMap.internalMap {
-		existingJobs = append(existingJobs, jobId)
+		existingJobs[index] = jobId
 	}
 	jMap.lock.RUnlock()
 	return existingJobs
@@ -118,7 +114,7 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	// log filename is $JobId.log
 	if jobInfo.Logger == nil {
 		logger := new(common.Logger)
-		logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
+		logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", common.UUID(jobId).String()))
 		jobInfo.Logger = logger
 		//jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 	}
@@ -167,7 +163,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 		    * parse part number string and version number string into uint32 integer
 	*/
 	// split the s string using '-' which separates the jobId from the rest of string in filename
-	parts := strings.Split(s, "-")
+	parts := strings.Split(s, "--")
 	jobIdString := parts[0]
 	partNo_versionNo := parts[1]
 
@@ -191,8 +187,13 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 		errMsg := fmt.Sprintf("error parsing the mememory map file name %s", s)
 		panic(errors.New(errMsg))
 	}
-	//fmt.Println(" string ", common.JobID(jobIdString), " ", common.PartNumber(partNo64), " ", common.Version(versionNo64))
-	return common.JobID(jobIdString), common.PartNumber(partNo64), common.Version(versionNo64)
+
+	parsedJobId, err := common.ParseUUID(jobIdString)
+	if err != nil{
+		panic(err)
+	}
+
+	return common.JobID(parsedJobId), common.PartNumber(partNo64), common.Version(versionNo64)
 }
 
 // formatJobInfoToString builds the JobPart file name using the given JobId, part number and data schema version
@@ -200,19 +201,14 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
-	fileName := string(jobPartOrder.ID) + "-" + partNoString + ".steV" + versionIdString
-	return fileName
-}
-
-// convertJobIdToByteFormat converts the JobId from string format to 16 byte array
-func convertJobIdToByteFormat(jobIDString common.JobID) [128 / 8]byte {
-	var jobID [128 / 8]byte
-	guIdBytes, err := hex.DecodeString(string(jobIDString))
-	if err != nil {
-		panic(err)
+	var jobId common.JobID
+	err := json.Unmarshal([]byte(jobPartOrder.ID), &jobId)
+	if err != nil{
+		panic(fmt.Errorf("error unmarshalling the marshalled jobId %s", jobPartOrder.ID))
 	}
-	copy(jobID[:], guIdBytes)
-	return jobID
+	fileName := common.UUID(jobId).String() + "--" + partNoString + ".steV" + versionIdString
+	fmt.Println("fileName created ", fileName)
+	return fileName
 }
 
 // writeInterfaceDataToWriter api writes the content of given interface to the io writer
@@ -242,19 +238,23 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannel
 	for index := 0; index < len(files); index++ {
 		fileName := files[index].Name()
 		// extracting the jobId and part number from file name
-		jobIdString, partNumber, _ := parseStringToJobInfo(fileName)
+		jobId, partNumber, _ := parseStringToJobInfo(fileName)
+		fmt.Println("jobId ", common.UUID(jobId).String())
+		fmt.Println("part number", partNumber)
 		// creating a new JobPartPlanInfo pointer and initializing it
 		jobHandler := new(JobPartPlanInfo)
 		// Initializing the JobPartPlanInfo for existing Job file
 		jobHandler.initialize(steContext, fileName)
 
-		scheduleTransfers(jobIdString, partNumber, jobsInfoMap, coordinatorChannels)
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
-		putJobPartInfoHandlerIntoMap(jobHandler, jobIdString, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jobsInfoMap)
+		putJobPartInfoHandlerIntoMap(jobHandler, jobId, partNumber, jobHandler.getJobPartPlanPointer().LogSeverity, jobsInfoMap)
+
+		scheduleTransfers(jobId, partNumber, jobsInfoMap, coordinatorChannels)
+
 
 		// If the Job was cancelled, but cleanup was not done for the Job, cleaning up the jobfile
 		if jobHandler.getJobPartPlanPointer().getJobStatus() == Cancelled{
-			cleanUpJob(jobIdString, jobsInfoMap)
+			cleanUpJob(jobId, jobsInfoMap)
 		}
 	}
 	// checking for cancelled jobs and to cleanup those jobs
@@ -302,23 +302,16 @@ func listFileWithExtension(ext string) []os.FileInfo {
 // fileAlreadyExists api determines whether file with fileName exists in directory dir or not
 // Returns true is file with fileName exists else returns false
 //TODO : check guid in the map
-func fileAlreadyExists(fileName string, dir string) (bool, error) {
+func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfoMap) (bool) {
 
-	// listing the content of directory dir
-	fileInfos, err := ioutil.ReadDir(dir)
-	if err != nil {
-		errorMsg := fmt.Sprintf("not able to list contents of directory %s", dir)
-		return false, errors.New(errorMsg)
-	}
+	jobId, partNumber, _ := parseStringToJobInfo(fileName)
 
-	// iterating through each file and comparing the file name with given fileName
-	for index := range fileInfos {
-		if strings.Compare(fileName, fileInfos[index].Name()) == 0 {
-			errorMsg := fmt.Sprintf("file %s already exists", fileName)
-			return true, errors.New(errorMsg)
-		}
+	jobPartInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
+
+	if jobPartInfo == nil{
+		return false
 	}
-	return false, nil
+	return true
 }
 
 // getTransferMsgDetail returns the details of a transfer for given JobId, part number and transfer index
@@ -339,7 +332,7 @@ func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transfer
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber in thread safe manner
-func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus TransferStatus, jPartPlanInfoMap *JobsInfoMap) {
+func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transferIndex uint32, transferStatus common.TransferStatus, jPartPlanInfoMap *JobsInfoMap) {
 	jHandler := getJobPartInfoReferenceFromMap(jobId, partNo, jPartPlanInfoMap)
 	transferHeader := jHandler.Transfer(transferIndex)
 	transferHeader.setTransferStatus(transferStatus)
@@ -359,7 +352,7 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 			logger.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
 			cleanUpJob(jobId, jobsInfoMap)
 		}else if jPartHeader.getJobStatus() == InProgress{
-			jPartHeader.getJobStatus() = Completed
+			jPartHeader.setJobStatus(Completed)
 		}
 	}
 }

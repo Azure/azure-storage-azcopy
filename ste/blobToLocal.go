@@ -101,7 +101,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
 				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
 						"worker %d is finalizing cancellation of job %s and part number %d",
@@ -118,7 +118,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()
 				logger.Logf(common.LogInfo, "worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
 				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
 						"worker %d is finalizing cancellation of job %s and part number %d",
@@ -137,7 +137,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 					workerId, transferIdentifierStr, chunkId)
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId, partNum)

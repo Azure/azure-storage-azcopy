@@ -40,7 +40,7 @@ func sendJobPartOrderToSTE(payload []byte) {
 	//fmt.Println("Response to request", res.Status, " ", body)
 }
 
-func fetchJobStatus(jobId string) common.Status {
+func fetchJobStatus(jobId string) string {
 	url := "http://localhost:1337"
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)

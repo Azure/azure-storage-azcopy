@@ -34,6 +34,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"encoding/json"
 )
 
 const (
@@ -51,7 +52,14 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	if uuid.String() == "" {
 		panic("Failed to generate job id")
 	}
-	jobPartOrder.ID = common.JobID(uuid.String())
+
+	// marshaling the UUID to send to backend
+	marshaledUUID, err := json.MarshalIndent(uuid, "", "")
+	if err != nil{
+		fmt.Println("There is an error while marshalling the generated UUID. Please retry")
+		return ""
+	}
+	jobPartOrder.ID = string(marshaledUUID)
 
 	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
@@ -78,12 +86,12 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		select {
 		case <-cancelChannel:
 			fmt.Println("fetching cancel signal")
-			HandleCancelCommand(common.JobID(uuid))
+			HandleCancelCommand(uuid.String())
 			os.Exit(1)
 		case <-timeOut:
 			fmt.Println("fetching job status")
-			jobStatus := fetchJobStatus(uuid)
-			if jobStatus == common.StatusCompleted {
+			jobStatus := fetchJobStatus(uuid.String())
+			if jobStatus == "Completed" {
 				break
 			}
 		default:
@@ -93,7 +101,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
 	//	time.Sleep(2 * time.Second)
 	//}
-	return uuid
+	return uuid.String()
 }
 
 func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags,

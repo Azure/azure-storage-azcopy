@@ -30,10 +30,14 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	// memory map the JobPartOrder File with given filename
 	job.memMap = memoryMapTheJobFile(fileName)
 
+	job.fileName = fileName
+
+	fmt.Println("memory mapped file", len(job.memMap),job.memMap)
 	// gets the memory map JobPartPlanHeader for given JobPartOrder
+	fmt.Println("job pointer ", job.fileName)
+
 	jPartPlan := job.getJobPartPlanPointer()
 
-	job.fileName = fileName
 
 	// initializes the transferInfo slice
 	transferInfo := make([]TransferInfo, jPartPlan.NumTransfers)
@@ -58,10 +62,10 @@ func (job *JobPartPlanInfo) shutDownHandler() error {
 // getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 func (job *JobPartPlanInfo) getJobPartPlanPointer() *JobPartPlanHeader {
 	// memMap represents the slice of memory map file of JobPartOrder
-	//memMap  := job.memMap
-
+	memMap  := job.memMap
+	fmt.Println("casting the mem map")
 	// casting the memMap slice to JobPartPlanHeader Pointer
-	jPart := (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&job.memMap)).Data))
+	jPart := (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
 
 	return jPart
 }
@@ -175,7 +179,7 @@ func memoryMapTheJobFile(filename string) mmap.MMap {
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPlanBlobData) string {
+func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPlanBlobData, jobsInfoMap *JobsInfoMap) (string, error) {
 	var currentEndOffsetOfFile uint64 = 0
 	/*
 	*       Following Steps are executed:
@@ -192,9 +196,8 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 	fileAbsolutePath := currFileDirectory + "/" + fileName
 
 	// Check if file already exist or not
-	_, err := fileAlreadyExists(fileName, currFileDirectory)
-	if err != nil {
-		panic(err)
+	if fileAlreadyExists(fileName, jobsInfoMap) {
+		return "", fmt.Errorf("a job file already exists with create for uuid passed in this job part order %s", fileName)
 	}
 
 	// creating the file
@@ -205,7 +208,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 	}
 
 	// creating memory map file jobpartplan header
-	jPartPlan := jobPartTojobPartPlan(jobPartOrder, data)
+	jPartPlan := jobPartToJobPartPlan(jobPartOrder, data)
 	if err != nil {
 		err = fmt.Errorf("error converting Job Part to Job Part In File with err %s", err.Error())
 		panic(err)
@@ -233,7 +236,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		ModifiedTime: uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
 		SourceSize:uint64(jobPartOrder.Transfers[index].SourceSize),
 		CompletionTime:0,
-		transferStatus:TransferInProgress }
+		transferStatus:common.TransferInProgress }
 		numBytesWritten = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		transferEntryOffsets[index] = currentTransferChunkOffset
 		currentEndOffsetOfFile += uint64(numBytesWritten)
@@ -264,25 +267,26 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentEndOffsetOfFile += uint64(numBytesWritten)
 	}
 
+	fmt.Println("current Endoffset ", currentEndOffsetOfFile)
 	// closing the memory map file
 	file.Close()
-	return fileName
+	return fileName, nil
 }
 
 // Creates the memory map Job Part Plan Header from CopyJobPartOrder and JobPartPlanBlobData
-func jobPartTojobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobData) JobPartPlanHeader {
+func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobData) JobPartPlanHeader {
 	var jobID [128 / 8]byte
 	versionID := jobPart.Version
 	// converting the job Id string to [128 / 8] byte format
-	jobID = convertJobIdToByteFormat(jobPart.ID)
+	jobID, _ = common.ParseUUID(jobPart.ID)
 	partNo := jobPart.PartNum
 
 	// calculating the number of transfer for given CopyJobPartOrder
 	numTransfer := uint32(len(jobPart.Transfers))
-	jPartInFile := JobPartPlanHeader{versionID, jobID, uint32(partNo),
-		jobPart.IsFinalPart, DefaultJobPriority, uint32(time.Now().Nanosecond()),
-		jobPart.SourceType, jobPart.DestinationType,
-		numTransfer, jobPart.LogVerbosity, InProgress, data}
+	jPartInFile := JobPartPlanHeader{Version:versionID, Id:jobID, PartNum:uint32(partNo),
+		IsFinalPart:jobPart.IsFinalPart, Priority:DefaultJobPriority, TTLAfterCompletion:uint32(time.Now().Nanosecond()),
+		SrcLocationType:jobPart.SourceType, DstLocationType:jobPart.DestinationType,
+		NumTransfers:numTransfer, LogSeverity:jobPart.LogVerbosity, BlobData:data, jobStatus:InProgress}
 	return jPartInFile
 }
 

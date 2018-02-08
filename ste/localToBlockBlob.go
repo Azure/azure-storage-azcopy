@@ -108,7 +108,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
 
 			// step 1: generate block ID
-			blockId, _ := common.NewUUID()
+			blockId := common.NewUUID().String()
 			encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
 
 			// step 2: save the block ID into the list of block IDs
@@ -127,7 +127,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					workerId, transferIdentifierStr, chunkId, startIndex)
 				//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
 				logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
 				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
@@ -159,12 +159,12 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					logger.Logf(common.LogError,
 						"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
 						workerId, transferIdentifierStr, chunkId, string(err.Error()))
-					updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+					updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 					return
 				}
 				logger.Logf(common.LogInfo, "transfer %d of Job %s and part number %d has completed successfully", transferId, jobId, partNum)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferStatusComplete, jobsInfoMap)
+				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
 				err := memoryMappedFile.Unmap()
