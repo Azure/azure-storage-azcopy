@@ -237,7 +237,7 @@ func cleanUpJob(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 			panic(errors.New(errorMsg))
 		}
 	}
-	logger.LogFile.Close()
+	logger.logFile.Close()
 	// deletes the entry for given JobId from Map
 	jobsInfoMap.DeleteJobInfoForJobId(jobId)
 }
@@ -494,8 +494,7 @@ func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPl
 		}
 	}
 	// marshalling the TransfersDetail Struct to send back in response to front-end
-	// TODO : add field names while initializing struct
-	tStatusJson, err := json.MarshalIndent(common.TransfersDetail{transferList}, "", "")
+	tStatusJson, err := json.MarshalIndent(common.TransfersDetail{Details:transferList}, "", "")
 	if err != nil {
 		result := fmt.Sprintf("error marshalling the transfer status for Job Id %s", jobId)
 		(*resp).WriteHeader(http.StatusInternalServerError)

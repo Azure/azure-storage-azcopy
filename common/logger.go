@@ -52,7 +52,7 @@ func logLevelToString(level pipeline.LogLevel) string {
 type Logger struct {
 	Severity    pipeline.LogLevel
 	LogFileName string
-	LogFile     *os.File
+	logFile     *os.File
 }
 
 // Initializes the logger instance for given JobId with given Log Severity
@@ -64,7 +64,7 @@ func (logger *Logger) Initialize(severity pipeline.LogLevel, fileName string) {
 	if err != nil {
 		panic(err)
 	}
-	logger.LogFile = file
+	logger.logFile = file
 }
 
 // Logf api checks the log severity of current logger instance and writes the given
@@ -75,7 +75,7 @@ func (logger *Logger) Logf(severity pipeline.LogLevel, format string, a ...inter
 	if severity > logger.Severity {
 		return
 	}
-	log.SetOutput(logger.LogFile)
+	log.SetOutput(logger.logFile)
 	logMsg := fmt.Sprintf(logLevelToString(severity)+":"+format, a...)
 	log.Println(logMsg)
 }

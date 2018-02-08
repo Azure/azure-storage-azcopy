@@ -53,7 +53,6 @@ func main() {
 			panic(err)
 			os.Exit(1)
 		}
-
 		cmd.Execute()
 	}
 	//ste.InitializeSTE()
