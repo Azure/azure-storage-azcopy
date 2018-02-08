@@ -83,16 +83,16 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 
 	for index := uint32(0); index < jPartPlanHeader.NumTransfers; index++{
 		transferCtx, transferCancelFunc := context.WithCancel(jobPartInfo.ctx)
-		jobPartInfo.TransferInfo[index] = TransferInfo{ctx:transferCtx,cancel:transferCancelFunc, NumChunksCompleted:0}
+		jobPartInfo.TransfersInfo[index] = TransferInfo{ctx:transferCtx,cancel:transferCancelFunc, NumberOfChunksDone:0}
 		currentTransferStatus := jobPartInfo.Transfer(index).getTransferStatus()
 		//if the current transfer is already complete or failed, then it won't be scheduled
 		if currentTransferStatus == common.TransferComplete ||
 			currentTransferStatus == common.TransferFailed{
-				jobPartInfo.NumberOfTransfersCompleted ++
+				jobPartInfo.numberOfTransfersDone ++
 				continue
 		}
 		// creating transfer msg to schedule the transfer and queuing transferMsg into channels determined by the JobPriority
-		transferMsg := TransferMsg{Id:jobId, PartNumber:partNumber, TransferIndex: index, InfoMap:jobsInfoMap, TransferContext: jobPartInfo.TransferInfo[index].ctx}
+		transferMsg := TransferMsg{Id:jobId, PartNumber:partNumber, TransferIndex: index, InfoMap:jobsInfoMap, TransferContext: jobPartInfo.TransfersInfo[index].ctx}
 		switch priority {
 		case HighJobPriority:
 			coordinatorChannels.HighTransfer <- transferMsg
@@ -149,7 +149,7 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChan
 	if err != nil{
 		panic(err)
 	}
-	fmt.Println("jobID ", jobId)
+
 	// Creating a file for JobPartOrder and write data into that file.
 	fileName, err := createJobPartPlanFile(payload, destBlobData, jobsInfoMap)
 	// If file creation fails, then request is terminated as a bad request
@@ -273,13 +273,13 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorCha
 		scheduleTransfers(jobId, partNumber, jobsInfoMap, coordinatorChannels)
 		// If all the transfer of the current part are either complete or failed, then the part is complete
 		// There is no transfer in this part that is rescheduled
-		if jPartPlanInfo.NumberOfTransfersCompleted == jPartPlanInfo.getJobPartPlanPointer().NumTransfers{
-			jobInfo.NumberOfPartsDone ++
+		if jPartPlanInfo.numberOfTransfersDone == jPartPlanInfo.getJobPartPlanPointer().NumTransfers{
+			jobInfo.numberOfPartsDone ++
 		}
 	}
 	// If all the number of parts that are already done equals the total number of parts in Job
 	// No need to resume the Job since there are no transfer to reschedule
-	if jobInfo.NumberOfPartsDone == jobsInfoMap.GetNumberOfPartsForJob(jobId){
+	if jobInfo.numberOfPartsDone == jobsInfoMap.GetNumberOfPartsForJob(jobId){
 		logger.Logf(common.LogInfo, "all parts of Job %s are already complete and no transfer needs to be rescheduled")
 		setJobStatus(jobId, jobsInfoMap, Completed)
 		(*resp).WriteHeader(http.StatusAccepted)

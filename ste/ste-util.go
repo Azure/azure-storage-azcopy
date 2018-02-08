@@ -24,8 +24,20 @@ import (
 // Logger is the logger instance for a given JobId
 type JobInfo struct {
 	JobPartsMap       map[common.PartNumber]*JobPartPlanInfo
-	NumberOfPartsDone uint32
+	numberOfPartsDone uint32
 	Logger            *common.Logger
+}
+
+// getNumberOfPartsDone returns the number of parts of job either completed or failed
+// in a thread safe manner
+func (jobInfo *JobInfo) getNumberOfPartsDone() (uint32){
+	return atomic.LoadUint32(&jobInfo.numberOfPartsDone)
+}
+
+// incrementNumberOfPartsDone increments the number of parts either completed or failed
+// in a thread safe manner
+func (jobInfo *JobInfo) incrementNumberOfPartsDone() (uint32) {
+	return atomic.AddUint32(&jobInfo.numberOfPartsDone, 1)
 }
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
@@ -207,7 +219,6 @@ func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 		panic(fmt.Errorf("error unmarshalling the marshalled jobId %s", jobPartOrder.ID))
 	}
 	fileName := common.UUID(jobId).String() + "--" + partNoString + ".steV" + versionIdString
-	fmt.Println("fileName created ", fileName)
 	return fileName
 }
 
@@ -239,8 +250,6 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannel
 		fileName := files[index].Name()
 		// extracting the jobId and part number from file name
 		jobId, partNumber, _ := parseStringToJobInfo(fileName)
-		fmt.Println("jobId ", common.UUID(jobId).String())
-		fmt.Println("part number", partNumber)
 		// creating a new JobPartPlanInfo pointer and initializing it
 		jobHandler := new(JobPartPlanInfo)
 		// Initializing the JobPartPlanInfo for existing Job file
@@ -280,6 +289,7 @@ func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfoMap){
 		}
 	}
 }
+
 // listFileWithExtension list all files in the current directory that has given extension
 func listFileWithExtension(ext string) []os.FileInfo {
 	pathS, err := os.Getwd()
@@ -301,7 +311,6 @@ func listFileWithExtension(ext string) []os.FileInfo {
 
 // fileAlreadyExists api determines whether file with fileName exists in directory dir or not
 // Returns true is file with fileName exists else returns false
-//TODO : check guid in the map
 func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfoMap) (bool) {
 
 	jobId, partNumber, _ := parseStringToJobInfo(fileName)
@@ -327,8 +336,8 @@ func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transfer
 	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
 	chunkSize := jPartPlanPointer.BlobData.BlockSize
 	return TransferMsgDetail{jobId, partNo, transferEntryIndex, chunkSize, sourceType,
-		source, destinationType, destination, jHandler.TransferInfo[transferEntryIndex].ctx,
-		jHandler.TransferInfo[transferEntryIndex].cancel, jobsInfoMap}
+		source, destinationType, destination, jHandler.TransfersInfo[transferEntryIndex].ctx,
+		jHandler.TransfersInfo[transferEntryIndex].cancel, jobsInfoMap}
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber in thread safe manner
@@ -342,10 +351,9 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
-	//TODO atomic load and store attached with private variable
-	totalNumberOfPartsDone := atomic.LoadUint32(&jobInfo.NumberOfPartsDone)
+	totalNumberOfPartsDone := atomic.LoadUint32(&jobInfo.numberOfPartsDone)
 	logger.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
-	if atomic.AddUint32(&jobInfo.NumberOfPartsDone, 1) == numPartsForJob{
+	if atomic.AddUint32(&jobInfo.numberOfPartsDone, 1) == numPartsForJob{
 		logger.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
 		if jPartHeader.getJobStatus() == Cancelled{
@@ -357,17 +365,16 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
 	}
 }
 
-// UpdateNumTransferDone api increments the var NumberOfTransfersCompleted by 1 atomically
-// If this NumberOfTransfersCompleted equals the number of transfer in a job part,
+// UpdateNumTransferDone api increments the var numberOfTransfersDone by 1 atomically
+// If this numberOfTransfersDone equals the number of transfer in a job part,
 // all transfers of Job Part have either paused, cancelled or completed
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
-	//TODO : atomic load and store attached with private variable
-	totalNumberofTransfersCompleted := atomic.LoadUint32(&jHandler.NumberOfTransfersCompleted)
+	totalNumberofTransfersCompleted := jHandler.getNumberOfTransfersDone()
 	logger.Logf(common.LogInfo, "total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted)
-	if atomic.AddUint32(&jHandler.NumberOfTransfersCompleted, 1) == jPartPlanInfo.NumTransfers {
+	if jHandler.incrementNumberOfTransfersDone() == jPartPlanInfo.NumTransfers {
 		updateNumberOfPartsDone(jobId, jobsInfoMap)
 	}
 }

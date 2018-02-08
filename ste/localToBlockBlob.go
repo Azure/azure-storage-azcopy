@@ -96,7 +96,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobsInfoMap)
 		if ctx.Err() != nil{
-			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
+			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId)
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
@@ -105,7 +105,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
 		}else{
-			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
+			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
 
 			// step 1: generate block ID
 			blockId := common.NewUUID().String()
@@ -128,11 +128,11 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-				logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, jobId, partNum, chunkId)
+				logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId)
 				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					logger.Logf(common.LogInfo,
 						"worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, jobId, partNum)
+						workerId, common.UUID(jobId).String(), partNum)
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 				}
 				return
@@ -163,7 +163,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 					return
 				}
-				logger.Logf(common.LogInfo, "transfer %d of Job %s and part number %d has completed successfully", transferId, jobId, partNum)
+				logger.Logf(common.LogInfo, "transfer %d of Job %s and part number %d has completed successfully", transferId, common.UUID(jobId).String(), partNum)
 				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 

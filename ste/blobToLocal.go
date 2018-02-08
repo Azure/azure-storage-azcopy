@@ -87,11 +87,11 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
-					workerId, jobId, partNum)
+					workerId, common.UUID(jobId).String(), partNum)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
 		}else {
-			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId, partNum, transferId)
+			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
 
 			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
 
@@ -140,7 +140,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				logger.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
-					workerId, jobId, partNum)
+					workerId, common.UUID(jobId).String(), partNum)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 				err := memoryMappedFile.Unmap()
 				if err != nil {

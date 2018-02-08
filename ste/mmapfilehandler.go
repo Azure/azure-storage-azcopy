@@ -19,7 +19,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 
 	/*
 	 *       creates the job context with cancel using the given context
-	 *       memory maps the jobpartorder file for given fileName
+	 *       memory maps the jobPartOrder file for given fileName
 	 *       gets the memory map JobPartPlanHeader for given jobpartorder
 	 *       initializes the transferInfo struct for each transfer in jobpartorder
 	 */
@@ -32,19 +32,16 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 
 	job.fileName = fileName
 
-	fmt.Println("memory mapped file", len(job.memMap),job.memMap)
 	// gets the memory map JobPartPlanHeader for given JobPartOrder
-	fmt.Println("job pointer ", job.fileName)
-
 	jPartPlan := job.getJobPartPlanPointer()
 
 
 	// initializes the transferInfo slice
 	transferInfo := make([]TransferInfo, jPartPlan.NumTransfers)
 
-	job.TransferInfo = transferInfo
+	job.TransfersInfo = transferInfo
 
-	job.NumberOfTransfersCompleted = 0
+	job.numberOfTransfersDone = 0
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder
@@ -63,7 +60,7 @@ func (job *JobPartPlanInfo) shutDownHandler() error {
 func (job *JobPartPlanInfo) getJobPartPlanPointer() *JobPartPlanHeader {
 	// memMap represents the slice of memory map file of JobPartOrder
 	memMap  := job.memMap
-	fmt.Println("casting the mem map")
+
 	// casting the memMap slice to JobPartPlanHeader Pointer
 	jPart := (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
 
@@ -111,54 +108,6 @@ func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
 	return tEntry
 }
 
-// updateTheChunkInfo api updates the memory map JobPartPlanTransferHeader for transfer and chunk at given index
-//func (job *JobPartPlanInfo) updateTheChunkInfo(transferIndex uint32, chunkIndex uint16,
-//	crc [128 / 8]byte, status uint8) string {
-//	// get memory map JobPartPlanHeader
-//	jPartPlan := job.getJobPartPlanPointer()
-//
-//	// get memory map JobPartPlanTransferChunk Header
-//	cInfo := job.getChunkInfo(transferIndex, chunkIndex)
-//
-//	//copy the given CRC into chunk's blockId
-//	copy(cInfo.BlockId[:], crc[:])
-//
-//	//updating the chunk status with given status
-//	cInfo.Details = status
-//
-//	result := fmt.Sprintf("updated the chunk %d of transfer %d of Job %s", chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
-//	return result
-//}
-
-// getChunkInfo returns the memory map JobPartPlanTransferChunkHeader for given transfer and chunk index of JobPartOrder
-//func (job JobPartPlanInfo) getChunkInfo(transferIndex uint32, chunkIndex uint16) *JobPartPlanTransferChunk {
-//
-//	// get memory map JobPartPlanHeader
-//	jPartPlan := job.getJobPartPlanPointer()
-//
-//	// get memory map JobPartPlanTransfer header for given transferIndex
-//	tEntry := job.Transfer(transferIndex)
-//
-//	// Check to verify the bound of chunkIndex
-//	if chunkIndex >= tEntry.ChunkNum {
-//		errorMsg := fmt.Sprintf("given chunk %d of transfer %d of JobPart %s does not exists. Chunk Index exceeds number of chunks for transfer",
-//			chunkIndex, transferIndex, convertJobIdBytesToString(jPartPlan.Id))
-//		panic(errors.New(errorMsg))
-//	}
-//
-//	chunkInfoOffset := tEntry.Offset
-//
-//	// chunkInfoByteSlice represents the slice of memorymap buffer starting from chunkInfoOffset
-//	chunkInfoByteSlice := job.memMap[chunkInfoOffset:]
-//
-//	// casting the chunkInfoByteSlice to memory map JobPartPlanTransferChunk header
-//	chunkInfo := (*JobPartPlanTransferChunk)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&chunkInfoByteSlice)).Data))
-//	return chunkInfo
-//}
-
-// memoryMapTheJobFile api memory maps the file with given fileName
-// Returns the memory map byte slice
-//TODO : use jeff's code
 func memoryMapTheJobFile(filename string) mmap.MMap {
 
 	// opening the file with given filename
@@ -207,7 +156,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		panic(errors.New(errorMsg))
 	}
 
-	// creating memory map file jobpartplan header
+	// creating memory map file jobPartPlan header
 	jPartPlan := jobPartToJobPartPlan(jobPartOrder, data)
 	if err != nil {
 		err = fmt.Errorf("error converting Job Part to Job Part In File with err %s", err.Error())
@@ -232,7 +181,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentTransferEntry := JobPartPlanTransfer { Offset:currentTransferChunkOffset,
 		SrcLength:uint16(len(jobPartOrder.Transfers[index].Source)),
 		DstLength: uint16(len(jobPartOrder.Transfers[index].Destination)),
-		ChunkNum: getNumChunks(jobPartOrder.Transfers[index], data),
+		ChunkNum: getNumChunks(jobPartOrder.Transfers[index], data.BlockSize),
 		ModifiedTime: uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
 		SourceSize:uint64(jobPartOrder.Transfers[index].SourceSize),
 		CompletionTime:0,
@@ -267,7 +216,6 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentEndOffsetOfFile += uint64(numBytesWritten)
 	}
 
-	fmt.Println("current Endoffset ", currentEndOffsetOfFile)
 	// closing the memory map file
 	file.Close()
 	return fileName, nil
@@ -291,15 +239,7 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 }
 
 // getNumChunks api returns the number of chunks depending on source Type and destination type
-//TODO: just take the blocksize
-func getNumChunks(transfer common.CopyTransfer, destBlobData JobPartPlanBlobData) uint16 {
-	var blockSize = uint64(0)
-	//TODO : get the block size set from front-end in case of 0
-	if destBlobData.BlockSize == 0 {
-		blockSize = common.DefaultBlockSize
-	} else {
-		blockSize = destBlobData.BlockSize
-	}
+func getNumChunks(transfer common.CopyTransfer, blockSize uint64) uint16 {
 	if uint64(transfer.SourceSize)%blockSize == 0 {
 		return uint16(uint64(transfer.SourceSize) / blockSize)
 	} else {
@@ -321,15 +261,14 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 		return JobPartPlanBlobData{}, fmt.Errorf("size %d of content encoding exceeds the max content-encoding size %d", len(contentEncoding), MAX_SIZE_CONTENT_ENCODING)
 	}
 
-	//TODO: fmt.errorf
 	// check to verify whether content-length exceeds maximum content type length or not
 	if len(contentType) > MAX_SIZE_CONTENT_TYPE {
-		return JobPartPlanBlobData{}, errors.New(fmt.Sprintf("size %d of content type exceeds the max content type size %d", len(contentType), MAX_SIZE_CONTENT_TYPE))
+		return JobPartPlanBlobData{}, fmt.Errorf("size %d of content type exceeds the max content type size %d", len(contentType), MAX_SIZE_CONTENT_TYPE)
 	}
 
 	// check to verify whether meta data length exceeds maximum length or not
 	if len(metaData) > MAX_SIZE_META_DATA {
-		return JobPartPlanBlobData{}, errors.New(fmt.Sprintf("size %d of metadata exceeds the max metadata size %d", len(metaData), MAX_SIZE_META_DATA))
+		return JobPartPlanBlobData{}, fmt.Errorf("size %d of metadata exceeds the max metadata size %d", len(metaData), MAX_SIZE_META_DATA)
 	}
 
 	// copying contentType string in fixed size byte array
@@ -341,7 +280,7 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 	//copying metadata string in fixed size byte array
 	copy(metaDataBytes[:], metaData)
 
-	//TODO: skip it and front-end should take care of it
+	// if block size from the front-end is set to 0, block size is set to default block size
 	if blockSize == 0 {
 		blockSize = common.DefaultBlockSize
 	}

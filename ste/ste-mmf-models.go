@@ -6,12 +6,15 @@ import (
 	"sync/atomic"
 )
 
-//These constant defines the various types of source and destination of the transfers
 
-const dataSchemaVersion = 0 // To be Incremented every time when we release azcopy with changed dataschema
+// dataSchemaVersion defines the data schema version of JobPart order files supported by
+// current version of azcopy
+// To be Incremented every time when we release azcopy with changed dataSchema
+const dataSchemaVersion = 0
 
 type JobStatusCode uint32
 
+// String() returns appropriate Job status in string from respective status code
 func (status JobStatusCode) String() (statusString string){
 	switch uint32(status){
 	case 0:
@@ -44,7 +47,7 @@ const (
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
 	Version            uint32 // represent the version of data schema format of header
-	Id                 [128 / 8]byte // represents the 18 byte JobId
+	Id                 common.JobID // represents the 16 byte JobId
 	PartNum            uint32 // represents the part number of the JobOrder
 	IsFinalPart        bool // represents whether this part is final part or not
 	Priority           uint8 // represents the priority of JobPart order (High, Medium and Low)
@@ -60,10 +63,12 @@ type JobPartPlanHeader struct {
 	jobStatus          JobStatusCode
 }
 
+// getJobStatus returns the job status stored in JobPartPlanHeader in thread-safe manner
 func (jPartPlanHeader *JobPartPlanHeader) getJobStatus() (JobStatusCode){
 	return JobStatusCode(atomic.LoadUint32((*uint32)(&jPartPlanHeader.jobStatus)))
 }
 
+// setJobStatus sets the job status in JobPartPlanHeader in thread-safe manner
 func (jPartPlanHeader *JobPartPlanHeader)setJobStatus(status JobStatusCode) {
 	atomic.StoreUint32((*uint32)(&jPartPlanHeader.jobStatus), uint32(status))
 }
@@ -81,13 +86,21 @@ type JobPartPlanBlobData struct {
 
 // JobPartPlan represent the header of Job Part's Transfer in Memory Map File
 type JobPartPlanTransfer struct {
+	// Offset represents the actual start offset transfer header written in JobPartOrder file
 	Offset         uint64
+	// SrcLength represents the actual length of source string for specific transfer
 	SrcLength      uint16
+	// DstLength represents the actual length of destination string for specific transfer
 	DstLength      uint16
+	// ChunkNum represents the num of chunks a transfer is split into
 	ChunkNum       uint16
+	// ModifiedTime represents the last time at which source was modified before start of transfer
 	ModifiedTime   uint32
+	// SourceSize represents the actual size of the source on disk
 	SourceSize     uint64
+	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
+	// transferStatus represents the status of current transfer (TransferInProgress, TransferFailed or TransferCompleted)
 	transferStatus common.TransferStatus
 }
 
@@ -101,6 +114,8 @@ func (jPartPlanTransfer *JobPartPlanTransfer) setTransferStatus(status common.Tr
 	atomic.StoreUint32((*uint32)(&jPartPlanTransfer.transferStatus), uint32(status))
 }
 
+// These constants defines the various job priority of the JobPartOrders.
+// These priorities determines the channel in which transfers will be scheduled.
 const (
 	HighJobPriority    = 0
 	MediumJobPriority  = 1

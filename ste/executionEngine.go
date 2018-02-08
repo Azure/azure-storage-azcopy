@@ -44,13 +44,13 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 					logger := getLoggerForJobId(transferMsg.Id, transferMsg.InfoMap)
 					// If the transfer Msg has been cancelled,
 					if transferMsg.TransferContext.Err() != nil{
-						logger.Logf(common.LogInfo, "Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
+						logger.Logf(common.LogInfo, "Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, common.UUID(transferMsg.Id).String(), transferMsg.PartNumber, transferMsg.TransferIndex)
 						//updateTransferStatus(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, common.TransferStatusFailed, transferMsg.InfoMap)
 						updateNumberOfTransferDone(transferMsg.Id, transferMsg.PartNumber, transferMsg.InfoMap)
 					} else{
 						logger.Logf(common.LogInfo,
 							"Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
-							workerId, transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex)
+							workerId, common.UUID(transferMsg.Id).String(), transferMsg.PartNumber, transferMsg.TransferIndex)
 						transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.InfoMap)
 						prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
 						if prologueFunction == nil {
