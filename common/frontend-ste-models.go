@@ -34,8 +34,8 @@ type Status uint32
 
 type TransferStatus uint32
 
-func (status TransferStatus) String() (statusString string){
-	switch uint32(status){
+func (status TransferStatus) String() (statusString string) {
+	switch uint32(status) {
 	case 0:
 		return "InProgress"
 	case 1:
@@ -54,17 +54,17 @@ const (
 	TransferInProgress TransferStatus = 0
 
 	// Transfer has completed successfully
-	TransferComplete   TransferStatus = 1
+	TransferComplete TransferStatus = 1
 
 	// Transfer has failed due to some error. This status does represent the state when transfer is cancelled
-	TransferFailed     TransferStatus = 2
+	TransferFailed TransferStatus = 2
 
 	// Transfer is any of the three possible state (InProgress, Completer or Failed)
-	TransferAny        TransferStatus = TransferStatus(254)
+	TransferAny TransferStatus = TransferStatus(254)
 )
 
-func TransferStatusStringToCode(statusString string) (TransferStatus){
-	switch statusString{
+func TransferStatusStringToCode(statusString string) TransferStatus {
+	switch statusString {
 	case "TransferInProgress":
 		return TransferInProgress
 	case "TransferComplete":
@@ -135,7 +135,7 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version            uint32     // version of the azcopy
-	ID                 string      // Guid - job identifier    //todo use UUID from go sdk
+	ID                 string     // Guid - job identifier    //todo use UUID from go sdk
 	PartNum            PartNumber // part number of the job
 	IsFinalPart        bool       // to determine the final part for a specific job
 	Priority           uint8      // priority of the task

@@ -41,9 +41,9 @@ func (u UUID) String() string {
 // or "{03020100-0504-0706-0809-0a0b0c0d0e0f}" into a UUID.
 func ParseUUID(uuidStr string) (UUID, error) {
 	var hexEncodeErr error = nil
-	char := func(hexString string) (byte) {
+	char := func(hexString string) byte {
 		i, err := strconv.ParseUint(hexString, 16, 8)
-		if err != nil{
+		if err != nil {
 			hexEncodeErr = err
 		}
 		return byte(i)
@@ -76,9 +76,9 @@ func ParseUUID(uuidStr string) (UUID, error) {
 		char(uuidStr[32:34]),
 		char(uuidStr[34:36]),
 	}
-	if hexEncodeErr != nil{
+	if hexEncodeErr != nil {
 		return UUID{}, hexEncodeErr
-	}else{
+	} else {
 		return uuidVal, nil
 	}
 }

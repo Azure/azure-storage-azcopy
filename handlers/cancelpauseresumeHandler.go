@@ -1,11 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"net/http"
-	"encoding/json"
 )
 
 // handles the cancel command
@@ -16,7 +16,7 @@ func HandleCancelCommand(jobIdString string) {
 
 	// parsing the given JobId to validate its format correctness
 	jobId, err := common.ParseUUID(jobIdString)
-	if err != nil{
+	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
 		return
@@ -24,7 +24,7 @@ func HandleCancelCommand(jobIdString string) {
 
 	// marshaling the jodId to send to backend
 	marshaledJobId, err := json.Marshal(jobId)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error marshalling the jobId ", jobIdString)
 		return
 	}
@@ -68,7 +68,7 @@ func HandlePauseCommand(jobIdString string) {
 
 	// parsing the given JobId to validate its format correctness
 	jobId, err := common.ParseUUID(jobIdString)
-	if err != nil{
+	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
 		return
@@ -76,11 +76,11 @@ func HandlePauseCommand(jobIdString string) {
 
 	// marshaling the jodId to send to backend
 	marshaledJobId, err := json.Marshal(jobId)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error marshalling the jobId ", jobIdString)
 		return
 	}
-
+	fmt.Println("marshalled uuid ", len(marshaledJobId), " ", string(marshaledJobId))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -120,7 +120,7 @@ func HandleResumeCommand(jobIdString string) {
 
 	// parsing the given JobId to validate its format correctness
 	jobId, err := common.ParseUUID(jobIdString)
-	if err != nil{
+	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
 		return
@@ -128,7 +128,7 @@ func HandleResumeCommand(jobIdString string) {
 
 	// marshaling the jodId to send to backend
 	marshaledJobId, err := json.Marshal(jobId)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error marshalling the jobId ", jobIdString)
 		return
 	}

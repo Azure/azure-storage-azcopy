@@ -35,7 +35,6 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	// gets the memory map JobPartPlanHeader for given JobPartOrder
 	jPartPlan := job.getJobPartPlanPointer()
 
-
 	// initializes the transferInfo slice
 	transferInfo := make([]TransferInfo, jPartPlan.NumTransfers)
 
@@ -59,7 +58,7 @@ func (job *JobPartPlanInfo) shutDownHandler() error {
 // getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 func (job *JobPartPlanInfo) getJobPartPlanPointer() *JobPartPlanHeader {
 	// memMap represents the slice of memory map file of JobPartOrder
-	memMap  := job.memMap
+	memMap := job.memMap
 
 	// casting the memMap slice to JobPartPlanHeader Pointer
 	jPart := (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&memMap)).Data))
@@ -178,14 +177,14 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 	// Calculates the start offset of the chunk header for each transfer
 	for index := range jobPartOrder.Transfers {
 		// currentTransferEntry represents the JobPartPlan Transfer Header of a transfer.
-		currentTransferEntry := JobPartPlanTransfer { Offset:currentTransferChunkOffset,
-		SrcLength:uint16(len(jobPartOrder.Transfers[index].Source)),
-		DstLength: uint16(len(jobPartOrder.Transfers[index].Destination)),
-		ChunkNum: getNumChunks(jobPartOrder.Transfers[index], data.BlockSize),
-		ModifiedTime: uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
-		SourceSize:uint64(jobPartOrder.Transfers[index].SourceSize),
-		CompletionTime:0,
-		transferStatus:common.TransferInProgress }
+		currentTransferEntry := JobPartPlanTransfer{Offset: currentTransferChunkOffset,
+			SrcLength:      uint16(len(jobPartOrder.Transfers[index].Source)),
+			DstLength:      uint16(len(jobPartOrder.Transfers[index].Destination)),
+			ChunkNum:       getNumChunks(jobPartOrder.Transfers[index], data.BlockSize),
+			ModifiedTime:   uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
+			SourceSize:     uint64(jobPartOrder.Transfers[index].SourceSize),
+			CompletionTime: 0,
+			transferStatus_doNotUse: common.TransferInProgress}
 		numBytesWritten = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		transferEntryOffsets[index] = currentTransferChunkOffset
 		currentEndOffsetOfFile += uint64(numBytesWritten)
@@ -231,10 +230,10 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 
 	// calculating the number of transfer for given CopyJobPartOrder
 	numTransfer := uint32(len(jobPart.Transfers))
-	jPartInFile := JobPartPlanHeader{Version:versionID, Id:jobID, PartNum:uint32(partNo),
-		IsFinalPart:jobPart.IsFinalPart, Priority:DefaultJobPriority, TTLAfterCompletion:uint32(time.Now().Nanosecond()),
-		SrcLocationType:jobPart.SourceType, DstLocationType:jobPart.DestinationType,
-		NumTransfers:numTransfer, LogSeverity:jobPart.LogVerbosity, BlobData:data, jobStatus: JobInProgress}
+	jPartInFile := JobPartPlanHeader{Version: versionID, Id: jobID, PartNum: uint32(partNo),
+		IsFinalPart: jobPart.IsFinalPart, Priority: DefaultJobPriority, TTLAfterCompletion: uint32(time.Now().Nanosecond()),
+		SrcLocationType: jobPart.SourceType, DstLocationType: jobPart.DestinationType,
+		NumTransfers: numTransfer, LogSeverity: jobPart.LogVerbosity, BlobData: data, jobStatus_doNotUse: JobInProgress}
 	return jPartInFile
 }
 

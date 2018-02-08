@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	var commandLineInput  = ""
+	var commandLineInput = ""
 
 	// cancelCmd represents the pause command
 	cancelCmd := &cobra.Command{

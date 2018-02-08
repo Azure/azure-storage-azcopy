@@ -36,19 +36,19 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	listOrder := common.ListJobPartsTransfers{}
 
 	// checking if the jobId passed is valid or not
-	if commandLineInput.JobId != ""{
-		jobId , err := common.ParseUUID(commandLineInput.JobId)
-		if err != nil{
+	if commandLineInput.JobId != "" {
+		jobId, err := common.ParseUUID(commandLineInput.JobId)
+		if err != nil {
 			fmt.Println("invalid jobId passed to list the respective job info")
 			return
 		}
 		marshaledJobId, err := json.Marshal(jobId)
-		if err != nil{
+		if err != nil {
 			fmt.Println("error marshalling the jobId")
 			return
 		}
 		listOrder.JobId = string(marshaledJobId)
-	}else{
+	} else {
 		listOrder.JobId = ""
 	}
 
@@ -129,7 +129,7 @@ func PrintJobTransfers(data []byte, jobId string) {
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
-func PrintJobProgressSummary(summaryData []byte, jobId string)  {
+func PrintJobProgressSummary(summaryData []byte, jobId string) {
 	var summary common.JobProgressSummary
 	err := json.Unmarshal(summaryData, &summary)
 	if err != nil {

@@ -2,8 +2,10 @@ package ste
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"os"
@@ -13,10 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"unsafe"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"sync/atomic"
-	"encoding/json"
+	"unsafe"
 )
 
 // JobInfo contains JobPartsMap and Logger
@@ -30,13 +30,13 @@ type JobInfo struct {
 
 // getNumberOfPartsDone returns the number of parts of job either completed or failed
 // in a thread safe manner
-func (jobInfo *JobInfo) getNumberOfPartsDone() (uint32){
+func (jobInfo *JobInfo) getNumberOfPartsDone() uint32 {
 	return atomic.LoadUint32(&jobInfo.numberOfPartsDone)
 }
 
 // incrementNumberOfPartsDone increments the number of parts either completed or failed
 // in a thread safe manner
-func (jobInfo *JobInfo) incrementNumberOfPartsDone() (uint32) {
+func (jobInfo *JobInfo) incrementNumberOfPartsDone() uint32 {
 	return atomic.AddUint32(&jobInfo.numberOfPartsDone, 1)
 }
 
@@ -61,7 +61,7 @@ func (jMap *JobsInfoMap) LoadJobPartsMapForJob(jobId common.JobID) (map[common.P
 }
 
 // LoadJobInfoForJob returns the JobInfo pointer stored in JobsInfoMap for given JobId in thread-safe manner.
-func (jMap *JobsInfoMap) LoadJobInfoForJob(jobId common.JobID) (*JobInfo) {
+func (jMap *JobsInfoMap) LoadJobInfoForJob(jobId common.JobID) *JobInfo {
 	jMap.lock.RLock()
 	jobInfo, ok := jMap.internalMap[jobId]
 	jMap.lock.RUnlock()
@@ -97,10 +97,10 @@ func (jMap *JobsInfoMap) LoadExistingJobIds() []common.JobID {
 }
 
 // GetNumberOfPartsForJob returns the number of part order for job with given JobId
-func (jMap *JobsInfoMap) GetNumberOfPartsForJob(jobId common.JobID) (uint32){
+func (jMap *JobsInfoMap) GetNumberOfPartsForJob(jobId common.JobID) uint32 {
 	jMap.lock.RLock()
 	jobInfo := jMap.internalMap[jobId]
-	if jobInfo == nil{
+	if jobInfo == nil {
 		jMap.lock.RUnlock()
 		return 0
 	}
@@ -201,7 +201,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 	}
 
 	parsedJobId, err := common.ParseUUID(jobIdString)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 
@@ -215,7 +215,7 @@ func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
 	var jobId common.JobID
 	err := json.Unmarshal([]byte(jobPartOrder.ID), &jobId)
-	if err != nil{
+	if err != nil {
 		panic(fmt.Errorf("error unmarshalling the marshalled jobId %s", jobPartOrder.ID))
 	}
 	fileName := common.UUID(jobId).String() + "--" + partNoString + ".steV" + versionIdString
@@ -223,11 +223,11 @@ func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 }
 
 // writeInterfaceDataToWriter api writes the content of given interface to the io writer
-func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint64) (int) {
+func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint64) int {
 	rv := reflect.ValueOf(f)
-	interfaceSlice := reflect.SliceHeader{Data:rv.Pointer(),
-						Len:int(structSize),
-						Cap:int(structSize)}
+	interfaceSlice := reflect.SliceHeader{Data: rv.Pointer(),
+		Len: int(structSize),
+		Cap: int(structSize)}
 	interfaceByteSlice := *(*[]byte)(unsafe.Pointer(&interfaceSlice))
 	err := binary.Write(writer, binary.LittleEndian, interfaceByteSlice)
 	if err != nil {
@@ -260,9 +260,8 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannel
 
 		scheduleTransfers(jobId, partNumber, jobsInfoMap, coordinatorChannels)
 
-
 		// If the Job was cancelled, but cleanup was not done for the Job, cleaning up the jobfile
-		if jobHandler.getJobPartPlanPointer().getJobStatus() == JobCancelled {
+		if jobHandler.getJobPartPlanPointer().jobStatus() == JobCancelled {
 			cleanUpJob(jobId, jobsInfoMap)
 		}
 	}
@@ -275,7 +274,7 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannel
 // checkCancelledJobsInJobMap api checks the JobPartPlan header of part 0 of each job
 // JobPartPlan header of part 0 of each job determines the actual status of each job
 // if the job status is cancelled, then it cleans up the job
-func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfoMap){
+func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfoMap) {
 	jobIds := jobsInfoMap.LoadExistingJobIds()
 	for index := 0; index < len(jobIds); index++ {
 		// getting the jobInfo for part 0 of current jobId
@@ -284,7 +283,7 @@ func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfoMap){
 
 		// if the jobstatus in JobPartPlan header of part 0 is cancelled and cleanup wasn't successful
 		// cleaning up the job now
-		if jobInfo.getJobPartPlanPointer().getJobStatus() == JobCancelled {
+		if jobInfo.getJobPartPlanPointer().jobStatus() == JobCancelled {
 			cleanUpJob(jobIds[index], jobsInfoMap)
 		}
 	}
@@ -311,13 +310,13 @@ func listFileWithExtension(ext string) []os.FileInfo {
 
 // fileAlreadyExists api determines whether file with fileName exists in directory dir or not
 // Returns true is file with fileName exists else returns false
-func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfoMap) (bool) {
+func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfoMap) bool {
 
 	jobId, partNumber, _ := parseStringToJobInfo(fileName)
 
 	jobPartInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 
-	if jobPartInfo == nil{
+	if jobPartInfo == nil {
 		return false
 	}
 	return true
@@ -347,19 +346,19 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 	transferHeader.setTransferStatus(transferStatus)
 }
 
-func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap){
+func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
 	totalNumberOfPartsDone := atomic.LoadUint32(&jobInfo.numberOfPartsDone)
 	logger.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
-	if atomic.AddUint32(&jobInfo.numberOfPartsDone, 1) == numPartsForJob{
+	if atomic.AddUint32(&jobInfo.numberOfPartsDone, 1) == numPartsForJob {
 		logger.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
-		if jPartHeader.getJobStatus() == JobCancelled {
+		if jPartHeader.jobStatus() == JobCancelled {
 			logger.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
 			cleanUpJob(jobId, jobsInfoMap)
-		}else if jPartHeader.getJobStatus() == JobInProgress {
+		} else if jPartHeader.jobStatus() == JobInProgress {
 			jPartHeader.setJobStatus(JobCompleted)
 		}
 	}

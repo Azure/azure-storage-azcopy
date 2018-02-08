@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	var commandLineInput  = ""
+	var commandLineInput = ""
 
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{

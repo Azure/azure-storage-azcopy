@@ -95,7 +95,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 	memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, blockIds *[]string, jobsInfoMap *JobsInfoMap) chunkFunc {
 	return func(workerId int) {
 		logger := getLoggerForJobId(jobId, jobsInfoMap)
-		if ctx.Err() != nil{
+		if ctx.Err() != nil {
 			logger.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId)
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				logger.Logf(common.LogInfo,
@@ -104,7 +104,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				//updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
-		}else{
+		} else {
 			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
 
 			// step 1: generate block ID
@@ -144,7 +144,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			// step 4: check if this is the last chunk
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				// If the transfer gets cancelled before the putblock list
-				if ctx.Err() != nil{
+				if ctx.Err() != nil {
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 					return
 				}

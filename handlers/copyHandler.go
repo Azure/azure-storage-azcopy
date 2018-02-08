@@ -22,6 +22,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -34,7 +35,6 @@ import (
 	"path"
 	"strings"
 	"time"
-	"encoding/json"
 )
 
 const (
@@ -55,7 +55,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 
 	// marshaling the UUID to send to backend
 	marshaledUUID, err := json.MarshalIndent(uuid, "", "")
-	if err != nil{
+	if err != nil {
 		fmt.Println("There is an error while marshalling the generated UUID. Please retry")
 		return ""
 	}
