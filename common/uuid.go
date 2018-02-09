@@ -40,7 +40,6 @@ func (u UUID) String() string {
 
 // Implementing MarshalJSON() method for type UUID
 func (u UUID) MarshalJSON() ([]byte, error) {
-	fmt.Println("Using Custom ", u.String())
 	s := u.String()
 	return json.Marshal(s)
 }

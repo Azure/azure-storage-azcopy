@@ -80,7 +80,6 @@ func HandlePauseCommand(jobIdString string) {
 		fmt.Println("error marshalling the jobId ", jobIdString)
 		return
 	}
-	fmt.Println("marshalled uuid ", len(marshaledJobId), " ", string(marshaledJobId))
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		panic(err)

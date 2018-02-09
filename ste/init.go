@@ -32,6 +32,7 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"log"
 )
 
 var steContext = context.Background()
@@ -504,7 +505,7 @@ func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPl
 }
 
 // listExistingJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, commonLogger *log.Logger, resp *http.ResponseWriter) {
 	// get the list of all the jobId from the JobsInfoMap
 	jobIds := jPartPlanInfoMap.LoadExistingJobIds()
 
@@ -512,8 +513,10 @@ func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, resp *http.ResponseWriter) 
 	existingJobDetails := common.ExistingJobDetails{JobIds: jobIds}
 	existingJobDetailsJson, err := json.Marshal(existingJobDetails)
 	if err != nil {
+		commonLogger.Println("error marshalling the existing job list ")
 		(*resp).WriteHeader(http.StatusInternalServerError)
 		(*resp).Write([]byte("error marshalling the existing job list"))
+
 		return
 	}
 	(*resp).WriteHeader(http.StatusAccepted)
@@ -544,7 +547,8 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error) {
 	* coordinatorChannels -- These are the High, Med and Low transfer channels for scheduling the incoming transfer. These channel are required in case of New JobPartOrder request
     * jobToLoggerMap -- This Map holds the logger instance for each job
 */
-func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jobsInfoMap *JobsInfoMap) {
+func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jobsInfoMap *JobsInfoMap, commonLogger *log.Logger) {
+	commonLogger.Println(fmt.Sprintf("http request recieved of type %s from %s", req.Method, req.RemoteAddr))
 	switch req.Method {
 	case http.MethodGet:
 		// request type defines the type of GET request supported by transfer engine
@@ -552,6 +556,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 		// list type is used by the request for list commands
 		// kill type is used when frontend wants the existing instance of transfer engine to kill itself
 		var requestType = req.URL.Query()["Type"][0]
+		commonLogger.Println(fmt.Sprintf("type of http get request received by transfer engine %s", requestType))
 		switch requestType {
 		case "list":
 			var params = req.URL.Query()["command"][0]
@@ -562,7 +567,8 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 				panic(err)
 			}
 			if lsCommand.JobId == "" {
-				listExistingJobs(jobsInfoMap, &resp)
+				commonLogger.Println("received request for listing existing jobs")
+				listExistingJobs(jobsInfoMap, commonLogger, &resp)
 			} else {
 				var jobId common.UUID
 				err := json.Unmarshal([]byte(lsCommand.JobId), &jobId)
@@ -620,8 +626,8 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 }
 
 // InitializeChannels initializes the channels used further by coordinator and execution engine
-func InitializeChannels() (*CoordinatorChannels, *EEChannels) {
-
+func InitializeChannels(commonLogger *log.Logger) (*CoordinatorChannels, *EEChannels) {
+	commonLogger.Println("initializing channels for execution engine and coordinator")
 	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
 	HighTransferMsgChannel := make(chan TransferMsg, 500)
 	// MedTransferMsgChannel takes medium priority job part transfers from coordinator and feed to execution engine
@@ -654,7 +660,18 @@ func InitializeChannels() (*CoordinatorChannels, *EEChannels) {
 		LowChunkTransaction:  LowChunkMsgChannel,
 		SuicideChannel:       SuicideChannel,
 	}
+	commonLogger.Println("successfully initialized channels for execution engine and coordinator")
 	return transferEngineChannel, executionEngineChanel
+}
+
+// initializeAzCopyLogger initializes the logger instance for logging logs not related to any job order
+func initializeAzCopyLogger(filename string) (*log.Logger){
+	// Creates the log file if it does not exists already else opens the file in append mode.
+	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	return log.New(file, "", log.Llongfile)
 }
 
 // initializeCoordinator initializes the coordinator
@@ -662,12 +679,12 @@ func InitializeChannels() (*CoordinatorChannels, *EEChannels) {
 * reconstructs the existing job using job part file on disk
 * creates a server listening on port 1337 for job part order requests from front end
  */
-func initializeCoordinator(coordinatorChannels *CoordinatorChannels) error {
+func initializeCoordinator(coordinatorChannels *CoordinatorChannels, commonLogger *log.Logger) error {
 
 	jobHandlerMap := NewJobPartPlanInfoMap()
 	reconstructTheExistingJobParts(jobHandlerMap, coordinatorChannels)
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-		serveRequest(writer, request, coordinatorChannels, jobHandlerMap)
+		serveRequest(writer, request, coordinatorChannels, jobHandlerMap, commonLogger)
 	})
 	err := http.ListenAndServe("localhost:1337", nil)
 	fmt.Print("Server Created")
@@ -679,7 +696,8 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels) error {
 
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
 func InitializeSTE() error {
-	coordinatorChannel, execEngineChannels := InitializeChannels()
+	commonLogger := initializeAzCopyLogger("azCopyNg-Common.log")
+	coordinatorChannel, execEngineChannels := InitializeChannels(commonLogger)
 	go InitializeExecutionEngine(execEngineChannels)
-	return initializeCoordinator(coordinatorChannel)
+	return initializeCoordinator(coordinatorChannel, commonLogger)
 }
