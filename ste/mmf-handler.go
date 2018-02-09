@@ -225,7 +225,7 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 	var jobID [128 / 8]byte
 	versionID := jobPart.Version
 	// converting the job Id string to [128 / 8] byte format
-	jobID, _ = common.ParseUUID(jobPart.ID)
+	jobID  = common.UUID(jobPart.ID)
 	partNo := jobPart.PartNum
 
 	// calculating the number of transfer for given CopyJobPartOrder

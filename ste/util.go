@@ -2,10 +2,8 @@ package ste
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"os"
@@ -17,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"unsafe"
+	"log"
 )
 
 // JobInfo contains JobPartsMap and Logger
@@ -24,8 +23,11 @@ import (
 // Logger is the logger instance for a given JobId
 type JobInfo struct {
 	JobPartsMap       map[common.PartNumber]*JobPartPlanInfo
+	LogSeverity       common.LogLevel
+	Logger            *log.Logger
 	numberOfPartsDone uint32
-	Logger            *common.Logger
+	logFile           *os.File
+	logFileName       string
 }
 
 // getNumberOfPartsDone returns the number of parts of job either completed or failed
@@ -39,6 +41,34 @@ func (jobInfo *JobInfo) getNumberOfPartsDone() uint32 {
 func (jobInfo *JobInfo) incrementNumberOfPartsDone() uint32 {
 	return atomic.AddUint32(&jobInfo.numberOfPartsDone, 1)
 }
+
+func (jobInfo *JobInfo) initializeLogForJob(logSeverity common.LogLevel, fileName string) {
+	jobInfo.logFileName = fileName
+	// Creates the log file if it does not exists already else opens the file in append mode.
+	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+	jobInfo.LogSeverity = logSeverity
+	jobInfo.logFile = file
+	jobInfo.Logger = log.New(jobInfo.logFile, "", log.Llongfile)
+}
+
+func (jobInfo *JobInfo) closeLogForJob(){
+	err := jobInfo.logFile.Close()
+	if err != nil{
+		panic(err)
+	}
+}
+
+func (jobInfo *JobInfo) Logf(severity common.LogLevel, format string, a ...interface{}) {
+	if severity > jobInfo.LogSeverity {
+		return
+	}
+	logMsg := fmt.Sprintf(severity.String()+":"+format, a...)
+	jobInfo.Logger.Println(logMsg)
+}
+
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
 // Provides the thread safe Load and Store Method
@@ -110,7 +140,7 @@ func (jMap *JobsInfoMap) GetNumberOfPartsForJob(jobId common.JobID) uint32 {
 }
 
 // StoreJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
-func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity pipeline.LogLevel, jHandler *JobPartPlanInfo) {
+func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber, jobLogVerbosity common.LogLevel, jHandler *JobPartPlanInfo) {
 	jMap.lock.Lock()
 	var jobInfo = jMap.internalMap[jobId]
 	// If there is no JobInfo instance for given jobId
@@ -125,9 +155,7 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	// initialize the logger instance with log severity and jobId
 	// log filename is $JobId.log
 	if jobInfo.Logger == nil {
-		logger := new(common.Logger)
-		logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", common.UUID(jobId).String()))
-		jobInfo.Logger = logger
+		jobInfo.initializeLogForJob(jobLogVerbosity, fmt.Sprintf("%s.log", common.UUID(jobId).String()))
 		//jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 	}
 	jobInfo.JobPartsMap[partNumber] = jHandler
@@ -136,15 +164,11 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 }
 
 // LoadLoggerForJob loads the logger instance for given jobId in thread safe manner
-func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) *common.Logger {
+func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) *log.Logger {
 	jMap.lock.RLock()
 	jobInfo := jMap.internalMap[jobId]
 	jMap.lock.RUnlock()
-	if jobInfo == nil {
-		return nil
-	} else {
-		return jobInfo.Logger
-	}
+	return jobInfo.Logger
 }
 
 // DeleteJobInfoForJobId api deletes an entry of given JobId the JobsInfoMap
@@ -213,12 +237,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
-	var jobId common.JobID
-	err := json.Unmarshal([]byte(jobPartOrder.ID), &jobId)
-	if err != nil {
-		panic(fmt.Errorf("error unmarshalling the marshalled jobId %s", jobPartOrder.ID))
-	}
-	fileName := common.UUID(jobId).String() + "--" + partNoString + ".steV" + versionIdString
+	fileName := common.UUID(jobPartOrder.ID).String() + "--" + partNoString + ".steV" + versionIdString
 	return fileName
 }
 
@@ -347,16 +366,15 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 }
 
 func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
-	logger := getLoggerForJobId(jobId, jobsInfoMap)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
 	totalNumberOfPartsDone := atomic.LoadUint32(&jobInfo.numberOfPartsDone)
-	logger.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
+	jobInfo.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
 	if atomic.AddUint32(&jobInfo.numberOfPartsDone, 1) == numPartsForJob {
-		logger.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
+		jobInfo.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
 		if jPartHeader.jobStatus() == JobCancelled {
-			logger.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
+			jobInfo.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
 			cleanUpJob(jobId, jobsInfoMap)
 		} else if jPartHeader.jobStatus() == JobInProgress {
 			jPartHeader.setJobStatus(JobCompleted)
@@ -368,21 +386,12 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 // If this numberOfTransfersDone equals the number of transfer in a job part,
 // all transfers of Job Part have either paused, cancelled or completed
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
-	logger := getLoggerForJobId(jobId, jobsInfoMap)
+	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
 	totalNumberofTransfersCompleted := jHandler.getNumberOfTransfersDone()
-	logger.Logf(common.LogInfo, "total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted)
+	jobInfo.Logf(common.LogInfo, "total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted)
 	if jHandler.incrementNumberOfTransfersDone() == jPartPlanInfo.NumTransfers {
 		updateNumberOfPartsDone(jobId, jobsInfoMap)
 	}
-}
-
-// getLoggerForJobId returns the logger instance for a given JobId
-func getLoggerForJobId(jobId common.JobID, jobsInfoMap *JobsInfoMap) *common.Logger {
-	logger := jobsInfoMap.LoadLoggerForJob(jobId)
-	if logger == nil {
-		panic(errors.New(fmt.Sprintf("no logger instance initialized for jobId %s", jobId)))
-	}
-	return logger
 }

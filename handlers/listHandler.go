@@ -44,7 +44,7 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 		}
 		marshaledJobId, err := json.Marshal(jobId)
 		if err != nil {
-			fmt.Println("error marshalling the jobId")
+			fmt.Println("error marshalling the jobId ", jobId.String())
 			return
 		}
 		listOrder.JobId = string(marshaledJobId)

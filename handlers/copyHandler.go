@@ -22,9 +22,7 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"io/ioutil"
@@ -54,12 +52,12 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	}
 
 	// marshaling the UUID to send to backend
-	marshaledUUID, err := json.MarshalIndent(uuid, "", "")
-	if err != nil {
-		fmt.Println("There is an error while marshalling the generated UUID. Please retry")
-		return ""
-	}
-	jobPartOrder.ID = string(marshaledUUID)
+	//marshaledUUID, err := json.MarshalIndent(uuid, "", "")
+	//if err != nil {
+	//	fmt.Println("There is an error while marshalling the generated UUID. Please retry")
+	//	return ""
+	//}
+	jobPartOrder.ID = common.JobID(uuid)
 
 	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
@@ -309,7 +307,7 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	}
 
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
-	jobPartOrderToFill.LogVerbosity = pipeline.LogLevel(commandLineInput.LogVerbosity)
+	jobPartOrderToFill.LogVerbosity = common.LogLevel(commandLineInput.LogVerbosity)
 	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl

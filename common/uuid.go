@@ -37,6 +37,22 @@ func (u UUID) String() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:])
 }
 
+// Implementing MarshalJSON() method for type UUID
+func (u UUID) MarshalJSON() ([]byte, error) {
+	fmt.Println("Using Custom ", u.String())
+	return []byte(u.String()), nil
+}
+
+// Implementing UnmarshalJSON() method for type UUID
+func (u *UUID) UnmarshalJSON(b []byte) error {
+	uuid, err := ParseUUID(string(b))
+	if err != nil{
+		return err
+	}
+	*u = uuid
+	return nil
+}
+
 // ParseUUID parses a string formatted as "003020100-0504-0706-0809-0a0b0c0d0e0f"
 // or "{03020100-0504-0706-0809-0a0b0c0d0e0f}" into a UUID.
 func ParseUUID(uuidStr string) (UUID, error) {

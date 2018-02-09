@@ -78,6 +78,46 @@ func TransferStatusStringToCode(statusString string) TransferStatus {
 	}
 }
 
+type LogLevel pipeline.LogLevel
+const (
+	// LogNone tells a logger not to log any entries passed to it.
+	LogNone LogLevel = iota
+
+	// LogFatal tells a logger to log all LogFatal entries passed to it.
+	LogFatal
+
+	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
+	LogPanic
+
+	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
+	LogError
+
+	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogWarning
+
+	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
+	LogInfo
+)
+
+func (logLevel LogLevel) String() (string){
+	switch logLevel {
+	case LogNone:
+		return "NoLogLevel"
+	case LogFatal:
+		return "FatalLogs"
+	case LogPanic:
+		return "PanicLogs"
+	case LogError:
+		return "ErrorLogs"
+	case LogWarning:
+		return "WarningLogs"
+	case LogInfo:
+		return "InfoLogs"
+	default:
+		return ""
+	}
+}
+
 // represents the raw copy command input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
@@ -135,14 +175,14 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version            uint32     // version of the azcopy
-	ID                 string     // Guid - job identifier    //todo use UUID from go sdk
+	ID                 JobID     // Guid - job identifier    //todo use UUID from go sdk
 	PartNum            PartNumber // part number of the job
 	IsFinalPart        bool       // to determine the final part for a specific job
 	Priority           uint8      // priority of the task
 	SourceType         LocationType
 	DestinationType    LocationType
 	Transfers          []CopyTransfer
-	LogVerbosity       pipeline.LogLevel
+	LogVerbosity       LogLevel
 	IsaBackgroundOp    bool
 	OptionalAttributes BlobTransferAttributes
 }
