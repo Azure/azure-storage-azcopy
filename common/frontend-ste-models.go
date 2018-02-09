@@ -28,6 +28,10 @@ import (
 
 type JobID UUID
 
+func (j JobID) String() (string){
+	return UUID(j).String()
+}
+
 type PartNumber uint32
 type Version uint32
 type Status uint32
@@ -175,7 +179,7 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version            uint32     // version of the azcopy
-	ID                 JobID     // Guid - job identifier    //todo use UUID from go sdk
+	ID                 UUID     // Guid - job identifier
 	PartNum            PartNumber // part number of the job
 	IsFinalPart        bool       // to determine the final part for a specific job
 	Priority           uint8      // priority of the task

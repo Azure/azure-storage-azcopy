@@ -110,7 +110,7 @@ func PrintExistingJobIds(data []byte) {
 	}
 	fmt.Println("Existing Jobs ")
 	for index := 0; index < len(jobs.JobIds); index++ {
-		fmt.Println(common.UUID(jobs.JobIds[index]).String())
+		fmt.Println(jobs.JobIds[index].String())
 	}
 }
 

@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 	"log"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"net/http"
 )
 
 // JobInfo contains JobPartsMap and Logger
@@ -155,7 +157,7 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	// initialize the logger instance with log severity and jobId
 	// log filename is $JobId.log
 	if jobInfo.Logger == nil {
-		jobInfo.initializeLogForJob(jobLogVerbosity, fmt.Sprintf("%s.log", common.UUID(jobId).String()))
+		jobInfo.initializeLogForJob(jobLogVerbosity, fmt.Sprintf("%s.log", jobId.String()))
 		//jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 	}
 	jobInfo.JobPartsMap[partNumber] = jHandler
@@ -232,12 +234,57 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 	return common.JobID(parsedJobId), common.PartNumber(partNo64), common.Version(versionNo64)
 }
 
+// getJobPartMetaData returns the meta data of JobPart Order store in following format
+// "key1=val1;key2=val2;key3=val3"
+func getJobPartMetaData(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) (azblob.Metadata){
+	// jPartPlanHeader is the JobPartPlan header for memory mapped JobPartOrder File
+	jPartPlanHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber).getJobPartPlanPointer()
+	if jPartPlanHeader.BlobData.MetaDataLength == 0{
+		return azblob.Metadata{}
+	}
+	var mData azblob.Metadata
+	// metaDataString is meta data stored as string in JobPartOrder file
+	metaDataString := string(jPartPlanHeader.BlobData.MetaData[:])
+	// Split the meta data string using ';' to get key=value pairs
+	metaDataKeyValues := strings.Split(metaDataString, ";")
+	for index := 0; index < len(metaDataKeyValues); index ++{
+		// Splitting each key=value pair to get key and values
+		keyValue := strings.Split(metaDataKeyValues[index], "=")
+		mData[keyValue[0]] = keyValue[1]
+	}
+	return mData
+}
+
+// getBlobHttpHeaders returns the azblob.BlobHTTPHeaders with blobData attributes of JobPart Order
+func getBlobHttpHeaders(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap, sourceBytes []byte) (azblob.BlobHTTPHeaders){
+
+	// jPartPlanHeader is the JobPartPlan header for memory mapped JobPartOrder File
+	jPartPlanHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber).getJobPartPlanPointer()
+	contentTpe := ""
+	contentEncoding := ""
+	// If NoGuessMimeType is set to true, then detecting the content type
+	if jPartPlanHeader.BlobData.NoGuessMimeType{
+		contentTpe = http.DetectContentType(sourceBytes)
+	}else{
+		// If the NoGuessMimeType is set to false, then using the user given content-type
+		if jPartPlanHeader.BlobData.ContentEncodingLength > 0{
+			contentTpe = string(jPartPlanHeader.BlobData.ContentType[:])
+		}
+	}
+
+	if jPartPlanHeader.BlobData.ContentEncodingLength > 0{
+		contentEncoding = string(jPartPlanHeader.BlobData.ContentEncoding[:])
+	}
+	httpHeaderProperties := azblob.BlobHTTPHeaders{ContentType:contentTpe, ContentEncoding:contentEncoding, }
+	return httpHeaderProperties
+}
+
 // formatJobInfoToString builds the JobPart file name using the given JobId, part number and data schema version
 // fileName format := $jobId-$partnumber.stev$dataschemaversion
 func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
 	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
-	fileName := common.UUID(jobPartOrder.ID).String() + "--" + partNoString + ".steV" + versionIdString
+	fileName := jobPartOrder.ID.String() + "--" + partNoString + ".steV" + versionIdString
 	return fileName
 }
 

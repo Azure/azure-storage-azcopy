@@ -255,6 +255,7 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 	contentType := data.ContentType
 	contentEncoding := data.ContentEncoding
 	metaData := data.Metadata
+	noGuessMimeType := data.NoGuessMimeType
 	// check to verify whether content-length exceeds maximum content encoding length or not
 	if len(contentEncoding) > MAX_SIZE_CONTENT_ENCODING {
 		return JobPartPlanBlobData{}, fmt.Errorf("size %d of content encoding exceeds the max content-encoding size %d", len(contentEncoding), MAX_SIZE_CONTENT_ENCODING)
@@ -284,7 +285,7 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 		blockSize = common.DefaultBlockSize
 	}
 
-	return JobPartPlanBlobData{uint8(len(contentType)), contentTypeBytes,
-		uint8(len(contentEncoding)), contentEncodingBytes,
-		uint16(len(metaData)), metaDataBytes, uint64(blockSize)}, nil
+	return JobPartPlanBlobData{NoGuessMimeType:noGuessMimeType,ContentTypeLength:uint8(len(contentType)), ContentType:contentTypeBytes,
+								ContentEncodingLength:uint8(len(contentEncoding)), ContentEncoding:contentEncodingBytes,
+								MetaDataLength:uint16(len(metaData)), MetaData:metaDataBytes, BlockSize:uint64(blockSize)}, nil
 }

@@ -57,7 +57,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	//	fmt.Println("There is an error while marshalling the generated UUID. Please retry")
 	//	return ""
 	//}
-	jobPartOrder.ID = common.JobID(uuid)
+	jobPartOrder.ID = uuid
 
 	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {

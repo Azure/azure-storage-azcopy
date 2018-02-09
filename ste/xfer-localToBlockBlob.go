@@ -56,6 +56,19 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 	// step 4: compute the number of blocks and create a slice to hold the blockIDs of each chunk
 	downloadChunkSize := int64(transfer.ChunkSize)
 
+	// fetching the blob http headers with content-type, content-encoding attributes
+	blobHttpHeader := getBlobHttpHeaders(transfer.JobId, transfer.PartNumber, transfer.JobHandlerMap, memoryMappedFile)
+
+	// this sets the certain properties in the bloburl which will be set in request header
+	blobUrl.SetProperties(transfer.TransferCtx, blobHttpHeader, azblob.BlobAccessConditions{})
+
+	// fetching the metadata passed with the JobPartOrder
+	metaData := getJobPartMetaData(transfer.JobId, transfer.PartNumber, transfer.JobHandlerMap)
+
+	if len(metaData) > 0{
+		blobUrl.SetMetadata(transfer.TransferCtx, metaData, azblob.BlobAccessConditions{})
+	}
+
 	numOfBlocks := computeNumOfChunks(blobSize, downloadChunkSize)
 	blocksIds := make([]string, numOfBlocks)
 	blockIdCount := int32(0)
@@ -116,7 +129,6 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
 			// step 3: perform put block
-
 			blockBlobUrl := blobURL.ToBlockBlobURL()
 			_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), azblob.LeaseAccessConditions{})
 			if err != nil {

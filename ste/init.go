@@ -309,7 +309,7 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
 	if !ok {
 		(*resp).WriteHeader(http.StatusBadRequest)
-		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
+		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId.String())
 		(*resp).Write([]byte(errorMsg))
 		return
 	}
@@ -327,7 +327,7 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 	// If the job has not been ordered completely, then job cannot be cancelled
 	if !completeJobOrdered {
 		(*resp).WriteHeader(http.StatusBadRequest)
-		errorMsg := fmt.Sprintf("job with JobId %s hasn't been ordered completely", jobId)
+		errorMsg := fmt.Sprintf("job with JobId %s hasn't been ordered completely", jobId.String())
 		(*resp).Write([]byte(errorMsg))
 		return
 	}
@@ -337,9 +337,9 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 		errorMsg := ""
 		(*resp).WriteHeader(http.StatusBadRequest)
 		if isPaused {
-			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot pause the job", jobId)
+			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot pause the job", jobId.String())
 		} else {
-			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot cancel the job", jobId)
+			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot cancel the job", jobId.String())
 		}
 		(*resp).Write([]byte(errorMsg))
 		return
@@ -357,9 +357,9 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 	(*resp).WriteHeader(http.StatusAccepted)
 	resultMsg := ""
 	if isPaused {
-		resultMsg = fmt.Sprintf("succesfully pausing job with JobId %s", jobId)
+		resultMsg = fmt.Sprintf("succesfully pausing job with JobId %s", jobId.String())
 	} else {
-		resultMsg = fmt.Sprintf("succesfully cancelling job with JobId %s", jobId)
+		resultMsg = fmt.Sprintf("succesfully cancelling job with JobId %s", jobId.String())
 	}
 	jobInfo.Logf(common.LogInfo, resultMsg)
 	(*resp).Write([]byte(resultMsg))
@@ -576,13 +576,13 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 				}
 			}
 		case "cancel":
-			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.UUID
-			err := json.Unmarshal([]byte(jobIdString), &jobId)
+			var jobIdStructString = req.URL.Query()["jobId"][0]
+			var uuid common.UUID
+			err := json.Unmarshal([]byte(jobIdStructString), &uuid)
 			if err != nil {
 				panic(err)
 			}
-			CancelJobOrder(common.JobID(jobId), jobsInfoMap, &resp)
+			CancelJobOrder(common.JobID(uuid), jobsInfoMap, &resp)
 		case "pause":
 			var jobIdString = req.URL.Query()["jobId"][0]
 			var jobId common.UUID

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"strconv"
+	"encoding/json"
 )
 
 // The UUID reserved variants.
@@ -40,12 +41,17 @@ func (u UUID) String() string {
 // Implementing MarshalJSON() method for type UUID
 func (u UUID) MarshalJSON() ([]byte, error) {
 	fmt.Println("Using Custom ", u.String())
-	return []byte(u.String()), nil
+	s := u.String()
+	return json.Marshal(s)
 }
 
 // Implementing UnmarshalJSON() method for type UUID
 func (u *UUID) UnmarshalJSON(b []byte) error {
-	uuid, err := ParseUUID(string(b))
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil{
+		return err
+	}
+	uuid, err := ParseUUID(s)
 	if err != nil{
 		return err
 	}

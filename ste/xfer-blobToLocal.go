@@ -49,6 +49,7 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
 	downloadChunkSize := int64(transfer.ChunkSize)
 
+
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
 		adjustedChunkSize := downloadChunkSize
@@ -87,11 +88,11 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				jobInfo.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
-					workerId, common.UUID(jobId).String(), partNum)
+					workerId,jobId.String(), partNum)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
 		} else {
-			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
+			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId.String(), partNum, transferId)
 
 			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
 
@@ -140,7 +141,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				jobInfo.Logf(common.LogInfo,
 					"worker %d is finalizing cancellation of job %s and part number %d",
-					workerId, common.UUID(jobId).String(), partNum)
+					workerId, jobId.String(), partNum)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 				err := memoryMappedFile.Unmap()
 				if err != nil {
