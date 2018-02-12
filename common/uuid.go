@@ -50,10 +50,12 @@ func (u *UUID) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &s); err != nil{
 		return err
 	}
+	fmt.Println("string uuid ", s)
 	uuid, err := ParseUUID(s)
 	if err != nil{
 		return err
 	}
+	fmt.Println("uuid parsed" , uuid.String())
 	*u = uuid
 	return nil
 }

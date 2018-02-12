@@ -37,17 +37,12 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 
 	// checking if the jobId passed is valid or not
 	if commandLineInput.JobId != "" {
-		jobId, err := common.ParseUUID(commandLineInput.JobId)
-		if err != nil {
-			fmt.Println("invalid jobId passed to list the respective job info")
-			return
-		}
-		marshaledJobId, err := json.Marshal(jobId)
-		if err != nil {
-			fmt.Println("error marshalling the jobId ", jobId.String())
-			return
-		}
-		listOrder.JobId = string(marshaledJobId)
+		//jobId, err := common.ParseUUID(commandLineInput.JobId)
+		//if err != nil {
+		//	fmt.Println("invalid jobId passed to list the respective job info")
+		//	return
+		//}
+		listOrder.JobId = commandLineInput.JobId
 	} else {
 		listOrder.JobId = ""
 	}
@@ -80,19 +75,23 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	if err != nil {
 		panic(err)
 	}
-	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if resp.StatusCode != http.StatusAccepted {
-		fmt.Println("request failed with status ", resp.Status)
-		panic(errors.New(fmt.Sprintf("request failed with status %s", resp.Status)))
-	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
+
+	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
+	if resp.StatusCode != http.StatusAccepted {
+		errorMessage := fmt.Sprintf("request failed with status %s and message %s", resp.Status, string(body))
+		fmt.Println(errorMessage)
+		return
+		//panic(errors.New(fmt.Sprintf("request failed with status %s", resp.Status)))
+	}
+
 	// list Order command requested the list of existing jobs
-	if listOrder.JobId == "" {
+	if commandLineInput.JobId == ""  {
 		PrintExistingJobIds(body)
 	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
 		PrintJobProgressSummary(body, commandLineInput.JobId)

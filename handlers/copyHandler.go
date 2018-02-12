@@ -79,18 +79,16 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	timeOut := time.After(2 * time.Second)
 
 	// Waiting for signals from either cancelChannel or timeOut Channel. If no signal received, will sleep for 100 milliseconds
-	fmt.Println("listening for commands")
 	for {
 		select {
 		case <-cancelChannel:
-			fmt.Println("fetching cancel signal")
+			fmt.Println("Cancelling Job")
 			HandleCancelCommand(uuid.String())
 			os.Exit(1)
 		case <-timeOut:
-			fmt.Println("fetching job status")
 			jobStatus := fetchJobStatus(uuid.String())
-			if jobStatus == "Completed" {
-				break
+			if jobStatus == "JobCompleted" {
+				os.Exit(1)
 			}
 		default:
 			time.Sleep(100 * time.Millisecond)

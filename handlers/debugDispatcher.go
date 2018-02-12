@@ -74,24 +74,26 @@ func fetchJobStatus(jobId string) string {
 	var summary common.JobProgressSummary
 	json.Unmarshal(body, &summary)
 
-	//tm.Clear()
+	tm.Clear()
 	tm.MoveCursor(1, 1)
 
-	tm.Println("----------------- Progress Summary for JobId", jobId, "------------------")
+	fmt.Println("----------------- Progress Summary for JobId ", jobId, "------------------")
 	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfer)
 	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
 	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
 	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)
 
-	tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
-	tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
+	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
+	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
+
+	tm.Println(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress))
+	tm.Println(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024))
 
 	for index := 0; index < len(summary.FailedTransfers); index++ {
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
 		fmt.Println(message)
 	}
-
-	tm.Flush()
+	//tm.Flush()
 
 	return summary.JobStatus
 }

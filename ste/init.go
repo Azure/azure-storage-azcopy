@@ -35,6 +35,7 @@ import (
 	"log"
 )
 
+var emptyJobId = common.UUID{}
 var steContext = context.Background()
 var realTimeThroughputCounter = throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: time.Now()}
 
@@ -49,8 +50,8 @@ func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 	jPartInfoMap *JobsInfoMap) (jPartMap map[common.PartNumber]*JobPartPlanInfo) {
 	jPartMap, ok := jPartInfoMap.LoadJobPartsMapForJob(jobId)
 	if !ok {
-		errorMsg := fmt.Sprintf("no part number exists for given jobId %s", jobId)
-		panic(errors.New(errorMsg))
+		//panic(errors.New(errorMsg))
+		return nil
 	}
 	return jPartMap
 }
@@ -162,10 +163,10 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChan
 	var jobHandler = new(JobPartPlanInfo)
 
 	// creating context with cancel for the new job
-	jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
+	//jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
 
 	// Initializing the JobPartPlanInfo for new job
-	(jobHandler).initialize(jobHandler.ctx, fileName)
+	(jobHandler).initialize(context.Background(), fileName)
 
 	putJobPartInfoHandlerIntoMap(jobHandler, common.JobID(jobId), payload.PartNum, payload.LogVerbosity, jobsInfoMap)
 
@@ -265,9 +266,11 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorCha
 	// set job status to JobInProgress
 	setJobStatus(jobId, jobsInfoMap, JobInProgress)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
+	jobInfo.numberOfPartsDone = 0
 	for partNumber, jPartPlanInfo := range jPartMap {
 		jPartPlanInfo.ctx, jPartPlanInfo.cancel = context.WithCancel(context.Background())
-
+		// reset in memory number of transfer done
+		jPartPlanInfo.numberOfTransfersDone = 0
 		// schedule transfer job part order
 		scheduleTransfers(jobId, partNumber, jobsInfoMap, coordinatorChannels)
 		// If all the transfer of the current part are either complete or failed, then the part is complete
@@ -516,7 +519,6 @@ func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, commonLogger *log.Logger, r
 		commonLogger.Println("error marshalling the existing job list ")
 		(*resp).WriteHeader(http.StatusInternalServerError)
 		(*resp).Write([]byte("error marshalling the existing job list"))
-
 		return
 	}
 	(*resp).WriteHeader(http.StatusAccepted)
@@ -570,10 +572,10 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 				commonLogger.Println("received request for listing existing jobs")
 				listExistingJobs(jobsInfoMap, commonLogger, &resp)
 			} else {
-				var jobId common.UUID
-				err := json.Unmarshal([]byte(lsCommand.JobId), &jobId)
-				if err != nil {
-					panic(err)
+				jobId, err := common.ParseUUID(lsCommand.JobId)
+				if err != nil{
+					resp.Write([]byte("Invalid job id"))
+					resp.WriteHeader(http.StatusBadRequest)
 				}
 				if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
 					getJobSummary(common.JobID(jobId), jobsInfoMap, &resp)
