@@ -40,7 +40,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 
 	job.TransfersInfo = transferInfo
 
-	job.numberOfTransfersDone = 0
+	job.numberOfTransfersDone_doNotUse = 0
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder

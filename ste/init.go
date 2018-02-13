@@ -88,7 +88,7 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 		//if the current transfer is already complete or failed, then it won't be scheduled
 		if currentTransferStatus == common.TransferComplete ||
 			currentTransferStatus == common.TransferFailed {
-			jobPartInfo.numberOfTransfersDone++
+			jobPartInfo.numberOfTransfersDone_doNotUse++
 			continue
 		}
 		// creating transfer msg to schedule the transfer and queuing transferMsg into channels determined by the JobPriority
@@ -266,17 +266,17 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorCha
 	// set job status to JobInProgress
 	setJobStatus(jobId, jobsInfoMap, JobInProgress)
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
-	jobInfo.numberOfPartsDone = 0
+	jobInfo.setNumberOfPartsDone(0)
 	for partNumber, jPartPlanInfo := range jPartMap {
 		jPartPlanInfo.ctx, jPartPlanInfo.cancel = context.WithCancel(context.Background())
 		// reset in memory number of transfer done
-		jPartPlanInfo.numberOfTransfersDone = 0
+		jPartPlanInfo.numberOfTransfersDone_doNotUse = 0
 		// schedule transfer job part order
 		scheduleTransfers(jobId, partNumber, jobsInfoMap, coordinatorChannels)
 		// If all the transfer of the current part are either complete or failed, then the part is complete
 		// There is no transfer in this part that is rescheduled
-		if jPartPlanInfo.numberOfTransfersDone == jPartPlanInfo.getJobPartPlanPointer().NumTransfers {
-			jobInfo.numberOfPartsDone++
+		if jPartPlanInfo.numberOfTransfersDone_doNotUse == jPartPlanInfo.getJobPartPlanPointer().NumTransfers {
+			jobInfo.incrementNumberOfPartsDone()
 		}
 	}
 	// If all the number of parts that are already done equals the total number of parts in Job
@@ -346,6 +346,24 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot cancel the job", jobId.String())
 		}
 		(*resp).Write([]byte(errorMsg))
+		return
+	}
+	// If the Job is currently paused
+	if jPartPlanHeaderForPart0.jobStatus() == JobPaused {
+		// If an already paused job is set to pause again
+		if isPaused{
+			(*resp).WriteHeader(http.StatusBadRequest)
+			errorMsg := fmt.Sprintf("job with JobId %s i already paused, cannot pause it again", jobId.String())
+			(*resp).Write([]byte(errorMsg))
+		}else{
+			// If an already paused job has to be cancelled, then straight cleaning the paused job
+			setJobStatus(jobId, jobsInfoMap, JobCancelled)
+			// cleaning up the job since all parts of job are already done
+			cleanUpJob(jobId, jobsInfoMap)
+			(*resp).WriteHeader(http.StatusAccepted)
+			resultMsg := fmt.Sprintf("succesfully cancelling job with JobId %s", jobId.String())
+			(*resp).Write([]byte(resultMsg))
+		}
 		return
 	}
 	if isPaused {

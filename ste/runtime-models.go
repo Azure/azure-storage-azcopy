@@ -41,24 +41,28 @@ type JobPartPlanInfo struct {
 	// TransfersInfo list of transfer info of the transfers of JobPartOrder
 	TransfersInfo []TransferInfo
 
-	// numberOfTransfersDone represents the number of transfer of JobPartOrder
+	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
-	// numberOfTransfersDone determines the final cancellation of JobPartOrder
-	//TODO : use do not use pattern
-	numberOfTransfersDone uint32
+	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
+	numberOfTransfersDone_doNotUse uint32
 }
 
-// getNumberOfTransfersDone returns the numberOfTransfersDone of JobPartPlanInfo
+// numberOfTransfersDone returns the numberOfTransfersDone_doNotUse of JobPartPlanInfo
 // instance in thread safe manner
-//TODO : getter name fixed
-func (jPartPlanInfo *JobPartPlanInfo) getNumberOfTransfersDone() uint32 {
-	return atomic.LoadUint32(&jPartPlanInfo.numberOfTransfersDone)
+func (jPartPlanInfo *JobPartPlanInfo) numberOfTransfersDone() uint32 {
+	return atomic.LoadUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse)
 }
 
-// incrementNumberOfTransfersDone increment the numberOfTransfersDone of JobPartPlanInfo
+// incrementNumberOfTransfersDone increment the numberOfTransfersDone_doNotUse of JobPartPlanInfo
 // instance in thread safe manner by 1
 func (jPartPlanInfo *JobPartPlanInfo) incrementNumberOfTransfersDone() uint32 {
-	return atomic.AddUint32(&jPartPlanInfo.numberOfTransfersDone, 1)
+	return atomic.AddUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse, 1)
+}
+
+// setNumberOfTransfersDone sets the number of transfers done to a specific value
+// in a thread safe manner
+func (jPartPlanInfo *JobPartPlanInfo) setNumberOfTransfersDone(val uint32) {
+	atomic.StoreUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse, val)
 }
 
 // TransferMsg represents the transfer message for scheduling the transfers

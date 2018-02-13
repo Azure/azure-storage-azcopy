@@ -44,6 +44,12 @@ func (jobInfo *JobInfo) incrementNumberOfPartsDone() uint32 {
 	return atomic.AddUint32(&jobInfo.numberOfPartsDone, 1)
 }
 
+// setNumberOfPartsDone sets the number of part done for a job to the given value
+// in a thread-safe manner
+func (jobInfo *JobInfo) setNumberOfPartsDone(val uint32) {
+	atomic.StoreUint32(&jobInfo.numberOfPartsDone, val)
+}
+
 func (jobInfo *JobInfo) initializeLogForJob(logSeverity common.LogLevel, fileName string) {
 	jobInfo.logFileName = fileName
 	// Creates the log file if it does not exists already else opens the file in append mode.
@@ -415,9 +421,9 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
-	totalNumberOfPartsDone := atomic.LoadUint32(&jobInfo.numberOfPartsDone)
+	totalNumberOfPartsDone :=jobInfo.getNumberOfPartsDone()
 	jobInfo.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
-	if atomic.AddUint32(&jobInfo.numberOfPartsDone, 1) == numPartsForJob {
+	if jobInfo.incrementNumberOfPartsDone() == numPartsForJob {
 		jobInfo.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
 		if jPartHeader.jobStatus() == JobCancelled {
@@ -429,14 +435,14 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 	}
 }
 
-// UpdateNumTransferDone api increments the var numberOfTransfersDone by 1 atomically
-// If this numberOfTransfersDone equals the number of transfer in a job part,
+// UpdateNumTransferDone api increments the var numberOfTransfersDone_doNotUse by 1 atomically
+// If this numberOfTransfersDone_doNotUse equals the number of transfer in a job part,
 // all transfers of Job Part have either paused, cancelled or completed
 func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) {
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
-	totalNumberofTransfersCompleted := jHandler.getNumberOfTransfersDone()
+	totalNumberofTransfersCompleted := jHandler.numberOfTransfersDone()
 	jobInfo.Logf(common.LogInfo, "total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted)
 	if jHandler.incrementNumberOfTransfersDone() == jPartPlanInfo.NumTransfers {
 		updateNumberOfPartsDone(jobId, jobsInfoMap)
