@@ -130,7 +130,9 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 			// step 3: perform put block
 			blockBlobUrl := blobURL.ToBlockBlobURL()
-			_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), azblob.LeaseAccessConditions{})
+
+			body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), pc)
+			_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, body , azblob.LeaseAccessConditions{})
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				cancelTransfer()

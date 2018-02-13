@@ -18,7 +18,7 @@ func InitializeExecutionEngine(execEngineChannels *EEChannels) {
 	suicideLine := execEngineChannels.SuicideChannel
 
 	// TODO change this
-	for i := 1; i <= 20; i++ {
+	for i := 1; i <= 100; i++ {
 		// TODO take struct instead
 		go engineWorker(i, highChunk, highTransfer, suicideLine)
 	}
