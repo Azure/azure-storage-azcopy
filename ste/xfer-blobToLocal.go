@@ -111,7 +111,6 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				}
 				return
 			}
-
 			// step2: write the body into the memory mapped file directly
 			bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex:startIndex+chunkSize])
 			get.Body().Close()
@@ -143,11 +142,21 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 					"worker %d is finalizing cancellation of job %s and part number %d",
 					workerId, jobId.String(), partNum)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+
 				err := memoryMappedFile.Unmap()
 				if err != nil {
 					jobInfo.Logf(common.LogError,
 						"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
 						workerId, transferIdentifierStr, chunkId)
+				}
+
+				jobPartInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNum)
+				// if the job order has the flag preserve-last-modified-time set to true,
+				// then changing the timestamp of destination to last-modified time received in response
+				if jobPartInfo.getJobPartPlanPointer().BlobData.PreserveLastModifiedTime{
+					_, dst := jobPartInfo.getTransferSrcDstDetail(transferId)
+					lastModifiedTime := get.LastModified()
+					setModifiedTime(dst, lastModifiedTime, jobInfo)
 				}
 			}
 		}

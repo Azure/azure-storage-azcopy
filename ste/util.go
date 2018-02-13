@@ -18,6 +18,7 @@ import (
 	"log"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"net/http"
+	"time"
 )
 
 // JobInfo contains JobPartsMap and Logger
@@ -311,6 +312,18 @@ func writeInterfaceDataToWriter(writer io.Writer, f interface{}, structSize uint
 func convertJobIdBytesToString(jobId [128 / 8]byte) string {
 	jobIdString := fmt.Sprintf("%x%x%x%x%x", jobId[0:4], jobId[4:6], jobId[6:8], jobId[8:10], jobId[10:])
 	return jobIdString
+}
+
+
+func setModifiedTime(file string, mTime time.Time, info *JobInfo){
+	err := os.Chtimes(file, mTime, mTime)
+	if err != nil{
+		errorMsg := fmt.Sprintf("error changing the modified time of file %s to the time %s", file, mTime.String())
+		info.Logf(common.LogError, errorMsg)
+		panic(errors.New(errorMsg))
+		return
+	}
+	info.Logf(common.LogInfo, "successfully changed the modified time of file %s to the time %s", file, mTime.String())
 }
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile

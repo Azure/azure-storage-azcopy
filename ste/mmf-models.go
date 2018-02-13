@@ -86,6 +86,9 @@ type JobPartPlanBlobData struct {
 	ContentEncoding [256]byte
 	MetaDataLength  uint16
 	MetaData        [1000]byte
+
+	// Specifies whether the timestamp of destination file has to be set to the modified time of source file
+	PreserveLastModifiedTime bool
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
 	BlockSize uint64
 }
