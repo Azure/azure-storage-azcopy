@@ -168,7 +168,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					workerId, transferIdentifierStr, chunkId, *blockIds)
 				//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
 
-				_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.Metadata{}, azblob.BlobHTTPHeaders{}, azblob.BlobAccessConditions{})
+				_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 				if err != nil {
 					jobInfo.Logf(common.LogError,
 						"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
