@@ -353,7 +353,7 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannel
 	// checking for cancelled jobs and to cleanup those jobs
 	// this api is called to ensure that no cancelled jobs exists in in-memory
 	// this api is called to ensure that no cancelled jobs exists in in-memory
-	checkCancelledJobsInJobMap(jobsInfoMap)
+	//checkCancelledJobsInJobMap(jobsInfoMap)
 }
 
 // checkCancelledJobsInJobMap api checks the JobPartPlan header of part 0 of each job

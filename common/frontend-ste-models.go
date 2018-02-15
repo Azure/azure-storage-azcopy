@@ -239,4 +239,4 @@ type TransfersDetail struct {
 	Details []TransferDetail
 }
 
-const DefaultBlockSize = 4 * 1024 * 1024
+const DefaultBlockSize = 100 * 1024 * 1024

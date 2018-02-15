@@ -105,82 +105,145 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
 		} else {
-			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
 
-			// step 1: generate block ID
-			blockId := common.NewUUID().String()
-			encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
+			// If there are more than one block for a transfer, then we need to upload each individually
+			// and then we need to upload the block list
+			if totalNumOfChunks > 1 {
+				transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
 
-			// step 2: save the block ID into the list of block IDs
-			(*blockIds)[chunkId] = encodedBlockId
-			//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
+				// step 1: generate block ID
+				blockId := common.NewUUID().String()
+				encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
 
-			// step 3: perform put block
-			blockBlobUrl := blobURL.ToBlockBlobURL()
+				// step 2: save the block ID into the list of block IDs
+				(*blockIds)[chunkId] = encodedBlockId
+				//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
-			body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), pc)
-			_, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, body , azblob.LeaseAccessConditions{})
-			if err != nil {
-				// cancel entire transfer because this chunk has failed
-				cancelTransfer()
-				jobInfo.Logf(common.LogInfo,
-					"worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed",
-					workerId, transferIdentifierStr, chunkId, startIndex)
-				//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
-				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-				jobInfo.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId)
-				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+				// step 3: perform put block
+				blockBlobUrl := blobURL.ToBlockBlobURL()
+
+				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), pc)
+				putBlockResponse, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, body , azblob.LeaseAccessConditions{})
+				if err != nil {
+					// cancel entire transfer because this chunk has failed
+					cancelTransfer()
 					jobInfo.Logf(common.LogInfo,
-						"worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, common.UUID(jobId).String(), partNum)
-					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
-				}
-				return
-			}
+						"worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed",
+						workerId, transferIdentifierStr, chunkId, startIndex)
+					//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
+					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
+					updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
+					jobInfo.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId)
+					if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+						jobInfo.Logf(common.LogInfo,
+							"worker %d is finalizing cancellation of job %s and part number %d",
+							workerId, common.UUID(jobId).String(), partNum)
+						updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
-			//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobsInfoMap)
-			updateThroughputCounter(chunkSize)
+						err := memoryMappedFile.Unmap()
+						if err != nil {
+							jobInfo.Logf(common.LogError,
+								"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
+								workerId, transferIdentifierStr, chunkId)
+						}
 
-			// step 4: check if this is the last chunk
-			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
-				// If the transfer gets cancelled before the putblock list
-				if ctx.Err() != nil {
-					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+					}
 					return
 				}
-				// step 5: this is the last block, perform EPILOGUE
-				jobInfo.Logf(common.LogInfo,
-					"worker %d is concluding download Transfer job with %s after processing chunkId %d with blocklist %s",
-					workerId, transferIdentifierStr, chunkId, *blockIds)
-				//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
 
-				// fetching the blob http headers with content-type, content-encoding attributes
+				if putBlockResponse != nil{
+					putBlockResponse.Response().Body.Close()
+				}
+
+				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusComplete, jobsInfoMap)
+				updateThroughputCounter(chunkSize)
+
+				// step 4: check if this is the last chunk
+				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+					// If the transfer gets cancelled before the putblock list
+					if ctx.Err() != nil {
+						updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+						return
+					}
+					// step 5: this is the last block, perform EPILOGUE
+					jobInfo.Logf(common.LogInfo,
+						"worker %d is concluding download Transfer job with %s after processing chunkId %d with blocklist %s",
+						workerId, transferIdentifierStr, chunkId, *blockIds)
+					//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
+
+					// fetching the blob http headers with content-type, content-encoding attributes
+					blobHttpHeader := getBlobHttpHeaders(jobId, partNum, jobsInfoMap, memoryMappedFile)
+
+					// fetching the metadata passed with the JobPartOrder
+					metaData := getJobPartMetaData(jobId, partNum, jobsInfoMap)
+
+					putBlockListResponse, err := blockBlobUrl.PutBlockList(ctx, *blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+					if err != nil {
+						jobInfo.Logf(common.LogError,
+							"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
+							workerId, transferIdentifierStr, chunkId, string(err.Error()))
+						updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
+						updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+						return
+					}
+
+					if putBlockListResponse != nil{
+						putBlockListResponse.Response().Body.Close()
+					}
+
+					jobInfo.Logf(common.LogInfo, "transfer %d of Job %s and part number %d has completed successfully", transferId, common.UUID(jobId).String(), partNum)
+					updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
+					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+
+					err = memoryMappedFile.Unmap()
+					if err != nil {
+						jobInfo.Logf(common.LogError,
+							"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
+							workerId, transferIdentifierStr, chunkId)
+					}
+				}
+			}else {
+				// If there is only one block for a transfer, then uploading block as a blob
+				blockBlobUrl := blobURL.ToBlockBlobURL()
+
 				blobHttpHeader := getBlobHttpHeaders(jobId, partNum, jobsInfoMap, memoryMappedFile)
 
 				// fetching the metadata passed with the JobPartOrder
 				metaData := getJobPartMetaData(jobId, partNum, jobsInfoMap)
 
-				_, err = blockBlobUrl.PutBlockList(ctx, *blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
-				if err != nil {
-					jobInfo.Logf(common.LogError,
-						"Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
-						workerId, transferIdentifierStr, chunkId, string(err.Error()))
+				// reading the chunk contents
+				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), pc)
+
+				putblobResp, err := blockBlobUrl.PutBlob(ctx, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+
+				// if the put blob is a failure, updating the transfer status to failed
+				if err != nil{
+					jobInfo.Logf(common.LogInfo,
+						"put blob failed for transfer %d of Job %s and part number %d failed and so cancelling the transfer",
+						transferId, jobId, partNum)
 					updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
-					return
+				}else{
+					// if the put blob is a success, updating the transfer status to success
+					jobInfo.Logf(common.LogInfo,
+						"put blob successful for transfer %d of Job %s and part number %d by worked %d",
+						transferId, jobId, partNum, workerId)
+					updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				}
-				jobInfo.Logf(common.LogInfo, "transfer %d of Job %s and part number %d has completed successfully", transferId, common.UUID(jobId).String(), partNum)
-				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
+
+				// updating number of transfers done for job part order
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
-				err := memoryMappedFile.Unmap()
-				if err != nil {
-					jobInfo.Logf(common.LogError,
-						"worker %v failed to conclude Transfer job with %v after processing chunkId %v",
-						workerId, transferIdentifierStr, chunkId)
+				// closing the put blob response body
+				if putblobResp != nil{
+					putblobResp.Response().Body.Close()
 				}
 
+				err = memoryMappedFile.Unmap()
+				if err != nil {
+					jobInfo.Logf(common.LogError,
+						"error mapping the memory map file for transfer %d job %s and part number %d",
+						transferId, jobId, partNum)
+				}
 			}
 		}
 	}
