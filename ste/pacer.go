@@ -7,8 +7,6 @@ import (
 	"runtime"
 )
 
-var pc = newPacer(500 * 1024 * 1024)
-
 type pacer struct {
 	bytesAvailable int64
 }

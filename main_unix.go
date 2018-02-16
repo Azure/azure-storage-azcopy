@@ -27,6 +27,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"os"
 	"os/exec"
+	"strconv"
 )
 
 func main() {
@@ -36,10 +37,27 @@ func main() {
 	}
 	switch os.Args[1] {
 	case "inproc": // STE is launched in process
-		go ste.InitializeSTE()
+		go ste.InitializeSTE(100, 500)
 		cmd.Execute()
 	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
-		ste.InitializeSTE()
+		if len(os.Args) == 4 {
+			numOfEngineWorker, err := strconv.Atoi(os.Args[2])
+			if err != nil {
+				panic("Cannot parse number of engine workers, please give a positive integer.")
+			}
+
+			targetRateInMBps, err := strconv.Atoi(os.Args[3])
+			if err != nil {
+				panic("Cannot parse target rate in MB/s, please give a positive integer.")
+			}
+
+			ste.InitializeSTE(numOfEngineWorker, targetRateInMBps)
+		} else if len(os.Args) == 2 {
+			// use default number of engine worker and target rate to initialize ste
+			ste.InitializeSTE(100, 500)
+		} else {
+			panic("Wrong number of arguments for STE mode! Please contact your developer.")
+		}
 	default:
 		//STE is launched as an independent process
 		//args := append(os.Args, "ste")

@@ -28,8 +28,8 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
 			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      3,
-			TryTimeout:    time.Second * 60,
+			MaxTries:      5,
+			TryTimeout:    time.Minute * 10,
 			RetryDelay:    time.Second * 1,
 			MaxRetryDelay: time.Second * 3,
 		},
@@ -117,7 +117,6 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 				// step 2: save the block ID into the list of block IDs
 				(*blockIds)[chunkId] = encodedBlockId
-				//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
 				// step 3: perform put block
 				blockBlobUrl := blobURL.ToBlockBlobURL()
@@ -130,8 +129,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					jobInfo.Logf(common.LogInfo,
 						"worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed",
 						workerId, transferIdentifierStr, chunkId, startIndex)
-					//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
-					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
+
 					updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
 					jobInfo.Logf(common.LogInfo, "transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId)
 					if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
