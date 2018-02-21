@@ -11,14 +11,13 @@ import (
 	"time"
 )
 
-func InitializeExecutionEngine(execEngineChannels *EEChannels) {
+func InitializeExecutionEngine(execEngineChannels *EEChannels, numOfEngineWorker int) {
 	highChunk := execEngineChannels.HighChunkTransaction
 	highTransfer := execEngineChannels.HighTransfer
 	// TODO add the other channels
 	suicideLine := execEngineChannels.SuicideChannel
 
-	// TODO change this
-	for i := 1; i <= 100; i++ {
+	for i := 1; i <= numOfEngineWorker; i++ {
 		// TODO take struct instead
 		go engineWorker(i, highChunk, highTransfer, suicideLine)
 	}

@@ -28,8 +28,8 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
 			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      3,
-			TryTimeout:    time.Second * 60,
+			MaxTries:      5,
+			TryTimeout:    time.Minute * 10,
 			RetryDelay:    time.Second * 1,
 			MaxRetryDelay: time.Second * 3,
 		},
@@ -117,7 +117,6 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 
 				// step 2: save the block ID into the list of block IDs
 				(*blockIds)[chunkId] = encodedBlockId
-				//fmt.Println("Worker", workerId, "is processing upload CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "and blockID", encodedBlockId)
 
 				// step 3: perform put block
 				blockBlobUrl := blobURL.ToBlockBlobURL()
