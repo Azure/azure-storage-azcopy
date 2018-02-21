@@ -5,7 +5,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/edsrzf/mmap-go"
 	"sync/atomic"
-	"time"
 )
 
 // TransfersInfo represents the runtime information of a transfer of a JobPartOrder
@@ -130,8 +129,39 @@ type SuicideJob byte
 type chunkFunc func(int)
 type prologueFunc func(msg TransferMsgDetail, chunkChannel chan<- ChunkMsg)
 
+// throughputState struct holds the attribute to monitor the through of an existing JobOrder
 type throughputState struct {
-	lastCheckedTime  time.Time
+	lastCheckedTime  int64
 	lastCheckedBytes int64
 	currentBytes     int64
+}
+
+// getLastCheckedTime api returns the lastCheckedTime of throughputState instance in thread-safe manner
+func (t *throughputState) getLastCheckedTime() (int64){
+	return atomic.LoadInt64(&t.lastCheckedTime)
+}
+
+// updateLastCheckTime api updates the lastCheckedTime of throughputState instance in thread-safe manner
+func (t *throughputState) updateLastCheckTime(currentTime int64){
+	atomic.StoreInt64(&t.lastCheckedTime, currentTime)
+}
+
+// getLastCheckedBytes api returns the lastCheckedBytes of throughputState instance in thread-safe manner
+func (t *throughputState) getLastCheckedBytes() (int64){
+	return atomic.LoadInt64(&t.lastCheckedBytes)
+}
+
+// updateLastCheckedBytes api updates the lastCheckedBytes of throughputState instance in thread-safe manner
+func (t *throughputState) updateLastCheckedBytes(bytes int64) {
+	atomic.StoreInt64(&t.lastCheckedBytes, bytes)
+}
+
+// getCurrentBytes api returns the currentBytes of throughputState instance in thread-safe manner
+func (t *throughputState) getCurrentBytes() (int64){
+	return atomic.LoadInt64(&t.currentBytes)
+}
+
+// updateCurrentBytes api adds the value in currentBytes of throughputState instance in thread-safe manner
+func (t *throughputState) updateCurrentBytes(bytes int64) (int64){
+	return atomic.AddInt64(&t.currentBytes, bytes)
 }

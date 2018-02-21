@@ -215,9 +215,10 @@ type ExistingJobDetails struct {
 
 // represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
 type JobProgressSummary struct {
+	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered             bool
 	JobStatus                      string
-	TotalNumberOfTransfer          uint32
+	TotalNumberOfTransfers         uint32
 	TotalNumberofTransferCompleted uint32
 	TotalNumberofFailedTransfer    uint32
 	//NumberOfTransferCompletedafterCheckpoint uint32

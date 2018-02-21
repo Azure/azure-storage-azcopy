@@ -30,14 +30,14 @@ import (
 	"math"
 	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 	"log"
+	"sync/atomic"
 )
 
 var emptyJobId = common.UUID{}
 var steContext = context.Background()
-var realTimeThroughputCounter = throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: time.Now()}
+var realTimeThroughputCounter = &throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: int64(time.Now().Nanosecond())}
 
 // putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID,
@@ -96,23 +96,23 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 		switch priority {
 		case HighJobPriority:
 			coordinatorChannels.HighTransfer <- transferMsg
-			jobInfo.Logf(common.LogInfo,
-				"successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-				index, priority, jobId, partNumber)
+			jobInfo.Log(common.LogInfo,
+				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
+				index, priority, jobId, partNumber))
 		case MediumJobPriority:
 			coordinatorChannels.MedTransfer <- transferMsg
-			jobInfo.Logf(common.LogInfo,
-				"successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-				index, priority, jobId, partNumber)
+			jobInfo.Log(common.LogInfo,
+				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
+				index, priority, jobId, partNumber))
 		case LowJobPriority:
 			coordinatorChannels.LowTransfer <- transferMsg
-			jobInfo.Logf(common.LogInfo,
-				"successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-				index, priority, jobId, partNumber)
+			jobInfo.Log(common.LogInfo,
+				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
+				index, priority, jobId, partNumber))
 		default:
-			jobInfo.Logf(common.LogInfo,
-				"invalid job part order priority %d for given Job Id %s and part number %d and transfer Index %d",
-				priority, jobId, partNumber, index)
+			jobInfo.Log(common.LogInfo,
+				fmt.Sprintf("invalid job part order priority %d for given Job Id %s and part number %d and transfer Index %d",
+				priority, jobId, partNumber, index))
 		}
 	}
 }
@@ -125,7 +125,7 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 * jobToLoggerMap -- Map to hold the logger instance specific to a job
  */
 func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChannels *CoordinatorChannels,
-	jobsInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+	jobsInfoMap *JobsInfoMap, resp http.ResponseWriter) {
 	/*
 	* Convert the optional attributes of job part order to memory map compatible DestinationBlobData
 	* Create a file for JobPartOrder and write data into that file.
@@ -155,8 +155,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChan
 	fileName, err := createJobPartPlanFile(payload, destBlobData, jobsInfoMap)
 	// If file creation fails, then request is terminated as a bad request
 	if err != nil {
-		(*resp).WriteHeader(http.StatusBadRequest)
-		(*resp).Write([]byte(err.Error()))
+		resp.WriteHeader(http.StatusBadRequest)
+		resp.Write([]byte(err.Error()))
 	}
 
 	// Creating JobPartPlanInfo reference for new job part order
@@ -171,15 +171,15 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChan
 	putJobPartInfoHandlerIntoMap(jobHandler, common.JobID(jobId), payload.PartNum, payload.LogVerbosity, jobsInfoMap)
 
 	if coordinatorChannels == nil { // If the coordinator transfer channels are initialized properly, then incoming transfers can't be scheduled with current instance of transfer engine.
-		jobsInfoMap.LoadJobInfoForJob(common.JobID(jobId)).Logf(common.LogError, "coordinator channels not initialized properly")
+		jobsInfoMap.LoadJobInfoForJob(common.JobID(jobId)).Log(common.LogError, "coordinator channels not initialized properly")
 	}
 
 	// Scheduling each transfer in the new job according to the priority of the job
 	scheduleTransfers(common.JobID(jobId), payload.PartNum, jobsInfoMap, coordinatorChannels)
 
 	// sending successful response back to front end
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write([]byte("Successfully trigger the Job PartOrder request"))
+	resp.WriteHeader(http.StatusAccepted)
+	resp.Write([]byte("Successfully trigger the Job PartOrder request"))
 }
 
 // jobStatus api returns the current status of given JobId
@@ -190,7 +190,7 @@ func getJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap) JobStatusCode {
 		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
 	}
 	status := jobPartInfo.getJobPartPlanPointer().jobStatus()
-	jobInfo.Logf(common.LogInfo, "current job status of JobId %s is %s", jobId, status.String())
+	jobInfo.Log(common.LogInfo, fmt.Sprintf("current job status of JobId %s is %s", jobId, status.String()))
 	return status
 }
 
@@ -204,7 +204,7 @@ func setJobStatus(jobId common.JobID, jobsInfoMap *JobsInfoMap, status JobStatus
 	}
 	// changing the JobPart status to given status
 	jPartPlanHeader.setJobStatus(status)
-	jobsInfo.Logf(common.LogInfo, "changed the status of Job %s to status %s", jobId, status.String())
+	jobsInfo.Log(common.LogInfo, fmt.Sprintf("changed the status of Job %s to status %s", jobId, status.String()))
 }
 
 // cleanUpJob api unmaps all the memory map JobPartFile and deletes the JobPartFile
@@ -226,16 +226,12 @@ func cleanUpJob(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 		// unmapping the memory map JobPart file
 		err := jobHandler.shutDownHandler()
 		if err != nil {
-			errorMsg := fmt.Sprintf("error unmapping the memory map file %s. Failed with following error %s", jobHandler.fileName, err.Error())
-			jobInfo.Logf(common.LogError, errorMsg)
-			panic(errors.New(errorMsg))
+			jobInfo.Panic(errors.New(fmt.Sprintf("error unmapping the memory map file %s. Failed with following error %s", jobHandler.fileName, err.Error())))
 		}
 		// deleting the JobPartFile
 		err = os.Remove(jobHandler.fileName)
 		if err != nil {
-			errorMsg := fmt.Sprintf("error removing the job part file %s. Failed with following error %s", jobHandler.fileName, err.Error())
-			jobInfo.Logf(common.LogError, errorMsg)
-			panic(errors.New(errorMsg))
+			jobInfo.Panic(errors.New(fmt.Sprintf("error removing the job part file %s. Failed with following error %s", jobHandler.fileName, err.Error())))
 		}
 	}
 	jobInfo.closeLogForJob()
@@ -250,18 +246,18 @@ func cleanUpJob(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 	* Iterate through each transfer of JobPart order and refresh the cancelled context of the transfer
     * Reschedule each transfer again into the transfer msg channel depending on the priority of the channel
 */
-func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorChannels *CoordinatorChannels, resp *http.ResponseWriter) {
+func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorChannels *CoordinatorChannels, resp http.ResponseWriter) {
 	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
 	if !ok {
-		(*resp).WriteHeader(http.StatusBadRequest)
+		resp.WriteHeader(http.StatusBadRequest)
 		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
-		(*resp).Write([]byte(errorMsg))
+		resp.Write([]byte(errorMsg))
 		return
 	}
 	currentJobStatus := getJobStatus(jobId, jobsInfoMap)
 	if currentJobStatus == JobInProgress || currentJobStatus == JobCompleted {
-		(*resp).WriteHeader(http.StatusBadRequest)
-		(*resp).Write([]byte(fmt.Sprintf("Job %s is already %s", jobId, currentJobStatus.String())))
+		resp.WriteHeader(http.StatusBadRequest)
+		resp.Write([]byte(fmt.Sprintf("Job %s is already %s", jobId, currentJobStatus.String())))
 	}
 	// set job status to JobInProgress
 	setJobStatus(jobId, jobsInfoMap, JobInProgress)
@@ -282,24 +278,24 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, coordinatorCha
 	// If all the number of parts that are already done equals the total number of parts in Job
 	// No need to resume the Job since there are no transfer to reschedule
 	if jobInfo.numberOfPartsDone == jobsInfoMap.GetNumberOfPartsForJob(jobId) {
-		jobInfo.Logf(common.LogInfo, "all parts of Job %s are already complete and no transfer needs to be rescheduled")
+		jobInfo.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s are already complete and no transfer needs to be rescheduled", jobId))
 		setJobStatus(jobId, jobsInfoMap, JobCompleted)
-		(*resp).WriteHeader(http.StatusAccepted)
-		(*resp).Write([]byte(fmt.Sprintf("Job %s was already complete hence no need to resume it", jobId)))
+		resp.WriteHeader(http.StatusAccepted)
+		resp.Write([]byte(fmt.Sprintf("Job %s was already complete hence no need to resume it", jobId)))
 		return
 	}
 
-	jobInfo.Logf(common.LogInfo, "Job %s resumed and has been rescheduled", jobId)
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write([]byte(fmt.Sprintf("Job %s successfully resumed", jobId)))
+	jobInfo.Log(common.LogInfo, fmt.Sprintf("Job %s resumed and has been rescheduled", jobId))
+	resp.WriteHeader(http.StatusAccepted)
+	resp.Write([]byte(fmt.Sprintf("Job %s successfully resumed", jobId)))
 }
 
 // PauseJobOrder api process the process job order request from front-end
-func PauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+func PauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp http.ResponseWriter) {
 	cancelpauseJobOrder(jobId, jobsInfoMap, true, resp)
 }
 
-func CancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+func CancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp http.ResponseWriter) {
 	cancelpauseJobOrder(jobId, jobsInfoMap, false, resp)
 }
 
@@ -309,12 +305,12 @@ func CancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, resp *http.Res
     * If all the transfers in the Job are either failed or completed, then Job cannot be cancelled or paused
     * If a job is already paused, it cannot be paused again
 */
-func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused bool, resp *http.ResponseWriter) {
+func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused bool, resp http.ResponseWriter) {
 	jPartMap, ok := jobsInfoMap.LoadJobPartsMapForJob(jobId)
 	if !ok {
-		(*resp).WriteHeader(http.StatusBadRequest)
+		resp.WriteHeader(http.StatusBadRequest)
 		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId.String())
-		(*resp).Write([]byte(errorMsg))
+		resp.Write([]byte(errorMsg))
 		return
 	}
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
@@ -330,39 +326,39 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 
 	// If the job has not been ordered completely, then job cannot be cancelled
 	if !completeJobOrdered {
-		(*resp).WriteHeader(http.StatusBadRequest)
+		resp.WriteHeader(http.StatusBadRequest)
 		errorMsg := fmt.Sprintf("job with JobId %s hasn't been ordered completely", jobId.String())
-		(*resp).Write([]byte(errorMsg))
+		resp.Write([]byte(errorMsg))
 		return
 	}
 	// If all parts of the job has either completed or failed, then job cannot be cancelled since it is already finished
 	jPartPlanHeaderForPart0 := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
 	if jPartPlanHeaderForPart0.jobStatus() == JobCompleted {
 		errorMsg := ""
-		(*resp).WriteHeader(http.StatusBadRequest)
+		resp.WriteHeader(http.StatusBadRequest)
 		if isPaused {
 			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot pause the job", jobId.String())
 		} else {
 			errorMsg = fmt.Sprintf("job with JobId %s has already completed, hence cannot cancel the job", jobId.String())
 		}
-		(*resp).Write([]byte(errorMsg))
+		resp.Write([]byte(errorMsg))
 		return
 	}
 	// If the Job is currently paused
 	if jPartPlanHeaderForPart0.jobStatus() == JobPaused {
 		// If an already paused job is set to pause again
 		if isPaused{
-			(*resp).WriteHeader(http.StatusBadRequest)
+			resp.WriteHeader(http.StatusBadRequest)
 			errorMsg := fmt.Sprintf("job with JobId %s i already paused, cannot pause it again", jobId.String())
-			(*resp).Write([]byte(errorMsg))
+			resp.Write([]byte(errorMsg))
 		}else{
 			// If an already paused job has to be cancelled, then straight cleaning the paused job
 			setJobStatus(jobId, jobsInfoMap, JobCancelled)
 			// cleaning up the job since all parts of job are already done
 			cleanUpJob(jobId, jobsInfoMap)
-			(*resp).WriteHeader(http.StatusAccepted)
+			resp.WriteHeader(http.StatusAccepted)
 			resultMsg := fmt.Sprintf("succesfully cancelling job with JobId %s", jobId.String())
-			(*resp).Write([]byte(resultMsg))
+			resp.Write([]byte(resultMsg))
 		}
 		return
 	}
@@ -376,29 +372,29 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 		jHandler.cancel()
 	}
 
-	(*resp).WriteHeader(http.StatusAccepted)
+	resp.WriteHeader(http.StatusAccepted)
 	resultMsg := ""
 	if isPaused {
 		resultMsg = fmt.Sprintf("succesfully pausing job with JobId %s", jobId.String())
 	} else {
 		resultMsg = fmt.Sprintf("succesfully cancelling job with JobId %s", jobId.String())
 	}
-	jobInfo.Logf(common.LogInfo, resultMsg)
-	(*resp).Write([]byte(resultMsg))
+	jobInfo.Log(common.LogInfo, resultMsg)
+	resp.Write([]byte(resultMsg))
 }
 
 // getJobSummary api returns the job progress summary of an active job
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
-* TotalNumberOfTransfer - total number of transfers available for the given job
+* TotalNumberOfTransfers - total number of transfers available for the given job
 * TotalNumberOfTransfersCompleted - total number of transfers in the job completed
 * NumberOfTransfersCompletedAfterCheckpoint - number of transfers completed after the last checkpoint
 * NumberOfTransferFailedAfterCheckpoint - number of transfers failed after last checkpoint timestamp
 * PercentageProgress - job progress reported in terms of percentage
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp http.ResponseWriter) {
 
 	//fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
@@ -406,9 +402,9 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http
 
 	// if partNumber to JobPartPlanInfo Pointer map is nil, then returning error
 	if jPartMap == nil {
-		(*resp).WriteHeader(http.StatusBadRequest)
+		resp.WriteHeader(http.StatusBadRequest)
 		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
-		(*resp).Write([]byte(errorMsg))
+		resp.Write([]byte(errorMsg))
 		return
 	}
 
@@ -423,7 +419,7 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http
 		currentJobPartPlanInfo := jHandler.getJobPartPlanPointer()
 
 		completeJobOrdered = completeJobOrdered || currentJobPartPlanInfo.IsFinalPart
-		progressSummary.TotalNumberOfTransfer += currentJobPartPlanInfo.NumTransfers
+		progressSummary.TotalNumberOfTransfers += currentJobPartPlanInfo.NumTransfers
 		// iterating through all transfers for current partNo and job with given jobId
 		for index := uint32(0); index < currentJobPartPlanInfo.NumTransfers; index++ {
 
@@ -444,54 +440,47 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp *http
 	}
 	/*If each transfer in all parts of a job has either completed or failed and is not in active or inactive state, then job order is said to be completed
 	if final part of job has been ordered.*/
-	if (progressSummary.TotalNumberOfTransfer == progressSummary.TotalNumberofFailedTransfer+progressSummary.TotalNumberofTransferCompleted) && (completeJobOrdered) {
+	if (progressSummary.TotalNumberOfTransfers == progressSummary.TotalNumberofFailedTransfer+progressSummary.TotalNumberofTransferCompleted) && (completeJobOrdered) {
 		progressSummary.JobStatus = JobCompleted.String()
 	} else {
 		progressSummary.JobStatus = JobInProgress.String()
 	}
 	progressSummary.CompleteJobOrdered = completeJobOrdered
 	progressSummary.FailedTransfers = failedTransfers
-	progressSummary.PercentageProgress = ((progressSummary.TotalNumberofTransferCompleted + progressSummary.TotalNumberofFailedTransfer) * 100) / progressSummary.TotalNumberOfTransfer
+	progressSummary.PercentageProgress = ((progressSummary.TotalNumberofTransferCompleted + progressSummary.TotalNumberofFailedTransfer) * 100) / progressSummary.TotalNumberOfTransfers
 
 	// get the throughput counts
 	numOfBytesTransferredSinceLastCheckpoint := atomic.LoadInt64(&realTimeThroughputCounter.currentBytes) - realTimeThroughputCounter.lastCheckedBytes
 	if numOfBytesTransferredSinceLastCheckpoint == 0 {
 		progressSummary.ThroughputInBytesPerSeconds = 0
 	} else {
-		progressSummary.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) / time.Since(realTimeThroughputCounter.lastCheckedTime).Seconds()
+		lastCheckedTime := time.Unix(0, realTimeThroughputCounter.getLastCheckedTime())
+		progressSummary.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) / time.Since(lastCheckedTime).Seconds()
 	}
 	// update the throughput state
-	snapshotThroughputCounter()
+	realTimeThroughputCounter.updateLastCheckedBytes(realTimeThroughputCounter.getCurrentBytes())
+	realTimeThroughputCounter.updateLastCheckTime(int64(time.Now().Nanosecond()))
 
 	// marshalling the JobProgressSummary struct to send back in response.
 	jobProgressSummaryJson, err := json.MarshalIndent(progressSummary, "", "")
 	if err != nil {
 		result := fmt.Sprintf("error marshalling the progress summary for Job Id %s", jobId)
-		(*resp).WriteHeader(http.StatusInternalServerError)
-		(*resp).Write([]byte(result))
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte(result))
 		return
 	}
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write(jobProgressSummaryJson)
-}
-
-func updateThroughputCounter(numBytes int64) {
-	atomic.AddInt64(&realTimeThroughputCounter.currentBytes, numBytes)
-}
-
-func snapshotThroughputCounter() {
-	realTimeThroughputCounter.lastCheckedBytes = atomic.LoadInt64(&realTimeThroughputCounter.currentBytes)
-	realTimeThroughputCounter.lastCheckedTime = time.Now()
+	resp.WriteHeader(http.StatusAccepted)
+	resp.Write(jobProgressSummaryJson)
 }
 
 // getTransferList api returns the list of transfer with specific status for given jobId in http response
-func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPlanInfoMap *JobsInfoMap, resp *http.ResponseWriter) {
+func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPlanInfoMap *JobsInfoMap, resp http.ResponseWriter) {
 	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
 	jPartMap, ok := jPartPlanInfoMap.LoadJobPartsMapForJob(jobId)
 	// sending back the error status and error message in response
 	if !ok {
-		(*resp).WriteHeader(http.StatusBadRequest)
-		(*resp).Write([]byte(fmt.Sprintf("invalid jobId %s", jobId)))
+		resp.WriteHeader(http.StatusBadRequest)
+		resp.Write([]byte(fmt.Sprintf("invalid jobId %s", jobId)))
 		return
 	}
 	var transferList []common.TransferDetail
@@ -517,16 +506,16 @@ func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPl
 	tStatusJson, err := json.MarshalIndent(common.TransfersDetail{Details: transferList}, "", "")
 	if err != nil {
 		result := fmt.Sprintf("error marshalling the transfer status for Job Id %s", jobId)
-		(*resp).WriteHeader(http.StatusInternalServerError)
-		(*resp).Write([]byte(result))
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte(result))
 		return
 	}
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write(tStatusJson)
+	resp.WriteHeader(http.StatusAccepted)
+	resp.Write(tStatusJson)
 }
 
 // listExistingJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, commonLogger *log.Logger, resp *http.ResponseWriter) {
+func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, commonLogger *log.Logger, resp http.ResponseWriter) {
 	// get the list of all the jobId from the JobsInfoMap
 	jobIds := jPartPlanInfoMap.LoadExistingJobIds()
 
@@ -535,12 +524,12 @@ func listExistingJobs(jPartPlanInfoMap *JobsInfoMap, commonLogger *log.Logger, r
 	existingJobDetailsJson, err := json.Marshal(existingJobDetails)
 	if err != nil {
 		commonLogger.Println("error marshalling the existing job list ")
-		(*resp).WriteHeader(http.StatusInternalServerError)
-		(*resp).Write([]byte("error marshalling the existing job list"))
+		resp.WriteHeader(http.StatusInternalServerError)
+		resp.Write([]byte("error marshalling the existing job list"))
 		return
 	}
-	(*resp).WriteHeader(http.StatusAccepted)
-	(*resp).Write(existingJobDetailsJson)
+	resp.WriteHeader(http.StatusAccepted)
+	resp.Write(existingJobDetailsJson)
 }
 
 // parsePostHttpRequest parses the incoming CopyJobPartOrder request
@@ -568,7 +557,7 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error) {
     * jobToLoggerMap -- This Map holds the logger instance for each job
 */
 func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jobsInfoMap *JobsInfoMap, commonLogger *log.Logger) {
-	commonLogger.Println(fmt.Sprintf("http request recieved of type %s from %s", req.Method, req.RemoteAddr))
+	commonLogger.Println(fmt.Sprintf("http request recieved of type %s from %s for time %d", req.Method, req.RemoteAddr, time.Now().Second()))
 	switch req.Method {
 	case http.MethodGet:
 		// request type defines the type of GET request supported by transfer engine
@@ -588,7 +577,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			}
 			if lsCommand.JobId == "" {
 				commonLogger.Println("received request for listing existing jobs")
-				listExistingJobs(jobsInfoMap, commonLogger, &resp)
+				listExistingJobs(jobsInfoMap, commonLogger, resp)
 			} else {
 				jobId, err := common.ParseUUID(lsCommand.JobId)
 				if err != nil{
@@ -596,9 +585,9 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 					resp.WriteHeader(http.StatusBadRequest)
 				}
 				if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
-					getJobSummary(common.JobID(jobId), jobsInfoMap, &resp)
+					getJobSummary(common.JobID(jobId), jobsInfoMap, resp)
 				} else {
-					getTransferList(common.JobID(jobId), lsCommand.ExpectedTransferStatus, jobsInfoMap, &resp)
+					getTransferList(common.JobID(jobId), lsCommand.ExpectedTransferStatus, jobsInfoMap, resp)
 				}
 			}
 		case "cancel":
@@ -608,7 +597,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			if err != nil {
 				panic(err)
 			}
-			CancelJobOrder(common.JobID(uuid), jobsInfoMap, &resp)
+			CancelJobOrder(common.JobID(uuid), jobsInfoMap, resp)
 		case "pause":
 			var jobIdString = req.URL.Query()["jobId"][0]
 			var jobId common.UUID
@@ -616,7 +605,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			if err != nil {
 				panic(err)
 			}
-			PauseJobOrder(common.JobID(jobId), jobsInfoMap, &resp)
+			PauseJobOrder(common.JobID(jobId), jobsInfoMap, resp)
 		case "resume":
 			var jobIdString = req.URL.Query()["jobId"][0]
 			var jobId common.UUID
@@ -624,16 +613,17 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			if err != nil {
 				panic(err)
 			}
-			ResumeJobOrder(common.JobID(jobId), jobsInfoMap, coordinatorChannels, &resp)
+			ResumeJobOrder(common.JobID(jobId), jobsInfoMap, coordinatorChannels, resp)
 		}
 
 	case http.MethodPost:
+		commonLogger.Println(fmt.Sprintf("http put request recieved of type %s from %s for time %s", req.Method, req.RemoteAddr, time.Now()))
 		jobRequestData, err := parsePostHttpRequest(req)
 		if err != nil {
 			resp.WriteHeader(http.StatusBadRequest)
 			resp.Write([]byte("Not able to trigger the AZCopy request" + " : " + err.Error()))
 		}
-		ExecuteNewCopyJobPartOrder(jobRequestData, coordinatorChannels, jobsInfoMap, &resp)
+		ExecuteNewCopyJobPartOrder(jobRequestData, coordinatorChannels, jobsInfoMap, resp)
 	case http.MethodPut:
 		fallthrough
 	case http.MethodDelete:

@@ -42,6 +42,7 @@ const (
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
+	fmt.Println("current time", time.Now())
 	jobPartOrder := common.CopyJobPartOrder{}
 	ApplyFlags(&commandLineInput, &jobPartOrder)
 
@@ -90,7 +91,8 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 			if jobStatus == "JobCompleted" {
 				os.Exit(1)
 			}
-			time.Sleep(2 * time.Second)
+			//time.Sleep(1 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
@@ -103,6 +105,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 	jobPartOrderToFill *common.CopyJobPartOrder,
 	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {
 
+	fmt.Println("HandleUploadFromLocalToWastore startTime ", time.Now())
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Local
 	jobPartOrderToFill.DestinationType = common.Blob
@@ -123,8 +126,11 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 	// TODO add source id = last modified time
 	// uploading entire directory to Azure Storage
 	// listing needs to be performed
+	fmt.Println("listing parts starts ", time.Now())
 	if sourceFileInfo.IsDir() {
+		fmt.Println("reading dir start", time.Now())
 		files, err := ioutil.ReadDir(commandLineInput.Source)
+		fmt.Println("reading dir end", time.Now())
 
 		// since source was already validated, it would be surprising if file/directory cannot be accessed at this point
 		if err != nil {
@@ -191,6 +197,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		jobPartOrderToFill.IsFinalPart = true
 		dispatchJobPartOrderFunc(jobPartOrderToFill)
 	}
+	fmt.Println("listing parts ends ", time.Now())
 }
 
 func HandleDownloadFromWastoreToLocal(

@@ -70,14 +70,17 @@ func (jobInfo *JobInfo) closeLogForJob(){
 	}
 }
 
-func (jobInfo *JobInfo) Logf(severity common.LogLevel, format string, a ...interface{}) {
+func (jobInfo *JobInfo) Log(severity common.LogLevel, logMessage string) {
 	if severity > jobInfo.LogSeverity {
 		return
 	}
-	logMsg := fmt.Sprintf(severity.String()+":"+format, a...)
-	jobInfo.Logger.Println(logMsg)
+	jobInfo.Logger.Println(logMessage)
 }
 
+func (jobInfo *JobInfo) Panic(err error) {
+	jobInfo.Logger.Println(err.Error())
+	panic(err)
+}
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
 // Provides the thread safe Load and Store Method
@@ -318,12 +321,10 @@ func convertJobIdBytesToString(jobId [128 / 8]byte) string {
 func setModifiedTime(file string, mTime time.Time, info *JobInfo){
 	err := os.Chtimes(file, mTime, mTime)
 	if err != nil{
-		errorMsg := fmt.Sprintf("error changing the modified time of file %s to the time %s", file, mTime.String())
-		info.Logf(common.LogError, errorMsg)
-		panic(errors.New(errorMsg))
+		info.Panic(errors.New(fmt.Sprintf("error changing the modified time of file %s to the time %s", file, mTime.String())))
 		return
 	}
-	info.Logf(common.LogInfo, "successfully changed the modified time of file %s to the time %s", file, mTime.String())
+	info.Log(common.LogInfo, fmt.Sprintf("successfully changed the modified time of file %s to the time %s", file, mTime.String()))
 }
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
@@ -435,12 +436,12 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
 	totalNumberOfPartsDone :=jobInfo.getNumberOfPartsDone()
-	jobInfo.Logf(common.LogInfo, "total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone)
+	jobInfo.Log(common.LogInfo, fmt.Sprintf("total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone))
 	if jobInfo.incrementNumberOfPartsDone() == numPartsForJob {
-		jobInfo.Logf(common.LogInfo, "all parts of Job %s successfully completedm, cancelled or paused", jobId)
+		jobInfo.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully completed, cancelled or paused", jobId))
 		jPartHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, 0).getJobPartPlanPointer()
 		if jPartHeader.jobStatus() == JobCancelled {
-			jobInfo.Logf(common.LogInfo, "all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId)
+			jobInfo.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId))
 			cleanUpJob(jobId, jobsInfoMap)
 		} else if jPartHeader.jobStatus() == JobInProgress {
 			jPartHeader.setJobStatus(JobCompleted)
@@ -456,7 +457,7 @@ func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber
 	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber)
 	jPartPlanInfo := jHandler.getJobPartPlanPointer()
 	totalNumberofTransfersCompleted := jHandler.numberOfTransfersDone()
-	jobInfo.Logf(common.LogInfo, "total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted)
+	jobInfo.Log(common.LogInfo, fmt.Sprintf("total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted))
 	if jHandler.incrementNumberOfTransfersDone() == jPartPlanInfo.NumTransfers {
 		updateNumberOfPartsDone(jobId, jobsInfoMap)
 	}

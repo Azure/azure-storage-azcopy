@@ -9,13 +9,12 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
-	"time"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
 
 func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
-	time.Sleep(time.Second * 2)
+	//time.Sleep(time.Second * 2)
 
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
@@ -24,7 +23,6 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 }
 
 func sendJobPartOrderToSTE(payload []byte) {
-	//fmt.Println("Sending Upload Request TO STE")
 	url := "http://localhost:1337"
 
 	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payload))
@@ -78,7 +76,7 @@ func fetchJobStatus(jobId string) string {
 	tm.MoveCursor(1, 1)
 
 	fmt.Println("----------------- Progress Summary for JobId ", jobId, "------------------")
-	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfer)
+	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfers)
 	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
 	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
 	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)

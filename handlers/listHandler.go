@@ -136,7 +136,7 @@ func PrintJobProgressSummary(summaryData []byte, jobId string) {
 		return
 	}
 	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", jobId))
-	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfer)
+	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfers)
 	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
 	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)
 	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
