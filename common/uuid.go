@@ -2,12 +2,12 @@ package common
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"strconv"
-	"encoding/json"
 )
 
-// The UUID reserved variants.
+// The JobID reserved variants.
 const (
 	reservedNCS       byte = 0x80
 	reservedRFC4122   byte = 0x40
@@ -47,11 +47,11 @@ func (u UUID) MarshalJSON() ([]byte, error) {
 // Implementing UnmarshalJSON() method for type UUID
 func (u *UUID) UnmarshalJSON(b []byte) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil{
+	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
 	uuid, err := ParseUUID(s)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	*u = uuid
@@ -102,8 +102,4 @@ func ParseUUID(uuidStr string) (UUID, error) {
 	} else {
 		return uuidVal, nil
 	}
-}
-
-func (u UUID) bytes() []byte {
-	return u[:]
 }

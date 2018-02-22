@@ -178,12 +178,12 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 	for index := range jobPartOrder.Transfers {
 		// currentTransferEntry represents the JobPartPlan Transfer Header of a transfer.
 		currentTransferEntry := JobPartPlanTransfer{Offset: currentTransferChunkOffset,
-			SrcLength:      uint16(len(jobPartOrder.Transfers[index].Source)),
-			DstLength:      uint16(len(jobPartOrder.Transfers[index].Destination)),
-			ChunkNum:       getNumChunks(jobPartOrder.Transfers[index], data.BlockSize),
-			ModifiedTime:   uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
-			SourceSize:     uint64(jobPartOrder.Transfers[index].SourceSize),
-			CompletionTime: 0,
+			SrcLength:               uint16(len(jobPartOrder.Transfers[index].Source)),
+			DstLength:               uint16(len(jobPartOrder.Transfers[index].Destination)),
+			ChunkNum:                getNumChunks(jobPartOrder.Transfers[index], data.BlockSize),
+			ModifiedTime:            uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
+			SourceSize:              uint64(jobPartOrder.Transfers[index].SourceSize),
+			CompletionTime:          0,
 			transferStatus_doNotUse: common.TransferInProgress}
 		numBytesWritten = writeInterfaceDataToWriter(file, &currentTransferEntry, uint64(unsafe.Sizeof(JobPartPlanTransfer{})))
 		transferEntryOffsets[index] = currentTransferChunkOffset
@@ -225,7 +225,7 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 	var jobID [128 / 8]byte
 	versionID := jobPart.Version
 	// converting the job Id string to [128 / 8] byte format
-	jobID  = common.UUID(jobPart.ID)
+	jobID = common.JobID(jobPart.ID)
 	partNo := jobPart.PartNum
 
 	// calculating the number of transfer for given CopyJobPartOrder
@@ -285,9 +285,9 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 		blockSize = common.DefaultBlockSize
 	}
 
-	return JobPartPlanBlobData{NoGuessMimeType:noGuessMimeType,ContentTypeLength:uint8(len(contentType)),
-								ContentType:contentTypeBytes, ContentEncodingLength:uint8(len(contentEncoding)),
-								ContentEncoding:contentEncodingBytes, MetaDataLength:uint16(len(metaData)),
-								MetaData:metaDataBytes, PreserveLastModifiedTime:data.PreserveLastModifiedTime,
-								BlockSize:uint64(blockSize)}, nil
+	return JobPartPlanBlobData{NoGuessMimeType: noGuessMimeType, ContentTypeLength: uint8(len(contentType)),
+		ContentType: contentTypeBytes, ContentEncodingLength: uint8(len(contentEncoding)),
+		ContentEncoding: contentEncodingBytes, MetaDataLength: uint16(len(metaData)),
+		MetaData: metaDataBytes, PreserveLastModifiedTime: data.PreserveLastModifiedTime,
+		BlockSize: uint64(blockSize)}, nil
 }

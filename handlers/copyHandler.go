@@ -36,7 +36,7 @@ import (
 )
 
 const (
-	NumOfFilesPerUploadJobPart = 3
+	NumOfFilesPerUploadJobPart = 1000
 )
 
 // handles the copy command
@@ -47,18 +47,15 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	ApplyFlags(&commandLineInput, &jobPartOrder)
 
 	// generate job id
-	uuid := common.NewUUID()
-	if uuid.String() == "" {
-		panic("Failed to generate job id")
-	}
+	jobId := common.JobID(common.NewUUID())
 
-	// marshaling the UUID to send to backend
+	// marshaling the JobID to send to backend
 	//marshaledUUID, err := json.MarshalIndent(uuid, "", "")
 	//if err != nil {
-	//	fmt.Println("There is an error while marshalling the generated UUID. Please retry")
+	//	fmt.Println("There is an error while marshalling the generated JobID. Please retry")
 	//	return ""
 	//}
-	jobPartOrder.ID = uuid
+	jobPartOrder.ID = jobId
 
 	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
@@ -66,9 +63,9 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
 		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
-	fmt.Println("Job with id", uuid, "has started.")
+	fmt.Print("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
-		return uuid.String()
+		return jobId.String()
 	}
 
 	// created a signal channel to receive the Interrupt and Kill signal send to OS
@@ -84,10 +81,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 		select {
 		case <-cancelChannel:
 			fmt.Println("Cancelling Job")
-			HandleCancelCommand(uuid.String())
+			HandleCancelCommand(jobId.String())
 			os.Exit(1)
 		default:
-			jobStatus := fetchJobStatus(uuid.String())
+			jobStatus := fetchJobStatus(jobId.String())
 			if jobStatus == "JobCompleted" {
 				os.Exit(1)
 			}
@@ -98,7 +95,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
 	//	time.Sleep(2 * time.Second)
 	//}
-	return uuid.String()
+	return jobId.String()
 }
 
 func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags,
@@ -138,6 +135,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 		}
 
 		// make sure this is a container url
+		//TODO root container handling
 		if strings.Contains(destinationUrl.Path[1:], "/") {
 			panic("destination is not a valid container url")
 		}

@@ -87,7 +87,6 @@ func fetchJobStatus(jobId string) string {
 	tm.Println(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress))
 	tm.Println(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024))
 
-
 	for index := 0; index < len(summary.FailedTransfers); index++ {
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
 		fmt.Println(message)

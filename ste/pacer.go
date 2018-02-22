@@ -2,27 +2,27 @@ package ste
 
 import (
 	"io"
+	"runtime"
 	"sync/atomic"
 	"time"
-	"runtime"
 )
 
 type pacer struct {
 	bytesAvailable int64
 }
 
-func newPacer (bytesPerSecond int64) (p *pacer) {
-	p = &pacer{bytesAvailable:0}
+func newPacer(bytesPerSecond int64) (p *pacer) {
+	p = &pacer{bytesAvailable: 0}
 	timeToWaitInMs := 50
 	availableBytesPerPeriod := bytesPerSecond * int64(timeToWaitInMs) / 1000
 
-	go func () {
+	go func() {
 		for {
 			for targetTime := time.Now().Add(time.Millisecond * 50); time.Now().Before(targetTime); {
 				runtime.Gosched()
 			}
 
-			if atomic.AddInt64(&p.bytesAvailable, availableBytesPerPeriod) > 2 * availableBytesPerPeriod {
+			if atomic.AddInt64(&p.bytesAvailable, availableBytesPerPeriod) > 2*availableBytesPerPeriod {
 				atomic.AddInt64(&p.bytesAvailable, -availableBytesPerPeriod)
 			}
 		}
@@ -31,7 +31,7 @@ func newPacer (bytesPerSecond int64) (p *pacer) {
 	return
 }
 
-func (p *pacer) requestRightToSend(bytesToSend int64){
+func (p *pacer) requestRightToSend(bytesToSend int64) {
 	// attempt to get ticket
 	for atomic.AddInt64(&p.bytesAvailable, -bytesToSend) < 0 {
 		atomic.AddInt64(&p.bytesAvailable, bytesToSend)
