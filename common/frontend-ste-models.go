@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-type JobID JobID
+type JobID UUID
 
 func (j JobID) String() string {
 	return JobID(j).String()
@@ -108,19 +108,19 @@ const (
 	LogNone = LogLevel(pipeline.LogNone)
 
 	// LogFatal tells a logger to log all LogFatal entries passed to it.
-	LogFatal = pipeline.LogFatal
+	LogFatal = LogLevel(pipeline.LogFatal)
 
 	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
-	LogPanic = pipeline.LogPanic
+	LogPanic = LogLevel(pipeline.LogPanic)
 
 	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
-	LogError = pipeline.LogError
+	LogError = LogLevel(pipeline.LogError)
 
 	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
-	LogWarning = pipeline.LogWarning
+	LogWarning = LogLevel(pipeline.LogWarning)
 
 	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
-	LogInfo = pipeline.LogInfo
+	LogInfo = LogLevel(pipeline.LogInfo)
 )
 
 //TODO comments
