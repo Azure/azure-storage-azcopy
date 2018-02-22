@@ -59,9 +59,9 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 
 	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
-		HandleUploadFromLocalToWastore(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
+		HandleUploadFromLocalToBlobStorage(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
-		HandleDownloadFromWastoreToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
+		HandleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
 	}
 	fmt.Print("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
@@ -98,7 +98,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	return jobId.String()
 }
 
-func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags,
+func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrder,
 	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {
 
@@ -198,7 +198,7 @@ func HandleUploadFromLocalToWastore(commandLineInput *common.CopyCmdArgsAndFlags
 	fmt.Println("listing parts ends ", time.Now())
 }
 
-func HandleDownloadFromWastoreToLocal(
+func HandleDownloadFromBlobStorageToLocal(
 	commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrder,
 	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {

@@ -82,13 +82,11 @@ type CoordinatorChannels struct {
 }
 
 type EEChannels struct {
-	HighTransfer         <-chan TransferMsg
-	MedTransfer          <-chan TransferMsg
-	LowTransfer          <-chan TransferMsg
-	HighChunkTransaction chan ChunkMsg
-	MedChunkTransaction  chan ChunkMsg
-	LowChunkTransaction  chan ChunkMsg
-	SuicideChannel       <-chan SuicideJob
+	HighTransfer   <-chan TransferMsg
+	LowTransfer    <-chan TransferMsg
+	HighChunk      chan ChunkMsg
+	LowChunk       chan ChunkMsg
+	SuicideChannel <-chan SuicideJob
 }
 
 type SuicideJob byte

@@ -1,3 +1,23 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package ste
 
 import (
@@ -9,24 +29,19 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"time"
 )
 
-type blobToLocal struct {
-	// count the number of chunks that are done
-	count uint32
-}
+type blobToLocal struct {}
 
 func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
-	// step 1: get blob size
-
+	// step 1: create blobUrl for source blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
 			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      3,
-			TryTimeout:    time.Second * 60,
-			RetryDelay:    time.Second * 1,
-			MaxRetryDelay: time.Second * 3,
+			MaxTries:      DownloadMaxTries,
+			TryTimeout:    DownloadTryTimeout,
+			RetryDelay:    DownloadRetryDelay,
+			MaxRetryDelay: DownloadMaxRetryDelay,
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
@@ -37,17 +52,17 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 			},
 		},
 	})
-
 	u, _ := url.Parse(transfer.Source)
 	blobUrl := azblob.NewBlobURL(*u, p)
+
+	// step 2: get size info for the download
 	blobSize := int64(transfer.SourceSize)
-
-	// step 2: prep local file before download starts
-	memoryMappedFile := createAndMemoryMapFile(transfer.Destination, blobSize)
-
-	// step 3: go through the blob range and schedule download chunk jobs/msgs
 	downloadChunkSize := int64(transfer.BlockSize)
 
+	// step 3: prep local file before download starts
+	memoryMappedFile := executionEngineHelper{}.createAndMemoryMapFile(transfer.Destination, blobSize)
+
+	// step 4: go through the blob range and schedule download chunk jobs
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
 		adjustedChunkSize := downloadChunkSize
@@ -59,10 +74,10 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 
 		// schedule the download chunk job
 		chunkChannel <- ChunkMsg{
-			doTransfer: generateDownloadFunc(
+			doTransfer: blobToLocal.generateDownloadFunc(
 				transfer,
 				blockIdCount, // serves as index of chunk
-				computeNumOfChunks(blobSize, downloadChunkSize),
+				uint32(transfer.NumChunks),
 				adjustedChunkSize,
 				startIndex,
 				blobUrl,
@@ -73,75 +88,77 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 }
 
 // this generates a function which performs the downloading of a single chunk
-func generateDownloadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64,
+func (blobToLocal) generateDownloadFunc(transfer TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64,
 	startIndex int64, blobURL azblob.BlobURL, memoryMappedFile mmap.MMap) chunkFunc {
 	return func(workerId int) {
-		if t.TransferContext.Err() != nil {
-			if t.ChunksDone() == totalNumOfChunks {
-				t.Log(common.LogInfo,
+
+		// TODO consider encapsulating this check operation on transferMsg
+		if transfer.TransferContext.Err() != nil {
+			if transfer.ChunksDone() == totalNumOfChunks {
+				transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
-				t.TransferDone()
+				transfer.TransferDone()
 			}
 		} else {
-			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
-
 			// step 1: perform get
-			get, err := blobURL.GetBlob(t.TransferContext, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
+			get, err := blobURL.GetBlob(transfer.TransferContext, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
-				t.TransferCancelFunc()
-				t.Log(common.LogInfo, fmt.Sprintf(" has worker %d which is canceling job and chunkId %d because startIndex of %d has failed", workerId, chunkId, startIndex))
-				t.TransferStatus(common.TransferFailed)
-				if t.ChunksDone() == totalNumOfChunks {
-					t.Log(common.LogInfo,
+				// TODO consider encapsulating cancel operation on transferMsg
+				transfer.TransferCancelFunc()
+				transfer.Log(common.LogInfo, fmt.Sprintf(" has worker %d which is canceling job and chunkId %d because startIndex of %d has failed", workerId, chunkId, startIndex))
+				transfer.TransferStatus(common.TransferFailed)
+				if transfer.ChunksDone() == totalNumOfChunks {
+					transfer.Log(common.LogInfo,
 						fmt.Sprintf(" has worker %d which finalizing cancellation of Transfer", workerId))
-					t.TransferDone()
+					transfer.TransferDone()
 				}
 				return
 			}
-			// step2: write the body into the memory mapped file directly
+			// step 2: write the body into the memory mapped file directly
 			bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex:startIndex+chunkSize])
 			get.Body().Close()
 			if int64(bytesRead) != chunkSize || err != nil {
 				// cancel entire transfer because this chunk has failed
-				t.TransferCancelFunc()
-				t.Log(common.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
-				t.TransferStatus(common.TransferFailed)
-				if t.ChunksDone() == totalNumOfChunks {
-					t.Log(common.LogInfo,
+				transfer.TransferCancelFunc()
+				transfer.Log(common.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+				transfer.TransferStatus(common.TransferFailed)
+				if transfer.ChunksDone() == totalNumOfChunks {
+					transfer.Log(common.LogInfo,
 						fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
-					t.TransferDone()
+					transfer.TransferDone()
 				}
 				return
 			}
 
+			// TODO this should be 1 counter per job
 			realTimeThroughputCounter.updateCurrentBytes(chunkSize)
 
 			// step 3: check if this is the last chunk
-			if t.ChunksDone() == totalNumOfChunks {
+			if transfer.ChunksDone() == totalNumOfChunks {
 				// step 4: this is the last block, perform EPILOGUE
-				t.Log(common.LogInfo,
+				transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
-				t.TransferStatus(common.TransferComplete)
-				t.Log(common.LogInfo,
+				transfer.TransferStatus(common.TransferComplete)
+				transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
-				t.TransferDone()
+				transfer.TransferDone()
 
 				err := memoryMappedFile.Unmap()
 				if err != nil {
-					t.Log(common.LogError,
+					transfer.Log(common.LogError,
 						fmt.Sprintf(" has worker %v which failed to conclude Transfer after processing chunkId %v", workerId, chunkId))
 				}
 
-				lastModifiedTime, preserveLastModifiedTime := t.ifPreserveLastModifiedTime()
+				lastModifiedTime, preserveLastModifiedTime := transfer.ifPreserveLastModifiedTime()
 				if preserveLastModifiedTime {
-					err := os.Chtimes(t.Destination, lastModifiedTime, lastModifiedTime)
+					err := os.Chtimes(transfer.Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
-						t.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", t.Destination))
+						transfer.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", transfer.Destination))
 						return
 					}
-					t.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", t.Destination))
+					transfer.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", transfer.Destination))
 				}
 			}
 		}

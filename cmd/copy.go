@@ -57,19 +57,19 @@ Usage:
 		Args: func(cmd *cobra.Command, args []string) error {
 			fmt.Print("number of arguments ", len(args))
 			if len(args) == 1 { // redirection
-				sourceType := determineLocaltionType(args[0])
+				sourceType := validator{}.determineLocationType(args[0])
 				if sourceType != common.Blob {
 					return errors.New("the provided blob URL for redirection is not valid")
 				}
 				commandLineInput.BlobUrlForRedirection = args[0]
 
 			} else if len(args) == 2 { // normal copy
-				sourceType := determineLocaltionType(args[0])
+				sourceType := validator{}.determineLocationType(args[0])
 				if sourceType == common.Unknown {
 					return errors.New("the provided source is invalid")
 				}
 
-				destinationType := determineLocaltionType(args[1])
+				destinationType := validator{}.determineLocationType(args[1])
 				if destinationType == common.Unknown {
 					return errors.New("the provided destination is invalid")
 				}

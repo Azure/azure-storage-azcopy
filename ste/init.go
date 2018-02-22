@@ -78,11 +78,6 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 			jobInfo.Log(common.LogInfo,
 				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
 					index, priority, jobId, partNumber))
-		case MediumJobPriority:
-			coordinatorChannels.MedTransfer <- transferMsg
-			jobInfo.Log(common.LogInfo,
-				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-					index, priority, jobId, partNumber))
 		case LowJobPriority:
 			coordinatorChannels.LowTransfer <- transferMsg
 			jobInfo.Log(common.LogInfo,
@@ -618,36 +613,31 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 func InitializeChannels(commonLogger *log.Logger) (*CoordinatorChannels, *EEChannels) {
 	commonLogger.Println("initializing channels for execution engine and coordinator")
 	// HighTransferMsgChannel takes high priority job part transfers from coordinator and feed to execution engine
-	HighTransferMsgChannel := make(chan TransferMsg, 500)
-	// MedTransferMsgChannel takes medium priority job part transfers from coordinator and feed to execution engine
-	MedTransferMsgChannel := make(chan TransferMsg, 500)
+	HighTransferMsgChannel := make(chan TransferMsg, 100000)
+
 	// LowTransferMsgChannel takes low priority job part transfers from coordinator and feed to execution engine
-	LowTransferMsgChannel := make(chan TransferMsg, 500)
+	LowTransferMsgChannel := make(chan TransferMsg, 100000)
 
 	// HighChunkMsgChannel queues high priority job part transfer chunk transactions
-	HighChunkMsgChannel := make(chan ChunkMsg, 500)
-	// MedChunkMsgChannel queues medium priority job part transfer chunk transactions
-	MedChunkMsgChannel := make(chan ChunkMsg, 500)
+	HighChunkMsgChannel := make(chan ChunkMsg, 100000)
+
 	// LowChunkMsgChannel queues low priority job part transfer chunk transactions
-	LowChunkMsgChannel := make(chan ChunkMsg, 500)
+	LowChunkMsgChannel := make(chan ChunkMsg, 100000)
 
 	// Create suicide channel which is used to scale back on the number of workers
-	SuicideChannel := make(chan SuicideJob, 100)
+	SuicideChannel := make(chan SuicideJob, 100000)
 
 	transferEngineChannel := &CoordinatorChannels{
 		HighTransfer: HighTransferMsgChannel,
-		MedTransfer:  MedTransferMsgChannel,
 		LowTransfer:  LowTransferMsgChannel,
 	}
 
 	executionEngineChanel := &EEChannels{
-		HighTransfer:         HighTransferMsgChannel,
-		MedTransfer:          MedTransferMsgChannel,
-		LowTransfer:          LowTransferMsgChannel,
-		HighChunkTransaction: HighChunkMsgChannel,
-		MedChunkTransaction:  MedChunkMsgChannel,
-		LowChunkTransaction:  LowChunkMsgChannel,
-		SuicideChannel:       SuicideChannel,
+		HighTransfer:   HighTransferMsgChannel,
+		LowTransfer:    LowTransferMsgChannel,
+		HighChunk:      HighChunkMsgChannel,
+		LowChunk:       LowChunkMsgChannel,
+		SuicideChannel: SuicideChannel,
 	}
 	commonLogger.Println("successfully initialized channels for execution engine and coordinator")
 	return transferEngineChannel, executionEngineChanel
@@ -690,6 +680,6 @@ func InitializeSTE(numOfEngineWorker int, targetRateInMBps int) error {
 	pc = newPacer(int64(targetRateInMBps) * 1024 * 1024)
 	commonLogger := initializeAzCopyLogger("azCopyNg-Common.log")
 	coordinatorChannel, execEngineChannels := InitializeChannels(commonLogger)
-	go InitializeExecutionEngine(execEngineChannels, numOfEngineWorker)
+	go executionEngine{}.initializeExecutionEngine(execEngineChannels, numOfEngineWorker)
 	return initializeCoordinator(coordinatorChannel, commonLogger)
 }

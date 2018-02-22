@@ -26,10 +26,12 @@ import (
 	"os"
 )
 
-func determineLocaltionType(stringToParse string) common.LocationType {
-	if IsLocalPath(stringToParse) {
+type validator struct {}
+
+func (validator validator) determineLocationType(stringToParse string) common.LocationType {
+	if validator.isLocalPath(stringToParse) {
 		return common.Local
-	} else if IsUrl(stringToParse) {
+	} else if validator.isUrl(stringToParse) {
 		return common.Blob
 	} else {
 		return common.Unknown
@@ -37,19 +39,19 @@ func determineLocaltionType(stringToParse string) common.LocationType {
 }
 
 // verify if path is a valid local path
-func IsLocalPath(path string) bool {
+func (validator validator) isLocalPath(path string) bool {
 	// attempting to get stats from the OS validates whether a given path is a valid local path
 	_, err := os.Stat(path)
 	// in case the path does not exist yet, an err is returned
 	// we need to make sure that it is indeed just a local path that does not exist yet, and not a url
-	if err == nil || (!IsUrl(path) && os.IsNotExist(err)) {
+	if err == nil || (!validator.isUrl(path) && os.IsNotExist(err)) {
 		return true
 	}
 	return false
 }
 
 // verify if givenUrl is a valid url
-func IsUrl(givenUrl string) bool {
+func (validator) isUrl(givenUrl string) bool {
 	u, err := url.Parse(givenUrl)
 	// attempting to parse the url validates whether a given string is a valid url
 	if err != nil {
