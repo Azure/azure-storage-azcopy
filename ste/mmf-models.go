@@ -53,7 +53,7 @@ type JobPartPlanHeader struct {
 	SrcLocationType    common.LocationType // represents type of source location
 	DstLocationType    common.LocationType // represents type of destination location
 	NumTransfers       uint32              // represents the number of transfer the JobPart order has
-	LogSeverity        common.LogLevel   // represent the log verbosity level of logs for the specific Job
+	LogSeverity        common.LogLevel     // represent the log verbosity level of logs for the specific Job
 	BlobData           JobPartPlanBlobData // represent the optional attributes of JobPart Order
 	// jobStatus_doNotUse represents the current status of JobPartPlan
 	// It can have these possible values - JobInProgress, JobPaused, JobCancelled and JobCompleted
@@ -75,7 +75,7 @@ func (jPartPlanHeader *JobPartPlanHeader) setJobStatus(status JobStatusCode) {
 // JobPartPlan represent the header of Job Part's Optional Attributes in Memory Map File
 type JobPartPlanBlobData struct {
 	// represents user decision to interpret the content-encoding from source file
-	NoGuessMimeType          bool
+	NoGuessMimeType bool
 	// Specifies the length of MIME content type of the blob
 	ContentTypeLength uint8
 	// Specifies the MIME content type of the blob. The default type is application/octet-stream

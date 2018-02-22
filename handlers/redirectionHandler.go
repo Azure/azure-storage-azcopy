@@ -21,14 +21,14 @@
 package handlers
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"os"
-	"io/ioutil"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"time"
-	"net/url"
 	"context"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"io"
+	"io/ioutil"
+	"net/url"
+	"os"
+	"time"
 )
 
 func HandleRedirectionCommand(commandLineInput common.CopyCmdArgsAndFlags) {

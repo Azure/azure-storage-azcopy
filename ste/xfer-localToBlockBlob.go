@@ -38,7 +38,7 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsgDetail, ch
 				jobInfo.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(jobInfo.LogSeverity)
+				return pipeline.LogLevel(jobInfo.minimumLogLevel)
 			},
 		},
 	})
@@ -96,11 +96,11 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 	return func(workerId int) {
 		jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 		if ctx.Err() != nil {
-			jobInfo.Log(common.LogInfo, fmt.Sprintf("transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId))
+			jobInfo.Log(common.LogInfo, fmt.Sprintf("transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.JobID(jobId).String(), partNum, chunkId))
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				jobInfo.Log(common.LogInfo,
 					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-					workerId, jobId, partNum))
+						workerId, jobId, partNum))
 				//updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
@@ -109,7 +109,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 			// If there are more than one block for a transfer, then we need to upload each individually
 			// and then we need to upload the block list
 			if totalNumOfChunks > 1 {
-				transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.UUID(jobId).String(), partNum, transferId)
+				transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", common.JobID(jobId).String(), partNum, transferId)
 
 				// step 1: generate block ID
 				blockId := common.NewUUID().String()
@@ -122,35 +122,35 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				blockBlobUrl := blobURL.ToBlockBlobURL()
 
 				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), pc)
-				putBlockResponse, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, body , azblob.LeaseAccessConditions{})
+				putBlockResponse, err := blockBlobUrl.PutBlock(ctx, encodedBlockId, body, azblob.LeaseAccessConditions{})
 				if err != nil {
 					// cancel entire transfer because this chunk has failed
 					cancelTransfer()
 					jobInfo.Log(common.LogInfo,
 						fmt.Sprintf("worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed",
-						workerId, transferIdentifierStr, chunkId, startIndex))
+							workerId, transferIdentifierStr, chunkId, startIndex))
 					//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 					updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-					jobInfo.Log(common.LogInfo, fmt.Sprintf("transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.UUID(jobId).String(), partNum, chunkId))
+					jobInfo.Log(common.LogInfo, fmt.Sprintf("transferId %d of jobId %s and partNum %d are cancelled. Hence not picking up chunkId %d", transferId, common.JobID(jobId).String(), partNum, chunkId))
 					if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 						jobInfo.Log(common.LogInfo,
 							fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-							workerId, common.UUID(jobId).String(), partNum))
+								workerId, common.JobID(jobId).String(), partNum))
 						updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
 						err := memoryMappedFile.Unmap()
 						if err != nil {
 							jobInfo.Log(common.LogError,
 								fmt.Sprintf("worker %v failed to conclude Transfer job with %v after processing chunkId %v",
-								workerId, transferIdentifierStr, chunkId))
+									workerId, transferIdentifierStr, chunkId))
 						}
 
 					}
 					return
 				}
 
-				if putBlockResponse != nil{
+				if putBlockResponse != nil {
 					putBlockResponse.Response().Body.Close()
 				}
 
@@ -167,7 +167,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					// step 5: this is the last block, perform EPILOGUE
 					jobInfo.Log(common.LogInfo,
 						fmt.Sprintf("worker %d is concluding download Transfer job with %s after processing chunkId %d with blocklist %s",
-						workerId, transferIdentifierStr, chunkId, *blockIds))
+							workerId, transferIdentifierStr, chunkId, *blockIds))
 					//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
 
 					// fetching the blob http headers with content-type, content-encoding attributes
@@ -180,17 +180,17 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					if err != nil {
 						jobInfo.Log(common.LogError,
 							fmt.Sprintf("Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
-							workerId, transferIdentifierStr, chunkId, string(err.Error())))
+								workerId, transferIdentifierStr, chunkId, string(err.Error())))
 						updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
 						updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 						return
 					}
 
-					if putBlockListResponse != nil{
+					if putBlockListResponse != nil {
 						putBlockListResponse.Response().Body.Close()
 					}
 
-					jobInfo.Log(common.LogInfo, fmt.Sprintf("transfer %d of Job %s and part number %d has completed successfully", transferId, common.UUID(jobId).String(), partNum))
+					jobInfo.Log(common.LogInfo, fmt.Sprintf("transfer %d of Job %s and part number %d has completed successfully", transferId, common.JobID(jobId).String(), partNum))
 					updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
@@ -198,10 +198,10 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 					if err != nil {
 						jobInfo.Log(common.LogError,
 							fmt.Sprintf("worker %v failed to conclude Transfer job with %v after processing chunkId %v",
-							workerId, transferIdentifierStr, chunkId))
+								workerId, transferIdentifierStr, chunkId))
 					}
 				}
-			}else {
+			} else {
 				// If there is only one block for a transfer, then uploading block as a blob
 				blockBlobUrl := blobURL.ToBlockBlobURL()
 
@@ -216,16 +216,16 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				putblobResp, err := blockBlobUrl.PutBlob(ctx, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 
 				// if the put blob is a failure, updating the transfer status to failed
-				if err != nil{
+				if err != nil {
 					jobInfo.Log(common.LogInfo,
 						fmt.Sprintf("put blob failed for transfer %d of Job %s and part number %d failed and so cancelling the transfer",
-						transferId, jobId, partNum))
+							transferId, jobId, partNum))
 					updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-				}else{
+				} else {
 					// if the put blob is a success, updating the transfer status to success
 					jobInfo.Log(common.LogInfo,
 						fmt.Sprintf("put blob successful for transfer %d of Job %s and part number %d by worked %d",
-						transferId, jobId, partNum, workerId))
+							transferId, jobId, partNum, workerId))
 					updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				}
 
@@ -233,7 +233,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
 				// closing the put blob response body
-				if putblobResp != nil{
+				if putblobResp != nil {
 					putblobResp.Response().Body.Close()
 				}
 
@@ -241,7 +241,7 @@ func generateUploadFunc(jobId common.JobID, partNum common.PartNumber, transferI
 				if err != nil {
 					jobInfo.Log(common.LogError,
 						fmt.Sprintf("error mapping the memory map file for transfer %d job %s and part number %d",
-						transferId, jobId, partNum))
+							transferId, jobId, partNum))
 				}
 			}
 		}

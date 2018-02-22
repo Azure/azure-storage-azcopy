@@ -27,22 +27,22 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
 	"os"
-	"time"
-	"log"
 	"sync/atomic"
+	"time"
 )
 
-var emptyJobId = common.UUID{}
+var emptyJobId = common.JobID{}
 var steContext = context.Background()
 var realTimeThroughputCounter = &throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: int64(time.Now().Nanosecond())}
 
 // putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID,
 	partNo common.PartNumber, jobLogVerbosity common.LogLevel, jPartInfoMap *JobsInfoMap) {
-	jPartInfoMap.StoreJobPartPlanInfo(jobId, partNo, jobLogVerbosity, jobHandler)
+
 }
 
 // getJobPartMapFromJobPartInfoMap api gets the map[common.PartNumber]*JobPartPlanInfo for given jobId and part number from map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
@@ -98,21 +98,21 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 			coordinatorChannels.HighTransfer <- transferMsg
 			jobInfo.Log(common.LogInfo,
 				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-				index, priority, jobId, partNumber))
+					index, priority, jobId, partNumber))
 		case MediumJobPriority:
 			coordinatorChannels.MedTransfer <- transferMsg
 			jobInfo.Log(common.LogInfo,
 				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-				index, priority, jobId, partNumber))
+					index, priority, jobId, partNumber))
 		case LowJobPriority:
 			coordinatorChannels.LowTransfer <- transferMsg
 			jobInfo.Log(common.LogInfo,
 				fmt.Sprintf("successfully scheduled transfer %v with priority %v for Job %v and part number %v",
-				index, priority, jobId, partNumber))
+					index, priority, jobId, partNumber))
 		default:
 			jobInfo.Log(common.LogInfo,
 				fmt.Sprintf("invalid job part order priority %d for given Job Id %s and part number %d and transfer Index %d",
-				priority, jobId, partNumber, index))
+					priority, jobId, partNumber, index))
 		}
 	}
 }
@@ -144,8 +144,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChan
 	}
 
 	jobId := payload.ID
-	// unMarshalling the UUID to get the UUID passed from front-end
-	//var jobId common.UUID
+	// unMarshalling the JobID to get the JobID passed from front-end
+	//var jobId common.JobID
 	//err = json.Unmarshal([]byte(payload.ID), &jobId)
 	//if err != nil {
 	//	panic(err)
@@ -168,7 +168,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrder, coordinatorChan
 	// Initializing the JobPartPlanInfo for new job
 	(jobHandler).initialize(context.Background(), fileName)
 
-	putJobPartInfoHandlerIntoMap(jobHandler, common.JobID(jobId), payload.PartNum, payload.LogVerbosity, jobsInfoMap)
+	jobsInfoMap.StoreJobPartPlanInfo(jobId, payload.PartNum, payload.LogVerbosity, jobHandler)
+
 
 	if coordinatorChannels == nil { // If the coordinator transfer channels are initialized properly, then incoming transfers can't be scheduled with current instance of transfer engine.
 		jobsInfoMap.LoadJobInfoForJob(common.JobID(jobId)).Log(common.LogError, "coordinator channels not initialized properly")
@@ -347,11 +348,11 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfoMap, isPaused 
 	// If the Job is currently paused
 	if jPartPlanHeaderForPart0.jobStatus() == JobPaused {
 		// If an already paused job is set to pause again
-		if isPaused{
+		if isPaused {
 			resp.WriteHeader(http.StatusBadRequest)
 			errorMsg := fmt.Sprintf("job with JobId %s i already paused, cannot pause it again", jobId.String())
 			resp.Write([]byte(errorMsg))
-		}else{
+		} else {
 			// If an already paused job has to be cancelled, then straight cleaning the paused job
 			setJobStatus(jobId, jobsInfoMap, JobCancelled)
 			// cleaning up the job since all parts of job are already done
@@ -580,7 +581,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 				listExistingJobs(jobsInfoMap, commonLogger, resp)
 			} else {
 				jobId, err := common.ParseUUID(lsCommand.JobId)
-				if err != nil{
+				if err != nil {
 					resp.Write([]byte("Invalid job id"))
 					resp.WriteHeader(http.StatusBadRequest)
 				}
@@ -592,7 +593,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			}
 		case "cancel":
 			var jobIdStructString = req.URL.Query()["jobId"][0]
-			var uuid common.UUID
+			var uuid common.JobID
 			err := json.Unmarshal([]byte(jobIdStructString), &uuid)
 			if err != nil {
 				panic(err)
@@ -600,7 +601,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			CancelJobOrder(common.JobID(uuid), jobsInfoMap, resp)
 		case "pause":
 			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.UUID
+			var jobId common.JobID
 			err := json.Unmarshal([]byte(jobIdString), &jobId)
 			if err != nil {
 				panic(err)
@@ -608,7 +609,7 @@ func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChanne
 			PauseJobOrder(common.JobID(jobId), jobsInfoMap, resp)
 		case "resume":
 			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.UUID
+			var jobId common.JobID
 			err := json.Unmarshal([]byte(jobIdString), &jobId)
 			if err != nil {
 				panic(err)
@@ -675,7 +676,7 @@ func InitializeChannels(commonLogger *log.Logger) (*CoordinatorChannels, *EEChan
 }
 
 // initializeAzCopyLogger initializes the logger instance for logging logs not related to any job order
-func initializeAzCopyLogger(filename string) (*log.Logger){
+func initializeAzCopyLogger(filename string) *log.Logger {
 	// Creates the log file if it does not exists already else opens the file in append mode.
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {

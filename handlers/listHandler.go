@@ -91,7 +91,7 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 	}
 
 	// list Order command requested the list of existing jobs
-	if commandLineInput.JobId == ""  {
+	if commandLineInput.JobId == "" {
 		PrintExistingJobIds(body)
 	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
 		PrintJobProgressSummary(body, commandLineInput.JobId)

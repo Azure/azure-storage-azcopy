@@ -35,7 +35,7 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 				logger.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(logger.LogSeverity)
+				return pipeline.LogLevel(logger.minimumLogLevel)
 			},
 		},
 	})
@@ -48,7 +48,6 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
 	downloadChunkSize := int64(transfer.ChunkSize)
-
 
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
@@ -88,7 +87,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 				jobInfo.Log(common.LogInfo,
 					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-					workerId,jobId.String(), partNum))
+						workerId, jobId.String(), partNum))
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 			}
 		} else {
@@ -106,7 +105,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					jobInfo.Log(common.LogInfo,
 						fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, jobId, partNum))
+							workerId, jobId, partNum))
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 				}
 				return
@@ -122,7 +121,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
 					jobInfo.Log(common.LogInfo,
 						fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, jobId, partNum))
+							workerId, jobId, partNum))
 					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 				}
 				return
@@ -135,26 +134,26 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 				// step 4: this is the last block, perform EPILOGUE
 				jobInfo.Log(common.LogInfo,
 					fmt.Sprintf("worker %d is concluding download Transfer job with %s after processing chunkId %d",
-					workerId, transferIdentifierStr, chunkId))
+						workerId, transferIdentifierStr, chunkId))
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 
 				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
 				jobInfo.Log(common.LogInfo,
 					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-					workerId, jobId.String(), partNum))
+						workerId, jobId.String(), partNum))
 				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
 
 				err := memoryMappedFile.Unmap()
 				if err != nil {
 					jobInfo.Log(common.LogError,
 						fmt.Sprintf("worker %v failed to conclude Transfer job with %v after processing chunkId %v",
-						workerId, transferIdentifierStr, chunkId))
+							workerId, transferIdentifierStr, chunkId))
 				}
 
 				jobPartInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNum)
 				// if the job order has the flag preserve-last-modified-time set to true,
 				// then changing the timestamp of destination to last-modified time received in response
-				if jobPartInfo.getJobPartPlanPointer().BlobData.PreserveLastModifiedTime{
+				if jobPartInfo.getJobPartPlanPointer().BlobData.PreserveLastModifiedTime {
 					_, dst := jobPartInfo.getTransferSrcDstDetail(transferId)
 					lastModifiedTime := get.LastModified()
 					setModifiedTime(dst, lastModifiedTime, jobInfo)

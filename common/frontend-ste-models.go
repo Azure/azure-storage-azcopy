@@ -21,15 +21,31 @@
 package common
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
 )
 
-type JobID UUID
+type JobID JobID
 
-func (j JobID) String() (string){
-	return UUID(j).String()
+func (j JobID) String() string {
+	return JobID(j).String()
+}
+
+// Implementing MarshalJSON() method for type JobID
+func (j JobID) MarshalJSON() ([]byte, error) {
+	return json.Marshal(JobID(j))
+}
+
+// Implementing UnmarshalJSON() method for type JobID
+func (j *JobID) UnmarshalJSON(b []byte) error {
+	var u JobID
+	if err := json.Unmarshal(b, &u); err != nil {
+		return err
+	}
+	*j = JobID(u)
+	return nil
 }
 
 type PartNumber uint32
@@ -38,15 +54,17 @@ type Status uint32
 
 type TransferStatus uint32
 
+//TODO comments
+// TODO jeff's enum
 func (status TransferStatus) String() (statusString string) {
-	switch uint32(status) {
-	case 0:
+	switch status {
+	case TransferInProgress:
 		return "InProgress"
-	case 1:
+	case TransferComplete:
 		return "TransferComplete"
-	case 2:
+	case TransferFailed:
 		return "TransferFailed"
-	case 254:
+	case TransferAny:
 		return "TransferAny"
 	default:
 		return "InvalidStatusCode"
@@ -67,6 +85,7 @@ const (
 	TransferAny TransferStatus = TransferStatus(254)
 )
 
+//todo comments
 func TransferStatusStringToCode(statusString string) TransferStatus {
 	switch statusString {
 	case "TransferInProgress":
@@ -83,27 +102,30 @@ func TransferStatusStringToCode(statusString string) TransferStatus {
 }
 
 type LogLevel pipeline.LogLevel
+
 const (
 	// LogNone tells a logger not to log any entries passed to it.
-	LogNone LogLevel = iota
+	LogNone = LogLevel(pipeline.LogNone)
 
 	// LogFatal tells a logger to log all LogFatal entries passed to it.
-	LogFatal
+	LogFatal = pipeline.LogFatal
 
 	// LogPanic tells a logger to log all LogPanic and LogFatal entries passed to it.
-	LogPanic
+	LogPanic = pipeline.LogPanic
 
 	// LogError tells a logger to log all LogError, LogPanic and LogFatal entries passed to it.
-	LogError
+	LogError = pipeline.LogError
 
 	// LogWarning tells a logger to log all LogWarning, LogError, LogPanic and LogFatal entries passed to it.
-	LogWarning
+	LogWarning = pipeline.LogWarning
 
 	// LogInfo tells a logger to log all LogInfo, LogWarning, LogError, LogPanic and LogFatal entries passed to it.
-	LogInfo
+	LogInfo = pipeline.LogInfo
 )
 
-func (logLevel LogLevel) String() (string){
+//TODO comments
+// handle default and panic
+func (logLevel LogLevel) String() string {
 	switch logLevel {
 	case LogNone:
 		return "NoLogLevel"
@@ -125,8 +147,8 @@ func (logLevel LogLevel) String() (string){
 // represents the raw copy command input from the user
 type CopyCmdArgsAndFlags struct {
 	// from arguments
-	Source      string
-	Destination string
+	Source                string
+	Destination           string
 	BlobUrlForRedirection string
 
 	// inferred from arguments
@@ -180,7 +202,7 @@ type CopyTransfer struct {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrder struct {
 	Version            uint32     // version of the azcopy
-	ID                 UUID     // Guid - job identifier
+	ID                 JobID      // Guid - job identifier
 	PartNum            PartNumber // part number of the job
 	IsFinalPart        bool       // to determine the final part for a specific job
 	Priority           uint8      // priority of the task

@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"io"
+	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,20 +17,18 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unsafe"
-	"log"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"net/http"
 	"time"
+	"unsafe"
 )
 
-// JobInfo contains JobPartsMap and Logger
+// JobInfo contains JobPartsMap and logger
 // JobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
-// Logger is the logger instance for a given JobId
+// logger is the logger instance for a given JobId
 type JobInfo struct {
+	//TODO make slice
 	JobPartsMap       map[common.PartNumber]*JobPartPlanInfo
-	LogSeverity       common.LogLevel
-	Logger            *log.Logger
+	minimumLogLevel   common.LogLevel
+	logger            *log.Logger
 	numberOfPartsDone uint32
 	logFile           *os.File
 	logFileName       string
@@ -58,28 +59,27 @@ func (jobInfo *JobInfo) initializeLogForJob(logSeverity common.LogLevel, fileNam
 	if err != nil {
 		panic(err)
 	}
-	jobInfo.LogSeverity = logSeverity
+	jobInfo.minimumLogLevel = logSeverity
 	jobInfo.logFile = file
-	jobInfo.Logger = log.New(jobInfo.logFile, "", log.Llongfile)
+	jobInfo.logger = log.New(jobInfo.logFile, "", log.Llongfile)
 }
 
-func (jobInfo *JobInfo) closeLogForJob(){
+func (jobInfo *JobInfo) closeLogForJob() {
 	err := jobInfo.logFile.Close()
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 }
 
 func (jobInfo *JobInfo) Log(severity common.LogLevel, logMessage string) {
-	if severity > jobInfo.LogSeverity {
+	if severity > jobInfo.minimumLogLevel {
 		return
 	}
-	jobInfo.Logger.Println(logMessage)
+	jobInfo.logger.Println(logMessage)
 }
 
 func (jobInfo *JobInfo) Panic(err error) {
-	jobInfo.Logger.Println(err.Error())
-	panic(err)
+	jobInfo.logger.Panic(err)
 }
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
@@ -166,9 +166,9 @@ func (jMap *JobsInfoMap) StoreJobPartPlanInfo(jobId common.JobID, partNumber com
 	// If there is no logger instance for the current Job,
 	// initialize the logger instance with log severity and jobId
 	// log filename is $JobId.log
-	if jobInfo.Logger == nil {
+	if jobInfo.logger == nil {
 		jobInfo.initializeLogForJob(jobLogVerbosity, fmt.Sprintf("%s.log", jobId.String()))
-		//jobInfo.Logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
+		//jobInfo.logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 	}
 	jobInfo.JobPartsMap[partNumber] = jHandler
 	jMap.internalMap[jobId] = jobInfo
@@ -180,7 +180,7 @@ func (jMap *JobsInfoMap) LoadLoggerForJob(jobId common.JobID) *log.Logger {
 	jMap.lock.RLock()
 	jobInfo := jMap.internalMap[jobId]
 	jMap.lock.RUnlock()
-	return jobInfo.Logger
+	return jobInfo.logger
 }
 
 // DeleteJobInfoForJobId api deletes an entry of given JobId the JobsInfoMap
@@ -246,10 +246,10 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 
 // getJobPartMetaData returns the meta data of JobPart Order store in following format
 // "key1=val1;key2=val2;key3=val3"
-func getJobPartMetaData(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) (azblob.Metadata){
+func getJobPartMetaData(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap) azblob.Metadata {
 	// jPartPlanHeader is the JobPartPlan header for memory mapped JobPartOrder File
 	jPartPlanHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber).getJobPartPlanPointer()
-	if jPartPlanHeader.BlobData.MetaDataLength == 0{
+	if jPartPlanHeader.BlobData.MetaDataLength == 0 {
 		return azblob.Metadata{}
 	}
 	var mData azblob.Metadata
@@ -257,7 +257,7 @@ func getJobPartMetaData(jobId common.JobID, partNumber common.PartNumber, jobsIn
 	metaDataString := string(jPartPlanHeader.BlobData.MetaData[:])
 	// Split the meta data string using ';' to get key=value pairs
 	metaDataKeyValues := strings.Split(metaDataString, ";")
-	for index := 0; index < len(metaDataKeyValues); index ++{
+	for index := 0; index < len(metaDataKeyValues); index++ {
 		// Splitting each key=value pair to get key and values
 		keyValue := strings.Split(metaDataKeyValues[index], "=")
 		mData[keyValue[0]] = keyValue[1]
@@ -266,26 +266,26 @@ func getJobPartMetaData(jobId common.JobID, partNumber common.PartNumber, jobsIn
 }
 
 // getBlobHttpHeaders returns the azblob.BlobHTTPHeaders with blobData attributes of JobPart Order
-func getBlobHttpHeaders(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap, sourceBytes []byte) (azblob.BlobHTTPHeaders){
+func getBlobHttpHeaders(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfoMap, sourceBytes []byte) azblob.BlobHTTPHeaders {
 
 	// jPartPlanHeader is the JobPartPlan header for memory mapped JobPartOrder File
 	jPartPlanHeader := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNumber).getJobPartPlanPointer()
 	contentTpe := ""
 	contentEncoding := ""
 	// If NoGuessMimeType is set to true, then detecting the content type
-	if jPartPlanHeader.BlobData.NoGuessMimeType{
+	if jPartPlanHeader.BlobData.NoGuessMimeType {
 		contentTpe = http.DetectContentType(sourceBytes)
-	}else{
+	} else {
 		// If the NoGuessMimeType is set to false, then using the user given content-type
-		if jPartPlanHeader.BlobData.ContentEncodingLength > 0{
+		if jPartPlanHeader.BlobData.ContentEncodingLength > 0 {
 			contentTpe = string(jPartPlanHeader.BlobData.ContentType[:])
 		}
 	}
 
-	if jPartPlanHeader.BlobData.ContentEncodingLength > 0{
+	if jPartPlanHeader.BlobData.ContentEncodingLength > 0 {
 		contentEncoding = string(jPartPlanHeader.BlobData.ContentEncoding[:])
 	}
-	httpHeaderProperties := azblob.BlobHTTPHeaders{ContentType:contentTpe, ContentEncoding:contentEncoding, }
+	httpHeaderProperties := azblob.BlobHTTPHeaders{ContentType: contentTpe, ContentEncoding: contentEncoding}
 	return httpHeaderProperties
 }
 
@@ -317,10 +317,9 @@ func convertJobIdBytesToString(jobId [128 / 8]byte) string {
 	return jobIdString
 }
 
-
-func setModifiedTime(file string, mTime time.Time, info *JobInfo){
+func setModifiedTime(file string, mTime time.Time, info *JobInfo) {
 	err := os.Chtimes(file, mTime, mTime)
-	if err != nil{
+	if err != nil {
 		info.Panic(errors.New(fmt.Sprintf("error changing the modified time of file %s to the time %s", file, mTime.String())))
 		return
 	}
@@ -435,7 +434,7 @@ func updateTransferStatus(jobId common.JobID, partNo common.PartNumber, transfer
 func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfoMap) {
 	jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
 	numPartsForJob := jobsInfoMap.GetNumberOfPartsForJob(jobId)
-	totalNumberOfPartsDone :=jobInfo.getNumberOfPartsDone()
+	totalNumberOfPartsDone := jobInfo.getNumberOfPartsDone()
 	jobInfo.Log(common.LogInfo, fmt.Sprintf("total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone))
 	if jobInfo.incrementNumberOfPartsDone() == numPartsForJob {
 		jobInfo.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully completed, cancelled or paused", jobId))
