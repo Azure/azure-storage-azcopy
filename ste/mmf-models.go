@@ -46,7 +46,7 @@ const (
 type JobPartPlanHeader struct {
 	Version            uint32              // represent the version of data schema format of header
 	Id                 common.JobID        // represents the 16 byte JobId
-	PartNum            uint32              // represents the part number of the JobOrder
+	PartNum            common.PartNumber   // represents the part number of the JobOrder
 	IsFinalPart        bool                // represents whether this part is final part or not
 	Priority           uint8               // represents the priority of JobPart order (High, Medium and Low)
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder

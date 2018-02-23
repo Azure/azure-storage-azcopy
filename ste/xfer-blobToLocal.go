@@ -18,7 +18,7 @@ type blobToLocal struct {
 
 func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
 	// step 1: get blob size
-	jobInfo := transfer.getJobInfo()
+	jobInfo := transfer.JobInfo()
 
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -46,7 +46,7 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 	memoryMappedFile := createAndMemoryMapFile(destination, blobSize)
 
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
-	downloadChunkSize := int64(transfer.getBlockSize())
+	downloadChunkSize := int64(transfer.BlockSize())
 
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
@@ -73,11 +73,11 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 }
 
 // this generates a function which performs the downloading of a single chunk
-func generateDownloadFunc(t TransferMsg,  chunkId int32, totalNumOfChunks uint32, chunkSize int64,
-							startIndex int64, blobURL azblob.BlobURL, memoryMappedFile mmap.MMap) chunkFunc {
+func generateDownloadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64,
+	startIndex int64, blobURL azblob.BlobURL, memoryMappedFile mmap.MMap) chunkFunc {
 	return func(workerId int) {
-		jobInfo := t.getJobInfo()
-		transferIdentifierStr := t.getTransferIdentifierString()
+		jobInfo := t.JobInfo()
+		transferIdentifierStr := t.TransferIdentifierString()
 		if t.TransferContext.Err() != nil {
 			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
 				jobInfo.Log(common.LogInfo,

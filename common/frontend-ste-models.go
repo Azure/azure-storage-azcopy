@@ -30,17 +30,17 @@ import (
 type JobID UUID
 
 func (j JobID) String() string {
-	return JobID(j).String()
+	return UUID(j).String()
 }
 
 // Implementing MarshalJSON() method for type JobID
 func (j JobID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(JobID(j))
+	return json.Marshal(UUID(j))
 }
 
 // Implementing UnmarshalJSON() method for type JobID
 func (j *JobID) UnmarshalJSON(b []byte) error {
-	var u JobID
+	var u UUID
 	if err := json.Unmarshal(b, &u); err != nil {
 		return err
 	}

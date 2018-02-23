@@ -40,7 +40,7 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					jobInfo := transferMsg.infoMap.LoadJobInfoForJob(transferMsg.jobId)
+					jobInfo := transferMsg.infoMap.JobInfo(transferMsg.jobId)
 					// If the transfer Msg has been cancelled,
 					if transferMsg.TransferContext.Err() != nil {
 						jobInfo.Log(common.LogInfo, fmt.Sprintf("Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, common.JobID(transferMsg.jobId).String(), transferMsg.partNumber, transferMsg.transferIndex))
@@ -50,13 +50,13 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 						jobInfo.Log(common.LogInfo,
 							fmt.Sprintf("Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
 								workerId, common.JobID(transferMsg.jobId).String(), transferMsg.partNumber, transferMsg.transferIndex))
-						transferMsgDetail := transferMsg.getTransferMsgDetail()
-						prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
+						sourceType, destinationType := transferMsg.SourceDestinationType()
+						prologueFunction := computePrologueFunc(sourceType, destinationType)
 						if prologueFunction == nil {
 							jobInfo.Log(common.LogError,
 								fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
-									transferMsgDetail.SourceType, transferMsgDetail.DestinationType))
-							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)))
+									sourceType, destinationType))
+							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", sourceType, destinationType)))
 						}
 						prologueFunction(transferMsg, highPriorityChunkChannel)
 					}

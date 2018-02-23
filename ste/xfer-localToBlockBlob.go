@@ -20,7 +20,7 @@ type localToBlockBlob struct {
 // this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
 func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
 
-	jobInfo := transfer.getJobInfo()
+	jobInfo := transfer.JobInfo()
 	// step 1: create pipeline for the destination blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -45,15 +45,15 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkCha
 	blobUrl := azblob.NewBlobURL(*u, p)
 
 	// step 2: get the file size
-	blobSize := int64(transfer.getSourceSize())
+	blobSize := int64(transfer.SourceSize())
 
 	// step 3: map in the file to upload before transferring chunks
 	memoryMappedFile := openAndMemoryMapFile(source)
 
 	// step 4: compute the number of blocks and create a slice to hold the blockIDs of each chunk
-	chunkSize := int64(transfer.getBlockSize())
+	chunkSize := int64(transfer.BlockSize())
 
-	numOfBlocks := transfer.getNumberOfChunks()
+	numOfBlocks := transfer.NumberOfChunks()
 
 	blocksIds := make([]string, numOfBlocks)
 	blockIdCount := int32(0)
@@ -85,12 +85,12 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkCha
 
 // this generates a function which performs the uploading of a single chunk
 func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
-										memoryMappedFile mmap.MMap, blockIds *[]string) chunkFunc {
+	memoryMappedFile mmap.MMap, blockIds *[]string) chunkFunc {
 	return func(workerId int) {
-		transferIdentifierStr := t.getTransferIdentifierString()
-		jobInfo := t.getJobInfo()
+		transferIdentifierStr := t.TransferIdentifierString()
+		jobInfo := t.JobInfo()
 		if t.TransferContext.Err() != nil {
-			jobInfo.Log(common.LogInfo, fmt.Sprintf("%s. Hence not picking up chunkId %d", t.getTransferIdentifierString(), chunkId))
+			jobInfo.Log(common.LogInfo, fmt.Sprintf("%s is cancelled. Hence not picking up chunkId %d", t.TransferIdentifierString(), chunkId))
 			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
 				jobInfo.Log(common.LogInfo,
 					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
@@ -99,7 +99,6 @@ func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, c
 				t.updateNumberOfTransferDone()
 			}
 		} else {
-
 			// If there are more than one block for a transfer, then we need to upload each individually
 			// and then we need to upload the block list
 			if totalNumOfChunks > 1 {

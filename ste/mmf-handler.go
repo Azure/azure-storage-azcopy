@@ -127,7 +127,7 @@ func memoryMapTheJobFile(filename string) mmap.MMap {
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPlanBlobData, jobsInfoMap *JobsInfoMap) (string, error) {
+func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) (string, error) {
 	var currentEndOffsetOfFile uint64 = 0
 	/*
 	*       Following Steps are executed:
@@ -230,7 +230,7 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 
 	// calculating the number of transfer for given CopyJobPartOrder
 	numTransfer := uint32(len(jobPart.Transfers))
-	jPartInFile := JobPartPlanHeader{Version: versionID, Id: jobID, PartNum: uint32(partNo),
+	jPartInFile := JobPartPlanHeader{Version: versionID, Id: jobID, PartNum: partNo,
 		IsFinalPart: jobPart.IsFinalPart, Priority: DefaultJobPriority, TTLAfterCompletion: uint32(time.Now().Nanosecond()),
 		SrcLocationType: jobPart.SourceType, DstLocationType: jobPart.DestinationType,
 		NumTransfers: numTransfer, LogSeverity: jobPart.LogVerbosity, BlobData: data, jobStatus_doNotUse: JobInProgress}

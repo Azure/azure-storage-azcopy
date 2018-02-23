@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
+	"fmt"
 )
 
 // TODO check file size, max is 4.75TB
@@ -54,6 +55,7 @@ Usage:
     - This command downloads a blob and outputs it on stdout.
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
+			fmt.Print("number of arguments ", len(args))
 			if len(args) == 1 { // redirection
 				sourceType := determineLocaltionType(args[0])
 				if sourceType != common.Blob {
