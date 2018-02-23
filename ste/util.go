@@ -17,7 +17,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 	"unsafe"
 )
 
@@ -91,7 +90,7 @@ type JobsInfoMap struct {
 	internalMap map[common.JobID]*JobInfo
 }
 
-// LoadJobPartsMapForJob returns the map of PartNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
+// LoadJobPartsMapForJob returns the map of partNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
 func (jMap *JobsInfoMap) LoadJobPartsMapForJob(jobId common.JobID) (map[common.PartNumber]*JobPartPlanInfo, bool) {
 	jMap.lock.RLock()
 	jobInfo, ok := jMap.internalMap[jobId]
@@ -197,8 +196,8 @@ func NewJobPartPlanInfoMap() *JobsInfoMap {
 	}
 }
 
-// parseStringToJobInfo api parses the file name to extract the job Id, part number and schema version number
-// Returns the JobId, PartNumber and data schema version
+// parseStringToJobInfo api parses the file name to extract the job jobId, part number and schema version number
+// Returns the JobId, partNumber and data schema version
 func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumber, version common.Version) {
 
 	/*
@@ -317,14 +316,7 @@ func convertJobIdBytesToString(jobId [128 / 8]byte) string {
 	return jobIdString
 }
 
-func setModifiedTime(file string, mTime time.Time, info *JobInfo) {
-	err := os.Chtimes(file, mTime, mTime)
-	if err != nil {
-		info.Panic(errors.New(fmt.Sprintf("error changing the modified time of file %s to the time %s", file, mTime.String())))
-		return
-	}
-	info.Log(common.LogInfo, fmt.Sprintf("successfully changed the modified time of file %s to the time %s", file, mTime.String()))
-}
+
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
 func reconstructTheExistingJobParts(jobsInfoMap *JobsInfoMap, coordinatorChannels *CoordinatorChannels) {
@@ -405,23 +397,6 @@ func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfoMap) bool {
 		return false
 	}
 	return true
-}
-
-// getTransferMsgDetail returns the details of a transfer for given JobId, part number and transfer index
-func getTransferMsgDetail(jobId common.JobID, partNo common.PartNumber, transferEntryIndex uint32, jobsInfoMap *JobsInfoMap) TransferMsgDetail {
-	// jHandler is the JobPartPlanInfo Pointer for given JobId and part number
-	jHandler := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNo)
-
-	// jPartPlanPointer is the memory map JobPartPlan for given JobId and part number
-	jPartPlanPointer := jHandler.getJobPartPlanPointer()
-
-	sourceType := jPartPlanPointer.SrcLocationType
-	destinationType := jPartPlanPointer.DstLocationType
-	source, destination := jHandler.getTransferSrcDstDetail(transferEntryIndex)
-	chunkSize := jPartPlanPointer.BlobData.BlockSize
-	return TransferMsgDetail{jobId, partNo, transferEntryIndex, chunkSize, sourceType,
-		source, destinationType, destination, jHandler.TransfersInfo[transferEntryIndex].ctx,
-		jHandler.TransfersInfo[transferEntryIndex].cancel, jobsInfoMap}
 }
 
 // updateTransferStatus updates the status of given transfer for given jobId and partNumber in thread safe manner

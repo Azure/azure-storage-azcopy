@@ -40,17 +40,17 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					jobInfo := transferMsg.InfoMap.LoadJobInfoForJob(transferMsg.Id)
+					jobInfo := transferMsg.infoMap.LoadJobInfoForJob(transferMsg.jobId)
 					// If the transfer Msg has been cancelled,
 					if transferMsg.TransferContext.Err() != nil {
-						jobInfo.Log(common.LogInfo, fmt.Sprintf("Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, common.JobID(transferMsg.Id).String(), transferMsg.PartNumber, transferMsg.TransferIndex))
-						//updateTransferStatus(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, common.TransferStatusFailed, transferMsg.InfoMap)
-						updateNumberOfTransferDone(transferMsg.Id, transferMsg.PartNumber, transferMsg.InfoMap)
+						jobInfo.Log(common.LogInfo, fmt.Sprintf("Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, common.JobID(transferMsg.jobId).String(), transferMsg.partNumber, transferMsg.transferIndex))
+						//updateTransferStatus(transferMsg.jobId, transferMsg.partNumber, transferMsg.transferIndex, common.TransferStatusFailed, transferMsg.infoMap)
+						updateNumberOfTransferDone(transferMsg.jobId, transferMsg.partNumber, transferMsg.infoMap)
 					} else {
 						jobInfo.Log(common.LogInfo,
 							fmt.Sprintf("Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
-								workerId, common.JobID(transferMsg.Id).String(), transferMsg.PartNumber, transferMsg.TransferIndex))
-						transferMsgDetail := getTransferMsgDetail(transferMsg.Id, transferMsg.PartNumber, transferMsg.TransferIndex, transferMsg.InfoMap)
+								workerId, common.JobID(transferMsg.jobId).String(), transferMsg.partNumber, transferMsg.transferIndex))
+						transferMsgDetail := transferMsg.getTransferMsgDetail()
 						prologueFunction := computePrologueFunc(transferMsgDetail.SourceType, transferMsgDetail.DestinationType)
 						if prologueFunction == nil {
 							jobInfo.Log(common.LogError,
@@ -58,7 +58,7 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 									transferMsgDetail.SourceType, transferMsgDetail.DestinationType))
 							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", transferMsgDetail.SourceType, transferMsgDetail.DestinationType)))
 						}
-						prologueFunction(transferMsgDetail, highPriorityChunkChannel)
+						prologueFunction(transferMsg, highPriorityChunkChannel)
 					}
 				default:
 					// lower priorities should go here in the future

@@ -138,7 +138,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 	* 		5. Close the file
 	* 		6. Return File Name
 	 */
-	// creating file name from job Id, part number and version id of job part order
+	// creating file name from job jobId, part number and version id of job part order
 	fileName := formatJobInfoToString(jobPartOrder)
 
 	fileAbsolutePath := currFileDirectory + "/" + fileName
@@ -224,7 +224,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobData) JobPartPlanHeader {
 	var jobID [128 / 8]byte
 	versionID := jobPart.Version
-	// converting the job Id string to [128 / 8] byte format
+	// converting the job jobId string to [128 / 8] byte format
 	jobID = common.JobID(jobPart.ID)
 	partNo := jobPart.PartNum
 

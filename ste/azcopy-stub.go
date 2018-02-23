@@ -85,7 +85,7 @@ package ste
 //		message := fmt.Sprintf("---------- Details for JobId %s and Part Number %d ---------------", jobId, jobDetail.PartsDetail[index].PartNum)
 //		fmt.Println(message)
 //		for tIndex := 0; tIndex < len(jobDetail.PartsDetail[index].TransferDetails); tIndex++{
-//			message := fmt.Sprintf("--- transfer Id - %d; Source - %s; Destination - %s", index, jobDetail.PartsDetail[index].TransferDetails[tIndex].Src,
+//			message := fmt.Sprintf("--- transfer jobId - %d; Source - %s; Destination - %s", index, jobDetail.PartsDetail[index].TransferDetails[tIndex].Src,
 //																											jobDetail.PartsDetail[index].TransferDetails[tIndex].Dst)
 //			fmt.Println(message)
 //		}
@@ -179,7 +179,7 @@ package ste
 //	url := "http://localhost:1337"
 //	payload := common.CopyJobPartOrder{Version: 1,
 //			ID: common.JobID(guId),
-//			PartNum: common.PartNumber(partNumber),
+//			PartNum: common.partNumber(partNumber),
 //			Priority: HighJobPriority,
 //			SourceType: common.Local,
 //			DestinationType: common.Blob,
@@ -213,7 +213,7 @@ package ste
 //	fmt.Println("Sending Upload Request TO STE")
 //	client := &http.Client{}
 //	url := "http://localhost:1337"
-//	payload := statusQuery{Guid:guId, PartNo:partNo, TransferIndex:transferIndex, ChunkIndex:chunkIndex}
+//	payload := statusQuery{Guid:guId, PartNo:partNo, transferIndex:transferIndex, ChunkIndex:chunkIndex}
 //	payloadData, err := json.MarshalIndent(payload, "", "")
 //	if err != nil {
 //		panic(err)

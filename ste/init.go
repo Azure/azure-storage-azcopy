@@ -39,13 +39,13 @@ var emptyJobId = common.JobID{}
 var steContext = context.Background()
 var realTimeThroughputCounter = &throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: int64(time.Now().Nanosecond())}
 
-// putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
+// putJobPartInfoHandlerIntoMap api put the JobPartPlanInfo pointer for given jobId and part number in map[common.JobID]map[common.partNumber]*JobPartPlanInfo
 func putJobPartInfoHandlerIntoMap(jobHandler *JobPartPlanInfo, jobId common.JobID,
 	partNo common.PartNumber, jobLogVerbosity common.LogLevel, jPartInfoMap *JobsInfoMap) {
 
 }
 
-// getJobPartMapFromJobPartInfoMap api gets the map[common.PartNumber]*JobPartPlanInfo for given jobId and part number from map[common.JobID]map[common.PartNumber]*JobPartPlanInfo
+// getJobPartMapFromJobPartInfoMap api gets the map[common.partNumber]*JobPartPlanInfo for given jobId and part number from map[common.JobID]map[common.partNumber]*JobPartPlanInfo
 func getJobPartMapFromJobPartInfoMap(jobId common.JobID,
 	jPartInfoMap *JobsInfoMap) (jPartMap map[common.PartNumber]*JobPartPlanInfo) {
 	jPartMap, ok := jPartInfoMap.LoadJobPartsMapForJob(jobId)
@@ -92,7 +92,7 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 			continue
 		}
 		// creating transfer msg to schedule the transfer and queuing transferMsg into channels determined by the JobPriority
-		transferMsg := TransferMsg{Id: jobId, PartNumber: partNumber, TransferIndex: index, InfoMap: jobsInfoMap, TransferContext: jobPartInfo.TransfersInfo[index].ctx}
+		transferMsg := TransferMsg{jobId: jobId, partNumber: partNumber, transferIndex: index, infoMap: jobsInfoMap, TransferContext: jobPartInfo.TransfersInfo[index].ctx}
 		switch priority {
 		case HighJobPriority:
 			coordinatorChannels.HighTransfer <- transferMsg
@@ -111,7 +111,7 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 					index, priority, jobId, partNumber))
 		default:
 			jobInfo.Log(common.LogInfo,
-				fmt.Sprintf("invalid job part order priority %d for given Job Id %s and part number %d and transfer Index %d",
+				fmt.Sprintf("invalid job part order priority %d for given Job jobId %s and part number %d and transfer Index %d",
 					priority, jobId, partNumber, index))
 		}
 	}
@@ -465,7 +465,7 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp http.
 	// marshalling the JobProgressSummary struct to send back in response.
 	jobProgressSummaryJson, err := json.MarshalIndent(progressSummary, "", "")
 	if err != nil {
-		result := fmt.Sprintf("error marshalling the progress summary for Job Id %s", jobId)
+		result := fmt.Sprintf("error marshalling the progress summary for Job jobId %s", jobId)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(result))
 		return
@@ -476,7 +476,7 @@ func getJobSummary(jobId common.JobID, jPartPlanInfoMap *JobsInfoMap, resp http.
 
 // getTransferList api returns the list of transfer with specific status for given jobId in http response
 func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPlanInfoMap *JobsInfoMap, resp http.ResponseWriter) {
-	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and PartNumber
+	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and partNumber
 	jPartMap, ok := jPartPlanInfoMap.LoadJobPartsMapForJob(jobId)
 	// sending back the error status and error message in response
 	if !ok {
@@ -506,7 +506,7 @@ func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jPartPl
 	// marshalling the TransfersDetail Struct to send back in response to front-end
 	tStatusJson, err := json.MarshalIndent(common.TransfersDetail{Details: transferList}, "", "")
 	if err != nil {
-		result := fmt.Sprintf("error marshalling the transfer status for Job Id %s", jobId)
+		result := fmt.Sprintf("error marshalling the transfer status for Job jobId %s", jobId)
 		resp.WriteHeader(http.StatusInternalServerError)
 		resp.Write([]byte(result))
 		return

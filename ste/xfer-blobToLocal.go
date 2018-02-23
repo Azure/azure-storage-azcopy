@@ -1,7 +1,6 @@
 package ste
 
 import (
-	"context"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -9,7 +8,6 @@ import (
 	"github.com/edsrzf/mmap-go"
 	"io"
 	"net/url"
-	"sync/atomic"
 	"time"
 )
 
@@ -18,9 +16,9 @@ type blobToLocal struct {
 	count uint32
 }
 
-func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel chan<- ChunkMsg) {
+func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
 	// step 1: get blob size
-	logger := transfer.JobHandlerMap.LoadJobInfoForJob(transfer.JobId)
+	jobInfo := transfer.getJobInfo()
 
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -32,22 +30,23 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				logger.Log(common.LogLevel(l), msg)
+				jobInfo.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(logger.minimumLogLevel)
+				return pipeline.LogLevel(jobInfo.minimumLogLevel)
 			},
 		},
 	})
-	u, _ := url.Parse(transfer.Source)
+	source, destination := transfer.SourceDestination()
+	u, _ := url.Parse(source)
 	blobUrl := azblob.NewBlobURL(*u, p)
 	blobSize := getBlobSize(blobUrl)
 
 	// step 2: prep local file before download starts
-	memoryMappedFile := createAndMemoryMapFile(transfer.Destination, blobSize)
+	memoryMappedFile := createAndMemoryMapFile(destination, blobSize)
 
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
-	downloadChunkSize := int64(transfer.ChunkSize)
+	downloadChunkSize := int64(transfer.getBlockSize())
 
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
@@ -61,52 +60,44 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsgDetail, chunkChannel
 		// schedule the download chunk job
 		chunkChannel <- ChunkMsg{
 			doTransfer: generateDownloadFunc(
-				transfer.JobId,
-				transfer.PartNumber,
-				transfer.TransferId,
+				transfer,
 				blockIdCount, // serves as index of chunk
 				computeNumOfChunks(blobSize, downloadChunkSize),
 				adjustedChunkSize,
 				startIndex,
 				blobUrl,
-				memoryMappedFile,
-				transfer.TransferCtx,
-				transfer.TransferCancelFunc,
-				&blobToLocal.count, transfer.JobHandlerMap),
+				memoryMappedFile),
 		}
 		blockIdCount += 1
 	}
 }
 
 // this generates a function which performs the downloading of a single chunk
-func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transferId uint32, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64,
-	blobURL azblob.BlobURL, memoryMappedFile mmap.MMap, ctx context.Context, cancelTransfer func(), progressCount *uint32, jobsInfoMap *JobsInfoMap) chunkFunc {
+func generateDownloadFunc(t TransferMsg,  chunkId int32, totalNumOfChunks uint32, chunkSize int64,
+							startIndex int64, blobURL azblob.BlobURL, memoryMappedFile mmap.MMap) chunkFunc {
 	return func(workerId int) {
-		jobInfo := jobsInfoMap.LoadJobInfoForJob(jobId)
-		if ctx.Err() != nil {
-			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+		jobInfo := t.getJobInfo()
+		transferIdentifierStr := t.getTransferIdentifierString()
+		if t.TransferContext.Err() != nil {
+			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
 				jobInfo.Log(common.LogInfo,
-					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, jobId.String(), partNum))
-				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+					fmt.Sprintf("worker %d is finalizing cancellation %s", workerId, transferIdentifierStr))
+				t.updateNumberOfTransferDone()
 			}
 		} else {
-			transferIdentifierStr := fmt.Sprintf("jobId %s and partNum %d and transferId %d", jobId.String(), partNum, transferId)
-
 			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
 
 			// step 1: perform get
-			get, err := blobURL.GetBlob(ctx, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
+			get, err := blobURL.GetBlob(t.TransferContext, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
-				cancelTransfer()
+				t.TransferCancelFunc()
 				jobInfo.Log(common.LogInfo, fmt.Sprintf("worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex))
-				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+				t.updateTransferStatus(common.TransferFailed)
+				if t.incrementNumberOfChunksDone() == totalNumOfChunks {
 					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-							workerId, jobId, partNum))
-					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+						fmt.Sprintf("worker %d is finalizing cancellation of %s", workerId, transferIdentifierStr))
+					t.updateNumberOfTransferDone()
 				}
 				return
 			}
@@ -115,14 +106,14 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 			get.Body().Close()
 			if int64(bytesRead) != chunkSize || err != nil {
 				// cancel entire transfer because this chunk has failed
-				cancelTransfer()
+				t.TransferCancelFunc()
 				jobInfo.Log(common.LogInfo, fmt.Sprintf("worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex))
-				updateTransferStatus(jobId, partNum, transferId, common.TransferFailed, jobsInfoMap)
-				if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+				t.updateTransferStatus(common.TransferFailed)
+				if t.incrementNumberOfChunksDone() == totalNumOfChunks {
 					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-							workerId, jobId, partNum))
-					updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+						fmt.Sprintf("worker %d is finalizing cancellation of %s",
+							workerId, transferIdentifierStr))
+					t.updateNumberOfTransferDone()
 				}
 				return
 			}
@@ -130,18 +121,17 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 			realTimeThroughputCounter.updateCurrentBytes(chunkSize)
 
 			// step 3: check if this is the last chunk
-			if atomic.AddUint32(progressCount, 1) == totalNumOfChunks {
+			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
 				// step 4: this is the last block, perform EPILOGUE
 				jobInfo.Log(common.LogInfo,
 					fmt.Sprintf("worker %d is concluding download Transfer job with %s after processing chunkId %d",
 						workerId, transferIdentifierStr, chunkId))
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
-
-				updateTransferStatus(jobId, partNum, transferId, common.TransferComplete, jobsInfoMap)
+				t.updateTransferStatus(common.TransferComplete)
 				jobInfo.Log(common.LogInfo,
-					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, jobId.String(), partNum))
-				updateNumberOfTransferDone(jobId, partNum, jobsInfoMap)
+					fmt.Sprintf("worker %d is finalizing cancellation of %s",
+						workerId, transferIdentifierStr))
+				t.updateNumberOfTransferDone()
 
 				err := memoryMappedFile.Unmap()
 				if err != nil {
@@ -150,14 +140,7 @@ func generateDownloadFunc(jobId common.JobID, partNum common.PartNumber, transfe
 							workerId, transferIdentifierStr, chunkId))
 				}
 
-				jobPartInfo := jobsInfoMap.LoadJobPartPlanInfoForJobPart(jobId, partNum)
-				// if the job order has the flag preserve-last-modified-time set to true,
-				// then changing the timestamp of destination to last-modified time received in response
-				if jobPartInfo.getJobPartPlanPointer().BlobData.PreserveLastModifiedTime {
-					_, dst := jobPartInfo.getTransferSrcDstDetail(transferId)
-					lastModifiedTime := get.LastModified()
-					setModifiedTime(dst, lastModifiedTime, jobInfo)
-				}
+				t.ifPreserveLastModifiedTime(get)
 			}
 		}
 	}

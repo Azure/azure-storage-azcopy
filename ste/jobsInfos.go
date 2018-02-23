@@ -15,7 +15,7 @@ type JobsInfoMap_New struct {
 	internalMap map[common.JobID]*JobInfo
 }
 
-// LoadJobPartsMapForJob returns the map of PartNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
+// LoadJobPartsMapForJob returns the map of partNumber to JobPartPlanInfo Pointer for given JobId in thread-safe manner.
 func (jMap *JobsInfoMap_New) LoadJobPartsMapForJob(jobId common.JobID) (map[common.PartNumber]*JobPartPlanInfo, bool) {
 	return nil, false
 }
