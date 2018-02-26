@@ -20,7 +20,6 @@ type localToBlockBlob struct {
 // this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
 func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
 
-	jobInfo := transfer.JobInfo()
 	// step 1: create pipeline for the destination blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -32,28 +31,27 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkCha
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				jobInfo.Log(common.LogLevel(l), msg)
+				transfer.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(jobInfo.minimumLogLevel)
+				return pipeline.LogLevel(transfer.MinimumLogLevel)
 			},
 		},
 	})
 
-	source, destination := transfer.SourceDestination()
-	u, _ := url.Parse(destination)
+	u, _ := url.Parse(transfer.Destination)
 	blobUrl := azblob.NewBlobURL(*u, p)
 
 	// step 2: get the file size
-	blobSize := int64(transfer.SourceSize())
+	blobSize := int64(transfer.SourceSize)
 
 	// step 3: map in the file to upload before transferring chunks
-	memoryMappedFile := openAndMemoryMapFile(source)
+	memoryMappedFile := openAndMemoryMapFile(transfer.Source)
 
 	// step 4: compute the number of blocks and create a slice to hold the blockIDs of each chunk
-	chunkSize := int64(transfer.BlockSize())
+	chunkSize := int64(transfer.BlockSize)
 
-	numOfBlocks := transfer.NumberOfChunks()
+	numOfBlocks := transfer.NumChunks
 
 	blocksIds := make([]string, numOfBlocks)
 	blockIdCount := int32(0)
@@ -87,16 +85,14 @@ func (localToBlockBlob localToBlockBlob) prologue(transfer TransferMsg, chunkCha
 func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64, startIndex int64, blobURL azblob.BlobURL,
 	memoryMappedFile mmap.MMap, blockIds *[]string) chunkFunc {
 	return func(workerId int) {
-		transferIdentifierStr := t.TransferIdentifierString()
-		jobInfo := t.JobInfo()
+
 		if t.TransferContext.Err() != nil {
-			jobInfo.Log(common.LogInfo, fmt.Sprintf("%s is cancelled. Hence not picking up chunkId %d", t.TransferIdentifierString(), chunkId))
-			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
-				jobInfo.Log(common.LogInfo,
-					fmt.Sprintf("worker %d is finalizing cancellation of job %s and part number %d",
-						workerId, t.jobId, t.partNumber))
-				//updateTransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
-				t.updateNumberOfTransferDone()
+			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
+			if t.ChunksDone() == totalNumOfChunks {
+				t.Log(common.LogInfo,
+					fmt.Sprintf("has worker %d which is finalizing cancellation of transfer", workerId))
+				//TransferStatus(jobId, partNum, transferId, common.TransferStatusFailed, jobsInfoMap)
+				t.TransferDone()
 			}
 		} else {
 			// If there are more than one block for a transfer, then we need to upload each individually
@@ -118,24 +114,23 @@ func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, c
 				if err != nil {
 					// cancel entire transfer because this chunk has failed
 					t.TransferCancelFunc()
-					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("worker %d is canceling %s chunkId %d because startIndex of %d has failed",
-							workerId, transferIdentifierStr, chunkId, startIndex))
+					t.Log(common.LogInfo,
+						fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
+							workerId, chunkId, startIndex))
 					//fmt.Println("Worker", workerId, "is canceling CHUNK job with", transferIdentifierStr, "and chunkID", chunkId, "because startIndex of", startIndex, "has failed due to err", err)
 					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-					t.updateTransferStatus(common.TransferFailed)
+					t.TransferStatus(common.TransferFailed)
 
-					if t.incrementNumberOfChunksDone() == totalNumOfChunks {
-						jobInfo.Log(common.LogInfo,
-							fmt.Sprintf("worker %d is finalizing cancellation of %s",
-								workerId, transferIdentifierStr))
-						t.updateNumberOfTransferDone()
+					if t.ChunksDone() == totalNumOfChunks {
+						t.Log(common.LogInfo,
+							fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
+						t.TransferDone()
 
 						err := memoryMappedFile.Unmap()
 						if err != nil {
-							jobInfo.Log(common.LogError,
-								fmt.Sprintf("worker %v failed to conclude %s after processing chunkId %v",
-									workerId, transferIdentifierStr, chunkId))
+							t.Log(common.LogError,
+								fmt.Sprintf("has worker %v which failed to conclude transfer after processing chunkId %v",
+									workerId, chunkId))
 						}
 
 					}
@@ -150,31 +145,29 @@ func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, c
 				realTimeThroughputCounter.updateCurrentBytes(chunkSize)
 
 				// step 4: check if this is the last chunk
-				if t.incrementNumberOfChunksDone() == totalNumOfChunks {
+				if t.ChunksDone() == totalNumOfChunks {
 					// If the transfer gets cancelled before the putblock list
 					if t.TransferContext.Err() != nil {
-						t.updateNumberOfTransferDone()
+						t.TransferDone()
 						return
 					}
 					// step 5: this is the last block, perform EPILOGUE
-					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("worker %d is concluding download of %s after processing chunkId %d with blocklist %s",
-							workerId, transferIdentifierStr, chunkId, *blockIds))
+					t.Log(common.LogInfo,
+						fmt.Sprintf("has worker %d which is concluding download transfer after processing chunkId %d with blocklist %s",
+							workerId, chunkId, *blockIds))
 					//fmt.Println("Worker", workerId, "is concluding upload TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId, "with blocklist", *blockIds)
 
 					// fetching the blob http headers with content-type, content-encoding attributes
-					blobHttpHeader := t.getBlobHttpHeaders(memoryMappedFile)
-
 					// fetching the metadata passed with the JobPartOrder
-					metaData := t.getJobPartMetaData()
+					blobHttpHeader, metaData := t.blobHttpHeaderandMetaData(memoryMappedFile)
 
 					putBlockListResponse, err := blockBlobUrl.PutBlockList(t.TransferContext, *blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 					if err != nil {
-						jobInfo.Log(common.LogError,
-							fmt.Sprintf("Worker %d failed to conclude Transfer job with %s after processing chunkId %d due to error %s",
-								workerId, transferIdentifierStr, chunkId, string(err.Error())))
-						t.updateTransferStatus(common.TransferFailed)
-						t.updateNumberOfTransferDone()
+						t.Log(common.LogError,
+							fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
+								workerId, chunkId, string(err.Error())))
+						t.TransferStatus(common.TransferFailed)
+						t.TransferDone()
 						return
 					}
 
@@ -182,25 +175,22 @@ func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, c
 						putBlockListResponse.Response().Body.Close()
 					}
 
-					jobInfo.Log(common.LogInfo, fmt.Sprintf("%s has completed successfully", transferIdentifierStr))
-					t.updateTransferStatus(common.TransferComplete)
-					t.updateNumberOfTransferDone()
+					t.Log(common.LogInfo, "completed successfully")
+					t.TransferStatus(common.TransferComplete)
+					t.TransferDone()
 
 					err = memoryMappedFile.Unmap()
 					if err != nil {
-						jobInfo.Log(common.LogError,
-							fmt.Sprintf("worker %v failed to conclude Transfer job with %v after processing chunkId %v",
-								workerId, transferIdentifierStr, chunkId))
+						t.Log(common.LogError,
+							fmt.Sprintf("has worker %v which failed to conclude Transfer after processing chunkId %v",
+								workerId, chunkId))
 					}
 				}
 			} else {
 				// If there is only one block for a transfer, then uploading block as a blob
 				blockBlobUrl := blobURL.ToBlockBlobURL()
 
-				blobHttpHeader := t.getBlobHttpHeaders(memoryMappedFile)
-
-				// fetching the metadata passed with the JobPartOrder
-				metaData := t.getJobPartMetaData()
+				blobHttpHeader, metaData := t.blobHttpHeaderandMetaData(memoryMappedFile)
 
 				// reading the chunk contents
 				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex+chunkSize]), pc)
@@ -209,18 +199,17 @@ func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, c
 
 				// if the put blob is a failure, updating the transfer status to failed
 				if err != nil {
-					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("put blob failed for %s failed and so cancelling the transfer", transferIdentifierStr))
-					t.updateTransferStatus(common.TransferFailed)
+					t.Log(common.LogInfo, " put blob failed and so cancelling the transfer")
+					t.TransferStatus(common.TransferFailed)
 				} else {
 					// if the put blob is a success, updating the transfer status to success
-					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("put blob successful for %s by worked %d", transferIdentifierStr, workerId))
-					t.updateTransferStatus(common.TransferComplete)
+					t.Log(common.LogInfo,
+						fmt.Sprintf("put blob successful by worked %d", workerId))
+					t.TransferStatus(common.TransferComplete)
 				}
 
 				// updating number of transfers done for job part order
-				t.updateNumberOfTransferDone()
+				t.TransferDone()
 
 				// closing the put blob response body
 				if putblobResp != nil {
@@ -229,8 +218,7 @@ func generateUploadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, c
 
 				err = memoryMappedFile.Unmap()
 				if err != nil {
-					jobInfo.Log(common.LogError,
-						fmt.Sprintf("error mapping the memory map file for %s", transferIdentifierStr))
+					t.Log(common.LogError, " has error mapping the memory map file")
 				}
 			}
 		}

@@ -90,7 +90,7 @@ type JobPartPlanBlobData struct {
 	// Specifies whether the timestamp of destination file has to be set to the modified time of source file
 	PreserveLastModifiedTime bool
 	// Specifies the maximum size of block which determines the number of chunks and chunk size of a transfer
-	BlockSize uint64
+	BlockSize uint32
 }
 
 // JobPartPlan represent the header of Job Part's Transfer in Memory Map File

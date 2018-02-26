@@ -40,23 +40,22 @@ func engineWorker(workerId int, highPriorityChunkChannel chan ChunkMsg, highPrio
 				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
 				case transferMsg := <-highPriorityTransferChannel:
-					jobInfo := transferMsg.infoMap.JobInfo(transferMsg.jobId)
 					// If the transfer Msg has been cancelled,
 					if transferMsg.TransferContext.Err() != nil {
-						jobInfo.Log(common.LogInfo, fmt.Sprintf("Worker %d is not picking up TRANSFER job with jobId %s and partNum %d and transferId %d since it is already cancelled", workerId, common.JobID(transferMsg.jobId).String(), transferMsg.partNumber, transferMsg.transferIndex))
-						//updateTransferStatus(transferMsg.jobId, transferMsg.partNumber, transferMsg.transferIndex, common.TransferStatusFailed, transferMsg.infoMap)
-						updateNumberOfTransferDone(transferMsg.jobId, transferMsg.partNumber, transferMsg.infoMap)
+						transferMsg.Log(common.LogInfo, fmt.Sprintf(" is not picked up worked %d", workerId))
+						//TransferStatus(transferMsg.jobId, transferMsg.partNumber, transferMsg.transferIndex, common.TransferStatusFailed, transferMsg.infoMap)
+						transferMsg.TransferDone()
 					} else {
-						jobInfo.Log(common.LogInfo,
-							fmt.Sprintf("Worker %d is processing TRANSFER job with jobId %s and partNum %d and transferId %d",
-								workerId, common.JobID(transferMsg.jobId).String(), transferMsg.partNumber, transferMsg.transferIndex))
-						sourceType, destinationType := transferMsg.SourceDestinationType()
-						prologueFunction := computePrologueFunc(sourceType, destinationType)
+						transferMsg.Log(common.LogInfo,
+							fmt.Sprintf("has worker %d which is processing TRANSFER", workerId))
+						prologueFunction := computePrologueFunc(transferMsg.SourceType, transferMsg.DestinationType)
 						if prologueFunction == nil {
-							jobInfo.Log(common.LogError,
-								fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
-									sourceType, destinationType))
-							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", sourceType, destinationType)))
+
+							transferMsg.Log(common.LogError,
+								fmt.Sprintf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
+									transferMsg.SourceType, transferMsg.DestinationType))
+							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
+								transferMsg.SourceType, transferMsg.DestinationType)))
 						}
 						prologueFunction(transferMsg, highPriorityChunkChannel)
 					}

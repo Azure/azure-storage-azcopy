@@ -22,10 +22,10 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
-	"fmt"
 )
 
 // TODO check file size, max is 4.75TB

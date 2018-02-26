@@ -8,6 +8,7 @@ import (
 	"github.com/edsrzf/mmap-go"
 	"io"
 	"net/url"
+	"os"
 	"time"
 )
 
@@ -18,7 +19,6 @@ type blobToLocal struct {
 
 func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
 	// step 1: get blob size
-	jobInfo := transfer.JobInfo()
 
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -30,23 +30,23 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				jobInfo.Log(common.LogLevel(l), msg)
+				transfer.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(jobInfo.minimumLogLevel)
+				return pipeline.LogLevel(transfer.MinimumLogLevel)
 			},
 		},
 	})
-	source, destination := transfer.SourceDestination()
-	u, _ := url.Parse(source)
+
+	u, _ := url.Parse(transfer.Source)
 	blobUrl := azblob.NewBlobURL(*u, p)
-	blobSize := getBlobSize(blobUrl)
+	blobSize := int64(transfer.SourceSize)
 
 	// step 2: prep local file before download starts
-	memoryMappedFile := createAndMemoryMapFile(destination, blobSize)
+	memoryMappedFile := createAndMemoryMapFile(transfer.Destination, blobSize)
 
 	// step 3: go through the blob range and schedule download chunk jobs/msgs
-	downloadChunkSize := int64(transfer.BlockSize())
+	downloadChunkSize := int64(transfer.BlockSize)
 
 	blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
@@ -76,13 +76,11 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 func generateDownloadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64,
 	startIndex int64, blobURL azblob.BlobURL, memoryMappedFile mmap.MMap) chunkFunc {
 	return func(workerId int) {
-		jobInfo := t.JobInfo()
-		transferIdentifierStr := t.TransferIdentifierString()
 		if t.TransferContext.Err() != nil {
-			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
-				jobInfo.Log(common.LogInfo,
-					fmt.Sprintf("worker %d is finalizing cancellation %s", workerId, transferIdentifierStr))
-				t.updateNumberOfTransferDone()
+			if t.ChunksDone() == totalNumOfChunks {
+				t.Log(common.LogInfo,
+					fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
+				t.TransferDone()
 			}
 		} else {
 			//fmt.Println("Worker", workerId, "is processing download CHUNK job with", transferIdentifierStr)
@@ -92,12 +90,12 @@ func generateDownloadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32,
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				t.TransferCancelFunc()
-				jobInfo.Log(common.LogInfo, fmt.Sprintf("worker %d is canceling Chunk job with %s and chunkId %d because startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex))
-				t.updateTransferStatus(common.TransferFailed)
-				if t.incrementNumberOfChunksDone() == totalNumOfChunks {
-					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("worker %d is finalizing cancellation of %s", workerId, transferIdentifierStr))
-					t.updateNumberOfTransferDone()
+				t.Log(common.LogInfo, fmt.Sprintf(" has worker %d which is canceling job and chunkId %d because startIndex of %d has failed", workerId, chunkId, startIndex))
+				t.TransferStatus(common.TransferFailed)
+				if t.ChunksDone() == totalNumOfChunks {
+					t.Log(common.LogInfo,
+						fmt.Sprintf(" has worker %d which finalizing cancellation of Transfer", workerId))
+					t.TransferDone()
 				}
 				return
 			}
@@ -107,13 +105,12 @@ func generateDownloadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32,
 			if int64(bytesRead) != chunkSize || err != nil {
 				// cancel entire transfer because this chunk has failed
 				t.TransferCancelFunc()
-				jobInfo.Log(common.LogInfo, fmt.Sprintf("worker %d is canceling Chunk job with %s and chunkId %d because writing to file for startIndex of %d has failed", workerId, transferIdentifierStr, chunkId, startIndex))
-				t.updateTransferStatus(common.TransferFailed)
-				if t.incrementNumberOfChunksDone() == totalNumOfChunks {
-					jobInfo.Log(common.LogInfo,
-						fmt.Sprintf("worker %d is finalizing cancellation of %s",
-							workerId, transferIdentifierStr))
-					t.updateNumberOfTransferDone()
+				t.Log(common.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+				t.TransferStatus(common.TransferFailed)
+				if t.ChunksDone() == totalNumOfChunks {
+					t.Log(common.LogInfo,
+						fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
+					t.TransferDone()
 				}
 				return
 			}
@@ -121,26 +118,31 @@ func generateDownloadFunc(t TransferMsg, chunkId int32, totalNumOfChunks uint32,
 			realTimeThroughputCounter.updateCurrentBytes(chunkSize)
 
 			// step 3: check if this is the last chunk
-			if t.incrementNumberOfChunksDone() == totalNumOfChunks {
+			if t.ChunksDone() == totalNumOfChunks {
 				// step 4: this is the last block, perform EPILOGUE
-				jobInfo.Log(common.LogInfo,
-					fmt.Sprintf("worker %d is concluding download Transfer job with %s after processing chunkId %d",
-						workerId, transferIdentifierStr, chunkId))
+				t.Log(common.LogInfo,
+					fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
-				t.updateTransferStatus(common.TransferComplete)
-				jobInfo.Log(common.LogInfo,
-					fmt.Sprintf("worker %d is finalizing cancellation of %s",
-						workerId, transferIdentifierStr))
-				t.updateNumberOfTransferDone()
+				t.TransferStatus(common.TransferComplete)
+				t.Log(common.LogInfo,
+					fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
+				t.TransferDone()
 
 				err := memoryMappedFile.Unmap()
 				if err != nil {
-					jobInfo.Log(common.LogError,
-						fmt.Sprintf("worker %v failed to conclude Transfer job with %v after processing chunkId %v",
-							workerId, transferIdentifierStr, chunkId))
+					t.Log(common.LogError,
+						fmt.Sprintf(" has worker %v which failed to conclude Transfer after processing chunkId %v", workerId, chunkId))
 				}
 
-				t.ifPreserveLastModifiedTime(get)
+				lastModifiedTime, preserveLastModifiedTime := t.ifPreserveLastModifiedTime()
+				if preserveLastModifiedTime {
+					err := os.Chtimes(t.Destination, lastModifiedTime, lastModifiedTime)
+					if err != nil {
+						t.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", t.Destination))
+						return
+					}
+					t.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", t.Destination))
+				}
 			}
 		}
 	}

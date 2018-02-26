@@ -180,7 +180,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 		currentTransferEntry := JobPartPlanTransfer{Offset: currentTransferChunkOffset,
 			SrcLength:               uint16(len(jobPartOrder.Transfers[index].Source)),
 			DstLength:               uint16(len(jobPartOrder.Transfers[index].Destination)),
-			ChunkNum:                getNumChunks(jobPartOrder.Transfers[index], data.BlockSize),
+			ChunkNum:                getNumChunks(uint64(jobPartOrder.Transfers[index].SourceSize), uint64(data.BlockSize)),
 			ModifiedTime:            uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
 			SourceSize:              uint64(jobPartOrder.Transfers[index].SourceSize),
 			CompletionTime:          0,
@@ -238,11 +238,11 @@ func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobD
 }
 
 // getNumChunks api returns the number of chunks depending on source Type and destination type
-func getNumChunks(transfer common.CopyTransfer, blockSize uint64) uint16 {
-	if uint64(transfer.SourceSize)%blockSize == 0 {
-		return uint16(uint64(transfer.SourceSize) / blockSize)
+func getNumChunks(sourceSize uint64, blockSize uint64) uint16 {
+	if uint64(sourceSize)%blockSize == 0 {
+		return uint16(uint64(sourceSize) / blockSize)
 	} else {
-		return uint16(uint64(transfer.SourceSize)/blockSize) + 1
+		return uint16(uint64(sourceSize)/blockSize) + 1
 	}
 }
 
@@ -289,5 +289,5 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 		ContentType: contentTypeBytes, ContentEncodingLength: uint8(len(contentEncoding)),
 		ContentEncoding: contentEncodingBytes, MetaDataLength: uint16(len(metaData)),
 		MetaData: metaDataBytes, PreserveLastModifiedTime: data.PreserveLastModifiedTime,
-		BlockSize: uint64(blockSize)}, nil
+		BlockSize: uint32(blockSize)}, nil
 }
