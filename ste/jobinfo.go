@@ -39,12 +39,12 @@ type JobInfo struct {
 }
 
 // Returns the combination of PartNumber and respective JobPartPlanInfo reference.
-func (ji *JobInfo) JobParts() (map[common.PartNumber]*JobPartPlanInfo){
+func (ji *JobInfo) JobParts() map[common.PartNumber]*JobPartPlanInfo {
 	return ji.jobPartsMap
 }
 
 // JobPartPlanInfo returns the JobPartPlanInfo reference of a Job for given part number
-func (ji *JobInfo) JobPartPlanInfo(partNumber common.PartNumber) (*JobPartPlanInfo) {
+func (ji *JobInfo) JobPartPlanInfo(partNumber common.PartNumber) *JobPartPlanInfo {
 	jPartPlanInfo := ji.jobPartsMap[partNumber]
 	return jPartPlanInfo
 }

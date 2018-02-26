@@ -39,7 +39,6 @@ var emptyJobId = common.JobID{}
 var steContext = context.Background()
 var realTimeThroughputCounter = &throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: int64(time.Now().Nanosecond())}
 
-
 // scheduleTransfers schedules the transfer of a JobPart order
 // It does not schedules those transfers which are either completed or failed
 func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfo, coordinatorChannels *CoordinatorChannels) {
@@ -59,14 +58,20 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 		transferCtx, transferCancelFunc := context.WithCancel(jobPartInfo.ctx)
 		jobPartInfo.TransfersInfo[index] = TransferInfo{ctx: transferCtx, cancel: transferCancelFunc, NumberOfChunksDone: 0}
 		currentTransferStatus := jobPartInfo.Transfer(index).transferStatus()
+		source, destination := jobPartInfo.getTransferSrcDstDetail(index)
 		//if the current transfer is already complete or failed, then it won't be scheduled
 		if currentTransferStatus == common.TransferComplete ||
 			currentTransferStatus == common.TransferFailed {
 			jobPartInfo.numberOfTransfersDone_doNotUse++
 			continue
 		}
+		sourceSize := jobPartInfo.Transfer(index).SourceSize
+		blockSize := jPartPlanHeader.BlobData.BlockSize
 		// creating transfer msg to schedule the transfer and queuing transferMsg into channels determined by the JobPriority
-		transferMsg := TransferMsg{jobId: jobId, partNumber: partNumber, transferIndex: index, infoMap: jobsInfoMap, TransferContext: jobPartInfo.TransfersInfo[index].ctx}
+		transferMsg := TransferMsg{partNumber: partNumber, transferIndex: index, jobInfo: jobInfo, TransferContext: jobPartInfo.TransfersInfo[index].ctx,
+			TransferCancelFunc: transferCancelFunc, MinimumLogLevel: jPartPlanHeader.LogSeverity, SourceType: jPartPlanHeader.SrcLocationType,
+			DestinationType: jPartPlanHeader.DstLocationType, Source: source, SourceSize: sourceSize, Destination: destination,
+			NumChunks: getNumChunks(sourceSize, uint64(blockSize)), BlockSize: blockSize}
 		switch priority {
 		case HighJobPriority:
 			coordinatorChannels.HighTransfer <- transferMsg
@@ -222,7 +227,7 @@ func cleanUpJob(jobId common.JobID, jobsInfoMap *JobsInfo) {
 */
 func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, coordinatorChannels *CoordinatorChannels, resp http.ResponseWriter) {
 	jobInfo := jobsInfoMap.JobInfo(jobId)
-	if jobInfo == nil  {
+	if jobInfo == nil {
 		resp.WriteHeader(http.StatusBadRequest)
 		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId)
 		resp.Write([]byte(errorMsg))
@@ -280,7 +285,7 @@ func CancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, resp http.Respons
     * If a job is already paused, it cannot be paused again
 */
 func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, isPaused bool, resp http.ResponseWriter) {
-	jPartMap  := jobsInfoMap.JobInfo(jobId).JobParts()
+	jPartMap := jobsInfoMap.JobInfo(jobId).JobParts()
 	if jPartMap == nil {
 		resp.WriteHeader(http.StatusBadRequest)
 		errorMsg := fmt.Sprintf("no active job with JobId %s exists", jobId.String())
@@ -450,7 +455,7 @@ func getJobSummary(jobId common.JobID, jobsInfo *JobsInfo, resp http.ResponseWri
 // getTransferList api returns the list of transfer with specific status for given jobId in http response
 func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jobsInfo *JobsInfo, resp http.ResponseWriter) {
 	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and partNumber
-	jPartMap  := jobsInfo.JobInfo(jobId).JobParts()
+	jPartMap := jobsInfo.JobInfo(jobId).JobParts()
 	// sending back the error status and error message in response
 	if jPartMap == nil {
 		resp.WriteHeader(http.StatusBadRequest)
