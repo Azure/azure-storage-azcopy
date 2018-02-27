@@ -90,7 +90,6 @@ func (jMap *JobsInfo) NumberOfParts(jobId common.JobID) uint32 {
 func (jMap *JobsInfo) AddJobPartPlanInfo(jpp *JobPartPlanInfo) {
 	jMap.lock.Lock()
 	jPartPlanInfo := jpp.getJobPartPlanPointer()
-	fmt.Println("reconstructing job ", jPartPlanInfo.Id.String())
 	var jobInfo = jMap.internalMap[jPartPlanInfo.Id]
 	// If there is no JobInfo instance for given jobId
 	if jobInfo == nil {

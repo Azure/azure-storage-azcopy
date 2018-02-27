@@ -506,21 +506,71 @@ func listExistingJobs(jPartPlanInfoMap *JobsInfo, commonLogger *log.Logger, resp
 	resp.Write(existingJobDetailsJson)
 }
 
-// parsePostHttpRequest parses the incoming CopyJobPartOrder request
-func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error) {
-	var payload common.CopyJobPartOrder
-	if req.Body == nil {
-		return payload, errors.New("the http Request Does not have a valid body definition")
-	}
+// parseAndRouteHttpRequest parses the incoming CopyJobPartOrder request
+func parseAndRouteHttpRequest(req *http.Request, coordinatorChannels *CoordinatorChannels,
+	jobsInfoMap *JobsInfo, commonLogger *log.Logger, resp http.ResponseWriter) {
+
+	var requestType = req.URL.Query()["commandType"][0]
 	body, err := ioutil.ReadAll(req.Body)
+	req.Body.Close()
 	if err != nil {
-		return payload, errors.New("error reading the HTTP Request Body")
+		panic(errors.New("error reading the HTTP Request Body"))
+
 	}
-	err = json.Unmarshal(body, &payload)
-	if err != nil {
-		return payload, errors.New("error UnMarshalling the HTTP Request Body")
+	switch requestType {
+	case "copy":
+		var payload common.CopyJobPartOrder
+		err = json.Unmarshal(body, &payload)
+		if err != nil {
+			panic(errors.New("error UnMarshalling the HTTP Request Body"))
+		}
+		ExecuteNewCopyJobPartOrder(payload, coordinatorChannels, jobsInfoMap, resp)
+	case "list":
+		var lsCommand common.ListJobPartsTransfers
+		err := json.Unmarshal(body, &lsCommand)
+		if err != nil {
+			panic(err)
+		}
+		if lsCommand.JobId == "" {
+			commonLogger.Println("received request for listing existing jobs")
+			listExistingJobs(jobsInfoMap, commonLogger, resp)
+		} else {
+			jobId, err := common.ParseUUID(lsCommand.JobId)
+			if err != nil {
+				resp.Write([]byte("Invalid job id"))
+				resp.WriteHeader(http.StatusBadRequest)
+			}
+			if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
+				getJobSummary(common.JobID(jobId), jobsInfoMap, resp)
+			} else {
+				getTransferList(common.JobID(jobId), lsCommand.ExpectedTransferStatus, jobsInfoMap, resp)
+			}
+		}
+	case "cancel":
+		var jobId common.JobID
+		err := json.Unmarshal(body, &jobId)
+		if err != nil {
+			panic(err)
+		}
+		CancelJobOrder(jobId, jobsInfoMap, resp)
+	case "pause":
+		var jobId common.JobID
+		err := json.Unmarshal(body, &jobId)
+		if err != nil {
+			panic(err)
+		}
+		PauseJobOrder(common.JobID(jobId), jobsInfoMap, resp)
+	case "resume":
+		var jobId common.JobID
+		err := json.Unmarshal(body, &jobId)
+		if err != nil {
+			panic(err)
+		}
+		ResumeJobOrder(common.JobID(jobId), jobsInfoMap, coordinatorChannels, resp)
+	default:
+		resp.WriteHeader(http.StatusBadRequest)
+		resp.Write([]byte("invalid command request received fromt front end"))
 	}
-	return payload, nil
 }
 
 // serveRequest process the incoming http request
@@ -533,71 +583,11 @@ func parsePostHttpRequest(req *http.Request) (common.CopyJobPartOrder, error) {
 func serveRequest(resp http.ResponseWriter, req *http.Request, coordinatorChannels *CoordinatorChannels, jobsInfoMap *JobsInfo, commonLogger *log.Logger) {
 	commonLogger.Println(fmt.Sprintf("http request recieved of type %s from %s for time %d", req.Method, req.RemoteAddr, time.Now().Second()))
 	switch req.Method {
-	case http.MethodGet:
-		// request type defines the type of GET request supported by transfer engine
-		// currently Transfer Engine is supporting list and kill type of GET request
-		// list type is used by the request for list commands
-		// kill type is used when frontend wants the existing instance of transfer engine to kill itself
-		var requestType = req.URL.Query()["Type"][0]
-		commonLogger.Println(fmt.Sprintf("type of http get request received by transfer engine %s", requestType))
-		switch requestType {
-		case "list":
-			var params = req.URL.Query()["command"][0]
-			listCommand := []byte(params)
-			var lsCommand common.ListJobPartsTransfers
-			err := json.Unmarshal(listCommand, &lsCommand)
-			if err != nil {
-				panic(err)
-			}
-			if lsCommand.JobId == "" {
-				commonLogger.Println("received request for listing existing jobs")
-				listExistingJobs(jobsInfoMap, commonLogger, resp)
-			} else {
-				jobId, err := common.ParseUUID(lsCommand.JobId)
-				if err != nil {
-					resp.Write([]byte("Invalid job id"))
-					resp.WriteHeader(http.StatusBadRequest)
-				}
-				if lsCommand.ExpectedTransferStatus == math.MaxUint8 {
-					getJobSummary(common.JobID(jobId), jobsInfoMap, resp)
-				} else {
-					getTransferList(common.JobID(jobId), lsCommand.ExpectedTransferStatus, jobsInfoMap, resp)
-				}
-			}
-		case "cancel":
-			var jobIdStructString = req.URL.Query()["jobId"][0]
-			var uuid common.JobID
-			err := json.Unmarshal([]byte(jobIdStructString), &uuid)
-			if err != nil {
-				panic(err)
-			}
-			CancelJobOrder(common.JobID(uuid), jobsInfoMap, resp)
-		case "pause":
-			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.JobID
-			err := json.Unmarshal([]byte(jobIdString), &jobId)
-			if err != nil {
-				panic(err)
-			}
-			PauseJobOrder(common.JobID(jobId), jobsInfoMap, resp)
-		case "resume":
-			var jobIdString = req.URL.Query()["jobId"][0]
-			var jobId common.JobID
-			err := json.Unmarshal([]byte(jobIdString), &jobId)
-			if err != nil {
-				panic(err)
-			}
-			ResumeJobOrder(common.JobID(jobId), jobsInfoMap, coordinatorChannels, resp)
-		}
-
 	case http.MethodPost:
 		commonLogger.Println(fmt.Sprintf("http put request recieved of type %s from %s for time %s", req.Method, req.RemoteAddr, time.Now()))
-		jobRequestData, err := parsePostHttpRequest(req)
-		if err != nil {
-			resp.WriteHeader(http.StatusBadRequest)
-			resp.Write([]byte("Not able to trigger the AZCopy request" + " : " + err.Error()))
-		}
-		ExecuteNewCopyJobPartOrder(jobRequestData, coordinatorChannels, jobsInfoMap, resp)
+		parseAndRouteHttpRequest(req, coordinatorChannels, jobsInfoMap, commonLogger, resp)
+	case http.MethodGet:
+		fallthrough
 	case http.MethodPut:
 		fallthrough
 	case http.MethodDelete:

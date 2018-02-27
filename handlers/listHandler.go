@@ -55,48 +55,24 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 		listOrder.ExpectedTransferStatus = math.MaxUint8
 	}
 	// converted the list order command to json byte array
-	commandSerialized, err := json.Marshal(listOrder)
-	if err != nil {
-		panic(err)
-	}
-	url := "http://localhost:1337"
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		panic(err)
-	}
-	q := req.URL.Query()
-	// Type defines the type of GET request processed by the transfer engine
-	q.Add("Type", "list")
-	// command defines the actual list command serialized to byte array
-	q.Add("command", string(commandSerialized))
-	req.URL.RawQuery = q.Encode()
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
 
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
+	url := "http://localhost:1337"
+	httpClient := common.NewHttpClient(url)
+
+	responseBytes := httpClient.Send("list", listOrder)
 
 	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if resp.StatusCode != http.StatusAccepted {
-		errorMessage := fmt.Sprintf("request failed with status %s and message %s", resp.Status, string(body))
-		fmt.Println(errorMessage)
+	if len(responseBytes) == 0 {
 		return
-		//panic(errors.New(fmt.Sprintf("request failed with status %s", resp.Status)))
 	}
 
 	// list Order command requested the list of existing jobs
 	if commandLineInput.JobId == "" {
-		PrintExistingJobIds(body)
+		PrintExistingJobIds(responseBytes)
 	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
-		PrintJobProgressSummary(body, commandLineInput.JobId)
+		PrintJobProgressSummary(responseBytes, commandLineInput.JobId)
 	} else { //list Order command requested the list of specific transfer of an existing job
-		PrintJobTransfers(body, commandLineInput.JobId)
+		PrintJobTransfers(responseBytes, commandLineInput.JobId)
 	}
 }
 

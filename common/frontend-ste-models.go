@@ -25,6 +25,10 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
+	"net/http"
+	"net"
+	"bytes"
+	"io/ioutil"
 )
 
 type JobID UUID
@@ -54,8 +58,6 @@ type Status uint32
 
 type TransferStatus uint32
 
-//TODO comments
-// TODO jeff's enum
 func (status TransferStatus) String() (statusString string) {
 	switch status {
 	case TransferInProgress:
@@ -260,6 +262,73 @@ type TransferDetail struct {
 // represents the list of Details and details of number of transfers
 type TransfersDetail struct {
 	Details []TransferDetail
+}
+
+type HttpRequestPayload struct {
+	CommandType uint8
+	Payload interface{}
+}
+
+type HttpRequestCopyJobPartPayload struct {
+	CommandType uint8
+	Payload CopyJobPartOrder
+}
+
+type HTTPClient struct {
+	client *http.Client
+	urlString string
+}
+
+func NewHttpClient(url string) (*HTTPClient) {
+	return &HTTPClient{
+		client: &http.Client{
+				Transport: &http.Transport{
+					Proxy: http.ProxyFromEnvironment,
+					// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
+					Dial /*Context*/ : (&net.Dialer{
+					Timeout:   30 * time.Second,
+					KeepAlive: 30 * time.Second,
+					DualStack: true,
+					}).Dial,                   /*Context*/
+					MaxIdleConns:           0, // No limit
+					MaxIdleConnsPerHost:    100,
+					IdleConnTimeout:        90 * time.Second,
+					TLSHandshakeTimeout:    10 * time.Second,
+					ExpectContinueTimeout:  1 * time.Second,
+					DisableKeepAlives:      false,
+					DisableCompression:     false,
+					MaxResponseHeaderBytes: 0,}},
+				urlString:url}
+}
+
+func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte){
+	payload, err := json.Marshal(v)
+	if err != nil{
+		fmt.Println(fmt.Sprintf("error marshalling the request payload for command type %d", commandType))
+		return []byte{}
+	}
+	req, err := http.NewRequest("POST", httpClient.urlString, bytes.NewBuffer(payload))
+
+	q := req.URL.Query()
+	q.Add("commandType", commandType)
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := httpClient.client.Do(req)
+	if err != nil{
+		fmt.Println(fmt.Sprintf("error sending the http request to url %s. Failed with error %s", httpClient.urlString, err.Error()))
+		return []byte{}
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		fmt.Println("error reading response for the request")
+		return []byte{}
+	}
+	if resp.StatusCode != http.StatusAccepted{
+		fmt.Println("request failed with status code %d and msg %s", resp.StatusCode, string(body))
+		return []byte{}
+	}
+	return body
 }
 
 const DefaultBlockSize = 100 * 1024 * 1024
