@@ -31,9 +31,21 @@ import (
 	"os"
 )
 
-type blobToLocal struct {}
+// this struct is created for each transfer
+type blobToLocal struct {
+	transfer         *TransferMsg
+	blobURL          azblob.BlobURL
+	memoryMappedFile mmap.MMap
+	blockIds         []string
+}
 
-func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
+// return a new blobToLocal struct targeting a specific transfer
+func newBlobToLocal(transfer *TransferMsg, pacer *pacer) xfer {
+	// download is not paced
+	return &blobToLocal{transfer: transfer}
+}
+
+func (blobToLocal *blobToLocal) runPrologue(chunkChannel chan<- ChunkMsg) {
 	// step 1: create blobUrl for source blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -45,22 +57,22 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				transfer.Log(common.LogLevel(l), msg)
+				blobToLocal.transfer.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(transfer.MinimumLogLevel)
+				return pipeline.LogLevel(blobToLocal.transfer.MinimumLogLevel)
 			},
 		},
 	})
-	u, _ := url.Parse(transfer.Source)
-	blobUrl := azblob.NewBlobURL(*u, p)
+	u, _ := url.Parse(blobToLocal.transfer.Source)
+	blobToLocal.blobURL = azblob.NewBlobURL(*u, p)
 
 	// step 2: get size info for the download
-	blobSize := int64(transfer.SourceSize)
-	downloadChunkSize := int64(transfer.BlockSize)
+	blobSize := int64(blobToLocal.transfer.SourceSize)
+	downloadChunkSize := int64(blobToLocal.transfer.BlockSize)
 
 	// step 3: prep local file before download starts
-	memoryMappedFile := executionEngineHelper{}.createAndMemoryMapFile(transfer.Destination, blobSize)
+	blobToLocal.memoryMappedFile = executionEngineHelper{}.createAndMemoryMapFile(blobToLocal.transfer.Destination, blobSize)
 
 	// step 4: go through the blob range and schedule download chunk jobs
 	blockIdCount := int32(0)
@@ -75,90 +87,86 @@ func (blobToLocal blobToLocal) prologue(transfer TransferMsg, chunkChannel chan<
 		// schedule the download chunk job
 		chunkChannel <- ChunkMsg{
 			doTransfer: blobToLocal.generateDownloadFunc(
-				transfer,
 				blockIdCount, // serves as index of chunk
-				uint32(transfer.NumChunks),
 				adjustedChunkSize,
-				startIndex,
-				blobUrl,
-				memoryMappedFile),
+				startIndex),
 		}
 		blockIdCount += 1
 	}
 }
 
 // this generates a function which performs the downloading of a single chunk
-func (blobToLocal) generateDownloadFunc(transfer TransferMsg, chunkId int32, totalNumOfChunks uint32, chunkSize int64,
-	startIndex int64, blobURL azblob.BlobURL, memoryMappedFile mmap.MMap) chunkFunc {
+func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChunkSize int64, startIndex int64) chunkFunc {
 	return func(workerId int) {
+		totalNumOfChunks := uint32(blobToLocal.transfer.NumChunks)
 
 		// TODO consider encapsulating this check operation on transferMsg
-		if transfer.TransferContext.Err() != nil {
-			if transfer.ChunksDone() == totalNumOfChunks {
-				transfer.Log(common.LogInfo,
+		if blobToLocal.transfer.TransferContext.Err() != nil {
+			if blobToLocal.transfer.ChunksDone() == totalNumOfChunks {
+				blobToLocal.transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
-				transfer.TransferDone()
+				blobToLocal.transfer.TransferDone()
 			}
 		} else {
 			// step 1: perform get
-			get, err := blobURL.GetBlob(transfer.TransferContext, azblob.BlobRange{Offset: startIndex, Count: chunkSize}, azblob.BlobAccessConditions{}, false)
+			get, err := blobToLocal.blobURL.GetBlob(blobToLocal.transfer.TransferContext, azblob.BlobRange{Offset: startIndex, Count: adjustedChunkSize}, azblob.BlobAccessConditions{}, false)
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				// TODO consider encapsulating cancel operation on transferMsg
-				transfer.TransferCancelFunc()
-				transfer.Log(common.LogInfo, fmt.Sprintf(" has worker %d which is canceling job and chunkId %d because startIndex of %d has failed", workerId, chunkId, startIndex))
-				transfer.TransferStatus(common.TransferFailed)
-				if transfer.ChunksDone() == totalNumOfChunks {
-					transfer.Log(common.LogInfo,
+				blobToLocal.transfer.TransferCancelFunc()
+				blobToLocal.transfer.Log(common.LogInfo, fmt.Sprintf(" has worker %d which is canceling job and chunkId %d because startIndex of %d has failed", workerId, chunkId, startIndex))
+				blobToLocal.transfer.TransferStatus(common.TransferFailed)
+				if blobToLocal.transfer.ChunksDone() == totalNumOfChunks {
+					blobToLocal.transfer.Log(common.LogInfo,
 						fmt.Sprintf(" has worker %d which finalizing cancellation of Transfer", workerId))
-					transfer.TransferDone()
+					blobToLocal.transfer.TransferDone()
 				}
 				return
 			}
 			// step 2: write the body into the memory mapped file directly
-			bytesRead, err := io.ReadFull(get.Body(), memoryMappedFile[startIndex:startIndex+chunkSize])
+			bytesRead, err := io.ReadFull(get.Body(), blobToLocal.memoryMappedFile[startIndex:startIndex+adjustedChunkSize])
 			get.Body().Close()
-			if int64(bytesRead) != chunkSize || err != nil {
+			if int64(bytesRead) != adjustedChunkSize || err != nil {
 				// cancel entire transfer because this chunk has failed
-				transfer.TransferCancelFunc()
-				transfer.Log(common.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
-				transfer.TransferStatus(common.TransferFailed)
-				if transfer.ChunksDone() == totalNumOfChunks {
-					transfer.Log(common.LogInfo,
+				blobToLocal.transfer.TransferCancelFunc()
+				blobToLocal.transfer.Log(common.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+				blobToLocal.transfer.TransferStatus(common.TransferFailed)
+				if blobToLocal.transfer.ChunksDone() == totalNumOfChunks {
+					blobToLocal.transfer.Log(common.LogInfo,
 						fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
-					transfer.TransferDone()
+					blobToLocal.transfer.TransferDone()
 				}
 				return
 			}
 
 			// TODO this should be 1 counter per job
-			realTimeThroughputCounter.updateCurrentBytes(chunkSize)
+			realTimeThroughputCounter.updateCurrentBytes(adjustedChunkSize)
 
 			// step 3: check if this is the last chunk
-			if transfer.ChunksDone() == totalNumOfChunks {
+			if blobToLocal.transfer.ChunksDone() == totalNumOfChunks {
 				// step 4: this is the last block, perform EPILOGUE
-				transfer.Log(common.LogInfo,
+				blobToLocal.transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
 				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
-				transfer.TransferStatus(common.TransferComplete)
-				transfer.Log(common.LogInfo,
+				blobToLocal.transfer.TransferStatus(common.TransferComplete)
+				blobToLocal.transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
-				transfer.TransferDone()
+				blobToLocal.transfer.TransferDone()
 
-				err := memoryMappedFile.Unmap()
+				err := blobToLocal.memoryMappedFile.Unmap()
 				if err != nil {
-					transfer.Log(common.LogError,
+					blobToLocal.transfer.Log(common.LogError,
 						fmt.Sprintf(" has worker %v which failed to conclude Transfer after processing chunkId %v", workerId, chunkId))
 				}
 
-				lastModifiedTime, preserveLastModifiedTime := transfer.ifPreserveLastModifiedTime()
+				lastModifiedTime, preserveLastModifiedTime := blobToLocal.transfer.ifPreserveLastModifiedTime()
 				if preserveLastModifiedTime {
-					err := os.Chtimes(transfer.Destination, lastModifiedTime, lastModifiedTime)
+					err := os.Chtimes(blobToLocal.transfer.Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
-						transfer.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", transfer.Destination))
+						blobToLocal.transfer.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", blobToLocal.transfer.Destination))
 						return
 					}
-					transfer.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", transfer.Destination))
+					blobToLocal.transfer.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", blobToLocal.transfer.Destination))
 				}
 			}
 		}

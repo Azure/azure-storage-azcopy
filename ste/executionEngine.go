@@ -29,17 +29,30 @@ import (
 	"time"
 )
 
-type executionEngine struct{}
+// TODO move execution engine as internal package
+type executionEngine struct {
+	executionEngineChannels *EEChannels
+	pacer                   *pacer
+	numOfEngineWorker       int
+}
 
-func (executionEngine executionEngine) initializeExecutionEngine(executionEngineChannels *EEChannels, numOfEngineWorker int) {
+func newExecutionEngine(executionEngineChannels *EEChannels, numOfEngineWorker int, targetRateInMBps int) *executionEngine {
+	return &executionEngine{
+		executionEngineChannels: executionEngineChannels,
+		pacer:             newPacer(int64(targetRateInMBps) * 1024 * 1024),
+		numOfEngineWorker: numOfEngineWorker,
+	}
+}
+
+func (executionEngine *executionEngine) start() {
 	// spin up the desired number of executionEngine workers to process transfers
-	for i := 1; i <= numOfEngineWorker; i++ {
-		go executionEngine.engineWorker(i, executionEngineChannels)
+	for i := 1; i <= executionEngine.numOfEngineWorker; i++ {
+		go executionEngine.engineWorker(i, executionEngine.executionEngineChannels)
 	}
 }
 
 // general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs
-func (executionEngine executionEngine) engineWorker(workerId int, executionEngineChannels *EEChannels) {
+func (executionEngine *executionEngine) engineWorker(workerId int, executionEngineChannels *EEChannels) {
 	for {
 		// priority 0: whether to commit suicide, this is used to scale back
 		select {
@@ -56,15 +69,16 @@ func (executionEngine executionEngine) engineWorker(workerId int, executionEngin
 				case transferMsg := <-executionEngineChannels.HighTransfer:
 					// if the transfer Msg has been cancelled
 					if transferMsg.TransferContext.Err() != nil {
-						transferMsg.Log(common.LogInfo, fmt.Sprintf(" is not picked up worked %d", workerId))
+						transferMsg.Log(common.LogInfo, fmt.Sprintf(" is not picked up worked %d because transfer was cancelled", workerId))
 						transferMsg.TransferDone()
 					} else {
+						// TODO fix preceding space
 						transferMsg.Log(common.LogInfo,
 							fmt.Sprintf("has worker %d which is processing TRANSFER", workerId))
 
-						// the prologue function is generated based on the type of transfer (source and destination pair)
-						prologueFunction := executionEngine.computePrologueFunc(transferMsg.SourceType, transferMsg.DestinationType)
-						if prologueFunction == nil {
+						// the xferFactory is generated based on the type of transfer (source and destination pair)
+						xferFactory := executionEngine.computeTransferFactory(transferMsg.SourceType, transferMsg.DestinationType)
+						if xferFactory == nil {
 							// TODO can these two calls be combined?
 							transferMsg.Log(common.LogError,
 								fmt.Sprintf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
@@ -72,7 +86,8 @@ func (executionEngine executionEngine) engineWorker(workerId int, executionEngin
 							panic(errors.New(fmt.Sprintf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
 								transferMsg.SourceType, transferMsg.DestinationType)))
 						}
-						prologueFunction(transferMsg, executionEngineChannels.HighChunk)
+						xfer := xferFactory(&transferMsg, executionEngine.pacer)
+						xfer.runPrologue(executionEngineChannels.HighChunk)
 					}
 				default:
 					// lower priorities should go here in the future
@@ -83,19 +98,19 @@ func (executionEngine executionEngine) engineWorker(workerId int, executionEngin
 	}
 }
 
-// the prologue function is generated based on the type of source and destination
-func (executionEngine) computePrologueFunc(sourceLocationType, destinationLocationType common.LocationType) prologueFunc {
+// the xfer factory is generated based on the type of source and destination
+func (*executionEngine) computeTransferFactory(sourceLocationType, destinationLocationType common.LocationType) xferFactory {
 	switch {
 	case sourceLocationType == common.Blob && destinationLocationType == common.Local: // download from Azure to local
-		return blobToLocal{}.prologue
+		return newBlobToLocal
 	case sourceLocationType == common.Local && destinationLocationType == common.Blob: // upload from local to Azure
-		return localToBlockBlob{}.prologue
+		return newLocalToBlockBlob
 	default:
 		return nil
 	}
 }
 
-// TODO these methods should be shared between coordinator and execution engine
+// TODO give these to the plugin packages
 type executionEngineHelper struct{}
 
 // opens file with desired flags and return *os.File

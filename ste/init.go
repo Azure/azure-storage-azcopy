@@ -673,13 +673,10 @@ func initializeCoordinator(coordinatorChannels *CoordinatorChannels, commonLogge
 	return err
 }
 
-var pc *pacer
-
 // InitializeSTE initializes the coordinator channels, execution engine channels, coordinator and execution engine
 func InitializeSTE(numOfEngineWorker int, targetRateInMBps int) error {
-	pc = newPacer(int64(targetRateInMBps) * 1024 * 1024)
 	commonLogger := initializeAzCopyLogger("azCopyNg-Common.log")
 	coordinatorChannel, execEngineChannels := InitializeChannels(commonLogger)
-	go executionEngine{}.initializeExecutionEngine(execEngineChannels, numOfEngineWorker)
+	go newExecutionEngine(execEngineChannels, numOfEngineWorker, targetRateInMBps).start()
 	return initializeCoordinator(coordinatorChannel, commonLogger)
 }

@@ -91,7 +91,10 @@ type EEChannels struct {
 
 type SuicideJob byte
 type chunkFunc func(int)
-type prologueFunc func(msg TransferMsg, chunkChannel chan<- ChunkMsg)
+type xferFactory func(transfer *TransferMsg, pacer *pacer) xfer
+type xfer interface {
+	runPrologue(chunkChannel chan<- ChunkMsg)
+}
 
 // throughputState struct holds the attribute to monitor the through of an existing JobOrder
 type throughputState struct {
