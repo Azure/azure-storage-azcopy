@@ -64,7 +64,7 @@ func parseStringToJobInfo(s string) (jobId common.JobID, partNo common.PartNumbe
 
 // formatJobInfoToString builds the JobPart file name using the given JobId, part number and data schema version
 // fileName format := $jobId-$partnumber.stev$dataschemaversion
-func formatJobInfoToString(jobPartOrder common.CopyJobPartOrder) string {
+func formatJobInfoToString(jobPartOrder common.CopyJobPartOrderRequest) string {
 	versionIdString := fmt.Sprintf("%05d", jobPartOrder.Version)
 	partNoString := fmt.Sprintf("%05d", jobPartOrder.PartNum)
 	fileName := jobPartOrder.ID.String() + "--" + partNoString + ".steV" + versionIdString
@@ -110,8 +110,8 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfo, coordinatorChannels *
 		scheduleTransfers(jobId, partNumber, jobsInfoMap, coordinatorChannels)
 
 		// If the Job was cancelled, but cleanup was not done for the Job, cleaning up the jobfile
-		if jobHandler.getJobPartPlanPointer().jobStatus() == JobCancelled {
-			cleanUpJob(jobId, jobsInfoMap)
+		if jobHandler.getJobPartPlanPointer().Status() == JobCancelled {
+			jobsInfoMap.cleanUpJob(jobId)
 		}
 	}
 	// checking for cancelled jobs and to cleanup those jobs
@@ -131,9 +131,10 @@ func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfo) {
 		jobInfo := jobsInfoMap.JobPartPlanInfo(jobIds[index], 0)
 
 		// if the jobstatus in JobPartPlan header of part 0 is cancelled and cleanup wasn't successful
+		// if the part 0 was deleted successfully but other parts deletion wasn't successful
 		// cleaning up the job now
-		if jobInfo.getJobPartPlanPointer().jobStatus() == JobCancelled {
-			cleanUpJob(jobIds[index], jobsInfoMap)
+		if jobInfo == nil || jobInfo.getJobPartPlanPointer().Status() == JobCancelled {
+			jobsInfoMap.cleanUpJob(jobIds[index])
 		}
 	}
 }
@@ -169,21 +170,4 @@ func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfo) bool {
 		return false
 	}
 	return true
-}
-
-func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfo) {
-	jobInfo := jobsInfoMap.JobInfo(jobId)
-	numPartsForJob := jobsInfoMap.NumberOfParts(jobId)
-	totalNumberOfPartsDone := jobInfo.NumberOfPartsDone()
-	jobInfo.Log(common.LogInfo, fmt.Sprintf("total number of parts done for Job %s is %d", jobId, totalNumberOfPartsDone))
-	if jobInfo.incrementNumberOfPartsDone() == numPartsForJob {
-		jobInfo.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully completed, cancelled or paused", jobId))
-		jPartHeader := jobsInfoMap.JobPartPlanInfo(jobId, 0).getJobPartPlanPointer()
-		if jPartHeader.jobStatus() == JobCancelled {
-			jobInfo.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully cancelled and hence cleaning up the Job", jobId))
-			cleanUpJob(jobId, jobsInfoMap)
-		} else if jPartHeader.jobStatus() == JobInProgress {
-			jPartHeader.setJobStatus(JobCompleted)
-		}
-	}
 }

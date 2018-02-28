@@ -8,17 +8,17 @@ import (
 	"math"
 )
 
-type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
+type coordinatorScheduleFunc func(*common.CopyJobPartOrderRequest)
 
 func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 	//time.Sleep(time.Second * 2)
 
-	return func(jobPartOrder *common.CopyJobPartOrder) {
+	return func(jobPartOrder *common.CopyJobPartOrderRequest) {
 		sendJobPartOrderToSTE(jobPartOrder)
 	}
 }
 
-func sendJobPartOrderToSTE(payload *common.CopyJobPartOrder) {
+func sendJobPartOrderToSTE(payload *common.CopyJobPartOrderRequest) {
 	url := "http://localhost:1337"
 	httpClient := common.NewHttpClient(url)
 
@@ -34,7 +34,7 @@ func fetchJobStatus(jobId string) string {
 	url := "http://localhost:1337"
 	client := common.NewHttpClient(url)
 
-	lsCommand := common.ListJobPartsTransfers{JobId: jobId, ExpectedTransferStatus: math.MaxUint8}
+	lsCommand := common.ListRequest{JobId: jobId, ExpectedTransferStatus: math.MaxUint32}
 
 	responseBytes := client.Send("list", lsCommand)
 

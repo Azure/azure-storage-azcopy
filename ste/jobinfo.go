@@ -25,14 +25,21 @@ import (
 	"log"
 	"os"
 	"sync/atomic"
+	"fmt"
 )
 
 // JobInfo contains jobPartsMap and logger
 // jobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
 // logger is the logger instance for a given JobId
 type JobInfo struct {
+	jobId             common.JobID
+	// jobsInfo is the reference of JobsInfo of which current jobInfo is part of.
+	jobsInfo          *JobsInfo
+	// jobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
 	jobPartsMap       map[common.PartNumber]*JobPartPlanInfo
-	minimumLogLevel   common.LogLevel
+	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
+	// any message with severity higher than this will be ignored.
+	maximumLogLevel   common.LogLevel
 	logger            *log.Logger
 	numberOfPartsDone uint32
 	logFile           *os.File
@@ -49,16 +56,32 @@ func (ji *JobInfo) JobPartPlanInfo(partNumber common.PartNumber) *JobPartPlanInf
 	return jPartPlanInfo
 }
 
+func (ji *JobInfo) NumberOfParts() (uint32){
+	return uint32(len(ji.jobPartsMap))
+}
+
 // NumberOfPartsDone returns the number of parts of job either completed or failed
 // in a thread safe manner
 func (ji *JobInfo) NumberOfPartsDone() uint32 {
 	return atomic.LoadUint32(&ji.numberOfPartsDone)
 }
 
-// incrementNumberOfPartsDone increments the number of parts either completed or failed
+// PartsDone increments the number of parts either completed or failed
 // in a thread safe manner
-func (ji *JobInfo) incrementNumberOfPartsDone() uint32 {
-	return atomic.AddUint32(&ji.numberOfPartsDone, 1)
+func (ji *JobInfo) PartsDone()  {
+
+	totalNumberOfPartsDone := ji.NumberOfPartsDone()
+	ji.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", totalNumberOfPartsDone))
+	if atomic.AddUint32(&ji.numberOfPartsDone, 1) == ji.NumberOfParts() {
+		ji.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully completed, cancelled or paused", ji.jobId.String()))
+		jPartHeader := ji.JobPartPlanInfo(0).getJobPartPlanPointer()
+		if jPartHeader.Status() == JobCancelled {
+			ji.Log(common.LogInfo, fmt.Sprintf("all parts of Job %s successfully cancelled and hence cleaning up the Job"))
+			ji.jobsInfo.cleanUpJob(ji.jobId)
+		} else if jPartHeader.Status() == JobInProgress {
+			jPartHeader.SetJobStatus(JobCompleted)
+		}
+	}
 }
 
 // setNumberOfPartsDone sets the number of part done for a job to the given value
@@ -67,17 +90,7 @@ func (ji *JobInfo) setNumberOfPartsDone(val uint32) {
 	atomic.StoreUint32(&ji.numberOfPartsDone, val)
 }
 
-func (ji *JobInfo) initializeLogForJob(logSeverity common.LogLevel, fileName string) {
-	// Creates the log file if it does not exists already else opens the file in append mode.
-	file, err := os.OpenFile(fileName, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		panic(err)
-	}
-	ji.minimumLogLevel = logSeverity
-	ji.logFile = file
-	ji.logger = log.New(ji.logFile, "", log.Llongfile)
-}
-
+//  closeLogForJob closes the log file for the Job
 func (ji *JobInfo) closeLogForJob() {
 	err := ji.logFile.Close()
 	if err != nil {
@@ -85,13 +98,26 @@ func (ji *JobInfo) closeLogForJob() {
 	}
 }
 
+// Log method is used to log the message of Job.
+// If the maximumLogLevel of Job is less than given message severity,
+// then the message is not logged.
 func (ji *JobInfo) Log(severity common.LogLevel, logMessage string) {
-	if severity > ji.minimumLogLevel {
+	if severity > ji.maximumLogLevel {
 		return
 	}
 	ji.logger.Println(logMessage)
 }
 
+// Panic method fir logs the panic error to the Job log file and then panics with given error.
 func (ji *JobInfo) Panic(err error) {
 	ji.logger.Panic(err)
+}
+
+// NewJobsInfo returns a new instance of synchronous JobsInfo to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
+func NewJobInfo(jobId common.JobID, jobsInfo *JobsInfo) *JobInfo {
+	return &JobInfo{
+		jobId:jobId,
+		jobsInfo:jobsInfo,
+		jobPartsMap: make(map[common.PartNumber]*JobPartPlanInfo),
+	}
 }

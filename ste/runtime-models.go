@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 	"github.com/Azure/azure-storage-azcopy/handlers"
+	"os"
 )
 
 // TransfersInfo represents the runtime information of a transfer of a JobPartOrder
@@ -38,8 +39,8 @@ type JobPartPlanInfo struct {
 	// cancel func is the func to be called to cancel a Job
 	cancel context.CancelFunc
 
-	// filename is name of JobPartOrder file
-	fileName string
+	// file is the file descriptor for JobPartOrder file
+	file *os.File
 
 	// memMap represents the memory map byte slice
 	memMap handlers.MMap
@@ -59,9 +60,9 @@ func (jPartPlanInfo *JobPartPlanInfo) numberOfTransfersDone() uint32 {
 	return atomic.LoadUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse)
 }
 
-// incrementNumberOfTransfersDone increment the numberOfTransfersDone_doNotUse of JobPartPlanInfo
+// TransfersDone increment the numberOfTransfersDone_doNotUse of JobPartPlanInfo
 // instance in thread safe manner by 1
-func (jPartPlanInfo *JobPartPlanInfo) incrementNumberOfTransfersDone() uint32 {
+func (jPartPlanInfo *JobPartPlanInfo) TransfersDone() uint32 {
 	return atomic.AddUint32(&jPartPlanInfo.numberOfTransfersDone_doNotUse, 1)
 }
 

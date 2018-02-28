@@ -43,7 +43,7 @@ const (
 // dispatches the job order (in parts) to the storage engine
 func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	fmt.Println("current time", time.Now())
-	jobPartOrder := common.CopyJobPartOrder{}
+	jobPartOrder := common.CopyJobPartOrderRequest{}
 	ApplyFlags(&commandLineInput, &jobPartOrder)
 
 	// generate job id
@@ -99,8 +99,8 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 }
 
 func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
-	jobPartOrderToFill *common.CopyJobPartOrder,
-	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {
+	jobPartOrderToFill *common.CopyJobPartOrderRequest,
+	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrderRequest)) {
 
 	fmt.Println("HandleUploadFromLocalToWastore startTime ", time.Now())
 	// set the source and destination type
@@ -200,8 +200,8 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 
 func HandleDownloadFromBlobStorageToLocal(
 	commandLineInput *common.CopyCmdArgsAndFlags,
-	jobPartOrderToFill *common.CopyJobPartOrder,
-	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrder)) {
+	jobPartOrderToFill *common.CopyJobPartOrderRequest,
+	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrderRequest)) {
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
@@ -298,7 +298,7 @@ func HandleDownloadFromBlobStorageToLocal(
 	commandLineInput.BlobType = ""
 }
 
-func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrder) {
+func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrderRequest) {
 	optionalAttributes := common.BlobTransferAttributes{
 		BlockSizeinBytes:         commandLineInput.BlockSize,
 		ContentType:              commandLineInput.ContentType,

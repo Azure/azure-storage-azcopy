@@ -10,6 +10,35 @@ import (
 // To be Incremented every time when we release azcopy with changed dataSchema
 const dataSchemaVersion = 0
 
+// These constants defines the various job priority of the JobPartOrders.
+// These priorities determines the channel in which transfers will be scheduled.
+const (
+	HighJobPriority    = 0
+	MediumJobPriority  = 1
+	LowJobPriority     = 2
+	DefaultJobPriority = HighJobPriority
+)
+
+const (
+	MAX_SIZE_CONTENT_TYPE     = 256
+	MAX_SIZE_CONTENT_ENCODING = 256
+	MAX_SIZE_META_DATA        = 1000
+)
+
+const (
+	// Job Part is currently executing
+	JobInProgress JobStatusCode = 0
+
+	// Job Part is currently paused and no transfer of Job is currently executing
+	JobPaused JobStatusCode = 1
+
+	// Job Part is cancelled and all transfers of the JobPart are cancelled
+	JobCancelled JobStatusCode = 2
+
+	// Job Part has completed and no transfer of JobPart is currently executing
+	JobCompleted JobStatusCode = 3
+)
+
 type JobStatusCode uint32
 
 // String() returns appropriate Job status in string from respective status code
@@ -28,19 +57,6 @@ func (status JobStatusCode) String() (statusString string) {
 	}
 }
 
-const (
-	// Job Part is currently executing
-	JobInProgress JobStatusCode = 0
-
-	// Job Part is currently paused and no transfer of Job is currently executing
-	JobPaused JobStatusCode = 1
-
-	// Job Part is cancelled and all transfers of the JobPart are cancelled
-	JobCancelled JobStatusCode = 2
-
-	// Job Part has completed and no transfer of JobPart is currently executing
-	JobCompleted JobStatusCode = 3
-)
 
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
@@ -57,18 +73,18 @@ type JobPartPlanHeader struct {
 	BlobData           JobPartPlanBlobData // represent the optional attributes of JobPart Order
 	// jobStatus_doNotUse represents the current status of JobPartPlan
 	// It can have these possible values - JobInProgress, JobPaused, JobCancelled and JobCompleted
-	// jobStatus_doNotUse is a private member whose value can be accessed by jobStatus and setJobStatus
-	// jobStatus_doNotUse should not be directly accessed anywhere except by the jobStatus and setJobStatus
+	// jobStatus_doNotUse is a private member whose value can be accessed by Status and SetJobStatus
+	// jobStatus_doNotUse should not be directly accessed anywhere except by the Status and SetJobStatus
 	jobStatus_doNotUse JobStatusCode
 }
 
-// jobStatus returns the job status stored in JobPartPlanHeader in thread-safe manner
-func (jPartPlanHeader *JobPartPlanHeader) jobStatus() JobStatusCode {
+// Status returns the job status stored in JobPartPlanHeader in thread-safe manner
+func (jPartPlanHeader *JobPartPlanHeader) Status() JobStatusCode {
 	return JobStatusCode(atomic.LoadUint32((*uint32)(&jPartPlanHeader.jobStatus_doNotUse)))
 }
 
-// setJobStatus sets the job status in JobPartPlanHeader in thread-safe manner
-func (jPartPlanHeader *JobPartPlanHeader) setJobStatus(status JobStatusCode) {
+// SetJobStatus sets the job status in JobPartPlanHeader in thread-safe manner
+func (jPartPlanHeader *JobPartPlanHeader) SetJobStatus(status JobStatusCode) {
 	atomic.StoreUint32((*uint32)(&jPartPlanHeader.jobStatus_doNotUse), uint32(status))
 }
 
@@ -103,7 +119,7 @@ type JobPartPlanTransfer struct {
 	DstLength uint16
 	// ChunkNum represents the num of chunks a transfer is split into
 	ChunkNum uint16
-	// ModifiedTime represents the last time at which source was modified before start of transfer
+	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
 	ModifiedTime uint32
 	// SourceSize represents the actual size of the source on disk
 	SourceSize uint64
@@ -123,18 +139,3 @@ func (jPartPlanTransfer *JobPartPlanTransfer) transferStatus() common.TransferSt
 func (jPartPlanTransfer *JobPartPlanTransfer) setTransferStatus(status common.TransferStatus) {
 	atomic.StoreUint32((*uint32)(&jPartPlanTransfer.transferStatus_doNotUse), uint32(status))
 }
-
-// These constants defines the various job priority of the JobPartOrders.
-// These priorities determines the channel in which transfers will be scheduled.
-const (
-	HighJobPriority    = 0
-	MediumJobPriority  = 1
-	LowJobPriority     = 2
-	DefaultJobPriority = HighJobPriority
-)
-
-const (
-	MAX_SIZE_CONTENT_TYPE     = 256
-	MAX_SIZE_CONTENT_ENCODING = 256
-	MAX_SIZE_META_DATA        = 1000
-)

@@ -31,16 +31,11 @@ import (
 // handles the list command
 // dispatches the list order to theZiyi Wang storage engine
 func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
-	listOrder := common.ListJobPartsTransfers{}
+	listOrder := common.ListRequest{}
 
 	// checking if the jobId passed is valid or not
 	if commandLineInput.JobId != "" {
-		//jobId, err := common.ParseUUID(commandLineInput.JobId)
-		//if err != nil {
-		//	fmt.Println("invalid jobId passed to list the respective job info")
-		//	return
-		//}
-		listOrder.JobId = commandLineInput.JobId
+		listOrder.JobId = common.JobID(common.ParseUUID(commandLineInput.JobId)
 	} else {
 		listOrder.JobId = ""
 	}
@@ -50,7 +45,7 @@ func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
 		listOrder.ExpectedTransferStatus = common.TransferStatusStringToCode(commandLineInput.OfStatus)
 	} else {
 		// if the expected status is not given by user, it is set to 255
-		listOrder.ExpectedTransferStatus = math.MaxUint8
+		listOrder.ExpectedTransferStatus = math.MaxUint32
 	}
 	// converted the list order command to json byte array
 
@@ -106,7 +101,7 @@ func PrintJobProgressSummary(summaryData []byte, jobId string) {
 	var summary common.JobProgressSummary
 	err := json.Unmarshal(summaryData, &summary)
 	if err != nil {
-		panic(errors.New(fmt.Sprintf("error unmarshaling the progress summary. Failed with error %s", err.Error())))
+		panic(fmt.Errorf("error unmarshaling the progress summary. Failed with error %s", err.Error()))
 		return
 	}
 	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", jobId))

@@ -26,7 +26,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
 	"net/http"
-	"net"
 	"bytes"
 	"io/ioutil"
 )
@@ -35,6 +34,14 @@ type JobID UUID
 
 func (j JobID) String() string {
 	return UUID(j).String()
+}
+
+func ParseJobID(jobId string) (JobID, error){
+	uuid, err := ParseUUID(jobId)
+	if err != nil{
+		return JobID{}, err
+	}
+	return JobID(uuid), nil
 }
 
 // Implementing MarshalJSON() method for type JobID
@@ -87,7 +94,8 @@ const (
 	TransferAny TransferStatus = TransferStatus(254)
 )
 
-//todo comments
+// TransferStatusStringToCode converts the user given Transfer status string to the internal Transfer Status constants.
+// TransferStatusStringToCode is used to avoid exposing the Transfer constants value to the user.
 func TransferStatusStringToCode(statusString string) TransferStatus {
 	switch statusString {
 	case "TransferInProgress":
@@ -125,8 +133,7 @@ const (
 	LogInfo = LogLevel(pipeline.LogInfo)
 )
 
-//TODO comments
-// handle default and panic
+// String() converts the internal Loglevel constants to the user understandable strings.
 func (logLevel LogLevel) String() string {
 	switch logLevel {
 	case LogNone:
@@ -142,7 +149,7 @@ func (logLevel LogLevel) String() string {
 	case LogInfo:
 		return "InfoLogs"
 	default:
-		return ""
+		panic(fmt.Errorf("invalid log level %d", logLevel))
 	}
 }
 
@@ -180,7 +187,7 @@ type CopyCmdArgsAndFlags struct {
 
 // ListCmdArgsAndFlags represents the raw list command input from the user
 type ListCmdArgsAndFlags struct {
-	JobId    string
+	JobId    JobID
 	OfStatus string
 }
 
@@ -202,7 +209,7 @@ type CopyTransfer struct {
 }
 
 // This struct represents the job info (a single part) to be sent to the storage engine
-type CopyJobPartOrder struct {
+type CopyJobPartOrderRequest struct {
 	Version            uint32     // version of the azcopy
 	ID                 JobID      // Guid - job identifier
 	PartNum            PartNumber // part number of the job
@@ -216,8 +223,12 @@ type CopyJobPartOrder struct {
 	OptionalAttributes BlobTransferAttributes
 }
 
+type CopyJobPartOrderResponse struct {
+	Message string
+}
+
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
-type ListJobPartsTransfers struct {
+type ListRequest struct {
 	JobId                  string
 	ExpectedTransferStatus TransferStatus
 }
@@ -258,72 +269,61 @@ type TransferDetail struct {
 	Dst            string
 	TransferStatus string
 }
+type HttpResponseMessage struct {
+	Payload interface{}
+	ErrorMsg string
+}
+
+type FooResponse struct {
+	ErrorMsg string
+}
 
 // represents the list of Details and details of number of transfers
 type TransfersDetail struct {
 	Details []TransferDetail
 }
 
-type HttpRequestPayload struct {
-	CommandType uint8
-	Payload interface{}
-}
-
-type HttpRequestCopyJobPartPayload struct {
-	CommandType uint8
-	Payload CopyJobPartOrder
-}
-
+// todo : use url in case of string
 type HTTPClient struct {
 	client *http.Client
-	urlString string
+	url    string
 }
 
+// NewHttpClient returns the instance of struct containing an instance of http.client and url
 func NewHttpClient(url string) (*HTTPClient) {
 	return &HTTPClient{
-		client: &http.Client{
-				Transport: &http.Transport{
-					Proxy: http.ProxyFromEnvironment,
-					// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
-					Dial /*Context*/ : (&net.Dialer{
-					Timeout:   30 * time.Second,
-					KeepAlive: 30 * time.Second,
-					DualStack: true,
-					}).Dial,                   /*Context*/
-					MaxIdleConns:           0, // No limit
-					MaxIdleConnsPerHost:    100,
-					IdleConnTimeout:        90 * time.Second,
-					TLSHandshakeTimeout:    10 * time.Second,
-					ExpectContinueTimeout:  1 * time.Second,
-					DisableKeepAlives:      false,
-					DisableCompression:     false,
-					MaxResponseHeaderBytes: 0,}},
-				urlString:url}
+		client:      &http.Client{},
+				url: url}
 }
 
+// Send method on HttpClient sends the data passed in the interface for given command type to the client url
 func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte){
 	payload, err := json.Marshal(v)
 	if err != nil{
 		fmt.Println(fmt.Sprintf("error marshalling the request payload for command type %d", commandType))
 		return []byte{}
 	}
-	req, err := http.NewRequest("POST", httpClient.urlString, bytes.NewBuffer(payload))
 
+	req, err := http.NewRequest("POST", httpClient.url, bytes.NewBuffer(payload))
+	// adding the commandType as a query param
 	q := req.URL.Query()
 	q.Add("commandType", commandType)
 	req.URL.RawQuery = q.Encode()
 
+	// panic in this case
 	resp, err := httpClient.client.Do(req)
 	if err != nil{
-		fmt.Println(fmt.Sprintf("error sending the http request to url %s. Failed with error %s", httpClient.urlString, err.Error()))
+		fmt.Println(fmt.Sprintf("error sending the http request to url %s. Failed with error %s", httpClient.url, err.Error()))
 		return []byte{}
 	}
+	// reading the entire response body and closing the response body.
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		fmt.Println("error reading response for the request")
 		return []byte{}
 	}
+	// If the resp status is not accepted, then the request failed
 	if resp.StatusCode != http.StatusAccepted{
 		fmt.Println("request failed with status code %d and msg %s", resp.StatusCode, string(body))
 		return []byte{}

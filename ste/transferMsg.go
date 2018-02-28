@@ -53,8 +53,8 @@ func (t TransferMsg) TransferDone() {
 	jPartPlanInfo := t.jobInfo.JobPartPlanInfo(t.partNumber)
 	totalNumberofTransfersCompleted := jPartPlanInfo.numberOfTransfersDone()
 	t.Log(common.LogInfo, fmt.Sprintf("has total number %d of transfers paused, cancelled or completed", totalNumberofTransfersCompleted))
-	if jPartPlanInfo.incrementNumberOfTransfersDone() == jPartPlanInfo.getJobPartPlanPointer().NumTransfers {
-		t.jobInfo.incrementNumberOfPartsDone()
+	if jPartPlanInfo.TransfersDone() == jPartPlanInfo.getJobPartPlanPointer().NumTransfers {
+		t.jobInfo.PartsDone()
 	}
 }
 
@@ -68,7 +68,7 @@ func (t TransferMsg) TransferStatus(transferStatus common.TransferStatus) {
 }
 
 // getBlobHttpHeaders returns the azblob.BlobHTTPHeaders with blobData attributes of JobPart Order
-func (t TransferMsg) blobHttpHeaderandMetaData(sourceBytes []byte) (httpHeaderProperties azblob.BlobHTTPHeaders, metaData azblob.Metadata) {
+func (t TransferMsg) blobHttpHeaderAndMetadata(sourceBytes []byte) (httpHeaderProperties azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
 
 	// jPartPlanHeader is the JobPartPlan header for memory mapped JobPartOrder File
 	jPartPlanHeader := t.jobInfo.JobPartPlanInfo(t.partNumber).getJobPartPlanPointer()
@@ -102,14 +102,14 @@ func (t TransferMsg) blobHttpHeaderandMetaData(sourceBytes []byte) (httpHeaderPr
 		keyValue := strings.Split(metaDataKeyValues[index], "=")
 		mData[keyValue[0]] = keyValue[1]
 	}
-	metaData = mData
+	metadata = mData
 	return
 }
 
-// ifPreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
+// PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
 // If PreserveLastModifiedTime is set to true, it takes the last modified time of source from resp
 // and sets the mtime , atime of destination to the former last modified time.
-func (t TransferMsg) ifPreserveLastModifiedTime() (time.Time, bool) {
+func (t TransferMsg) PreserveLastModifiedTime() (time.Time, bool) {
 	jPartPlanInfo := t.jobInfo.JobPartPlanInfo(t.partNumber)
 	if jPartPlanInfo.getJobPartPlanPointer().BlobData.PreserveLastModifiedTime {
 		lastModifiedTime := jPartPlanInfo.Transfer(t.transferIndex).ModifiedTime

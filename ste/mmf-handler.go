@@ -10,6 +10,7 @@ import (
 	"time"
 	"unsafe"
 	"github.com/Azure/azure-storage-azcopy/handlers"
+	"log"
 )
 
 var currFileDirectory string = "."
@@ -28,9 +29,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	job.ctx, job.cancel = context.WithCancel(jobContext)
 
 	// memory map the JobPartOrder File with given filename
-	job.memMap = memoryMapTheJobFile(fileName)
-
-	job.fileName = fileName
+	job.file, job.memMap = memoryMapTheJobFile(fileName)
 
 	// gets the memory map JobPartPlanHeader for given JobPartOrder
 	jPartPlan := job.getJobPartPlanPointer()
@@ -44,12 +43,12 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder
-func (job *JobPartPlanInfo) shutDownHandler() error {
-	//if job.memMap == nil {
-	//	return errors.New(fmt.Sprintf("memory map file %s already unmapped. Map it again to use further", job.fileName))
-	//}
+func (job *JobPartPlanInfo) shutDownHandler(log *log.Logger)  {
 	job.memMap.Unmap()
-	return nil
+	err := job.file.Close()
+	if err != nil{
+		log.Println("error closing the job part file")
+	}
 }
 
 // getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
@@ -104,7 +103,7 @@ func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
 	return tEntry
 }
 
-func memoryMapTheJobFile(filename string) handlers.MMap {
+func memoryMapTheJobFile(filename string) (*os.File, handlers.MMap) {
 
 	// opening the file with given filename
 	f, err := os.OpenFile(filename, os.O_RDWR, 0644)
@@ -125,11 +124,11 @@ func memoryMapTheJobFile(filename string) handlers.MMap {
 		err = fmt.Errorf("error memory mapping the file %s with err %s", filename, err.Error())
 		panic(err)
 	}
-	return mMap
+	return f, mMap
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) (string, error) {
+func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) (string, error) {
 	var currentEndOffsetOfFile uint64 = 0
 	/*
 	*       Following Steps are executed:
@@ -222,17 +221,16 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrder, data JobPartPla
 	return fileName, nil
 }
 
-// Creates the memory map Job Part Plan Header from CopyJobPartOrder and JobPartPlanBlobData
-func jobPartToJobPartPlan(jobPart common.CopyJobPartOrder, data JobPartPlanBlobData) JobPartPlanHeader {
-	var jobID [128 / 8]byte
+// Creates the memory map Job Part Plan Header from CopyJobPartOrderRequest and JobPartPlanBlobData
+func jobPartToJobPartPlan(jobPart common.CopyJobPartOrderRequest, data JobPartPlanBlobData) JobPartPlanHeader {
+
 	versionID := jobPart.Version
-	// converting the job jobId string to [128 / 8] byte format
-	jobID = common.JobID(jobPart.ID)
+
 	partNo := jobPart.PartNum
 
-	// calculating the number of transfer for given CopyJobPartOrder
+	// calculating the number of transfer for given CopyJobPartOrderRequest
 	numTransfer := uint32(len(jobPart.Transfers))
-	jPartInFile := JobPartPlanHeader{Version: versionID, Id: jobID, PartNum: partNo,
+	jPartInFile := JobPartPlanHeader{Version: versionID, Id: jobPart.ID, PartNum: partNo,
 		IsFinalPart: jobPart.IsFinalPart, Priority: DefaultJobPriority, TTLAfterCompletion: uint32(time.Now().Nanosecond()),
 		SrcLocationType: jobPart.SourceType, DstLocationType: jobPart.DestinationType,
 		NumTransfers: numTransfer, LogSeverity: jobPart.LogVerbosity, BlobData: data, jobStatus_doNotUse: JobInProgress}

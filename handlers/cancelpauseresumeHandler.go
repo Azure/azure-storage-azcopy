@@ -45,6 +45,7 @@ func HandlePauseCommand(jobIdString string) {
 
 	responseBytes := client.Send("pause", jobId)
 
+
 	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
 	if len(responseBytes) == 0 {
 		return

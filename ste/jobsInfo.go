@@ -26,6 +26,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"errors"
 )
 
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
@@ -93,8 +94,7 @@ func (jMap *JobsInfo) AddJobPartPlanInfo(jpp *JobPartPlanInfo) {
 	var jobInfo = jMap.internalMap[jPartPlanInfo.Id]
 	// If there is no JobInfo instance for given jobId
 	if jobInfo == nil {
-		jobInfo = new(JobInfo)
-		jobInfo.jobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
+		jobInfo = NewJobInfo(jPartPlanInfo.Id, jMap)
 	} else if jobInfo.jobPartsMap == nil {
 		// If the current JobInfo instance for given jobId has not jobPartsMap initialized
 		jobInfo.jobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
@@ -107,7 +107,7 @@ func (jMap *JobsInfo) AddJobPartPlanInfo(jpp *JobPartPlanInfo) {
 		if err != nil {
 			panic(err)
 		}
-		jobInfo.minimumLogLevel = jPartPlanInfo.LogSeverity
+		jobInfo.maximumLogLevel = jPartPlanInfo.LogSeverity
 		jobInfo.logFile = file
 		jobInfo.logger = log.New(jobInfo.logFile, "", log.Llongfile)
 		//jobInfo.logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
@@ -124,9 +124,44 @@ func (jMap *JobsInfo) DeleteJobInfo(jobId common.JobID) {
 	jMap.lock.Unlock()
 }
 
-// NewJobPartPlanInfoMap returns a new instance of synchronous JobsInfo to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
-func NewJobPartPlanInfoMap() *JobsInfo {
+// cleanUpJob api unmaps all the memory map JobPartFile and deletes the JobPartFile
+/*
+	* Load PartMap for given JobId
+    * Iterate through each part order of given Job and then shutdowns the JobInfo handler
+    * Iterate through each part order of given Job and then shutdowns the JobInfo handler
+	* Delete all the job part files stored on disk
+    * Closes the logger file opened for logging logs related to given job
+	* Removes the entry of given JobId from JobsInfo
+*/
+func (jMap *JobsInfo) cleanUpJob(jobId common.JobID) {
+	jMap.lock.Lock()
+	jobInfo := jMap.internalMap[jobId]
+	jPart := jobInfo.JobParts()
+	if jPart == nil {
+		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
+	}
+	for _, jobHandler := range jPart {
+		// unmapping the memory map JobPart file
+		jobHandler.shutDownHandler(jobInfo.logger)
+
+		// deleting the JobPartFile
+		err := os.Remove(jobHandler.file.Name())
+		if err != nil {
+			jobInfo.Panic(errors.New(fmt.Sprintf("error removing the job part file %s. Failed with following error %s", jobHandler.file.Name(), err.Error())))
+		}
+	}
+
+	jobInfo.closeLogForJob()
+	// deletes the entry for given JobId from Map
+	delete(jMap.internalMap, jobId)
+	jMap.lock.Lock()
+}
+
+// NewJobsInfo returns a new instance of synchronous JobsInfo to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
+func NewJobsInfo() *JobsInfo {
 	return &JobsInfo{
 		internalMap: make(map[common.JobID]*JobInfo),
 	}
 }
+
+
