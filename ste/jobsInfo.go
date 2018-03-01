@@ -29,75 +29,79 @@ import (
 	"errors"
 )
 
+type syncJobsInfoMap struct {
+	lock   sync.RWMutex
+	m      map[common.JobID]*JobInfo
+}
+
+func (sm *syncJobsInfoMap) Set(key common.JobID, value *JobInfo) {
+	sm.lock.Lock()
+	sm.m[key] = value
+	sm.lock.Unlock()
+}
+func (sm *syncJobsInfoMap) Get(key common.JobID) (value *JobInfo, ok bool) {
+	sm.lock.RLock()
+	value, ok = sm.m[key]
+	sm.lock.RUnlock()
+	return
+}
+func (sm *syncJobsInfoMap) Delete(key common.JobID) {
+	sm.lock.Lock()
+	delete(sm.m, key)
+	sm.lock.Unlock()
+}
+
+func (sm *syncJobsInfoMap) Iterate(readonly bool, f func(k common.JobID, v *JobInfo)) {
+	locker := sync.Locker(&sm.lock)
+	if !readonly {
+		locker = sm.lock.RLocker()
+	}
+	locker.Lock()
+	for k, v := range sm.m {
+		f(k, v)
+	}
+	locker.Unlock()
+}
+
+func newSyncJobsInfoMap() *syncJobsInfoMap {
+	return &syncJobsInfoMap{
+		m: make(map[common.JobID]*JobInfo),
+	}
+}
+
 // JobToLoggerMap is the Synchronous Map of Map to hold JobPartPlanPointer reference for combination of JobId and partNum.
 // Provides the thread safe Load and Store Method
 type JobsInfo struct {
-	// ReadWrite Mutex
-	lock sync.RWMutex
 	// map jobId -->[partNo -->JobPartPlanInfo Pointer]
-	internalMap map[common.JobID]*JobInfo
+	internalMap *syncJobsInfoMap
 }
 
 // JobInfo returns the JobInfo pointer stored in JobsInfo for given JobId in thread-safe manner.
 func (jMap *JobsInfo) JobInfo(jobId common.JobID) *JobInfo {
-	jMap.lock.RLock()
-	jobInfo, ok := jMap.internalMap[jobId]
-	jMap.lock.RUnlock()
+	jobInfo, ok := jMap.internalMap.Get(jobId)
 	if !ok {
 		return nil
 	}
 	return jobInfo
 }
 
-// JobPartPlanInfo returns the JobPartPlanInfo Pointer for given combination of JobId and part number in thread-safe manner.
-func (jMap *JobsInfo) JobPartPlanInfo(jobId common.JobID, partNumber common.PartNumber) *JobPartPlanInfo {
-	jMap.lock.RLock()
-	partMap := jMap.internalMap[jobId]
-	if partMap == nil {
-		jMap.lock.RUnlock()
-		return nil
-	}
-	jHandler := partMap.jobPartsMap[partNumber]
-	jMap.lock.RUnlock()
-	return jHandler
-}
-
 // JobIds returns the list of existing JobIds for which there are entries in the internal map in thread-safe manner.
 func (jMap *JobsInfo) JobIds() []common.JobID {
-	jMap.lock.RLock()
-	existingJobs := make([]common.JobID, len(jMap.internalMap))
-	index := 0
-	for jobId, _ := range jMap.internalMap {
-		existingJobs[index] = jobId
-	}
-	jMap.lock.RUnlock()
-	return existingJobs
-}
 
-// NumberOfParts returns the number of part order for job with given JobId
-func (jMap *JobsInfo) NumberOfParts(jobId common.JobID) uint32 {
-	jMap.lock.RLock()
-	jobInfo := jMap.internalMap[jobId]
-	if jobInfo == nil {
-		jMap.lock.RUnlock()
-		return 0
-	}
-	partMap := jobInfo.jobPartsMap
-	jMap.lock.RUnlock()
-	return uint32(len(partMap))
+	var existingJobs []common.JobID
+	jMap.internalMap.Iterate(true, func(k common.JobID, v *JobInfo){
+		existingJobs = append(existingJobs, k)
+	})
+	return existingJobs
 }
 
 // AddJobPartPlanInfo stores the JobPartPlanInfo reference for given combination of JobId and part number in thread-safe manner.
 func (jMap *JobsInfo) AddJobPartPlanInfo(jpp *JobPartPlanInfo) {
-	jMap.lock.Lock()
 	jPartPlanInfo := jpp.getJobPartPlanPointer()
-	var jobInfo = jMap.internalMap[jPartPlanInfo.Id]
+	var jobInfo, ok = jMap.internalMap.Get(jPartPlanInfo.Id)
 	// If there is no JobInfo instance for given jobId
-	if jobInfo == nil {
+	if !ok {
 		jobInfo = NewJobInfo(jPartPlanInfo.Id, jMap)
-	} else if jobInfo.jobPartsMap == nil {
-		// If the current JobInfo instance for given jobId has not jobPartsMap initialized
-		jobInfo.jobPartsMap = make(map[common.PartNumber]*JobPartPlanInfo)
 	}
 	// If there is no logger instance for the current Job,
 	// initialize the logger instance with log severity and jobId
@@ -112,16 +116,13 @@ func (jMap *JobsInfo) AddJobPartPlanInfo(jpp *JobPartPlanInfo) {
 		jobInfo.logger = log.New(jobInfo.logFile, "", log.Llongfile)
 		//jobInfo.logger.Initialize(jobLogVerbosity, fmt.Sprintf("%s.log", jobId))
 	}
-	jobInfo.jobPartsMap[jPartPlanInfo.PartNum] = jpp
-	jMap.internalMap[jPartPlanInfo.Id] = jobInfo
-	jMap.lock.Unlock()
+	jobInfo.AddPartPlanInfo(jPartPlanInfo.PartNum, jpp)
+	jMap.internalMap.Set(jPartPlanInfo.Id, jobInfo)
 }
 
 // DeleteJobInfo api deletes an entry of given JobId the JobsInfo
 func (jMap *JobsInfo) DeleteJobInfo(jobId common.JobID) {
-	jMap.lock.Lock()
-	delete(jMap.internalMap, jobId)
-	jMap.lock.Unlock()
+	jMap.internalMap.Delete(jobId)
 }
 
 // cleanUpJob api unmaps all the memory map JobPartFile and deletes the JobPartFile
@@ -134,13 +135,11 @@ func (jMap *JobsInfo) DeleteJobInfo(jobId common.JobID) {
 	* Removes the entry of given JobId from JobsInfo
 */
 func (jMap *JobsInfo) cleanUpJob(jobId common.JobID) {
-	jMap.lock.Lock()
-	jobInfo := jMap.internalMap[jobId]
-	jPart := jobInfo.JobParts()
-	if jPart == nil {
+	jobInfo, ok := jMap.internalMap.Get(jobId)
+	if !ok || (jobInfo.JobParts() == nil) {
 		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
 	}
-	for _, jobHandler := range jPart {
+	for _, jobHandler := range jobInfo.JobParts() {
 		// unmapping the memory map JobPart file
 		jobHandler.shutDownHandler(jobInfo.logger)
 
@@ -153,14 +152,13 @@ func (jMap *JobsInfo) cleanUpJob(jobId common.JobID) {
 
 	jobInfo.closeLogForJob()
 	// deletes the entry for given JobId from Map
-	delete(jMap.internalMap, jobId)
-	jMap.lock.Lock()
+	jMap.DeleteJobInfo(jobId)
 }
 
 // NewJobsInfo returns a new instance of synchronous JobsInfo to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
 func NewJobsInfo() *JobsInfo {
 	return &JobsInfo{
-		internalMap: make(map[common.JobID]*JobInfo),
+		internalMap: newSyncJobsInfoMap(),
 	}
 }
 

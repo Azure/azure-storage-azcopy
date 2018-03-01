@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	tm "github.com/buger/goterm"
-	"math"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrderRequest)
@@ -30,18 +29,15 @@ func sendJobPartOrderToSTE(payload *common.CopyJobPartOrderRequest) {
 	}
 }
 
-func fetchJobStatus(jobId string) string {
-	url := "http://localhost:1337"
-	client := common.NewHttpClient(url)
+func fetchJobStatus(jobId common.JobID) string {
+	lsCommand := common.ListRequest{JobId: jobId, }
 
-	lsCommand := common.ListRequest{JobId: jobId, ExpectedTransferStatus: math.MaxUint32}
-
-	responseBytes := client.Send("list", lsCommand)
+	responseBytes := common.Rpc("listJobProgressSummary", lsCommand)
 
 	if len(responseBytes) == 0 {
 		return ""
 	}
-	var summary common.JobProgressSummary
+	var summary common.ListJobSummaryResponse
 	json.Unmarshal(responseBytes, &summary)
 
 	tm.Clear()

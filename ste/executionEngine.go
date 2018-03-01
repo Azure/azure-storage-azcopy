@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/edsrzf/mmap-go"

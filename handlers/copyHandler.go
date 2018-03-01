@@ -84,7 +84,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 			HandleCancelCommand(jobId.String())
 			os.Exit(1)
 		default:
-			jobStatus := fetchJobStatus(jobId.String())
+			jobStatus := fetchJobStatus(jobId)
 			if jobStatus == "JobCompleted" {
 				os.Exit(1)
 			}

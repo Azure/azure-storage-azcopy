@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"strconv"
 	"syscall"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 func main() {
@@ -34,6 +35,10 @@ func main() {
 		cmd.Execute()
 		return
 	}
+
+	httpClient := common.NewHttpClient("http://localhost:1337")
+	common.Rpc = httpClient.Send
+
 	switch os.Args[1] {
 	case "inproc": // STE is launched in process
 		go ste.InitializeSTE(100, 500)

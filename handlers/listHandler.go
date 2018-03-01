@@ -22,7 +22,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"math"
@@ -30,81 +29,85 @@ import (
 
 // handles the list command
 // dispatches the list order to theZiyi Wang storage engine
-func HandleListCommand(commandLineInput common.ListCmdArgsAndFlags) {
-	listOrder := common.ListRequest{}
+func HandleListCommand(commandLineInput common.ListRequest) {
 
-	// checking if the jobId passed is valid or not
-	if commandLineInput.JobId != "" {
-		listOrder.JobId = common.JobID(common.ParseUUID(commandLineInput.JobId)
-	} else {
-		listOrder.JobId = ""
-	}
-
-	// if the expected status is given by User, then it is converted to the respective Transfer status code
-	if commandLineInput.OfStatus != "" {
-		listOrder.ExpectedTransferStatus = common.TransferStatusStringToCode(commandLineInput.OfStatus)
-	} else {
-		// if the expected status is not given by user, it is set to 255
-		listOrder.ExpectedTransferStatus = math.MaxUint32
-	}
-	// converted the list order command to json byte array
-
-	url := "http://localhost:1337"
-	httpClient := common.NewHttpClient(url)
-
-	responseBytes := httpClient.Send("list", listOrder)
-
-	// If the request is not valid or it is not processed by transfer engine, it does not returns Http StatusAccepted
-	if len(responseBytes) == 0 {
+	// check whether ofstatus transfer status is valid or not
+	if commandLineInput.OfStatus != "" &&
+				common.TransferStatusStringToCode(commandLineInput.OfStatus) == math.MaxUint32{
+		fmt.Println("invalid transfer status passed. Please provide the correct transfer status flag")
 		return
 	}
 
+	var response []byte
+
+	if commandLineInput.JobId == common.EmptyJobId {
+		response = common.Rpc("listJobs", commandLineInput)
+	}else if commandLineInput.OfStatus == "" {
+		response = common.Rpc("listJobProgressSummary", commandLineInput)
+	}else{
+		response = common.Rpc("listJobTransfers", commandLineInput)
+	}
+
 	// list Order command requested the list of existing jobs
-	if commandLineInput.JobId == "" {
-		PrintExistingJobIds(responseBytes)
+	if commandLineInput.JobId == common.EmptyJobId {
+		PrintExistingJobIds(response)
 	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
-		PrintJobProgressSummary(responseBytes, commandLineInput.JobId)
+		PrintJobProgressSummary(response)
 	} else { //list Order command requested the list of specific transfer of an existing job
-		PrintJobTransfers(responseBytes, commandLineInput.JobId)
+		PrintJobTransfers(response)
 	}
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
 func PrintExistingJobIds(data []byte) {
-	var jobs common.ExistingJobDetails
-	err := json.Unmarshal(data, &jobs)
+	var listJobResponse common.ListJobsResponse
+	err := json.Unmarshal(data, &listJobResponse)
 	if err != nil {
 		panic(err)
 	}
+	if listJobResponse.Errormessage != ""{
+		fmt.Println(fmt.Sprintf("request failed with following error message %s", listJobResponse.Errormessage))
+		return
+	}
+
 	fmt.Println("Existing Jobs ")
-	for index := 0; index < len(jobs.JobIds); index++ {
-		fmt.Println(jobs.JobIds[index].String())
+	for index := 0; index < len(listJobResponse.JobIds); index++ {
+		fmt.Println(listJobResponse.JobIds[index].String())
 	}
 }
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
-func PrintJobTransfers(data []byte, jobId string) {
-	var transfers common.TransfersDetail
-	err := json.Unmarshal(data, &transfers)
+func PrintJobTransfers(data []byte) {
+	var listTransfersResponse common.ListJobTransfersResponse
+	err := json.Unmarshal(data, &listTransfersResponse)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", jobId))
-	for index := 0; index < len(transfers.Details); index++ {
-		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", transfers.Details[index].Src, transfers.Details[index].Dst,
-			transfers.Details[index].TransferStatus))
+	if listTransfersResponse.ErrorMessage != "" {
+		fmt.Println(fmt.Sprintf("request failed with following message %s", listTransfersResponse.ErrorMessage))
+		return
+	}
+
+	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", listTransfersResponse.JobId))
+	for index := 0; index < len(listTransfersResponse.Details); index++ {
+		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", listTransfersResponse.Details[index].Src, listTransfersResponse.Details[index].Dst,
+			listTransfersResponse.Details[index].TransferStatus))
 	}
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
-func PrintJobProgressSummary(summaryData []byte, jobId string) {
-	var summary common.JobProgressSummary
+func PrintJobProgressSummary(summaryData []byte) {
+	var summary common.ListJobSummaryResponse
 	err := json.Unmarshal(summaryData, &summary)
 	if err != nil {
 		panic(fmt.Errorf("error unmarshaling the progress summary. Failed with error %s", err.Error()))
 		return
 	}
-	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", jobId))
+	if summary.ErrorMessage != ""{
+		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMessage))
+		return
+	}
+	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobId))
 	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfers)
 	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
 	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)

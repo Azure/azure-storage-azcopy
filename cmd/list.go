@@ -25,7 +25,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
 	"fmt"
-	"encoding/json"
 )
 
 type ListReq struct {
@@ -46,10 +45,8 @@ type ListProgressSummaryResponse struct {
 
 }
 
-var rpc func(cmd string, request interface{}) []byte
-
 func init() {
-	commandLineInput := common.ListCmdArgsAndFlags{}
+	commandLineInput := common.ListRequest{}
 
 	// lsCmd represents the ls command
 	lsCmd := &cobra.Command{
@@ -68,22 +65,17 @@ func init() {
 			* list jobId -- lists the progress summary of the job for given jobId
 			* list jobId --with-status -- lists all the transfers of an existing job which has the given status
 			 */
-			jobId := common.JobID{}
+
 			// if there is more than one argument passed, then it is taken as a jobId
 			if len(args) > 0 {
-				jobId, err := common.ParseJobID(args[0])
+				jobId , err := common.ParseJobID(args[0])
 				if err != nil{
 					fmt.Print("invalid job Id given ", args[0])
 					return nil
 				}
+				commandLineInput.JobId = jobId
 			}
-	resp := rpc( 0, ListReq{})
-	var lr ListResponse
-	json.Unmarshal(resp, &lr)
-	if lr.ErrorMsg != "" {
 
-	}
-	commandLineInput.JobId = jobId
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {

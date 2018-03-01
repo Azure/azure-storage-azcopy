@@ -28,9 +28,14 @@ import (
 	"net/http"
 	"bytes"
 	"io/ioutil"
+	"math"
 )
 
 type JobID UUID
+
+var Rpc func(cmd string, request interface{}) []byte
+
+var EmptyJobId JobID = JobID{}
 
 func (j JobID) String() string {
 	return UUID(j).String()
@@ -107,7 +112,7 @@ func TransferStatusStringToCode(statusString string) TransferStatus {
 	case "TransferAny":
 		return TransferAny
 	default:
-		panic(fmt.Errorf("invalid status string %s", statusString))
+		return math.MaxUint32
 	}
 }
 
@@ -185,12 +190,6 @@ type CopyCmdArgsAndFlags struct {
 	LogVerbosity             uint8
 }
 
-// ListCmdArgsAndFlags represents the raw list command input from the user
-type ListCmdArgsAndFlags struct {
-	JobId    JobID
-	OfStatus string
-}
-
 // define the different types of sources/destinations
 type LocationType uint8
 
@@ -229,8 +228,8 @@ type CopyJobPartOrderResponse struct {
 
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListRequest struct {
-	JobId                  string
-	ExpectedTransferStatus TransferStatus
+	JobId                  JobID
+	OfStatus 				string
 }
 
 // This struct represents the optional attribute for blob request header
@@ -243,13 +242,16 @@ type BlobTransferAttributes struct {
 	BlockSizeinBytes         uint32
 }
 
-// ExistingJobDetails represent the Job with JobId and
-type ExistingJobDetails struct {
+// ListJobsResponse represent the Job with JobId and
+type ListJobsResponse struct {
+	Errormessage string
 	JobIds []JobID
 }
 
 // represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
-type JobProgressSummary struct {
+type ListJobSummaryResponse struct {
+	ErrorMessage string
+	JobId JobID
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered             bool
 	JobStatus                      string
@@ -269,9 +271,10 @@ type TransferDetail struct {
 	Dst            string
 	TransferStatus string
 }
-type HttpResponseMessage struct {
-	Payload interface{}
-	ErrorMsg string
+
+type CancelPauseResumeResponse struct {
+	ErrorMsg              string
+	CancelledPauseResumed bool
 }
 
 type FooResponse struct {
@@ -279,7 +282,9 @@ type FooResponse struct {
 }
 
 // represents the list of Details and details of number of transfers
-type TransfersDetail struct {
+type ListJobTransfersResponse struct {
+	ErrorMessage string
+	JobId JobID
 	Details []TransferDetail
 }
 
@@ -313,19 +318,13 @@ func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte){
 	// panic in this case
 	resp, err := httpClient.client.Do(req)
 	if err != nil{
-		fmt.Println(fmt.Sprintf("error sending the http request to url %s. Failed with error %s", httpClient.url, err.Error()))
-		return []byte{}
+		panic(fmt.Errorf("error sending the http request to url %s. Failed with error %s", httpClient.url, err.Error()))
 	}
 	// reading the entire response body and closing the response body.
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		fmt.Println("error reading response for the request")
-		return []byte{}
-	}
-	// If the resp status is not accepted, then the request failed
-	if resp.StatusCode != http.StatusAccepted{
-		fmt.Println("request failed with status code %d and msg %s", resp.StatusCode, string(body))
 		return []byte{}
 	}
 	return body

@@ -26,7 +26,49 @@ import (
 	"os"
 	"sync/atomic"
 	"fmt"
+	"sync"
 )
+
+type syncJobInfoMap struct {
+	lock   sync.RWMutex
+	m      map[common.PartNumber]*JobPartPlanInfo
+}
+
+func (sm *syncJobInfoMap) Set(key common.PartNumber, value *JobPartPlanInfo) {
+	sm.lock.Lock()
+	sm.m[key] = value
+	sm.lock.Unlock()
+}
+func (sm *syncJobInfoMap) Get(key common.PartNumber) (value *JobPartPlanInfo, ok bool) {
+	sm.lock.RLock()
+	value, ok = sm.m[key]
+	sm.lock.RUnlock()
+	return
+}
+func (sm *syncJobInfoMap) Delete(key common.PartNumber) {
+	sm.lock.Lock()
+	delete(sm.m, key)
+	sm.lock.Unlock()
+}
+
+// We purposely disallow len
+func (sm *syncJobInfoMap) Iterate(readonly bool, f func(k common.PartNumber, v *JobPartPlanInfo)) {
+	locker := sync.Locker(&sm.lock)
+	if !readonly {
+		locker = sm.lock.RLocker()
+	}
+	locker.Lock()
+	for k, v := range sm.m {
+		f(k, v)
+	}
+	locker.Unlock()
+}
+
+func newSyncJobInfoMap() (*syncJobInfoMap){
+	return &syncJobInfoMap{
+		m:make(map[common.PartNumber]*JobPartPlanInfo),
+	}
+}
 
 // JobInfo contains jobPartsMap and logger
 // jobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
@@ -36,7 +78,7 @@ type JobInfo struct {
 	// jobsInfo is the reference of JobsInfo of which current jobInfo is part of.
 	jobsInfo          *JobsInfo
 	// jobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
-	jobPartsMap       map[common.PartNumber]*JobPartPlanInfo
+	jobPartsMap       *syncJobInfoMap
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	maximumLogLevel   common.LogLevel
@@ -47,17 +89,32 @@ type JobInfo struct {
 
 // Returns the combination of PartNumber and respective JobPartPlanInfo reference.
 func (ji *JobInfo) JobParts() map[common.PartNumber]*JobPartPlanInfo {
-	return ji.jobPartsMap
+	var partsMap map[common.PartNumber]*JobPartPlanInfo
+	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo){
+		partsMap[k] = v
+	})
+	return partsMap
+}
+
+func (ji *JobInfo) AddPartPlanInfo(partNumber common.PartNumber, jpi *JobPartPlanInfo){
+	ji.jobPartsMap.Set(partNumber, jpi)
 }
 
 // JobPartPlanInfo returns the JobPartPlanInfo reference of a Job for given part number
 func (ji *JobInfo) JobPartPlanInfo(partNumber common.PartNumber) *JobPartPlanInfo {
-	jPartPlanInfo := ji.jobPartsMap[partNumber]
+	jPartPlanInfo, ok := ji.jobPartsMap.Get(partNumber)
+	if !ok{
+		return nil
+	}
 	return jPartPlanInfo
 }
 
 func (ji *JobInfo) NumberOfParts() (uint32){
-	return uint32(len(ji.jobPartsMap))
+	numberOfParts := uint32(0)
+	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo){
+		numberOfParts ++
+	})
+	return numberOfParts
 }
 
 // NumberOfPartsDone returns the number of parts of job either completed or failed
@@ -118,6 +175,7 @@ func NewJobInfo(jobId common.JobID, jobsInfo *JobsInfo) *JobInfo {
 	return &JobInfo{
 		jobId:jobId,
 		jobsInfo:jobsInfo,
-		jobPartsMap: make(map[common.PartNumber]*JobPartPlanInfo),
+		jobPartsMap: newSyncJobInfoMap(),
+		logger:nil,
 	}
 }

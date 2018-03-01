@@ -128,12 +128,12 @@ func checkCancelledJobsInJobMap(jobsInfoMap *JobsInfo) {
 	for index := 0; index < len(jobIds); index++ {
 		// getting the jobInfo for part 0 of current jobId
 		// since the status of Job is determined by the job status in JobPartPlan header of part 0
-		jobInfo := jobsInfoMap.JobPartPlanInfo(jobIds[index], 0)
+		jobInfo := jobsInfoMap.JobInfo(jobIds[index])
 
 		// if the jobstatus in JobPartPlan header of part 0 is cancelled and cleanup wasn't successful
 		// if the part 0 was deleted successfully but other parts deletion wasn't successful
 		// cleaning up the job now
-		if jobInfo == nil || jobInfo.getJobPartPlanPointer().Status() == JobCancelled {
+		if jobInfo == nil || jobInfo.JobPartPlanInfo(0).getJobPartPlanPointer().Status() == JobCancelled {
 			jobsInfoMap.cleanUpJob(jobIds[index])
 		}
 	}
@@ -164,10 +164,10 @@ func fileAlreadyExists(fileName string, jobsInfoMap *JobsInfo) bool {
 
 	jobId, partNumber, _ := parseStringToJobInfo(fileName)
 
-	jobPartInfo := jobsInfoMap.JobPartPlanInfo(jobId, partNumber)
+	jobInfo := jobsInfoMap.JobInfo(jobId)
 
-	if jobPartInfo == nil {
-		return false
+	if jobInfo != nil && jobInfo.JobPartPlanInfo(partNumber) != nil {
+		return true
 	}
-	return true
+	return false
 }
