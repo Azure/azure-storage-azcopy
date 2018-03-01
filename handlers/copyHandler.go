@@ -33,6 +33,8 @@ import (
 	"path"
 	"strings"
 	"time"
+	tm "github.com/buger/goterm"
+	"encoding/json"
 )
 
 const (
@@ -57,11 +59,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	//}
 	jobPartOrder.ID = jobId
 
-	coordinatorScheduleFunc := generateCoordinatorScheduleFunc()
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
-		HandleUploadFromLocalToBlobStorage(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
+		HandleUploadFromLocalToBlobStorage(&commandLineInput, &jobPartOrder)
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
-		HandleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder, coordinatorScheduleFunc)
+		HandleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder)
 	}
 	fmt.Print("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
@@ -99,8 +100,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 }
 
 func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
-	jobPartOrderToFill *common.CopyJobPartOrderRequest,
-	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrderRequest)) {
+	jobPartOrderToFill *common.CopyJobPartOrderRequest) {
 
 	fmt.Println("HandleUploadFromLocalToWastore startTime ", time.Now())
 	// set the source and destination type
@@ -161,7 +161,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 					jobPartOrderToFill.Transfers = Transfers //TODO make truth, more defensive, consider channel
 					jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 					partNumber += 1
-					dispatchJobPartOrderFunc(jobPartOrderToFill)
+					common.Rpc("copy", jobPartOrderToFill)
 					Transfers = []common.CopyTransfer{}
 					numInTransfers = 0
 				}
@@ -175,7 +175,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 		}
 		jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 		jobPartOrderToFill.IsFinalPart = true
-		dispatchJobPartOrderFunc(jobPartOrderToFill)
+		common.Rpc("copy", jobPartOrderToFill)
 
 	} else { // upload single file
 
@@ -193,15 +193,13 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.PartNum = 0
 		jobPartOrderToFill.IsFinalPart = true
-		dispatchJobPartOrderFunc(jobPartOrderToFill)
+		common.Rpc("copy", jobPartOrderToFill)
 	}
 	fmt.Println("listing parts ends ", time.Now())
 }
 
-func HandleDownloadFromBlobStorageToLocal(
-	commandLineInput *common.CopyCmdArgsAndFlags,
-	jobPartOrderToFill *common.CopyJobPartOrderRequest,
-	dispatchJobPartOrderFunc func(jobPartOrder *common.CopyJobPartOrderRequest)) {
+func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAndFlags,
+											jobPartOrderToFill *common.CopyJobPartOrderRequest) {
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
@@ -257,7 +255,7 @@ func HandleDownloadFromBlobStorageToLocal(
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.IsFinalPart = true
 		jobPartOrderToFill.PartNum = 0
-		dispatchJobPartOrderFunc(jobPartOrderToFill)
+		common.Rpc("copy", jobPartOrderToFill)
 	} else { // source is a container
 		if !destinationFileInfo.IsDir() {
 			panic("destination should be a directory")
@@ -290,7 +288,7 @@ func HandleDownloadFromBlobStorageToLocal(
 			if !marker.NotDone() { // if there is no more segment
 				jobPartOrderToFill.IsFinalPart = true
 			}
-			dispatchJobPartOrderFunc(jobPartOrderToFill)
+			common.Rpc("copy", jobPartOrderToFill)
 		}
 	}
 
@@ -314,4 +312,40 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
 	//jobPartOrderToFill.Acl = commandLineInput.Acl
 	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier
+}
+
+
+func fetchJobStatus(jobId common.JobID) string {
+	lsCommand := common.ListRequest{JobId: jobId, }
+
+	responseBytes := common.Rpc("listJobProgressSummary", lsCommand)
+
+	if len(responseBytes) == 0 {
+		return ""
+	}
+	var summary common.ListJobSummaryResponse
+	json.Unmarshal(responseBytes, &summary)
+
+	tm.Clear()
+	tm.MoveCursor(1, 1)
+
+	fmt.Println("----------------- Progress Summary for JobId ", jobId, "------------------")
+	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfers)
+	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
+	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
+	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)
+
+	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
+	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
+
+	tm.Println(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress))
+	tm.Println(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024))
+
+	for index := 0; index < len(summary.FailedTransfers); index++ {
+		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
+		fmt.Println(message)
+	}
+	tm.Flush()
+
+	return summary.JobStatus
 }
