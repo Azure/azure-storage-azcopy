@@ -285,7 +285,7 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 		blockSize = common.DefaultBlockSize
 	}
 
-	return JobPartPlanBlobData{NoGuessMimeType: noGuessMimeType, ContentTypeLength: uint8(len(contentType)),
+	return JobPartPlanBlobData{BlobType:data.BlobType, NoGuessMimeType: noGuessMimeType, ContentTypeLength: uint8(len(contentType)),
 		ContentType: contentTypeBytes, ContentEncodingLength: uint8(len(contentEncoding)),
 		ContentEncoding: contentEncodingBytes, MetaDataLength: uint16(len(metaData)),
 		MetaData: metaDataBytes, PreserveLastModifiedTime: data.PreserveLastModifiedTime,

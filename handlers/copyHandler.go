@@ -43,13 +43,18 @@ const (
 
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
-func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
+func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	jobPartOrder := common.CopyJobPartOrderRequest{}
 	ApplyFlags(&commandLineInput, &jobPartOrder)
 
 	// generate job id
 	jobId := common.JobID(common.NewUUID())
 	jobStarted := true
+
+	if jobPartOrder.OptionalAttributes.BlobType == common.InvalidBlob{
+		fmt.Println("invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
+		return
+	}
 	// marshaling the JobID to send to backend
 	//marshaledUUID, err := json.MarshalIndent(uuid, "", "")
 	//if err != nil {
@@ -65,12 +70,12 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	}
 	if !jobStarted{
 		fmt.Print("Job with id", jobId, "was not abe to start. Please try again")
-		return common.EmptyJobId.String()
+		return
 	}
 
 	fmt.Print("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
-		return jobId.String()
+		return
 	}
 
 	// created a signal channel to receive the Interrupt and Kill signal send to OS
@@ -100,7 +105,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) string {
 	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
 	//	time.Sleep(2 * time.Second)
 	//}
-	return jobId.String()
+	return
 }
 
 func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
@@ -319,6 +324,7 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 
 func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrderRequest) {
 	optionalAttributes := common.BlobTransferAttributes{
+		BlobType:				common.BlobTypeStringToBlobType(commandLineInput.BlobType),
 		BlockSizeinBytes:         commandLineInput.BlockSize,
 		ContentType:              commandLineInput.ContentType,
 		ContentEncoding:          commandLineInput.ContentEncoding,
@@ -330,9 +336,6 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
 	jobPartOrderToFill.LogVerbosity = common.LogLevel(commandLineInput.LogVerbosity)
 	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
-	//jobPartOrderToFill.DestinationBlobType = commandLineInput.BlobType
-	//jobPartOrderToFill.Acl = commandLineInput.Acl
-	//jobPartOrderToFill.BlobTier = commandLineInput.BlobTier
 }
 
 

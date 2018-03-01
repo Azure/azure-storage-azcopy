@@ -90,6 +90,8 @@ func (jPartPlanHeader *JobPartPlanHeader) SetJobStatus(status JobStatusCode) {
 
 // JobPartPlan represent the header of Job Part's Optional Attributes in Memory Map File
 type JobPartPlanBlobData struct {
+	// The type of a blob - BlockBlob, PageBlob, AppendBlob
+	BlobType common.BlobType
 	// represents user decision to interpret the content-encoding from source file
 	NoGuessMimeType bool
 	// Specifies the length of MIME content type of the blob

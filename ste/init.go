@@ -68,7 +68,7 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 		blockSize := jPartPlanHeader.BlobData.BlockSize
 		// creating transfer msg to schedule the transfer and queuing transferMsg into channels determined by the JobPriority
 		transferMsg := TransferMsg{partNumber: partNumber, transferIndex: index, jobInfo: jobInfo, TransferContext: jobPartInfo.TransfersInfo[index].ctx,
-			TransferCancelFunc: transferCancelFunc, MinimumLogLevel: jPartPlanHeader.LogSeverity, SourceType: jPartPlanHeader.SrcLocationType,
+			TransferCancelFunc: transferCancelFunc, MinimumLogLevel: jPartPlanHeader.LogSeverity, BlobType:jPartPlanHeader.BlobData.BlobType, SourceType: jPartPlanHeader.SrcLocationType,
 			DestinationType: jPartPlanHeader.DstLocationType, Source: source, SourceSize: sourceSize, Destination: destination,
 			NumChunks: getNumChunks(sourceSize, uint64(blockSize)), BlockSize: blockSize}
 		switch priority {

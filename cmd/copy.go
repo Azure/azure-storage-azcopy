@@ -109,7 +109,7 @@ Usage:
 
 	// options
 	cpCmd.PersistentFlags().Uint32Var(&commandLineInput.BlockSize, "block-size", 0, "Use this block size when uploading to Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&commandLineInput.BlobType, "blob-type", "block", "Upload to Azure Storage using this blob type.")
+	cpCmd.PersistentFlags().StringVar(&commandLineInput.BlobType, "blob-type", "BlockBlob", "Upload to Azure Storage using this blob type.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.BlobTier, "blob-tier", "", "Upload to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.ContentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")

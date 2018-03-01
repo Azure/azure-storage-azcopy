@@ -37,6 +37,8 @@ var Rpc func(cmd string, request interface{}) []byte
 
 var EmptyJobId JobID = JobID{}
 
+const DefaultAppendBlobSize = 4 * 1024 * 1024
+
 func (j JobID) String() string {
 	return UUID(j).String()
 }
@@ -113,6 +115,47 @@ func TransferStatusStringToCode(statusString string) TransferStatus {
 		return TransferAny
 	default:
 		return math.MaxUint32
+	}
+}
+
+type BlobType uint8
+
+const (
+	BlockBlob BlobType = 0
+
+	AppendBlob BlobType = 1
+
+	PageBlob   BlobType = 2
+
+	InvalidBlob BlobType = math.MaxUint8
+)
+
+func (b BlobType) String() (string){
+	switch b {
+	case BlockBlob:
+		return "BlockBlob"
+	case AppendBlob:
+		return "AppendBlob"
+	case PageBlob:
+		return "PageBlob"
+	default:
+		return "Unspecified"
+	}
+}
+
+func BlobTypeStringToBlobType(btype string) (BlobType){
+	fmt.Println("b type ", btype)
+	switch btype {
+	case "":
+		return BlockBlob
+	case "BlockBlob":
+		return BlockBlob
+	case "AppendBlob":
+		return AppendBlob
+	case "PageBlob":
+		return PageBlob
+	default:
+		return InvalidBlob
 	}
 }
 
@@ -230,6 +273,7 @@ type ListRequest struct {
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
+	BlobType				 BlobType  // The type of a blob - BlockBlob, PageBlob, AppendBlob
 	ContentType              string //The content type specified for the blob.
 	ContentEncoding          string //Specifies which content encodings have been applied to the blob.
 	Metadata                 string //User-defined name-value pairs associated with the blob

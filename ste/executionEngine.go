@@ -76,7 +76,7 @@ func (executionEngine *executionEngine) engineWorker(workerId int, executionEngi
 							fmt.Sprintf("has worker %d which is processing TRANSFER", workerId))
 
 						// the xferFactory is generated based on the type of transfer (source and destination pair)
-						xferFactory := executionEngine.computeTransferFactory(transferMsg.SourceType, transferMsg.DestinationType)
+						xferFactory := executionEngine.computeTransferFactory(transferMsg.SourceType, transferMsg.DestinationType, transferMsg.BlobType)
 						if xferFactory == nil {
 							// TODO can these two calls be combined?
 							transferMsg.Log(common.LogError,
@@ -98,12 +98,19 @@ func (executionEngine *executionEngine) engineWorker(workerId int, executionEngi
 }
 
 // the xfer factory is generated based on the type of source and destination
-func (*executionEngine) computeTransferFactory(sourceLocationType, destinationLocationType common.LocationType) xferFactory {
+func (*executionEngine) computeTransferFactory(sourceLocationType, destinationLocationType common.LocationType, blobType common.BlobType) xferFactory {
 	switch {
 	case sourceLocationType == common.Blob && destinationLocationType == common.Local: // download from Azure to local
 		return newBlobToLocal
 	case sourceLocationType == common.Local && destinationLocationType == common.Blob: // upload from local to Azure
-		return newLocalToBlockBlob
+		switch blobType {
+		case common.BlockBlob:
+			return newLocalToBlockBlob
+		case common.AppendBlob:
+			return nil
+		default:
+			return nil
+		}
 	default:
 		return nil
 	}
