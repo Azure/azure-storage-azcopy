@@ -89,7 +89,7 @@ type JobInfo struct {
 
 // Returns the combination of PartNumber and respective JobPartPlanInfo reference.
 func (ji *JobInfo) JobParts() map[common.PartNumber]*JobPartPlanInfo {
-	var partsMap map[common.PartNumber]*JobPartPlanInfo
+	partsMap := make(map[common.PartNumber]*JobPartPlanInfo)
 	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo){
 		partsMap[k] = v
 	})
