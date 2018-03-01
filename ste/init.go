@@ -125,12 +125,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrderRequest, coordina
 	//}
 
 	// Creating a file for JobPartOrder and write data into that file.
-	fileName, err := createJobPartPlanFile(payload, destBlobData, jobsInfoMap)
+	fileName := createJobPartPlanFile(payload, destBlobData, jobsInfoMap)
 	// If file creation fails, then request is terminated as a bad request
-	if err != nil {
-		resp.WriteHeader(http.StatusBadRequest)
-		resp.Write([]byte(err.Error()))
-	}
 
 	// Creating JobPartPlanInfo reference for new job part order
 	var jobHandler = new(JobPartPlanInfo)
@@ -150,9 +146,16 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrderRequest, coordina
 	// Scheduling each transfer in the new job according to the priority of the job
 	scheduleTransfers(common.JobID(jobId), payload.PartNum, jobsInfoMap, coordinatorChannels)
 
+	copyResponse := common.CopyJobPartOrderResponse{JobStarted:true}
+
+	resultMsg, err := json.Marshal(copyResponse)
+
+	if err != nil{
+		panic(err)
+	}
 	// sending successful response back to front end
 	resp.WriteHeader(http.StatusAccepted)
-	resp.Write([]byte("Successfully triggered the Job PartOrder request"))
+	resp.Write(resultMsg)
 }
 
 // SetJobStatus changes the status of Job in all parts of Job order to given status

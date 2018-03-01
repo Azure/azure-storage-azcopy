@@ -128,7 +128,7 @@ func memoryMapTheJobFile(filename string) (*os.File, handlers.MMap) {
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) (string, error) {
+func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) (string) {
 	var currentEndOffsetOfFile uint64 = 0
 	/*
 	*       Following Steps are executed:
@@ -146,7 +146,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data Job
 
 	// Check if file already exist or not
 	if fileAlreadyExists(fileName, jobsInfoMap) {
-		return "", fmt.Errorf("a job file already exists with create for uuid passed in this job part order %s", fileName)
+		panic(fmt.Errorf("a job file already exists with create for uuid passed in this job part order %s", fileName))
 	}
 
 	// creating the file
@@ -218,7 +218,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data Job
 
 	// closing the memory map file
 	file.Close()
-	return fileName, nil
+	return fileName
 }
 
 // Creates the memory map Job Part Plan Header from CopyJobPartOrderRequest and JobPartPlanBlobData

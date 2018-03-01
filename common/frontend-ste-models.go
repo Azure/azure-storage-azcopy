@@ -222,10 +222,6 @@ type CopyJobPartOrderRequest struct {
 	OptionalAttributes BlobTransferAttributes
 }
 
-type CopyJobPartOrderResponse struct {
-	Message string
-}
-
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListRequest struct {
 	JobId                  JobID
@@ -275,6 +271,11 @@ type TransferDetail struct {
 type CancelPauseResumeResponse struct {
 	ErrorMsg              string
 	CancelledPauseResumed bool
+}
+
+type CopyJobPartOrderResponse struct {
+	ErrorMsg string
+	JobStarted bool
 }
 
 type FooResponse struct {
