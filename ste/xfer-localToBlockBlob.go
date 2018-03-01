@@ -79,7 +79,6 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 
 	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
 	if blobSize <= chunkSize {
-		fmt.Println("PUT BLOB TRIGGERED for", localToBlockBlob.transfer.Source)
 		localToBlockBlob.putBlob()
 		return
 	}
@@ -234,6 +233,9 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 
 	// updating number of transfers done for job part order
 	localToBlockBlob.transfer.TransferDone()
+
+	// TODO this should be 1 counter per job
+	realTimeThroughputCounter.updateCurrentBytes(int64(localToBlockBlob.transfer.SourceSize))
 
 	// closing the put blob response body
 	if putBlobResp != nil {

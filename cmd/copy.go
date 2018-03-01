@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
@@ -55,7 +54,6 @@ Usage:
     - This command downloads a blob and outputs it on stdout.
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
-			fmt.Print("number of arguments ", len(args))
 			if len(args) == 1 { // redirection
 				sourceType := validator{}.determineLocationType(args[0])
 				if sourceType != common.Blob {

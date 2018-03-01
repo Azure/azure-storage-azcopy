@@ -29,13 +29,28 @@ import (
 	"net/url"
 	"os"
 	"time"
+	"fmt"
 )
+
+// upload related
+const UploadMaxTries = 5
+const UploadTryTimeout = time.Minute * 10
+const UploadRetryDelay = time.Second * 1
+const UploadMaxRetryDelay = time.Second * 3
+
+// download related
+const DownloadMaxTries = 5
+const DownloadTryTimeout = time.Minute * 10
+const DownloadRetryDelay = time.Second * 1
+const DownloadMaxRetryDelay = time.Second * 3
+
 
 func HandleRedirectionCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	// check the Stdin to see if we are uploading or downloading
 	info, err := os.Stdin.Stat()
 	if err != nil {
-		panic(err)
+		fmt.Println("Fatal: failed to read from Stdin due to error: ", err)
+		return
 	}
 
 	// if nothing is on Stdin, this is a download case
@@ -50,35 +65,36 @@ func handleDownloadBlob(blobUrl string) {
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
-		panic(err)
+		panic("Fatal: cannot write to Stdout due to error: " + err.Error())
 	}
 
 	// step 1: initialize pipeline
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
 			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      3,
-			TryTimeout:    time.Second * 60,
-			RetryDelay:    time.Second * 1,
-			MaxRetryDelay: time.Second * 3,
+			MaxTries:      UploadMaxTries,
+			TryTimeout:    UploadTryTimeout,
+			RetryDelay:    UploadRetryDelay,
+			MaxRetryDelay: UploadMaxRetryDelay,
 		},
 	})
 
 	// step 2: parse source url
 	u, err := url.Parse(blobUrl)
 	if err != nil {
-		panic(err)
+		panic("Fatal: cannot parse source blob URL due to error: " + err.Error())
 	}
 
 	// step 3: start download
-	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
-	blobStream := azblob.NewDownloadStream(context.Background(), blockBlobUrl.GetBlob, azblob.DownloadStreamOptions{})
+	blobURL := azblob.NewBlobURL(*u, p)
+	blobStream := azblob.NewDownloadStream(context.Background(), blobURL.GetBlob, azblob.DownloadStreamOptions{})
 	defer blobStream.Close()
 
 	// step 4: pipe everything into Stdout
 	_, err = io.Copy(os.Stdout, blobStream)
 	if err != nil {
-		panic(err)
+		panic("Fatal: cannot download blob to Stdout due to error: " + err.Error())
+		return
 	}
 }
 
@@ -86,30 +102,30 @@ func handleUploadToBlob(blobUrl string) {
 	// step 0: pipe everything from Stdin into a buffer
 	input, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
-		panic("An error occurred while reading from stdin. Please retry.")
+		panic("Fatal: cannot read from Stdin due to error: " + err.Error())
 	}
 
 	// step 1: initialize pipeline
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
 			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      3,
-			TryTimeout:    time.Second * 60,
-			RetryDelay:    time.Second * 1,
-			MaxRetryDelay: time.Second * 3,
+			MaxTries:      DownloadMaxTries,
+			TryTimeout:    DownloadTryTimeout,
+			RetryDelay:    DownloadRetryDelay,
+			MaxRetryDelay: DownloadMaxRetryDelay,
 		},
 	})
 
 	// step 2: parse destination url
 	u, err := url.Parse(blobUrl)
 	if err != nil {
-		panic(err)
+		panic("Fatal: cannot parse destination blob URL due to error: " + err.Error())
 	}
 
 	// step 3: start upload
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
-	azblob.UploadBufferToBlockBlob(context.Background(), input, blockBlobUrl, azblob.UploadToBlockBlobOptions{})
+	_, err = azblob.UploadBufferToBlockBlob(context.Background(), input, blockBlobUrl, azblob.UploadToBlockBlobOptions{})
 	if err != nil {
-		panic(err)
+		panic("Fatal: failed to upload to blob due to error: " + err.Error())
 	}
 }
