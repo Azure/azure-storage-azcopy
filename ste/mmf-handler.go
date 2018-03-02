@@ -282,7 +282,13 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 
 	// if block size from the front-end is set to 0, block size is set to default block size
 	if blockSize == 0 {
-		blockSize = common.DefaultBlockSize
+		if data.BlobType == common.PageBlob{
+			blockSize = common.DefaultPageBlobSize
+		}else if data.BlobType == common.AppendBlob{
+			blockSize = common.DefaultAppendBlobSize
+		}else{
+			blockSize = common.DefaultBlockSize
+		}
 	}
 
 	return JobPartPlanBlobData{BlobType:data.BlobType, NoGuessMimeType: noGuessMimeType, ContentTypeLength: uint8(len(contentType)),

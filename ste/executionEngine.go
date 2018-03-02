@@ -148,7 +148,7 @@ func (executionEngineHelper executionEngineHelper) createAndMemoryMapFile(destin
 }
 
 // open and memory map a file, given its path
-func (executionEngineHelper executionEngineHelper) openAndMemoryMapFile(destinationPath string) mmap.MMap {
+func (executionEngineHelper executionEngineHelper) openAndMemoryMapFile(destinationPath string) (mmap.MMap, *os.File) {
 	f := executionEngineHelper.openFile(destinationPath, os.O_RDWR)
-	return executionEngineHelper.mapFile(f)
+	return executionEngineHelper.mapFile(f), f
 }

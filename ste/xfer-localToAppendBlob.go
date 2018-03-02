@@ -38,7 +38,7 @@ func (localToAppendBlob localToAppendBlob) prologue(transfer TransferMsg, chunkC
 	appendBlobUrl := azblob.NewAppendBlobURL(*u, p)
 
 	// step 2: map in the file to upload before appending blobs
-	memoryMappedFile := executionEngineHelper{}.openAndMemoryMapFile(transfer.Source)
+	memoryMappedFile,_ := executionEngineHelper{}.openAndMemoryMapFile(transfer.Source)
 
 
 	// step 3: Scheduling append blob in Chunk channel to perform append blob
@@ -65,17 +65,21 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t TransferMsg, app
 					t.TransferStatus(common.TransferFailed)
 				}
 				t.TransferDone()
+				err = memoryMappedFile.Unmap()
+				if err != nil{
+					t.Log(common.LogError, " has error mapping the memory map file")
+				}
 				return
 			}
 
 			// Iterating through source size and append blocks.
 			// If the source size greater than 4 MB, then source is split into
 			// 4MB blocks each and appended to the blob.
-			for startIndex := int64(0); startIndex < int64(t.SourceSize); startIndex += common.DefaultAppendBlobSize {
-				adjustedChunkSize := int64(common.DefaultAppendBlobSize)
+			for startIndex := int64(0); startIndex < int64(t.SourceSize); startIndex += int64(t.BlockSize) {
+				adjustedChunkSize := int64(t.BlockSize)
 
 				// compute actual size of the chunk
-				if startIndex + common.DefaultAppendBlobSize > int64(t.SourceSize) {
+				if startIndex + int64(t.BlockSize) > int64(t.SourceSize) {
 					adjustedChunkSize = int64(t.SourceSize) - startIndex
 				}
 
@@ -99,6 +103,10 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t TransferMsg, app
 					}
 					// updating number of the transfers done.
 					t.TransferDone()
+					err = memoryMappedFile.Unmap()
+					if err != nil{
+						t.Log(common.LogError, " has error mapping the memory map file")
+					}
 					return
 				}
 			}

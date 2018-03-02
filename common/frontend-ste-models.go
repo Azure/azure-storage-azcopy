@@ -39,6 +39,10 @@ var EmptyJobId JobID = JobID{}
 
 const DefaultAppendBlobSize = 4 * 1024 * 1024
 
+const DefaultPageBlobSize = 4 * 1024 * 1024
+
+const PageBlobPageBytes = 512
+
 func (j JobID) String() string {
 	return UUID(j).String()
 }
