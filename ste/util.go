@@ -187,17 +187,3 @@ func updateNumberOfPartsDone(jobId common.JobID, jobsInfoMap *JobsInfo) {
 		}
 	}
 }
-
-// UpdateNumTransferDone api increments the var numberOfTransfersDone_doNotUse by 1 atomically
-// If this numberOfTransfersDone_doNotUse equals the number of transfer in a job part,
-// all transfers of Job Part have either paused, cancelled or completed
-func updateNumberOfTransferDone(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfo) {
-	jobInfo := jobsInfoMap.JobInfo(jobId)
-	jHandler := jobsInfoMap.JobPartPlanInfo(jobId, partNumber)
-	jPartPlanInfo := jHandler.getJobPartPlanPointer()
-	totalNumberofTransfersCompleted := jHandler.numberOfTransfersDone()
-	jobInfo.Log(common.LogInfo, fmt.Sprintf("total number of transfers paused, cancelled or completed for Job %s and part number %d is %d", jobId, partNumber, totalNumberofTransfersCompleted))
-	if jHandler.incrementNumberOfTransfersDone() == jPartPlanInfo.NumTransfers {
-		updateNumberOfPartsDone(jobId, jobsInfoMap)
-	}
-}
