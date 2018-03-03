@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	tm "github.com/buger/goterm"
-	"io/ioutil"
 	"math"
-	"net/http"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)

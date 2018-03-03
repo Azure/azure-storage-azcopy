@@ -25,9 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"io/ioutil"
 	"math"
-	"net/http"
 )
 
 // handles the list command

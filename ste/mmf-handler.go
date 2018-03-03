@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/edsrzf/mmap-go"
 	"os"
 	"reflect"
 	"time"
 	"unsafe"
+	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 var currFileDirectory string = "."
@@ -48,10 +48,7 @@ func (job *JobPartPlanInfo) shutDownHandler() error {
 	//if job.memMap == nil {
 	//	return errors.New(fmt.Sprintf("memory map file %s already unmapped. Map it again to use further", job.fileName))
 	//}
-	err := job.memMap.Unmap()
-	if err != nil {
-		return err
-	}
+	job.memMap.Unmap()
 	return nil
 }
 
@@ -107,7 +104,7 @@ func (job *JobPartPlanInfo) Transfer(index uint32) *JobPartPlanTransfer {
 	return tEntry
 }
 
-func memoryMapTheJobFile(filename string) mmap.MMap {
+func memoryMapTheJobFile(filename string) handlers.MMap {
 
 	// opening the file with given filename
 	f, err := os.OpenFile(filename, os.O_RDWR, 0644)
@@ -118,7 +115,12 @@ func memoryMapTheJobFile(filename string) mmap.MMap {
 	// defer file closing to user the memory map byte slice later
 	defer f.Close()
 
-	mMap, err := mmap.Map(f, mmap.RDWR, 0)
+	fileInfo , err := f.Stat()
+	if err != nil{
+		panic(fmt.Errorf("error getting file info of file %s", filename))
+	}
+	//mMap, err := mmap.Map(f, mmap.RDWR, 0)
+	mMap, err := handlers.Map(f, true, 0, int(fileInfo.Size()))
 	if err != nil {
 		err = fmt.Errorf("error memory mapping the file %s with err %s", filename, err.Error())
 		panic(err)

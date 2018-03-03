@@ -2,8 +2,8 @@ package ste
 
 import (
 	"context"
-	"github.com/edsrzf/mmap-go"
 	"sync/atomic"
+	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 // TransfersInfo represents the runtime information of a transfer of a JobPartOrder
@@ -42,7 +42,7 @@ type JobPartPlanInfo struct {
 	fileName string
 
 	// memMap represents the memory map byte slice
-	memMap mmap.MMap
+	memMap handlers.MMap
 
 	// TransfersInfo list of transfer info of the transfers of JobPartOrder
 	TransfersInfo []TransferInfo
