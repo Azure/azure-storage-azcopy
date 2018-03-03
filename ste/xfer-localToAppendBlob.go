@@ -10,10 +10,22 @@ import (
 	"bytes"
 )
 
-type localToAppendBlob struct {}
+type localToAppendBlob struct {
+
+	transfer         *TransferMsg
+	pacer            *pacer
+	blobURL          azblob.BlobURL
+	memoryMappedFile mmap.MMap
+	blockIds         []string
+}
+
+// return a new localToBlockBlob struct targeting a specific transfer
+func newLocalToAppendBlob(transfer *TransferMsg, pacer *pacer) xfer {
+	return &localToAppendBlob{transfer: transfer, pacer: pacer}
+}
 
 // this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
-func (localToAppendBlob localToAppendBlob) prologue(transfer TransferMsg, chunkChannel chan<- ChunkMsg) {
+func (localToAppendBlob *localToAppendBlob) runPrologue(chunkChannel chan<- ChunkMsg) {
 
 	// step 1: create pipeline for the destination blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
@@ -26,30 +38,30 @@ func (localToAppendBlob localToAppendBlob) prologue(transfer TransferMsg, chunkC
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				transfer.Log(common.LogLevel(l), msg)
+				localToAppendBlob.transfer.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(transfer.MinimumLogLevel)
+				return pipeline.LogLevel(localToAppendBlob.transfer.MinimumLogLevel)
 			},
 		},
 	})
 
-	u, _ := url.Parse(transfer.Destination)
+	u, _ := url.Parse(localToAppendBlob.transfer.Destination)
 	appendBlobUrl := azblob.NewAppendBlobURL(*u, p)
 
 	// step 2: map in the file to upload before appending blobs
-	memoryMappedFile,_ := executionEngineHelper{}.openAndMemoryMapFile(transfer.Source)
+	localToAppendBlob.memoryMappedFile,_ = executionEngineHelper{}.openAndMemoryMapFile(localToAppendBlob.transfer.Source)
 
 
 	// step 3: Scheduling append blob in Chunk channel to perform append blob
 	chunkChannel <- ChunkMsg{doTransfer:localToAppendBlob.generateUploadFunc(
-		transfer,
+		localToAppendBlob.transfer,
 		appendBlobUrl,
-		memoryMappedFile),
+		localToAppendBlob.memoryMappedFile),
 	}
 }
 
-func (localToAppendBlob localToAppendBlob) generateUploadFunc(t TransferMsg, appendBlobURL azblob.AppendBlobURL, memoryMappedFile mmap.MMap) (chunkFunc){
+func (localToAppendBlob localToAppendBlob) generateUploadFunc(t *TransferMsg, appendBlobURL azblob.AppendBlobURL, memoryMappedFile mmap.MMap) (chunkFunc){
 	return func(workerId int) {
 		if t.TransferContext.Err() != nil{
 			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up transfer by worked %d", workerId))
@@ -84,7 +96,7 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t TransferMsg, app
 				}
 
 				// requesting (startIndex + adjustedChunkSize) bytes from pacer to be send to service.
-				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex + adjustedChunkSize]), pc)
+				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex + adjustedChunkSize]), localToAppendBlob.pacer)
 
 				_, err := appendBlobURL.AppendBlock(t.TransferContext, body, azblob.BlobAccessConditions{})
 				if err != nil {
