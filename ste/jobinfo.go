@@ -85,6 +85,7 @@ type JobInfo struct {
 	logger            *log.Logger
 	numberOfPartsDone uint32
 	logFile           *os.File
+	JobThroughPut *ThroughputState
 }
 
 // Returns the combination of PartNumber and respective JobPartPlanInfo reference.
@@ -177,5 +178,9 @@ func NewJobInfo(jobId common.JobID, jobsInfo *JobsInfo) *JobInfo {
 		jobsInfo:jobsInfo,
 		jobPartsMap: newSyncJobInfoMap(),
 		logger:nil,
+		JobThroughPut:&ThroughputState{lastCheckedTime:0,
+										lastCheckedBytes:0,
+										currentBytes:0,
+										},
 	}
 }

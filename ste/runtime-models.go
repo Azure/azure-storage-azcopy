@@ -97,39 +97,39 @@ type xfer interface {
 	runPrologue(chunkChannel chan<- ChunkMsg)
 }
 
-// throughputState struct holds the attribute to monitor the through of an existing JobOrder
-type throughputState struct {
+// ThroughputState struct holds the attribute to monitor the through of an existing JobOrder
+type ThroughputState struct {
 	lastCheckedTime  int64
 	lastCheckedBytes int64
 	currentBytes     int64
 }
 
-// getLastCheckedTime api returns the lastCheckedTime of throughputState instance in thread-safe manner
-func (t *throughputState) getLastCheckedTime() int64 {
+// getLastCheckedTime api returns the lastCheckedTime of ThroughputState instance in thread-safe manner
+func (t *ThroughputState) getLastCheckedTime() int64 {
 	return atomic.LoadInt64(&t.lastCheckedTime)
 }
 
-// updateLastCheckTime api updates the lastCheckedTime of throughputState instance in thread-safe manner
-func (t *throughputState) updateLastCheckTime(currentTime int64) {
+// updateLastCheckTime api updates the lastCheckedTime of ThroughputState instance in thread-safe manner
+func (t *ThroughputState) updateLastCheckTime(currentTime int64) {
 	atomic.StoreInt64(&t.lastCheckedTime, currentTime)
 }
 
-// getLastCheckedBytes api returns the lastCheckedBytes of throughputState instance in thread-safe manner
-func (t *throughputState) getLastCheckedBytes() int64 {
+// getLastCheckedBytes api returns the lastCheckedBytes of ThroughputState instance in thread-safe manner
+func (t *ThroughputState) getLastCheckedBytes() int64 {
 	return atomic.LoadInt64(&t.lastCheckedBytes)
 }
 
-// updateLastCheckedBytes api updates the lastCheckedBytes of throughputState instance in thread-safe manner
-func (t *throughputState) updateLastCheckedBytes(bytes int64) {
+// updateLastCheckedBytes api updates the lastCheckedBytes of ThroughputState instance in thread-safe manner
+func (t *ThroughputState) updateLastCheckedBytes(bytes int64) {
 	atomic.StoreInt64(&t.lastCheckedBytes, bytes)
 }
 
-// getCurrentBytes api returns the currentBytes of throughputState instance in thread-safe manner
-func (t *throughputState) getCurrentBytes() int64 {
+// getCurrentBytes api returns the currentBytes of ThroughputState instance in thread-safe manner
+func (t *ThroughputState) getCurrentBytes() int64 {
 	return atomic.LoadInt64(&t.currentBytes)
 }
 
-// updateCurrentBytes api adds the value in currentBytes of throughputState instance in thread-safe manner
-func (t *throughputState) updateCurrentBytes(bytes int64) int64 {
+// updateCurrentBytes api adds the value in currentBytes of ThroughputState instance in thread-safe manner
+func (t *ThroughputState) updateCurrentBytes(bytes int64) int64 {
 	return atomic.AddInt64(&t.currentBytes, bytes)
 }

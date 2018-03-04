@@ -14,7 +14,7 @@ type localToAppendBlob struct {
 
 	transfer         *TransferMsg
 	pacer            *pacer
-	blobURL          azblob.BlobURL
+	appendBlobURL          azblob.AppendBlobURL
 	memoryMappedFile mmap.MMap
 	blockIds         []string
 }
@@ -47,27 +47,26 @@ func (localToAppendBlob *localToAppendBlob) runPrologue(chunkChannel chan<- Chun
 	})
 
 	u, _ := url.Parse(localToAppendBlob.transfer.Destination)
-	appendBlobUrl := azblob.NewAppendBlobURL(*u, p)
+	localToAppendBlob.appendBlobURL = azblob.NewAppendBlobURL(*u, p)
 
 	// step 2: map in the file to upload before appending blobs
 	localToAppendBlob.memoryMappedFile,_ = executionEngineHelper{}.openAndMemoryMapFile(localToAppendBlob.transfer.Source)
 
 
 	// step 3: Scheduling append blob in Chunk channel to perform append blob
-	chunkChannel <- ChunkMsg{doTransfer:localToAppendBlob.generateUploadFunc(
-		localToAppendBlob.transfer,
-		appendBlobUrl,
-		localToAppendBlob.memoryMappedFile),
+	chunkChannel <- ChunkMsg{doTransfer:localToAppendBlob.generateUploadFunc(),
 	}
 }
 
-func (localToAppendBlob localToAppendBlob) generateUploadFunc(t *TransferMsg, appendBlobURL azblob.AppendBlobURL, memoryMappedFile mmap.MMap) (chunkFunc){
+func (localToAppendBlob localToAppendBlob) generateUploadFunc() (chunkFunc){
 	return func(workerId int) {
+		t := localToAppendBlob.transfer
 		if t.TransferContext.Err() != nil{
 			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up transfer by worked %d", workerId))
 			t.TransferDone()
 		}else{
-			blobHttpHeader, metaData := t.blobHttpHeaderAndMetadata(memoryMappedFile)
+			appendBlobURL := localToAppendBlob.appendBlobURL
+			blobHttpHeader, metaData := t.blobHttpHeaderAndMetadata(localToAppendBlob.memoryMappedFile)
 			_, err := appendBlobURL.Create(t.TransferContext, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 			if err != nil {
 				if t.TransferContext.Err() != nil{
@@ -77,7 +76,7 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t *TransferMsg, ap
 					t.TransferStatus(common.TransferFailed)
 				}
 				t.TransferDone()
-				err = memoryMappedFile.Unmap()
+				err = localToAppendBlob.memoryMappedFile.Unmap()
 				if err != nil{
 					t.Log(common.LogError, " has error mapping the memory map file")
 				}
@@ -96,7 +95,7 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t *TransferMsg, ap
 				}
 
 				// requesting (startIndex + adjustedChunkSize) bytes from pacer to be send to service.
-				body := newRequestBodyPacer(bytes.NewReader(memoryMappedFile[startIndex:startIndex + adjustedChunkSize]), localToAppendBlob.pacer)
+				body := newRequestBodyPacer(bytes.NewReader(localToAppendBlob.memoryMappedFile[startIndex:startIndex + adjustedChunkSize]), localToAppendBlob.pacer)
 
 				_, err := appendBlobURL.AppendBlock(t.TransferContext, body, azblob.BlobAccessConditions{})
 				if err != nil {
@@ -115,7 +114,7 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t *TransferMsg, ap
 					}
 					// updating number of the transfers done.
 					t.TransferDone()
-					err = memoryMappedFile.Unmap()
+					err = localToAppendBlob.memoryMappedFile.Unmap()
 					if err != nil{
 						t.Log(common.LogError, " has error mapping the memory map file")
 					}
@@ -125,7 +124,7 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc(t *TransferMsg, ap
 			t.Log(common.LogInfo, "successfully uploaded ")
 			t.TransferDone()
 			t.TransferStatus(common.TransferComplete)
-			err = memoryMappedFile.Unmap()
+			err = localToAppendBlob.memoryMappedFile.Unmap()
 			if err != nil{
 				t.Log(common.LogError, " has error mapping the memory map file")
 			}

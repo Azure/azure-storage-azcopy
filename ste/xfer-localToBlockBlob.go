@@ -164,8 +164,8 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 				putBlockResponse.Response().Body.Close()
 			}
 
+			localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
 			// TODO this should be 1 counter per job
-			realTimeThroughputCounter.updateCurrentBytes(adjustedChunkSize)
 
 			// step 4: check if this is the last chunk
 			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
@@ -234,8 +234,7 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 	// updating number of transfers done for job part order
 	localToBlockBlob.transfer.TransferDone()
 
-	// TODO this should be 1 counter per job
-	realTimeThroughputCounter.updateCurrentBytes(int64(localToBlockBlob.transfer.SourceSize))
+	localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(int64(localToBlockBlob.transfer.SourceSize))
 
 	// closing the put blob response body
 	if putBlobResp != nil {

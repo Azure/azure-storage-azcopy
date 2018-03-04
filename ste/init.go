@@ -30,13 +30,11 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync/atomic"
 	"time"
 )
 
 var emptyJobId = common.JobID{}
 var steContext = context.Background()
-var realTimeThroughputCounter = &throughputState{lastCheckedBytes: 0, currentBytes: 0, lastCheckedTime: int64(time.Now().Nanosecond())}
 
 // scheduleTransfers schedules the transfer of a JobPart order
 // It does not schedules those transfers which are either completed or failed
@@ -374,16 +372,16 @@ func getJobSummary(jobId common.JobID, jobsInfo *JobsInfo, resp http.ResponseWri
 		jobSummaryResponse.PercentageProgress = ((jobSummaryResponse.TotalNumberofTransferCompleted + jobSummaryResponse.TotalNumberofFailedTransfer) * 100) / jobSummaryResponse.TotalNumberOfTransfers
 
 		// get the throughput counts
-		numOfBytesTransferredSinceLastCheckpoint := atomic.LoadInt64(&realTimeThroughputCounter.currentBytes) - realTimeThroughputCounter.lastCheckedBytes
+		numOfBytesTransferredSinceLastCheckpoint := jobInfo.JobThroughPut.getCurrentBytes() - jobInfo.JobThroughPut.getLastCheckedBytes()
 		if numOfBytesTransferredSinceLastCheckpoint == 0 {
 			jobSummaryResponse.ThroughputInBytesPerSeconds = 0
 		} else {
-			lastCheckedTime := time.Unix(0, realTimeThroughputCounter.getLastCheckedTime())
+			lastCheckedTime := time.Unix(0, jobInfo.JobThroughPut.getLastCheckedTime())
 			jobSummaryResponse.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) / time.Since(lastCheckedTime).Seconds()
 		}
 		// update the throughput state
-		realTimeThroughputCounter.updateLastCheckedBytes(realTimeThroughputCounter.getCurrentBytes())
-		realTimeThroughputCounter.updateLastCheckTime(int64(time.Now().Nanosecond()))
+		jobInfo.JobThroughPut.updateLastCheckedBytes(jobInfo.JobThroughPut.getCurrentBytes())
+		jobInfo.JobThroughPut.updateLastCheckTime(int64(time.Now().Nanosecond()))
 	}
 
 	// marshalling the ListJobSummaryResponse struct to send back in response.

@@ -140,7 +140,7 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 			}
 
 			// TODO this should be 1 counter per job
-			realTimeThroughputCounter.updateCurrentBytes(adjustedChunkSize)
+			blobToLocal.transfer.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
 
 			// step 3: check if this is the last chunk
 			if blobToLocal.transfer.ChunksDone() == totalNumOfChunks {
