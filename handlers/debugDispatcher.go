@@ -9,13 +9,12 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"time"
 )
 
 type coordinatorScheduleFunc func(*common.CopyJobPartOrder)
 
 func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
-	//time.Sleep(time.Second * 2)
-
 	return func(jobPartOrder *common.CopyJobPartOrder) {
 		order, _ := json.MarshalIndent(jobPartOrder, "", "  ")
 		sendJobPartOrderToSTE(order)
@@ -24,10 +23,19 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 
 func sendJobPartOrderToSTE(payload []byte) {
 	url := "http://localhost:1337"
+	payloadContentType := "application/json; charset=utf-8"
+	payloadBuffer := bytes.NewBuffer(payload)
 
-	res, err := http.Post(url, "application/json; charset=utf-8", bytes.NewBuffer(payload))
+	res, err := http.Post(url, payloadContentType, payloadBuffer)
 	if err != nil {
-		panic(err)
+		// try a second time after 2 second, in case the transfer engine has not finished booting up
+		// TODO this should be smarter after refactoring
+		time.Sleep(2 * time.Second)
+		res, err = http.Post(url, payloadContentType, payloadBuffer)
+
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	defer res.Body.Close()
