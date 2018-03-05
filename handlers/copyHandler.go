@@ -22,9 +22,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	tm "github.com/buger/goterm"
 	"io/ioutil"
 	"log"
 	"net/url"
@@ -33,8 +35,6 @@ import (
 	"path"
 	"strings"
 	"time"
-	tm "github.com/buger/goterm"
-	"encoding/json"
 )
 
 const (
@@ -51,16 +51,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	jobId := common.JobID(common.NewUUID())
 	jobStarted := true
 
-	if jobPartOrder.OptionalAttributes.BlobType == common.InvalidBlob{
+	if jobPartOrder.OptionalAttributes.BlobType == common.InvalidBlob {
 		fmt.Println("invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
 		return
 	}
-	// marshaling the JobID to send to backend
-	//marshaledUUID, err := json.MarshalIndent(uuid, "", "")
-	//if err != nil {
-	//	fmt.Println("There is an error while marshalling the generated JobID. Please retry")
-	//	return ""
-	//}
 	jobPartOrder.ID = jobId
 
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
@@ -68,12 +62,12 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
 		jobStarted = HandleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder)
 	}
-	if !jobStarted{
-		fmt.Print("Job with id", jobId, "was not abe to start. Please try again")
+	if !jobStarted {
+		fmt.Println("Job with id", jobId, "was not able to start. Please try again.")
 		return
 	}
 
-	fmt.Print("Job with id", jobId, "has started.")
+	fmt.Println("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
 		return
 	}
@@ -102,14 +96,11 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
-	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
-	//	time.Sleep(2 * time.Second)
-	//}
 	return
 }
 
 func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
-	jobPartOrderToFill *common.CopyJobPartOrderRequest) (bool){
+	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
 
 	fmt.Println("HandleUploadFromLocalToWastore startTime ", time.Now())
 	// set the source and destination type
@@ -168,7 +159,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 					jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 					partNumber += 1
 					jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-					if !jobStarted{
+					if !jobStarted {
 						fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 						return jobStarted
 					}
@@ -186,7 +177,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 		jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 		jobPartOrderToFill.IsFinalPart = true
 		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-		if !jobStarted{
+		if !jobStarted {
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
 		}
@@ -208,7 +199,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 		jobPartOrderToFill.PartNum = 0
 		jobPartOrderToFill.IsFinalPart = true
 		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-		if !jobStarted{
+		if !jobStarted {
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
 		}
@@ -217,7 +208,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 }
 
 func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAndFlags,
-											jobPartOrderToFill *common.CopyJobPartOrderRequest) (bool) {
+	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
@@ -275,7 +266,7 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 		jobPartOrderToFill.PartNum = 0
 
 		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-		if !jobStarted{
+		if !jobStarted {
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
 		}
@@ -312,7 +303,7 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 				jobPartOrderToFill.IsFinalPart = true
 			}
 			jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-			if !jobStarted{
+			if !jobStarted {
 				fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 				return jobStarted
 			}
@@ -325,7 +316,7 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 
 func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrderRequest) {
 	optionalAttributes := common.BlobTransferAttributes{
-		BlobType:				common.BlobTypeStringToBlobType(commandLineInput.BlobType),
+		BlobType:                 common.BlobTypeStringToBlobType(commandLineInput.BlobType),
 		BlockSizeinBytes:         commandLineInput.BlockSize,
 		ContentType:              commandLineInput.ContentType,
 		ContentEncoding:          commandLineInput.ContentEncoding,
@@ -339,19 +330,22 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
 }
 
-func sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest) (bool, string){
+func sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest) (bool, string) {
 
-	for index := 0; index < 3; index++{
-		resp , err := common.Rpc("copy", jobOrder)
-		if err == nil{
+	for tryCount := 0; tryCount < 3; tryCount++ {
+		resp, err := common.Rpc("copy", jobOrder)
+		if err == nil {
 			return parseCopyJobPartResponse(resp)
+		} else {
+			// in case the transfer engine has not finished booting up, we must wait
+			time.Sleep(time.Duration(tryCount) * time.Second)
 		}
 	}
 	return false, ""
 }
 
 func fetchJobStatus(jobId common.JobID) string {
-	lsCommand := common.ListRequest{JobId: jobId, }
+	lsCommand := common.ListRequest{JobId: jobId}
 
 	responseBytes, _ := common.Rpc("listJobProgressSummary", lsCommand)
 
@@ -388,7 +382,7 @@ func fetchJobStatus(jobId common.JobID) string {
 func parseCopyJobPartResponse(data []byte) (bool, string) {
 	var copyJobPartResponse common.CopyJobPartOrderResponse
 	err := json.Unmarshal(data, &copyJobPartResponse)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 	return copyJobPartResponse.JobStarted, copyJobPartResponse.ErrorMsg

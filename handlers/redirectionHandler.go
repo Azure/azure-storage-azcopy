@@ -22,6 +22,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"io"
@@ -29,7 +30,6 @@ import (
 	"net/url"
 	"os"
 	"time"
-	"fmt"
 )
 
 // upload related
@@ -43,7 +43,6 @@ const DownloadMaxTries = 5
 const DownloadTryTimeout = time.Minute * 10
 const DownloadRetryDelay = time.Second * 1
 const DownloadMaxRetryDelay = time.Second * 3
-
 
 func HandleRedirectionCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	// check the Stdin to see if we are uploading or downloading

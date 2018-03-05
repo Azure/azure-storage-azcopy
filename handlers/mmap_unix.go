@@ -23,8 +23,8 @@
 package handlers
 
 import (
-"os"
-"syscall"
+	"os"
+	"syscall"
 )
 
 type MMap []byte

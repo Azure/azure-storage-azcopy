@@ -21,17 +21,17 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"log"
 	"os"
 	"sync"
-	"errors"
 )
 
 type syncJobsInfoMap struct {
-	lock   sync.RWMutex
-	m      map[common.JobID]*JobInfo
+	lock sync.RWMutex
+	m    map[common.JobID]*JobInfo
 }
 
 func (sm *syncJobsInfoMap) Set(key common.JobID, value *JobInfo) {
@@ -89,7 +89,7 @@ func (jMap *JobsInfo) JobInfo(jobId common.JobID) *JobInfo {
 func (jMap *JobsInfo) JobIds() []common.JobID {
 
 	var existingJobs []common.JobID
-	jMap.internalMap.Iterate(true, func(k common.JobID, v *JobInfo){
+	jMap.internalMap.Iterate(true, func(k common.JobID, v *JobInfo) {
 		existingJobs = append(existingJobs, k)
 	})
 	return existingJobs
@@ -161,5 +161,3 @@ func NewJobsInfo() *JobsInfo {
 		internalMap: newSyncJobsInfoMap(),
 	}
 }
-
-

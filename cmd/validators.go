@@ -26,7 +26,7 @@ import (
 	"os"
 )
 
-type validator struct {}
+type validator struct{}
 
 func (validator validator) determineLocationType(stringToParse string) common.LocationType {
 	if validator.isLocalPath(stringToParse) {

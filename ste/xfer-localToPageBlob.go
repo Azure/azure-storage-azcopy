@@ -1,13 +1,13 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"net/url"
+	"bytes"
+	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"fmt"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/edsrzf/mmap-go"
-	"bytes"
+	"net/url"
 	"os"
 )
 
@@ -49,26 +49,24 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 	u, _ := url.Parse(localToPageBlob.transfer.Destination)
 	localToPageBlob.pageBlobUrl = azblob.NewPageBlobURL(*u, p)
 
-
-
 	// step 2: map in the file to upload before appending blobs
 	localToPageBlob.memoryMappedFile, file = executionEngineHelper{}.openAndMemoryMapFile(localToPageBlob.transfer.Source)
 	//blobHttpHeaders, metaData := transfer.blobHttpHeaderAndMetadata(memoryMappedFile)
 
 	// step 3: Create Page Blob of the source size
 	_, err := localToPageBlob.pageBlobUrl.Create(localToPageBlob.transfer.TransferContext, int64(localToPageBlob.transfer.SourceSize),
-												0, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+		0, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 	if err != nil {
 		localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("failed since PageCreate failed due to %s", err.Error()))
 		localToPageBlob.transfer.TransferCancelFunc()
 		localToPageBlob.transfer.TransferDone()
 		localToPageBlob.transfer.TransferStatus(common.TransferFailed)
 		err := localToPageBlob.memoryMappedFile.Unmap()
-		if err != nil{
+		if err != nil {
 			localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
 		}
 		err = file.Close()
-		if err != nil{
+		if err != nil {
 			localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
 		}
 		return
@@ -83,7 +81,7 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 		adjustedPageSize := pageSize
 
 		// compute actual size of the chunk
-		if startIndex + pageSize > blobSize {
+		if startIndex+pageSize > blobSize {
 			adjustedPageSize = blobSize - startIndex
 		}
 
@@ -98,9 +96,9 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 	}
 }
 
-func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32, startPage int64, pageSize int64, file *os.File) (chunkFunc){
+func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32, startPage int64, pageSize int64, file *os.File) chunkFunc {
 	return func(workerId int) {
-		t  := localToPageBlob.transfer
+		t := localToPageBlob.transfer
 		if t.TransferContext.Err() != nil {
 			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up page %d", startPage))
 			if t.ChunksDone() == numberOfPages {
@@ -108,55 +106,55 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 					fmt.Sprintf("has worker %d which is finalizing cancellation of transfer", workerId))
 				t.TransferDone()
 				err := localToPageBlob.memoryMappedFile.Unmap()
-				if err != nil{
+				if err != nil {
 					t.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
 				}
 				err = file.Close()
-				if err != nil{
+				if err != nil {
 					t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
 				}
 			}
-		}else{
-			body := newRequestBodyPacer(bytes.NewReader(localToPageBlob.memoryMappedFile[startPage:startPage + pageSize]), localToPageBlob.pacer)
+		} else {
+			body := newRequestBodyPacer(bytes.NewReader(localToPageBlob.memoryMappedFile[startPage:startPage+pageSize]), localToPageBlob.pacer)
 
-			_, err := localToPageBlob.pageBlobUrl.PutPages(t.TransferContext, azblob.PageRange{Start: int32(startPage), End: int32(startPage + pageSize-1)},
+			_, err := localToPageBlob.pageBlobUrl.PutPages(t.TransferContext, azblob.PageRange{Start: int32(startPage), End: int32(startPage + pageSize - 1)},
 				body, azblob.BlobAccessConditions{})
 			if err != nil {
-				if t.TransferContext.Err() != nil{
+				if t.TransferContext.Err() != nil {
 					t.Log(common.LogError,
-						fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because transfer was cancelled", workerId, startPage, startPage + pageSize))
-				}else{
+						fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because transfer was cancelled", workerId, startPage, startPage+pageSize))
+				} else {
 					t.Log(common.LogError,
-						fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage + pageSize, err.Error()))
+						fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage+pageSize, err.Error()))
 					t.TransferStatus(common.TransferFailed)
 				}
-				if t.ChunksDone() == numberOfPages{
+				if t.ChunksDone() == numberOfPages {
 					t.TransferDone()
 					err := localToPageBlob.memoryMappedFile.Unmap()
-					if err != nil{
+					if err != nil {
 						t.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
 					}
 					err = file.Close()
-					if err != nil{
+					if err != nil {
 						t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
 					}
 					return
 				}
 			}
-			t.Log(common.LogInfo, fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage + pageSize))
+			t.Log(common.LogInfo, fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
 
 			//updating the through put counter of the Job
 			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(t.SourceSize))
-			if t.ChunksDone() == numberOfPages{
+			if t.ChunksDone() == numberOfPages {
 				t.TransferDone()
 				t.TransferStatus(common.TransferComplete)
 				t.Log(common.LogInfo, "successfully completed")
 				err := localToPageBlob.memoryMappedFile.Unmap()
-				if err != nil{
+				if err != nil {
 					t.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
 				}
 				err = file.Close()
-				if err != nil{
+				if err != nil {
 					t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
 				}
 			}
