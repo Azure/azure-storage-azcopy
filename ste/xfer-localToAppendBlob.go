@@ -122,6 +122,9 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() (chunkFunc){
 				}
 			}
 			t.Log(common.LogInfo, "successfully uploaded ")
+			//updating the through put counter of the Job
+			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(t.SourceSize))
+
 			t.TransferDone()
 			t.TransferStatus(common.TransferComplete)
 			err = localToAppendBlob.memoryMappedFile.Unmap()

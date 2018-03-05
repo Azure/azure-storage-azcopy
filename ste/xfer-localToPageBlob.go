@@ -144,6 +144,9 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 				}
 			}
 			t.Log(common.LogInfo, fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage + pageSize))
+
+			//updating the through put counter of the Job
+			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(t.SourceSize))
 			if t.ChunksDone() == numberOfPages{
 				t.TransferDone()
 				t.TransferStatus(common.TransferComplete)
