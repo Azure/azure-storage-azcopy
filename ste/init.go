@@ -376,12 +376,11 @@ func getJobSummary(jobId common.JobID, jobsInfo *JobsInfo, resp http.ResponseWri
 		if numOfBytesTransferredSinceLastCheckpoint == 0 {
 			jobSummaryResponse.ThroughputInBytesPerSeconds = 0
 		} else {
-			lastCheckedTime := time.Unix(0, jobInfo.JobThroughPut.getLastCheckedTime())
-			jobSummaryResponse.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) / time.Since(lastCheckedTime).Seconds()
+			jobSummaryResponse.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) / time.Since(jobInfo.JobThroughPut.getLastCheckedTime()).Seconds()
 		}
 		// update the throughput state
 		jobInfo.JobThroughPut.updateLastCheckedBytes(jobInfo.JobThroughPut.getCurrentBytes())
-		jobInfo.JobThroughPut.updateLastCheckTime(int64(time.Now().Nanosecond()))
+		jobInfo.JobThroughPut.updateLastCheckTime(time.Now())
 	}
 
 	// marshalling the ListJobSummaryResponse struct to send back in response.

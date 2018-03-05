@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"os"
+	"time"
 )
 
 // TransfersInfo represents the runtime information of a transfer of a JobPartOrder
@@ -99,19 +100,19 @@ type xfer interface {
 
 // ThroughputState struct holds the attribute to monitor the through of an existing JobOrder
 type ThroughputState struct {
-	lastCheckedTime  int64
+	lastCheckedTime  time.Time
 	lastCheckedBytes int64
 	currentBytes     int64
 }
 
 // getLastCheckedTime api returns the lastCheckedTime of ThroughputState instance in thread-safe manner
-func (t *ThroughputState) getLastCheckedTime() int64 {
-	return atomic.LoadInt64(&t.lastCheckedTime)
+func (t *ThroughputState) getLastCheckedTime() time.Time {
+	return t.lastCheckedTime
 }
 
 // updateLastCheckTime api updates the lastCheckedTime of ThroughputState instance in thread-safe manner
-func (t *ThroughputState) updateLastCheckTime(currentTime int64) {
-	atomic.StoreInt64(&t.lastCheckedTime, currentTime)
+func (t *ThroughputState) updateLastCheckTime(currentTime time.Time) {
+	t.lastCheckedTime = currentTime
 }
 
 // getLastCheckedBytes api returns the lastCheckedBytes of ThroughputState instance in thread-safe manner
