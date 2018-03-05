@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type syncJobInfoMap struct {
@@ -178,7 +179,7 @@ func NewJobInfo(jobId common.JobID, jobsInfo *JobsInfo) *JobInfo {
 		jobsInfo:jobsInfo,
 		jobPartsMap: newSyncJobInfoMap(),
 		logger:nil,
-		JobThroughPut:&ThroughputState{lastCheckedTime:0,
+		JobThroughPut:&ThroughputState{lastCheckedTime:time.Time{},
 										lastCheckedBytes:0,
 										currentBytes:0,
 										},
