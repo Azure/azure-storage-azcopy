@@ -167,7 +167,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 					jobPartOrderToFill.Transfers = Transfers //TODO make truth, more defensive, consider channel
 					jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 					partNumber += 1
-					jobStarted, errorMsg := parseCopyJobPartResponse(common.Rpc("copy", jobPartOrderToFill))
+					jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
 					if !jobStarted{
 						fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 						return jobStarted
@@ -185,7 +185,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 		}
 		jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
 		jobPartOrderToFill.IsFinalPart = true
-		jobStarted, errorMsg := parseCopyJobPartResponse(common.Rpc("copy", jobPartOrderToFill))
+		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
 		if !jobStarted{
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
@@ -207,7 +207,7 @@ func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.PartNum = 0
 		jobPartOrderToFill.IsFinalPart = true
-		jobStarted, errorMsg := parseCopyJobPartResponse(common.Rpc("copy", jobPartOrderToFill))
+		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
 		if !jobStarted{
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
@@ -273,7 +273,8 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
 		jobPartOrderToFill.IsFinalPart = true
 		jobPartOrderToFill.PartNum = 0
-		jobStarted, errorMsg := parseCopyJobPartResponse(common.Rpc("copy", jobPartOrderToFill))
+
+		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
 		if !jobStarted{
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
@@ -310,7 +311,7 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 			if !marker.NotDone() { // if there is no more segment
 				jobPartOrderToFill.IsFinalPart = true
 			}
-			jobStarted, errorMsg := parseCopyJobPartResponse(common.Rpc("copy", jobPartOrderToFill))
+			jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
 			if !jobStarted{
 				fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 				return jobStarted
@@ -338,11 +339,21 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
 }
 
+func sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest) (bool, string){
+
+	for index := 0; index < 3; index++{
+		resp , err := common.Rpc("copy", jobOrder)
+		if err != nil{
+			return parseCopyJobPartResponse(resp)
+		}
+	}
+	return false, ""
+}
 
 func fetchJobStatus(jobId common.JobID) string {
 	lsCommand := common.ListRequest{JobId: jobId, }
 
-	responseBytes := common.Rpc("listJobProgressSummary", lsCommand)
+	responseBytes, _ := common.Rpc("listJobProgressSummary", lsCommand)
 
 	if len(responseBytes) == 0 {
 		return ""

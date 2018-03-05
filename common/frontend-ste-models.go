@@ -33,7 +33,7 @@ import (
 
 type JobID UUID
 
-var Rpc func(cmd string, request interface{}) []byte
+var Rpc func(cmd string, request interface{}) ([]byte, error)
 
 var EmptyJobId JobID = JobID{}
 
@@ -351,11 +351,11 @@ func NewHttpClient(url string) (*HTTPClient) {
 }
 
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
-func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte){
+func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte, error){
 	payload, err := json.Marshal(v)
 	if err != nil{
 		fmt.Println(fmt.Sprintf("error marshalling the request payload for command type %d", commandType))
-		return []byte{}
+		return []byte{}, err
 	}
 
 	req, err := http.NewRequest("POST", httpClient.url, bytes.NewBuffer(payload))
@@ -367,16 +367,16 @@ func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte){
 	// panic in this case
 	resp, err := httpClient.client.Do(req)
 	if err != nil{
-		panic(fmt.Errorf("error sending the http request to url %s. Failed with error %s", httpClient.url, err.Error()))
+		return []byte{}, err
 	}
 	// reading the entire response body and closing the response body.
 	body, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		fmt.Println("error reading response for the request")
-		return []byte{}
+		return []byte{}, err
 	}
-	return body
+	return body, nil
 }
 
 const DefaultBlockSize = 100 * 1024 * 1024

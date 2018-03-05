@@ -41,11 +41,11 @@ func HandleListCommand(commandLineInput common.ListRequest) {
 	var response []byte
 
 	if commandLineInput.JobId == common.EmptyJobId {
-		response = common.Rpc("listJobs", commandLineInput)
+		response, _ = common.Rpc("listJobs", commandLineInput)
 	}else if commandLineInput.OfStatus == "" {
-		response = common.Rpc("listJobProgressSummary", commandLineInput)
+		response, _ = common.Rpc("listJobProgressSummary", commandLineInput)
 	}else{
-		response = common.Rpc("listJobTransfers", commandLineInput)
+		response, _ = common.Rpc("listJobTransfers", commandLineInput)
 	}
 
 	// list Order command requested the list of existing jobs

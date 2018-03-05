@@ -17,7 +17,7 @@ func HandleCancelCommand(jobIdString string) {
 		return
 	}
 
-	responseBytes := common.Rpc("cancel", jobId)
+	responseBytes, _ := common.Rpc("cancel", jobId)
 
 	var cancelJobResponse common.CancelPauseResumeResponse
 	err = json.Unmarshal(responseBytes, &cancelJobResponse)
@@ -43,7 +43,7 @@ func HandlePauseCommand(jobIdString string) {
 		return
 	}
 
-	responseBytes := common.Rpc("pause", jobId)
+	responseBytes, _ := common.Rpc("pause", jobId)
 
 	var pauseJobResponse common.CancelPauseResumeResponse
 	err = json.Unmarshal(responseBytes, &pauseJobResponse)
@@ -68,7 +68,7 @@ func HandleResumeCommand(jobIdString string) {
 		return
 	}
 
-	responseBytes := common.Rpc("resume", jobId)
+	responseBytes, _ := common.Rpc("resume", jobId)
 	var resumeJobResponse common.CancelPauseResumeResponse
 
 	err = json.Unmarshal(responseBytes, &resumeJobResponse)
