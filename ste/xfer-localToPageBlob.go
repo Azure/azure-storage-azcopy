@@ -18,12 +18,12 @@ type localToPageBlob struct {
 	memoryMappedFile mmap.MMap
 }
 
-// return a new localToBlockBlob struct targeting a specific transfer
+// return a new localToPageBlob struct targeting a specific transfer
 func newLocalToPageBlob(transfer *TransferMsg, pacer *pacer) xfer {
 	return &localToPageBlob{transfer: transfer, pacer: pacer}
 }
 
-// this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
+// this function performs the setup for each transfer and schedules the corresponding page requests into the chunkChannel
 func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg) {
 
 	var file *os.File
@@ -52,11 +52,10 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 
 
 	// step 2: map in the file to upload before appending blobs
-
 	localToPageBlob.memoryMappedFile, file = executionEngineHelper{}.openAndMemoryMapFile(localToPageBlob.transfer.Source)
 	//blobHttpHeaders, metaData := transfer.blobHttpHeaderAndMetadata(memoryMappedFile)
 
-	fmt.Println("transfer source size ", localToPageBlob.transfer.SourceSize)
+	// step 3: Create Page Blob of the source size
 	_, err := localToPageBlob.pageBlobUrl.Create(localToPageBlob.transfer.TransferContext, int64(localToPageBlob.transfer.SourceSize),
 												0, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 	if err != nil {
@@ -79,7 +78,7 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 
 	pageSize := int64(localToPageBlob.transfer.BlockSize)
 
-	// step 3: Scheduling page blob in Chunk channel to perform Put pages
+	// step 4: Scheduling page range update to the Page Blob created in Step 3
 	for startIndex := int64(0); startIndex < blobSize; startIndex += pageSize {
 		adjustedPageSize := pageSize
 
