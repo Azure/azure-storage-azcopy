@@ -25,6 +25,7 @@ package main
 import (
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"os"
 	"os/exec"
 	"strconv"
