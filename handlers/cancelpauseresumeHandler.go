@@ -1,9 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"encoding/json"
 )
 
 // handles the cancel command
@@ -21,7 +21,7 @@ func HandleCancelCommand(jobIdString string) {
 
 	var cancelJobResponse common.CancelPauseResumeResponse
 	err = json.Unmarshal(responseBytes, &cancelJobResponse)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 	if !cancelJobResponse.CancelledPauseResumed {
@@ -47,7 +47,7 @@ func HandlePauseCommand(jobIdString string) {
 
 	var pauseJobResponse common.CancelPauseResumeResponse
 	err = json.Unmarshal(responseBytes, &pauseJobResponse)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 	if !pauseJobResponse.CancelledPauseResumed {
@@ -72,10 +72,10 @@ func HandleResumeCommand(jobIdString string) {
 	var resumeJobResponse common.CancelPauseResumeResponse
 
 	err = json.Unmarshal(responseBytes, &resumeJobResponse)
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
-	if !resumeJobResponse.CancelledPauseResumed{
+	if !resumeJobResponse.CancelledPauseResumed {
 		fmt.Println(fmt.Sprintf("job cannot be resumed because %s", resumeJobResponse.ErrorMsg))
 		return
 	}

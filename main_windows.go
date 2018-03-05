@@ -22,12 +22,12 @@ package main
 
 import (
 	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
 	"os/exec"
 	"strconv"
 	"syscall"
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 func main() {

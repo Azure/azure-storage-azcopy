@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"log"
 	"os"
 	"reflect"
 	"time"
 	"unsafe"
-	"github.com/Azure/azure-storage-azcopy/handlers"
-	"log"
 )
 
 var currFileDirectory string = "."
@@ -43,10 +43,10 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder
-func (job *JobPartPlanInfo) shutDownHandler(log *log.Logger)  {
+func (job *JobPartPlanInfo) shutDownHandler(log *log.Logger) {
 	job.memMap.Unmap()
 	err := job.file.Close()
-	if err != nil{
+	if err != nil {
 		log.Println("error closing the job part file")
 	}
 }
@@ -114,8 +114,8 @@ func memoryMapTheJobFile(filename string) (*os.File, handlers.MMap) {
 	// defer file closing to user the memory map byte slice later
 	defer f.Close()
 
-	fileInfo , err := f.Stat()
-	if err != nil{
+	fileInfo, err := f.Stat()
+	if err != nil {
 		panic(fmt.Errorf("error getting file info of file %s", filename))
 	}
 	//mMap, err := mmap.Map(f, mmap.RDWR, 0)
@@ -128,7 +128,7 @@ func memoryMapTheJobFile(filename string) (*os.File, handlers.MMap) {
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
-func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) (string) {
+func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data JobPartPlanBlobData, jobsInfoMap *JobsInfo) string {
 	var currentEndOffsetOfFile uint64 = 0
 	/*
 	*       Following Steps are executed:
@@ -282,16 +282,16 @@ func dataToDestinationBlobData(data common.BlobTransferAttributes) (JobPartPlanB
 
 	// if block size from the front-end is set to 0, block size is set to default block size
 	if blockSize == 0 {
-		if data.BlobType == common.PageBlob{
+		if data.BlobType == common.PageBlob {
 			blockSize = common.DefaultPageBlobSize
-		}else if data.BlobType == common.AppendBlob{
+		} else if data.BlobType == common.AppendBlob {
 			blockSize = common.DefaultAppendBlobSize
-		}else{
+		} else {
 			blockSize = common.DefaultBlockSize
 		}
 	}
 
-	return JobPartPlanBlobData{BlobType:data.BlobType, NoGuessMimeType: noGuessMimeType, ContentTypeLength: uint8(len(contentType)),
+	return JobPartPlanBlobData{BlobType: data.BlobType, NoGuessMimeType: noGuessMimeType, ContentTypeLength: uint8(len(contentType)),
 		ContentType: contentTypeBytes, ContentEncodingLength: uint8(len(contentEncoding)),
 		ContentEncoding: contentEncodingBytes, MetaDataLength: uint16(len(metaData)),
 		MetaData: metaDataBytes, PreserveLastModifiedTime: data.PreserveLastModifiedTime,

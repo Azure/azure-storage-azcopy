@@ -66,7 +66,7 @@ func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInf
 		blockSize := jPartPlanHeader.BlobData.BlockSize
 		// creating transfer msg to schedule the transfer and queuing transferMsg into channels determined by the JobPriority
 		transferMsg := TransferMsg{partNumber: partNumber, transferIndex: index, jobInfo: jobInfo, TransferContext: jobPartInfo.TransfersInfo[index].ctx,
-			TransferCancelFunc: transferCancelFunc, MinimumLogLevel: jPartPlanHeader.LogSeverity, BlobType:jPartPlanHeader.BlobData.BlobType, SourceType: jPartPlanHeader.SrcLocationType,
+			TransferCancelFunc: transferCancelFunc, MinimumLogLevel: jPartPlanHeader.LogSeverity, BlobType: jPartPlanHeader.BlobData.BlobType, SourceType: jPartPlanHeader.SrcLocationType,
 			DestinationType: jPartPlanHeader.DstLocationType, Source: source, SourceSize: sourceSize, Destination: destination,
 			NumChunks: getNumChunks(sourceSize, uint64(blockSize)), BlockSize: blockSize}
 		switch priority {
@@ -144,11 +144,11 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrderRequest, coordina
 	// Scheduling each transfer in the new job according to the priority of the job
 	scheduleTransfers(common.JobID(jobId), payload.PartNum, jobsInfoMap, coordinatorChannels)
 
-	copyResponse := common.CopyJobPartOrderResponse{JobStarted:true}
+	copyResponse := common.CopyJobPartOrderResponse{JobStarted: true}
 
 	resultMsg, err := json.Marshal(copyResponse)
 
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 	// sending successful response back to front end
@@ -160,7 +160,7 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrderRequest, coordina
 func setJobStatus(jobId common.JobID, jobsInfoMap *JobsInfo, status JobStatusCode) {
 	jobInfo := jobsInfoMap.JobInfo(jobId)
 	// loading the jobPartPlanHeader for part number 0
-	jPartPlanHeader := jobInfo.JobPartPlanInfo( 0).getJobPartPlanPointer()
+	jPartPlanHeader := jobInfo.JobPartPlanInfo(0).getJobPartPlanPointer()
 	if jPartPlanHeader == nil {
 		panic(errors.New(fmt.Sprintf("no job found with JobId %s to clean up", jobId)))
 	}
@@ -182,7 +182,7 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, coordinatorChanne
 	if jobInfo == nil || jobInfo.JobParts() == nil {
 		resumeJobResponse.CancelledPauseResumed = false
 		resumeJobResponse.ErrorMsg = fmt.Sprintf("no active job with JobId %s exists", jobId)
-	}else{
+	} else {
 		currentJobStatus := jobInfo.JobPartPlanInfo(0).getJobPartPlanPointer().Status()
 		if currentJobStatus == JobInProgress || currentJobStatus == JobCompleted {
 			resumeJobResponse.CancelledPauseResumed = false
@@ -216,13 +216,13 @@ func ResumeJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, coordinatorChanne
 		resumeJobResponse.CancelledPauseResumed = true
 		jobInfo.Log(common.LogInfo, fmt.Sprintf("Job %s resumed and has been rescheduled", jobId))
 	}
-	SendResponse:
-		resp.WriteHeader(http.StatusAccepted)
-		response, err := json.Marshal(resumeJobResponse)
-		if err != nil{
-			jobInfo.Panic(err)
-		}
-		resp.Write([]byte(response))
+SendResponse:
+	resp.WriteHeader(http.StatusAccepted)
+	response, err := json.Marshal(resumeJobResponse)
+	if err != nil {
+		jobInfo.Panic(err)
+	}
+	resp.Write([]byte(response))
 }
 
 // PauseJobOrder api process the process job order request from front-end
@@ -243,11 +243,11 @@ func CancelJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, resp http.Respons
 func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, isPaused bool, resp http.ResponseWriter) {
 	jobInfo := jobsInfoMap.JobInfo(jobId)
 	cancelJobResponse := common.CancelPauseResumeResponse{}
-	if jobInfo == nil || jobInfo.JobParts() == nil{
+	if jobInfo == nil || jobInfo.JobParts() == nil {
 		cancelJobResponse.CancelledPauseResumed = false
 		cancelJobResponse.ErrorMsg = fmt.Sprintf("no active job with JobId %s exists", jobId.String())
 		goto SendResponse
-	} else{
+	} else {
 		// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
 		var completeJobOrdered bool = false
 		for _, jHandler := range jobInfo.JobParts() {
@@ -299,13 +299,13 @@ func cancelpauseJobOrder(jobId common.JobID, jobsInfoMap *JobsInfo, isPaused boo
 		cancelJobResponse.CancelledPauseResumed = true
 		cancelJobResponse.ErrorMsg = fmt.Sprintf("succesfully cancelling job with JobId %s", jobId.String())
 	}
-	SendResponse:
-		resp.WriteHeader(http.StatusAccepted)
-		response, err := json.Marshal(cancelJobResponse)
-		if err != nil{
-			jobInfo.Panic(err)
-		}
-		resp.Write([]byte(response))
+SendResponse:
+	resp.WriteHeader(http.StatusAccepted)
+	response, err := json.Marshal(cancelJobResponse)
+	if err != nil {
+		jobInfo.Panic(err)
+	}
+	resp.Write([]byte(response))
 }
 
 // getJobSummary api returns the job progress summary of an active job
@@ -329,7 +329,7 @@ func getJobSummary(jobId common.JobID, jobsInfo *JobsInfo, resp http.ResponseWri
 	// if partNumber to JobPartPlanInfo Pointer map is nil, then returning error
 	if jobInfo == nil || jobInfo.JobParts() == nil {
 		jobSummaryResponse.ErrorMessage = fmt.Sprintf("no active job with JobId %s exists", jobId)
-	}else{
+	} else {
 		jobSummaryResponse.JobId = jobId
 		// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
 		var completeJobOrdered bool = false
@@ -398,9 +398,9 @@ func getTransferList(jobId common.JobID, ofStatus common.TransferStatus, jobsInf
 	jobInfo := jobsInfo.JobInfo(jobId)
 	listJobTransfersResponse := common.ListJobTransfersResponse{}
 	// sending back the error status and error message in response
-	if jobInfo == nil || jobInfo.JobParts() == nil{
+	if jobInfo == nil || jobInfo.JobParts() == nil {
 		listJobTransfersResponse.ErrorMessage = fmt.Sprintf("there is no active Job with jobId %s", jobId)
-	}else{
+	} else {
 		var transferList []common.TransferDetail
 		for _, jHandler := range jobInfo.JobParts() {
 			// jPartPlan represents the memory map JobPartPlanHeader for given jobid and part number
@@ -449,7 +449,7 @@ func listExistingJobs(jPartPlanInfoMap *JobsInfo, commonLogger *log.Logger, resp
 
 // todo use this in case of panic
 func assertOK(err error) {
-	if err != nil{
+	if err != nil {
 		panic(err)
 	}
 }

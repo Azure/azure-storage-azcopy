@@ -25,7 +25,7 @@ type TransferMsg struct {
 	TransferCancelFunc context.CancelFunc
 
 	MinimumLogLevel common.LogLevel
-	BlobType 		common.BlobType
+	BlobType        common.BlobType
 	SourceType      common.LocationType
 	DestinationType common.LocationType
 	Source          string

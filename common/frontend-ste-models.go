@@ -21,14 +21,14 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"time"
-	"net/http"
-	"bytes"
 	"io/ioutil"
 	"math"
+	"net/http"
+	"time"
 )
 
 type JobID UUID
@@ -47,9 +47,9 @@ func (j JobID) String() string {
 	return UUID(j).String()
 }
 
-func ParseJobID(jobId string) (JobID, error){
+func ParseJobID(jobId string) (JobID, error) {
 	uuid, err := ParseUUID(jobId)
-	if err != nil{
+	if err != nil {
 		return JobID{}, err
 	}
 	return JobID(uuid), nil
@@ -129,12 +129,12 @@ const (
 
 	AppendBlob BlobType = 1
 
-	PageBlob   BlobType = 2
+	PageBlob BlobType = 2
 
 	InvalidBlob BlobType = math.MaxUint8
 )
 
-func (b BlobType) String() (string){
+func (b BlobType) String() string {
 	switch b {
 	case BlockBlob:
 		return "BlockBlob"
@@ -147,7 +147,7 @@ func (b BlobType) String() (string){
 	}
 }
 
-func BlobTypeStringToBlobType(btype string) (BlobType){
+func BlobTypeStringToBlobType(btype string) BlobType {
 	fmt.Println("b type ", btype)
 	switch btype {
 	case "":
@@ -271,31 +271,31 @@ type CopyJobPartOrderRequest struct {
 
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListRequest struct {
-	JobId                  JobID
-	OfStatus 				string
+	JobId    JobID
+	OfStatus string
 }
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
-	BlobType				 BlobType  // The type of a blob - BlockBlob, PageBlob, AppendBlob
-	ContentType              string //The content type specified for the blob.
-	ContentEncoding          string //Specifies which content encodings have been applied to the blob.
-	Metadata                 string //User-defined name-value pairs associated with the blob
-	NoGuessMimeType          bool   // represents user decision to interpret the content-encoding from source file
-	PreserveLastModifiedTime bool   // when downloading, tell engine to set file's timestamp to timestamp of blob
+	BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
+	ContentType              string   //The content type specified for the blob.
+	ContentEncoding          string   //Specifies which content encodings have been applied to the blob.
+	Metadata                 string   //User-defined name-value pairs associated with the blob
+	NoGuessMimeType          bool     // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime bool     // when downloading, tell engine to set file's timestamp to timestamp of blob
 	BlockSizeinBytes         uint32
 }
 
 // ListJobsResponse represent the Job with JobId and
 type ListJobsResponse struct {
 	Errormessage string
-	JobIds []JobID
+	JobIds       []JobID
 }
 
 // represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
 type ListJobSummaryResponse struct {
 	ErrorMessage string
-	JobId JobID
+	JobId        JobID
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered             bool
 	JobStatus                      string
@@ -322,7 +322,7 @@ type CancelPauseResumeResponse struct {
 }
 
 type CopyJobPartOrderResponse struct {
-	ErrorMsg string
+	ErrorMsg   string
 	JobStarted bool
 }
 
@@ -333,8 +333,8 @@ type FooResponse struct {
 // represents the list of Details and details of number of transfers
 type ListJobTransfersResponse struct {
 	ErrorMessage string
-	JobId JobID
-	Details []TransferDetail
+	JobId        JobID
+	Details      []TransferDetail
 }
 
 // todo : use url in case of string
@@ -344,16 +344,16 @@ type HTTPClient struct {
 }
 
 // NewHttpClient returns the instance of struct containing an instance of http.client and url
-func NewHttpClient(url string) (*HTTPClient) {
+func NewHttpClient(url string) *HTTPClient {
 	return &HTTPClient{
-		client:      &http.Client{},
-				url: url}
+		client: &http.Client{},
+		url:    url}
 }
 
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
-func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte, error){
+func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([]byte, error) {
 	payload, err := json.Marshal(v)
-	if err != nil{
+	if err != nil {
 		fmt.Println(fmt.Sprintf("error marshalling the request payload for command type %d", commandType))
 		return []byte{}, err
 	}
@@ -366,7 +366,7 @@ func (httpClient *HTTPClient) Send(commandType string, v interface{}) ([] byte, 
 
 	// panic in this case
 	resp, err := httpClient.client.Do(req)
-	if err != nil{
+	if err != nil {
 		return []byte{}, err
 	}
 	// reading the entire response body and closing the response body.

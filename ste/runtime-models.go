@@ -2,9 +2,9 @@ package ste
 
 import (
 	"context"
-	"sync/atomic"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"os"
+	"sync/atomic"
 	"time"
 )
 

@@ -21,18 +21,18 @@
 package ste
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"log"
 	"os"
-	"sync/atomic"
-	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 type syncJobInfoMap struct {
-	lock   sync.RWMutex
-	m      map[common.PartNumber]*JobPartPlanInfo
+	lock sync.RWMutex
+	m    map[common.PartNumber]*JobPartPlanInfo
 }
 
 func (sm *syncJobInfoMap) Set(key common.PartNumber, value *JobPartPlanInfo) {
@@ -65,9 +65,9 @@ func (sm *syncJobInfoMap) Iterate(readonly bool, f func(k common.PartNumber, v *
 	locker.Unlock()
 }
 
-func newSyncJobInfoMap() (*syncJobInfoMap){
+func newSyncJobInfoMap() *syncJobInfoMap {
 	return &syncJobInfoMap{
-		m:make(map[common.PartNumber]*JobPartPlanInfo),
+		m: make(map[common.PartNumber]*JobPartPlanInfo),
 	}
 }
 
@@ -75,46 +75,46 @@ func newSyncJobInfoMap() (*syncJobInfoMap){
 // jobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
 // logger is the logger instance for a given JobId
 type JobInfo struct {
-	jobId             common.JobID
+	jobId common.JobID
 	// jobsInfo is the reference of JobsInfo of which current jobInfo is part of.
-	jobsInfo          *JobsInfo
+	jobsInfo *JobsInfo
 	// jobPartsMap maps part number to JobPartPlanInfo reference for a given JobId
-	jobPartsMap       *syncJobInfoMap
+	jobPartsMap *syncJobInfoMap
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
 	maximumLogLevel   common.LogLevel
 	logger            *log.Logger
 	numberOfPartsDone uint32
 	logFile           *os.File
-	JobThroughPut *ThroughputState
+	JobThroughPut     *ThroughputState
 }
 
 // Returns the combination of PartNumber and respective JobPartPlanInfo reference.
 func (ji *JobInfo) JobParts() map[common.PartNumber]*JobPartPlanInfo {
 	partsMap := make(map[common.PartNumber]*JobPartPlanInfo)
-	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo){
+	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo) {
 		partsMap[k] = v
 	})
 	return partsMap
 }
 
-func (ji *JobInfo) AddPartPlanInfo(partNumber common.PartNumber, jpi *JobPartPlanInfo){
+func (ji *JobInfo) AddPartPlanInfo(partNumber common.PartNumber, jpi *JobPartPlanInfo) {
 	ji.jobPartsMap.Set(partNumber, jpi)
 }
 
 // JobPartPlanInfo returns the JobPartPlanInfo reference of a Job for given part number
 func (ji *JobInfo) JobPartPlanInfo(partNumber common.PartNumber) *JobPartPlanInfo {
 	jPartPlanInfo, ok := ji.jobPartsMap.Get(partNumber)
-	if !ok{
+	if !ok {
 		return nil
 	}
 	return jPartPlanInfo
 }
 
-func (ji *JobInfo) NumberOfParts() (uint32){
+func (ji *JobInfo) NumberOfParts() uint32 {
 	numberOfParts := uint32(0)
-	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo){
-		numberOfParts ++
+	ji.jobPartsMap.Iterate(true, func(k common.PartNumber, v *JobPartPlanInfo) {
+		numberOfParts++
 	})
 	return numberOfParts
 }
@@ -127,7 +127,7 @@ func (ji *JobInfo) NumberOfPartsDone() uint32 {
 
 // PartsDone increments the number of parts either completed or failed
 // in a thread safe manner
-func (ji *JobInfo) PartsDone()  {
+func (ji *JobInfo) PartsDone() {
 
 	totalNumberOfPartsDone := ji.NumberOfPartsDone()
 	ji.Log(common.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", totalNumberOfPartsDone))
@@ -175,13 +175,13 @@ func (ji *JobInfo) Panic(err error) {
 // NewJobsInfo returns a new instance of synchronous JobsInfo to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
 func NewJobInfo(jobId common.JobID, jobsInfo *JobsInfo) *JobInfo {
 	return &JobInfo{
-		jobId:jobId,
-		jobsInfo:jobsInfo,
+		jobId:       jobId,
+		jobsInfo:    jobsInfo,
 		jobPartsMap: newSyncJobInfoMap(),
-		logger:nil,
-		JobThroughPut:&ThroughputState{lastCheckedTime:time.Time{},
-										lastCheckedBytes:0,
-										currentBytes:0,
-										},
+		logger:      nil,
+		JobThroughPut: &ThroughputState{lastCheckedTime: time.Time{},
+			lastCheckedBytes: 0,
+			currentBytes:     0,
+		},
 	}
 }

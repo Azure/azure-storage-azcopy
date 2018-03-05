@@ -33,7 +33,7 @@ func HandleListCommand(commandLineInput common.ListRequest) {
 
 	// check whether ofstatus transfer status is valid or not
 	if commandLineInput.OfStatus != "" &&
-				common.TransferStatusStringToCode(commandLineInput.OfStatus) == math.MaxUint32{
+		common.TransferStatusStringToCode(commandLineInput.OfStatus) == math.MaxUint32 {
 		fmt.Println("invalid transfer status passed. Please provide the correct transfer status flag")
 		return
 	}
@@ -42,9 +42,9 @@ func HandleListCommand(commandLineInput common.ListRequest) {
 
 	if commandLineInput.JobId == common.EmptyJobId {
 		response, _ = common.Rpc("listJobs", commandLineInput)
-	}else if commandLineInput.OfStatus == "" {
+	} else if commandLineInput.OfStatus == "" {
 		response, _ = common.Rpc("listJobProgressSummary", commandLineInput)
-	}else{
+	} else {
 		response, _ = common.Rpc("listJobTransfers", commandLineInput)
 	}
 
@@ -65,7 +65,7 @@ func PrintExistingJobIds(data []byte) {
 	if err != nil {
 		panic(err)
 	}
-	if listJobResponse.Errormessage != ""{
+	if listJobResponse.Errormessage != "" {
 		fmt.Println(fmt.Sprintf("request failed with following error message %s", listJobResponse.Errormessage))
 		return
 	}
@@ -103,7 +103,7 @@ func PrintJobProgressSummary(summaryData []byte) {
 		panic(fmt.Errorf("error unmarshaling the progress summary. Failed with error %s", err.Error()))
 		return
 	}
-	if summary.ErrorMessage != ""{
+	if summary.ErrorMessage != "" {
 		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMessage))
 		return
 	}

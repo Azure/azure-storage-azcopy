@@ -3,8 +3,8 @@ package common
 import "sync"
 
 type SyncMap struct {
-	lock   sync.RWMutex
-	m      map[string]string
+	lock sync.RWMutex
+	m    map[string]string
 }
 
 func (sm *SyncMap) Set(key string, value string) {
@@ -35,4 +35,3 @@ func (sm *SyncMap) Iterate(readonly bool, f func(k string, v string)) {
 	}
 	locker.Unlock()
 }
-

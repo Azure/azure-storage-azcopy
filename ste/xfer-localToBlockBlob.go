@@ -75,7 +75,7 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 	chunkSize := int64(localToBlockBlob.transfer.BlockSize)
 
 	// step 3: map in the file to upload before transferring chunks
-	localToBlockBlob.memoryMappedFile,_ = executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
+	localToBlockBlob.memoryMappedFile, _ = executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
 
 	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
 	if blobSize <= chunkSize {

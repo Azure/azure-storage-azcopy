@@ -21,28 +21,25 @@
 package cmd
 
 import (
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
-	"fmt"
 )
 
 type ListReq struct {
-	JobID common.JobID
+	JobID    common.JobID
 	StatusOf common.TransferStatus
 }
 
 type ListResponse struct {
- 	ErrorMsg string
-
+	ErrorMsg string
 }
 
 type ListExistingJobResponse struct {
-
 }
 
 type ListProgressSummaryResponse struct {
-
 }
 
 func init() {
@@ -68,8 +65,8 @@ func init() {
 
 			// if there is more than one argument passed, then it is taken as a jobId
 			if len(args) > 0 {
-				jobId , err := common.ParseJobID(args[0])
-				if err != nil{
+				jobId, err := common.ParseJobID(args[0])
+				if err != nil {
 					fmt.Print("invalid job Id given ", args[0])
 					return nil
 				}

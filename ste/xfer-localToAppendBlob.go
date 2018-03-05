@@ -1,20 +1,19 @@
 package ste
 
 import (
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"net/url"
+	"bytes"
+	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/edsrzf/mmap-go"
-	"fmt"
-	"bytes"
+	"net/url"
 )
 
 type localToAppendBlob struct {
-
 	transfer         *TransferMsg
 	pacer            *pacer
-	appendBlobURL          azblob.AppendBlobURL
+	appendBlobURL    azblob.AppendBlobURL
 	memoryMappedFile mmap.MMap
 	blockIds         []string
 }
@@ -50,34 +49,32 @@ func (localToAppendBlob *localToAppendBlob) runPrologue(chunkChannel chan<- Chun
 	localToAppendBlob.appendBlobURL = azblob.NewAppendBlobURL(*u, p)
 
 	// step 2: map in the file to upload before appending blobs
-	localToAppendBlob.memoryMappedFile,_ = executionEngineHelper{}.openAndMemoryMapFile(localToAppendBlob.transfer.Source)
-
+	localToAppendBlob.memoryMappedFile, _ = executionEngineHelper{}.openAndMemoryMapFile(localToAppendBlob.transfer.Source)
 
 	// step 3: Scheduling append blob in Chunk channel to perform append blob
-	chunkChannel <- ChunkMsg{doTransfer:localToAppendBlob.generateUploadFunc(),
-	}
+	chunkChannel <- ChunkMsg{doTransfer: localToAppendBlob.generateUploadFunc()}
 }
 
-func (localToAppendBlob localToAppendBlob) generateUploadFunc() (chunkFunc){
+func (localToAppendBlob localToAppendBlob) generateUploadFunc() chunkFunc {
 	return func(workerId int) {
 		t := localToAppendBlob.transfer
-		if t.TransferContext.Err() != nil{
+		if t.TransferContext.Err() != nil {
 			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up transfer by worked %d", workerId))
 			t.TransferDone()
-		}else{
+		} else {
 			appendBlobURL := localToAppendBlob.appendBlobURL
 			blobHttpHeader, metaData := t.blobHttpHeaderAndMetadata(localToAppendBlob.memoryMappedFile)
 			_, err := appendBlobURL.Create(t.TransferContext, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 			if err != nil {
-				if t.TransferContext.Err() != nil{
-					t.Log(common.LogError, fmt.Sprintf("failed by worker %d while creating blob because transfer was cancelled",workerId))
-				}else{
+				if t.TransferContext.Err() != nil {
+					t.Log(common.LogError, fmt.Sprintf("failed by worker %d while creating blob because transfer was cancelled", workerId))
+				} else {
 					t.Log(common.LogError, fmt.Sprintf("upload failed while creating blob because of following reason %s by worker %d", err.Error(), workerId))
 					t.TransferStatus(common.TransferFailed)
 				}
 				t.TransferDone()
 				err = localToAppendBlob.memoryMappedFile.Unmap()
-				if err != nil{
+				if err != nil {
 					t.Log(common.LogError, " has error mapping the memory map file")
 				}
 				return
@@ -90,21 +87,21 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() (chunkFunc){
 				adjustedChunkSize := int64(t.BlockSize)
 
 				// compute actual size of the chunk
-				if startIndex + int64(t.BlockSize) > int64(t.SourceSize) {
+				if startIndex+int64(t.BlockSize) > int64(t.SourceSize) {
 					adjustedChunkSize = int64(t.SourceSize) - startIndex
 				}
 
 				// requesting (startIndex + adjustedChunkSize) bytes from pacer to be send to service.
-				body := newRequestBodyPacer(bytes.NewReader(localToAppendBlob.memoryMappedFile[startIndex:startIndex + adjustedChunkSize]), localToAppendBlob.pacer)
+				body := newRequestBodyPacer(bytes.NewReader(localToAppendBlob.memoryMappedFile[startIndex:startIndex+adjustedChunkSize]), localToAppendBlob.pacer)
 
 				_, err := appendBlobURL.AppendBlock(t.TransferContext, body, azblob.BlobAccessConditions{})
 				if err != nil {
 					// If the append block failed because transfer was cancelled.
-					if t.TransferContext.Err() != nil{ // append block failed because transfer was cancelled.
-						t.Log(common.LogError, fmt.Sprintf("has worker %d appending block from %d to %d failed because the transfer was cancelled", workerId, startIndex, startIndex + adjustedChunkSize))
-					} else{
+					if t.TransferContext.Err() != nil { // append block failed because transfer was cancelled.
+						t.Log(common.LogError, fmt.Sprintf("has worker %d appending block from %d to %d failed because the transfer was cancelled", workerId, startIndex, startIndex+adjustedChunkSize))
+					} else {
 						// If the append block failed because of some other reason.
-						t.Log(common.LogError, fmt.Sprintf("had append block from %d to %d failed because of following reason %s", startIndex, startIndex + adjustedChunkSize, err.Error()))
+						t.Log(common.LogError, fmt.Sprintf("had append block from %d to %d failed because of following reason %s", startIndex, startIndex+adjustedChunkSize, err.Error()))
 
 						// cancelling the transfer because one of the append block failed.
 						t.TransferCancelFunc()
@@ -115,20 +112,20 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() (chunkFunc){
 					// updating number of the transfers done.
 					t.TransferDone()
 					err = localToAppendBlob.memoryMappedFile.Unmap()
-					if err != nil{
+					if err != nil {
 						t.Log(common.LogError, " has error mapping the memory map file")
 					}
 					return
 				}
+				//updating the through put counter of the Job for each blob appended
+				t.jobInfo.JobThroughPut.updateCurrentBytes(int64(t.SourceSize))
 			}
 			t.Log(common.LogInfo, "successfully uploaded ")
-			//updating the through put counter of the Job
-			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(t.SourceSize))
 
 			t.TransferDone()
 			t.TransferStatus(common.TransferComplete)
 			err = localToAppendBlob.memoryMappedFile.Unmap()
-			if err != nil{
+			if err != nil {
 				t.Log(common.LogError, " has error mapping the memory map file")
 			}
 		}

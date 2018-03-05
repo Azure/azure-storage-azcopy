@@ -57,7 +57,6 @@ func (status JobStatusCode) String() (statusString string) {
 	}
 }
 
-
 // JobPartPlan represent the header of Job Part's Memory Map File
 type JobPartPlanHeader struct {
 	Version            uint32              // represent the version of data schema format of header
