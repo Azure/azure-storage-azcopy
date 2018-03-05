@@ -7,7 +7,7 @@ import (
 
 type MMap []byte
 
-func newMMF(file *os.File, writable bool, offset int64, length int) (MMap, error) {
+func Map(file *os.File, writable bool, offset int64, length int) (MMap, error) {
 	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
 	if writable {
 		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
@@ -16,7 +16,7 @@ func newMMF(file *os.File, writable bool, offset int64, length int) (MMap, error
 	return MMap(addr), err
 }
 
-func (m *MMap) unmap() {
+func (m *MMap) Unmap() {
 	err := syscall.Munmap(*m)
 	*m = nil
 	if err != nil {
