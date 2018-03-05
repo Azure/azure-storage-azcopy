@@ -343,7 +343,7 @@ func sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest) (bool, stri
 
 	for index := 0; index < 3; index++{
 		resp , err := common.Rpc("copy", jobOrder)
-		if err != nil{
+		if err == nil{
 			return parseCopyJobPartResponse(resp)
 		}
 	}
