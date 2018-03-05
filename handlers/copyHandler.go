@@ -55,12 +55,6 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 		fmt.Println("invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
 		return
 	}
-	// marshaling the JobID to send to backend
-	//marshaledUUID, err := json.MarshalIndent(uuid, "", "")
-	//if err != nil {
-	//	fmt.Println("There is an error while marshalling the generated JobID. Please retry")
-	//	return ""
-	//}
 	jobPartOrder.ID = jobId
 
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
@@ -73,7 +67,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 		return
 	}
 
-	fmt.Print("Job with id", jobId, "has started.")
+	fmt.Println("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
 		return
 	}
@@ -102,9 +96,6 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
-	//for jobStatus := fetchJobStatus(uuid); jobStatus != common.StatusCompleted; jobStatus = fetchJobStatus(uuid) {
-	//	time.Sleep(2 * time.Second)
-	//}
 	return
 }
 
@@ -346,10 +337,13 @@ func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill
 
 func sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest) (bool, string) {
 
-	for index := 0; index < 3; index++ {
+	for tryCount := 0; tryCount < 3; tryCount++ {
 		resp, err := common.Rpc("copy", jobOrder)
 		if err == nil {
 			return parseCopyJobPartResponse(resp)
+		} else {
+			// in case the transfer engine has not finished booting up, we must wait
+			time.Sleep(time.Duration(tryCount) * time.Second)
 		}
 	}
 	return false, ""
