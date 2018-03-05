@@ -1,3 +1,5 @@
+// +build linux darwin
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,36 +24,23 @@ package handlers
 
 import (
 "os"
-"reflect"
 "syscall"
-"unsafe"
 )
 
 type MMap []byte
 
 func Map(file *os.File, writable bool, offset int64, length int) (MMap, error) {
-	prot, access := uint32(syscall.PAGE_READONLY), uint32(syscall.FILE_MAP_READ) // Assume read-only
+	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
 	if writable {
-		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
+		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
 	}
-	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, uint32(int64(length)>>32), uint32(int64(length)&0xffffffff), nil)
-	if hMMF == 0 {
-		return nil, os.NewSyscallError("CreateFileMapping", errno)
-	}
-	defer syscall.CloseHandle(hMMF)
-	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
-	m := MMap{}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
-	h.Data = addr
-	h.Len = length
-	h.Cap = h.Len
-	return m, nil
+	addr, err := syscall.Mmap(int(file.Fd()), offset, length, prot, flags)
+	return MMap(addr), err
 }
 
 func (m *MMap) Unmap() {
-	addr := uintptr(unsafe.Pointer(&(([]byte)(*m)[0])))
-	*m = MMap{}
-	err := syscall.UnmapViewOfFile(addr)
+	err := syscall.Munmap(*m)
+	*m = nil
 	if err != nil {
 		panic(err)
 	}
