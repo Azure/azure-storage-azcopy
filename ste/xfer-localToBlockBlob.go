@@ -27,8 +27,9 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/edsrzf/mmap-go"
 	"net/url"
+	"github.com/Azure/azure-storage-azcopy/handlers"
+	"os"
 )
 
 // this struct is created for each transfer
@@ -36,8 +37,9 @@ type localToBlockBlob struct {
 	transfer         *TransferMsg
 	pacer            *pacer
 	blobURL          azblob.BlobURL
-	memoryMappedFile mmap.MMap
+	memoryMappedFile handlers.MMap
 	blockIds         []string
+	srcFileHandler   *os.File
 }
 
 // return a new localToBlockBlob struct targeting a specific transfer
@@ -75,7 +77,7 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 	chunkSize := int64(localToBlockBlob.transfer.BlockSize)
 
 	// step 3: map in the file to upload before transferring chunks
-	localToBlockBlob.memoryMappedFile, _ = executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
+	localToBlockBlob.memoryMappedFile, localToBlockBlob.srcFileHandler= executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
 
 	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
 	if blobSize <= chunkSize {
@@ -112,7 +114,6 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 	return func(workerId int) {
 		totalNumOfChunks := uint32(localToBlockBlob.transfer.NumChunks)
 
-		// TODO consider encapsulating this check operation on transferMsg
 		if localToBlockBlob.transfer.TransferContext.Err() != nil {
 			localToBlockBlob.transfer.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
 			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
@@ -133,7 +134,7 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 
 			body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile[startIndex:startIndex+adjustedChunkSize]), localToBlockBlob.pacer)
 			putBlockResponse, err := blockBlobUrl.PutBlock(localToBlockBlob.transfer.TransferContext, encodedBlockId, body, azblob.LeaseAccessConditions{})
-			// TODO consider encapsulating cancel operation on transferMsg
+
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				localToBlockBlob.transfer.TransferCancelFunc()
@@ -149,11 +150,13 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
 					localToBlockBlob.transfer.TransferDone()
 
-					err := localToBlockBlob.memoryMappedFile.Unmap()
+					localToBlockBlob.memoryMappedFile.Unmap()
+
+					err := localToBlockBlob.srcFileHandler.Close()
 					if err != nil {
 						localToBlockBlob.transfer.Log(common.LogError,
-							fmt.Sprintf("has worker %v which failed to conclude transfer after processing chunkId %v",
-								workerId, chunkId))
+							fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
+								workerId, err.Error()))
 					}
 
 				}
@@ -165,7 +168,6 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 			}
 
 			localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
-			// TODO this should be 1 counter per job
 
 			// step 4: check if this is the last chunk
 			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
@@ -201,11 +203,14 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 				localToBlockBlob.transfer.TransferStatus(common.TransferComplete)
 				localToBlockBlob.transfer.TransferDone()
 
-				err = localToBlockBlob.memoryMappedFile.Unmap()
+				// unmapping the memory map file
+				localToBlockBlob.memoryMappedFile.Unmap()
+
+				err = localToBlockBlob.srcFileHandler.Close()
 				if err != nil {
 					localToBlockBlob.transfer.Log(common.LogError,
-						fmt.Sprintf("has worker %v which failed to conclude Transfer after processing chunkId %v",
-							workerId, chunkId))
+						fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
+							workerId, err.Error()))
 				}
 			}
 		}
@@ -241,8 +246,10 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 		putBlobResp.Response().Body.Close()
 	}
 
-	err = localToBlockBlob.memoryMappedFile.Unmap()
+	localToBlockBlob.memoryMappedFile.Unmap()
+	err = localToBlockBlob.srcFileHandler.Close()
 	if err != nil {
-		localToBlockBlob.transfer.Log(common.LogError, " has error mapping the memory map file")
+		localToBlockBlob.transfer.Log(common.LogError,
+			fmt.Sprintf("has worker which failed to close the file because of following error %s", err.Error()))
 	}
 }

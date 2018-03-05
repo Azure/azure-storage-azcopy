@@ -6,16 +6,17 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/edsrzf/mmap-go"
 	"net/url"
+	"os"
+	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 type localToAppendBlob struct {
 	transfer         *TransferMsg
 	pacer            *pacer
 	appendBlobURL    azblob.AppendBlobURL
-	memoryMappedFile mmap.MMap
-	blockIds         []string
+	memoryMappedFile handlers.MMap
+	srcFileHandler   *os.File
 }
 
 // return a new localToBlockBlob struct targeting a specific transfer
@@ -49,7 +50,7 @@ func (localToAppendBlob *localToAppendBlob) runPrologue(chunkChannel chan<- Chun
 	localToAppendBlob.appendBlobURL = azblob.NewAppendBlobURL(*u, p)
 
 	// step 2: map in the file to upload before appending blobs
-	localToAppendBlob.memoryMappedFile, _ = executionEngineHelper{}.openAndMemoryMapFile(localToAppendBlob.transfer.Source)
+	localToAppendBlob.memoryMappedFile, localToAppendBlob.srcFileHandler = executionEngineHelper{}.openAndMemoryMapFile(localToAppendBlob.transfer.Source)
 
 	// step 3: Scheduling append blob in Chunk channel to perform append blob
 	chunkChannel <- ChunkMsg{doTransfer: localToAppendBlob.generateUploadFunc()}
@@ -73,9 +74,10 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() chunkFunc {
 					t.TransferStatus(common.TransferFailed)
 				}
 				t.TransferDone()
-				err = localToAppendBlob.memoryMappedFile.Unmap()
+				localToAppendBlob.memoryMappedFile.Unmap()
+				err := localToAppendBlob.srcFileHandler.Close()
 				if err != nil {
-					t.Log(common.LogError, " has error mapping the memory map file")
+					t.Log(common.LogError, fmt.Sprintf(" has error closing the file %s because of following error %s", localToAppendBlob.srcFileHandler.Name(), err.Error()))
 				}
 				return
 			}
@@ -111,9 +113,10 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() chunkFunc {
 					}
 					// updating number of the transfers done.
 					t.TransferDone()
-					err = localToAppendBlob.memoryMappedFile.Unmap()
+					localToAppendBlob.memoryMappedFile.Unmap()
+					err := localToAppendBlob.srcFileHandler.Close()
 					if err != nil {
-						t.Log(common.LogError, " has error mapping the memory map file")
+						t.Log(common.LogError, fmt.Sprintf(" has error closing the file %s because of following error %s", localToAppendBlob.srcFileHandler.Name(), err.Error()))
 					}
 					return
 				}
@@ -124,9 +127,10 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() chunkFunc {
 
 			t.TransferDone()
 			t.TransferStatus(common.TransferComplete)
-			err = localToAppendBlob.memoryMappedFile.Unmap()
+			localToAppendBlob.memoryMappedFile.Unmap()
+			err = localToAppendBlob.srcFileHandler.Close()
 			if err != nil {
-				t.Log(common.LogError, " has error mapping the memory map file")
+				t.Log(common.LogError, fmt.Sprintf(" has error closing the file %s because of following error %s", localToAppendBlob.srcFileHandler.Name(), err.Error()))
 			}
 		}
 	}

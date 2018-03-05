@@ -25,17 +25,18 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/edsrzf/mmap-go"
 	"io"
 	"net/url"
 	"os"
+	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 // this struct is created for each transfer
 type blobToLocal struct {
 	transfer         *TransferMsg
 	blobURL          azblob.BlobURL
-	memoryMappedFile mmap.MMap
+	memoryMappedFile handlers.MMap
+	srcFileHandler   *os.File
 	blockIds         []string
 }
 
@@ -72,7 +73,7 @@ func (blobToLocal *blobToLocal) runPrologue(chunkChannel chan<- ChunkMsg) {
 	downloadChunkSize := int64(blobToLocal.transfer.BlockSize)
 
 	// step 3: prep local file before download starts
-	blobToLocal.memoryMappedFile = executionEngineHelper{}.createAndMemoryMapFile(blobToLocal.transfer.Destination, blobSize)
+	blobToLocal.memoryMappedFile, blobToLocal.srcFileHandler = executionEngineHelper{}.createAndMemoryMapFile(blobToLocal.transfer.Destination, blobSize)
 
 	// step 4: go through the blob range and schedule download chunk jobs
 	blockIdCount := int32(0)
@@ -139,7 +140,6 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 				return
 			}
 
-			// TODO this should be 1 counter per job
 			blobToLocal.transfer.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
 
 			// step 3: check if this is the last chunk
@@ -153,10 +153,11 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 					fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
 				blobToLocal.transfer.TransferDone()
 
-				err := blobToLocal.memoryMappedFile.Unmap()
+				blobToLocal.memoryMappedFile.Unmap()
+				err := blobToLocal.srcFileHandler.Close()
 				if err != nil {
 					blobToLocal.transfer.Log(common.LogError,
-						fmt.Sprintf(" has worker %v which failed to conclude Transfer after processing chunkId %v", workerId, chunkId))
+						fmt.Sprintf(" has worker %v which failed to close the file %s and failed with error %s", workerId, blobToLocal.srcFileHandler.Name(),err.Error()))
 				}
 
 				lastModifiedTime, preserveLastModifiedTime := blobToLocal.transfer.PreserveLastModifiedTime()

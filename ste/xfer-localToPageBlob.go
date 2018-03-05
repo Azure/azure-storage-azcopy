@@ -6,16 +6,17 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/edsrzf/mmap-go"
 	"net/url"
 	"os"
+	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 type localToPageBlob struct {
 	transfer         *TransferMsg
 	pacer            *pacer
 	pageBlobUrl      azblob.PageBlobURL
-	memoryMappedFile mmap.MMap
+	memoryMappedFile handlers.MMap
+	srcFileHandler   *os.File
 }
 
 // return a new localToPageBlob struct targeting a specific transfer
@@ -26,7 +27,6 @@ func newLocalToPageBlob(transfer *TransferMsg, pacer *pacer) xfer {
 // this function performs the setup for each transfer and schedules the corresponding page requests into the chunkChannel
 func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg) {
 
-	var file *os.File
 	// step 1: create pipeline for the destination blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{
@@ -50,7 +50,7 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 	localToPageBlob.pageBlobUrl = azblob.NewPageBlobURL(*u, p)
 
 	// step 2: map in the file to upload before appending blobs
-	localToPageBlob.memoryMappedFile, file = executionEngineHelper{}.openAndMemoryMapFile(localToPageBlob.transfer.Source)
+	localToPageBlob.memoryMappedFile, localToPageBlob.srcFileHandler = executionEngineHelper{}.openAndMemoryMapFile(localToPageBlob.transfer.Source)
 	//blobHttpHeaders, metaData := transfer.blobHttpHeaderAndMetadata(memoryMappedFile)
 
 	// step 3: Create Page Blob of the source size
@@ -61,13 +61,10 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 		localToPageBlob.transfer.TransferCancelFunc()
 		localToPageBlob.transfer.TransferDone()
 		localToPageBlob.transfer.TransferStatus(common.TransferFailed)
-		err := localToPageBlob.memoryMappedFile.Unmap()
+		localToPageBlob.memoryMappedFile.Unmap()
+		err = localToPageBlob.srcFileHandler.Close()
 		if err != nil {
-			localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
-		}
-		err = file.Close()
-		if err != nil {
-			localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
+			localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", localToPageBlob.srcFileHandler.Name(), err.Error()))
 		}
 		return
 	}
@@ -90,26 +87,23 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 			doTransfer: localToPageBlob.generateUploadFunc(
 				uint32(localToPageBlob.transfer.NumChunks),
 				startIndex,
-				adjustedPageSize,
-				file),
+				adjustedPageSize),
 		}
 	}
 }
 
-func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32, startPage int64, pageSize int64, file *os.File) chunkFunc {
+func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32, startPage int64, pageSize int64) chunkFunc {
 	return func(workerId int) {
 		t := localToPageBlob.transfer
+		file := localToPageBlob.srcFileHandler
 		if t.TransferContext.Err() != nil {
 			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up page %d", startPage))
 			if t.ChunksDone() == numberOfPages {
 				t.Log(common.LogInfo,
 					fmt.Sprintf("has worker %d which is finalizing cancellation of transfer", workerId))
 				t.TransferDone()
-				err := localToPageBlob.memoryMappedFile.Unmap()
-				if err != nil {
-					t.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
-				}
-				err = file.Close()
+				localToPageBlob.memoryMappedFile.Unmap()
+				err := file.Close()
 				if err != nil {
 					t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
 				}
@@ -130,10 +124,7 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 				}
 				if t.ChunksDone() == numberOfPages {
 					t.TransferDone()
-					err := localToPageBlob.memoryMappedFile.Unmap()
-					if err != nil {
-						t.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
-					}
+					localToPageBlob.memoryMappedFile.Unmap()
 					err = file.Close()
 					if err != nil {
 						t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
@@ -144,15 +135,12 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			t.Log(common.LogInfo, fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
 
 			//updating the through put counter of the Job
-			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(t.SourceSize))
+			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(pageSize))
 			if t.ChunksDone() == numberOfPages {
 				t.TransferDone()
 				t.TransferStatus(common.TransferComplete)
 				t.Log(common.LogInfo, "successfully completed")
-				err := localToPageBlob.memoryMappedFile.Unmap()
-				if err != nil {
-					t.Log(common.LogError, fmt.Sprintf("got an error while unmapping the memory mapped file % because of %s", file.Name(), err.Error()))
-				}
+				localToPageBlob.memoryMappedFile.Unmap()
 				err = file.Close()
 				if err != nil {
 					t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))

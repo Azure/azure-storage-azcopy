@@ -23,9 +23,9 @@ package ste
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/edsrzf/mmap-go"
 	"os"
 	"time"
+	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 // TODO move execution engine as internal package
@@ -129,8 +129,12 @@ func (executionEngineHelper executionEngineHelper) openFile(filePath string, fla
 }
 
 // maps a *os.File into memory and return a byte slice (mmap.MMap)
-func (executionEngineHelper executionEngineHelper) mapFile(file *os.File) mmap.MMap {
-	memoryMappedFile, err := mmap.Map(file, mmap.RDWR, 0)
+func (executionEngineHelper executionEngineHelper) mapFile(file *os.File) handlers.MMap {
+	fileInfo, err := file.Stat()
+	if err != nil{
+		panic(err)
+	}
+	memoryMappedFile, err := handlers.Map(file, true, 0, int(fileInfo.Size()))
 	if err != nil {
 		panic(fmt.Sprintf("Error mapping: %s", err))
 	}
@@ -138,17 +142,17 @@ func (executionEngineHelper executionEngineHelper) mapFile(file *os.File) mmap.M
 }
 
 // create and memory map a file, given its path and length
-func (executionEngineHelper executionEngineHelper) createAndMemoryMapFile(destinationPath string, fileSize int64) mmap.MMap {
+func (executionEngineHelper executionEngineHelper) createAndMemoryMapFile(destinationPath string, fileSize int64) (handlers.MMap,*os.File) {
 	f := executionEngineHelper.openFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC)
 	if truncateError := f.Truncate(fileSize); truncateError != nil {
 		panic(truncateError)
 	}
 
-	return executionEngineHelper.mapFile(f)
+	return executionEngineHelper.mapFile(f), f
 }
 
 // open and memory map a file, given its path
-func (executionEngineHelper executionEngineHelper) openAndMemoryMapFile(destinationPath string) (mmap.MMap, *os.File) {
+func (executionEngineHelper executionEngineHelper) openAndMemoryMapFile(destinationPath string) (handlers.MMap, *os.File) {
 	f := executionEngineHelper.openFile(destinationPath, os.O_RDWR)
 	return executionEngineHelper.mapFile(f), f
 }
