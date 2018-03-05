@@ -22,20 +22,31 @@ func generateCoordinatorScheduleFunc() coordinatorScheduleFunc {
 }
 
 func sendJobPartOrderToSTE(payload []byte) {
+	// TODO this should be part of the IPC refactoring
 	url := "http://localhost:1337"
 	payloadContentType := "application/json; charset=utf-8"
 	payloadBuffer := bytes.NewBuffer(payload)
+	var res *http.Response
+	var err error
 
-	res, err := http.Post(url, payloadContentType, payloadBuffer)
-	if err != nil {
-		// try a second time after 2 second, in case the transfer engine has not finished booting up
-		// TODO this should be smarter after refactoring
-		time.Sleep(2 * time.Second)
+	// attempt to send the payload for a maximum of 3 times
+	// the request might fail because the transfer engine has not finished booting up
+	// we assume the transfer engine has already been triggered
+	for tryCount := 0; tryCount < 3; tryCount++ {
 		res, err = http.Post(url, payloadContentType, payloadBuffer)
-
-		if err != nil {
-			panic(err)
+		fmt.Println("TRYING for ", tryCount, "times")
+		if err == nil {
+			// it was successful, no need to try again
+			break
+		} else {
+			// wait a bit (0s, 1s, 2s) before trying again
+			time.Sleep(time.Duration(tryCount) * time.Second)
 		}
+	}
+
+	// if communication with the transfer engine is not working, this is a fatal state
+	if err != nil {
+		panic(err)
 	}
 
 	defer res.Body.Close()
