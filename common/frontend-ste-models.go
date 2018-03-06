@@ -148,7 +148,6 @@ func (b BlobType) String() string {
 }
 
 func BlobTypeStringToBlobType(btype string) BlobType {
-	fmt.Println("b type ", btype)
 	switch btype {
 	case "":
 		return BlockBlob

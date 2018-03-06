@@ -77,10 +77,12 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 	chunkSize := int64(localToBlockBlob.transfer.BlockSize)
 
 	// step 3: map in the file to upload before transferring chunks
-	localToBlockBlob.memoryMappedFile, localToBlockBlob.srcFileHandler= executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
+	if blobSize > 0 {
+		localToBlockBlob.memoryMappedFile, localToBlockBlob.srcFileHandler= executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
+	}
 
 	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
-	if blobSize <= chunkSize {
+	if blobSize == 0 || blobSize <= chunkSize {
 		localToBlockBlob.putBlob()
 		return
 	}
@@ -222,8 +224,17 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 	// transform blobURL and perform put blob operation
 	blockBlobUrl := localToBlockBlob.blobURL.ToBlockBlobURL()
 	blobHttpHeader, metaData := localToBlockBlob.transfer.blobHttpHeaderAndMetadata(localToBlockBlob.memoryMappedFile)
-	body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile), localToBlockBlob.pacer)
-	putBlobResp, err := blockBlobUrl.PutBlob(localToBlockBlob.transfer.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+
+	var putBlobResp *azblob.BlobsPutResponse
+	var err error
+
+	// take care of empty blobs
+	if localToBlockBlob.transfer.SourceSize == 0 {
+		putBlobResp, err = blockBlobUrl.PutBlob(localToBlockBlob.transfer.TransferContext, nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+	} else {
+		body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile), localToBlockBlob.pacer)
+		putBlobResp, err = blockBlobUrl.PutBlob(localToBlockBlob.transfer.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+	}
 
 	// if the put blob is a failure, updating the transfer status to failed
 	if err != nil {
@@ -239,17 +250,20 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 	// updating number of transfers done for job part order
 	localToBlockBlob.transfer.TransferDone()
 
-	localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(int64(localToBlockBlob.transfer.SourceSize))
+	// perform clean up for the case where blob size is not 0
+	if localToBlockBlob.transfer.SourceSize != 0 {
+		localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(int64(localToBlockBlob.transfer.SourceSize))
+
+		localToBlockBlob.memoryMappedFile.Unmap()
+		err = localToBlockBlob.srcFileHandler.Close()
+		if err != nil {
+			localToBlockBlob.transfer.Log(common.LogError,
+				fmt.Sprintf("has worker which failed to close the file because of following error %s", err.Error()))
+		}
+	}
 
 	// closing the put blob response body
 	if putBlobResp != nil {
 		putBlobResp.Response().Body.Close()
-	}
-
-	localToBlockBlob.memoryMappedFile.Unmap()
-	err = localToBlockBlob.srcFileHandler.Close()
-	if err != nil {
-		localToBlockBlob.transfer.Log(common.LogError,
-			fmt.Sprintf("has worker which failed to close the file because of following error %s", err.Error()))
 	}
 }

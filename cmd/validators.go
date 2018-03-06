@@ -42,9 +42,10 @@ func (validator validator) determineLocationType(stringToParse string) common.Lo
 func (validator validator) isLocalPath(path string) bool {
 	// attempting to get stats from the OS validates whether a given path is a valid local path
 	_, err := os.Stat(path)
-	// in case the path does not exist yet, an err is returned
-	// we need to make sure that it is indeed just a local path that does not exist yet, and not a url
-	if err == nil || (!validator.isUrl(path) && os.IsNotExist(err)) {
+
+	// in case the path does not exist yet, or path is a pattern match, an err is returned
+	// we need to make sure that it is not a url
+	if err == nil || !validator.isUrl(path) {
 		return true
 	}
 	return false
