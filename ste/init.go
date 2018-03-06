@@ -40,7 +40,7 @@ var steContext = context.Background()
 // It does not schedules those transfers which are either completed or failed
 func scheduleTransfers(jobId common.JobID, partNumber common.PartNumber, jobsInfoMap *JobsInfo, coordinatorChannels *CoordinatorChannels) {
 
-	jobPartInfo := jobsInfoMap.JobInfo(jobId).JobPartPlanInfo(0)
+	jobPartInfo := jobsInfoMap.JobInfo(jobId).JobPartPlanInfo(partNumber)
 
 	// jPartPlanHeader represents the memory map JobPartPlan header
 	jPartPlanHeader := jobPartInfo.getJobPartPlanPointer()
