@@ -82,22 +82,21 @@ func (t *TransferMsg) blobHttpHeaderAndMetadata(sourceBytes []byte) (httpHeaderP
 
 	jPartPlanInfo := t.jobInfo.JobPartPlanInfo(t.partNumber)
 	jPartPlanHeader := jPartPlanInfo.getJobPartPlanPointer()
-	contentTpe := ""
+	contentType := ""
 	contentEncoding := ""
-	// If NoGuessMimeType is set to true, then detecting the content type
+	// If NoGuessMimeType is set to false, then detecting the content type
 	if !jPartPlanHeader.BlobData.NoGuessMimeType {
-		contentTpe = http.DetectContentType(sourceBytes)
+		contentType = http.DetectContentType(sourceBytes)
 	} else {
 		// If the NoGuessMimeType is set to false, then using the user given content-type
-		if jPartPlanHeader.BlobData.ContentEncodingLength > 0 {
-			contentTpe = string(jPartPlanHeader.BlobData.ContentType[:])
+		if jPartPlanHeader.BlobData.ContentTypeLength > 0 {
+			contentType = string(jPartPlanHeader.BlobData.ContentType[:jPartPlanHeader.BlobData.ContentTypeLength])
 		}
 	}
-
 	if jPartPlanHeader.BlobData.ContentEncodingLength > 0 {
-		contentEncoding = string(jPartPlanHeader.BlobData.ContentEncoding[:])
+		contentEncoding = string(jPartPlanHeader.BlobData.ContentEncoding[:jPartPlanHeader.BlobData.ContentEncodingLength])
 	}
-	httpHeaderProperties = azblob.BlobHTTPHeaders{ContentType: contentTpe, ContentEncoding: contentEncoding}
+	httpHeaderProperties = azblob.BlobHTTPHeaders{ContentType: contentType, ContentEncoding: contentEncoding}
 
 	metadata = jPartPlanInfo.metaData
 	
