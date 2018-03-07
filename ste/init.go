@@ -126,14 +126,8 @@ func ExecuteNewCopyJobPartOrder(payload common.CopyJobPartOrderRequest, coordina
 	fileName := createJobPartPlanFile(payload, destBlobData, jobsInfoMap)
 	// If file creation fails, then request is terminated as a bad request
 
-	// Creating JobPartPlanInfo reference for new job part order
-	var jobHandler = new(JobPartPlanInfo)
-
-	// creating context with cancel for the new job
-	//jobHandler.ctx, jobHandler.cancel = context.WithCancel(context.Background())
-
-	// Initializing the JobPartPlanInfo for new job
-	(jobHandler).initialize(context.Background(), fileName)
+	// Creating and Initialize JobPartPlanInfo reference for new job part order
+	jobHandler := initializeJobPartPlanInfo(context.Background(), fileName)
 
 	jobsInfoMap.AddJobPartPlanInfo(jobHandler)
 

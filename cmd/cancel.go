@@ -33,11 +33,11 @@ func init() {
 	cancelCmd := &cobra.Command{
 		Use:        "cancel",
 		SuggestFor: []string{"cancl", "ancl", "cacl"},
-		Short:      "cancel cancels the existing job for given JobId",
-		Long:       `cancel cancels the existing job for given JobId`,
+		Short:      "cancel cancels an existing job",
+		Long:       "cancel cancels an existing job",
 		Args: func(cmd *cobra.Command, args []string) error {
-			// the cancel command requires necessarily to have an argument
-			// cancel jobId -- cancel all the parts of an existing job for given jobId
+			// the cancel command requires a JobId argument;
+			// it then cancels all parts of the specified job.
 
 			// If no argument is passed then it is not valid
 			if len(args) != 1 {

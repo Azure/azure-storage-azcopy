@@ -99,10 +99,8 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfo, coordinatorChannels *
 		fileName := files[index].Name()
 		// extracting the jobId and part number from file name
 		jobId, partNumber, _ := parseStringToJobInfo(fileName)
-		// creating a new JobPartPlanInfo pointer and initializing it
-		jobHandler := new(JobPartPlanInfo)
-		// Initializing the JobPartPlanInfo for existing Job file
-		jobHandler.initialize(steContext, fileName)
+		// creating and initializeJobPartPlanInfo a new JobPartPlanInfo pointer and initializing it
+		jobHandler := initializeJobPartPlanInfo(steContext, fileName)
 
 		// storing the JobPartPlanInfo pointer for given combination of JobId and part number
 		jobsInfoMap.AddJobPartPlanInfo(jobHandler)
@@ -116,8 +114,7 @@ func reconstructTheExistingJobParts(jobsInfoMap *JobsInfo, coordinatorChannels *
 	}
 	// checking for cancelled jobs and to cleanup those jobs
 	// this api is called to ensure that no cancelled jobs exists in in-memory
-	// this api is called to ensure that no cancelled jobs exists in in-memory
-	//checkCancelledJobsInJobMap(jobsInfoMap)
+		//checkCancelledJobsInJobMap(jobsInfoMap)
 }
 
 // checkCancelledJobsInJobMap api checks the JobPartPlan header of part 0 of each job

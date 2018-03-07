@@ -15,8 +15,8 @@ import (
 
 var currFileDirectory string = "."
 
-// initialize func initializes the JobPartPlanInfo handler for given JobPartOrder
-func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName string) {
+// initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
+func initializeJobPartPlanInfo(jobContext context.Context, fileName string) (*JobPartPlanInfo){
 
 	/*
 	 *       creates the job context with cancel using the given context
@@ -25,6 +25,7 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	 *       initializes the transferInfo struct for each transfer in jobpartorder
 	 */
 
+	job := new(JobPartPlanInfo)
 	// creating the context with cancel
 	job.ctx, job.cancel = context.WithCancel(jobContext)
 
@@ -40,6 +41,8 @@ func (job *JobPartPlanInfo) initialize(jobContext context.Context, fileName stri
 	job.TransfersInfo = transferInfo
 
 	job.numberOfTransfersDone_doNotUse = 0
+
+	return job
 }
 
 // shutDownHandler unmaps the memory map file for given JobPartOrder

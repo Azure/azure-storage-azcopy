@@ -104,7 +104,7 @@ func (jMap *JobsInfo) AddJobPartPlanInfo(jpp *JobPartPlanInfo) {
 		jobInfo = NewJobInfo(jPartPlanInfo.Id, jMap)
 	}
 	// If there is no logger instance for the current Job,
-	// initialize the logger instance with log severity and jobId
+	// initializeJobPartPlanInfo the logger instance with log severity and jobId
 	// log filename is $JobId.log
 	if jobInfo.logger == nil {
 		file, err := os.OpenFile(fmt.Sprintf("%s.log", jPartPlanInfo.Id.String()), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)

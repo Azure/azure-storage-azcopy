@@ -172,6 +172,7 @@ func (ji *JobInfo) Panic(err error) {
 	ji.logger.Panic(err)
 }
 
+
 // NewJobsInfo returns a new instance of synchronous JobsInfo to hold JobPartPlanInfo Pointer for given combination of JobId and part number.
 func NewJobInfo(jobId common.JobID, jobsInfo *JobsInfo) *JobInfo {
 	return &JobInfo{
