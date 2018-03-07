@@ -51,11 +51,11 @@ func (localToPageBlob *localToPageBlob) runPrologue(chunkChannel chan<- ChunkMsg
 
 	// step 2: map in the file to upload before appending blobs
 	localToPageBlob.memoryMappedFile, localToPageBlob.srcFileHandler = executionEngineHelper{}.openAndMemoryMapFile(localToPageBlob.transfer.Source)
-	//blobHttpHeaders, metaData := transfer.blobHttpHeaderAndMetadata(memoryMappedFile)
+	blobHttpHeaders, metaData := localToPageBlob.transfer.blobHttpHeaderAndMetadata(localToPageBlob.memoryMappedFile)
 
 	// step 3: Create Page Blob of the source size
 	_, err := localToPageBlob.pageBlobUrl.Create(localToPageBlob.transfer.TransferContext, int64(localToPageBlob.transfer.SourceSize),
-		0, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+		0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
 	if err != nil {
 		localToPageBlob.transfer.Log(common.LogError, fmt.Sprintf("failed since PageCreate failed due to %s", err.Error()))
 		localToPageBlob.transfer.TransferCancelFunc()
