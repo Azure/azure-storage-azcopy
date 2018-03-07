@@ -76,7 +76,7 @@ func (t TransferMsg) blobHttpHeaderAndMetadata(sourceBytes []byte) (httpHeaderPr
 	contentTpe := ""
 	contentEncoding := ""
 	// If NoGuessMimeType is set to true, then detecting the content type
-	if jPartPlanHeader.BlobData.NoGuessMimeType {
+	if !jPartPlanHeader.BlobData.NoGuessMimeType {
 		contentTpe = http.DetectContentType(sourceBytes)
 	} else {
 		// If the NoGuessMimeType is set to false, then using the user given content-type
