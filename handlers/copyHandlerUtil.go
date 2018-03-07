@@ -29,15 +29,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
 
 const (
-	// TODO there seems to be a bug with updating transfer status when there's more than 1 part
-	// TODO decrease this to something more reasonable
-	NumOfFilesPerUploadJobPart = 100000000
+	NumOfFilesPerUploadJobPart = 1000
 )
 
 type copyHandlerUtil struct{}
@@ -82,13 +79,13 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 
 	// +1 because we want to include the / at the end of the dir
 	scrubAway := rootPath[:strings.LastIndex(rootPath, string(os.PathSeparator))+1]
-	fmt.Println("scrub away", scrubAway)
 
 	result := strings.Replace(filePath, scrubAway, "", 1)
+
+	// the back slashes need to be replaced with forward ones
 	if os.PathSeparator == '\\' {
-		result = strings.Replace(rootPath, "\\", "/", -1)
+		result = strings.Replace(result, "\\", "/", -1)
 	}
-	fmt.Println("result", result)
 	return result
 }
 
@@ -106,10 +103,6 @@ func (util copyHandlerUtil) sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOr
 		}
 	}
 	return false, ""
-
-	//marshalled, _ := json.MarshalIndent(jobOrder, "", "  ")
-	//fmt.Println(string(marshalled))
-	//return true, ""
 }
 
 func (copyHandlerUtil) fetchJobStatus(jobId common.JobID) string {
@@ -131,9 +124,6 @@ func (copyHandlerUtil) fetchJobStatus(jobId common.JobID) string {
 	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
 	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
 	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)
-
-	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
-	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
 
 	tm.Println(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress))
 	tm.Println(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024))
@@ -173,6 +163,11 @@ func newUploadTaskEnumerator(jobPartOrderToFill *common.CopyJobPartOrderRequest)
 // accept a new transfer, if the threshold is reached, dispatch a job part order
 func (enumerator *uploadTaskEnumerator) addTransfer(transfer common.CopyTransfer) error {
 	enumerator.transfers = append(enumerator.transfers, transfer)
+
+	// if the transfer to be added is a page blob, we need to validate its file size
+	if enumerator.jobPartOrderToFill.OptionalAttributes.BlobType == common.PageBlob && transfer.SourceSize % 512 != 0 {
+		return errors.New(fmt.Sprintf("cannot perform upload for %s as a page blob because its size is not an exact multiple 512 bytes", transfer.Source))
+	}
 
 	// dispatch the transfers once the number reaches NumOfFilesPerUploadJobPart
 	// we do this so that in the case of large uploads, the transfer engine can get started
@@ -222,12 +217,16 @@ func (enumerator *uploadTaskEnumerator) enumerate(listOfFilesAndDirectories []st
 				destinationUrl.Path = util.generateBlobPath(destinationUrl.Path, f.Name())
 			}
 
-			enumerator.addTransfer(common.CopyTransfer{
+			err = enumerator.addTransfer(common.CopyTransfer{
 				Source:           listOfFilesAndDirectories[0],
 				Destination:      destinationUrl.String(),
 				LastModifiedTime: f.ModTime(),
 				SourceSize:       f.Size(),
 			})
+
+			if err != nil {
+				return err
+			}
 			return enumerator.dispatchFinalPart()
 		}
 	}
@@ -261,24 +260,30 @@ func (enumerator *uploadTaskEnumerator) enumerate(listOfFilesAndDirectories []st
 						// the path in the blob name started at the given fileOrDirectoryPath
 						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
 						destinationUrl.Path = util.generateBlobPath(cleanContainerPath, util.getRelativePath(fileOrDirectoryPath, pathToFile))
-						enumerator.addTransfer(common.CopyTransfer{
+						err = enumerator.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      destinationUrl.String(),
 							LastModifiedTime: f.ModTime(),
 							SourceSize:       f.Size(),
 						})
+						if err != nil {
+							return err
+						}
 					}
 					return nil
 				})
 			} else if !f.IsDir() {
 				// files are uploaded using their file name as blob name
 				destinationUrl.Path = util.generateBlobPath(cleanContainerPath, f.Name())
-				enumerator.addTransfer(common.CopyTransfer{
+				err = enumerator.addTransfer(common.CopyTransfer{
 					Source:           fileOrDirectoryPath,
 					Destination:      destinationUrl.String(),
 					LastModifiedTime: f.ModTime(),
 					SourceSize:       f.Size(),
 				})
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
