@@ -22,51 +22,53 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
+
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	tm "github.com/buger/goterm"
-	"io/ioutil"
+
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
-)
-
-const (
-	NumOfFilesPerUploadJobPart = 1000
 )
 
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	jobPartOrder := common.CopyJobPartOrderRequest{}
-	ApplyFlags(&commandLineInput, &jobPartOrder)
+	copyHandlerUtil{}.applyFlags(&commandLineInput, &jobPartOrder)
 
 	// generate job id
 	jobId := common.JobID(common.NewUUID())
+	jobPartOrder.ID = jobId
 	jobStarted := true
 
+	// not having a valid blob type is a fatal error
 	if jobPartOrder.OptionalAttributes.BlobType == common.InvalidBlob {
-		fmt.Println("invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
+		fmt.Println("Invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
 		return
 	}
-	jobPartOrder.ID = jobId
 
+	// depending on the source and destination type, we process the cp command differently
 	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
-		jobStarted = HandleUploadFromLocalToBlobStorage(&commandLineInput, &jobPartOrder)
+		jobStarted = handleUploadFromLocalToBlobStorage(&commandLineInput, &jobPartOrder)
 	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
-		jobStarted = HandleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder)
+		jobStarted = handleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder)
 	}
+
+	// unexpected errors can happen while communicating with the transfer engine
 	if !jobStarted {
 		fmt.Print("Job with id", jobId, "was not abe to start. Please try again")
 		return
 	}
 
+	// in background mode we would spit out the job id and quit
+	// in foreground mode we would continuously print out status updates for the job, so the job id is not important
 	fmt.Println("Job with id", jobId, "has started.")
 	if commandLineInput.IsaBackgroundOp {
 		return
@@ -77,10 +79,8 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
 
-	// timeOut channel will receive a message after every 2 seconds
-	//timeOut := time.After(2 * time.Second)
-
-	// Waiting for signals from either cancelChannel or timeOut Channel. If no signal received, will sleep for 100 milliseconds
+	// waiting for signals from either cancelChannel or timeOut Channel.
+	// if no signal received, will fetch/display a job status update then sleep for a bit
 	for {
 		select {
 		case <-cancelChannel:
@@ -88,132 +88,56 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 			HandleCancelCommand(jobId.String())
 			os.Exit(1)
 		default:
-			jobStatus := fetchJobStatus(jobId)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobId)
+
+			// happy ending to the front end
 			if jobStatus == "JobCompleted" {
 				os.Exit(1)
 			}
-			//time.Sleep(1 * time.Second)
+
+			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	return
 }
 
-func HandleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
+func handleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
 
-	fmt.Println("HandleUploadFromLocalToWastore startTime ", time.Now())
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Local
 	jobPartOrderToFill.DestinationType = common.Blob
 
-	sourceFileInfo, err := os.Stat(commandLineInput.Source)
-
-	// since source was already validated, it would be surprising if file/directory cannot be accessed at this point
-	if err != nil {
-		panic("cannot access source, not a valid local file system path")
-	}
-	// If the blob type is PageBlob and source size is not multiple of 512, then it cannot be uploaded as PageBlob.
-	if jobPartOrderToFill.OptionalAttributes.BlobType == common.PageBlob &&
-		(sourceFileInfo.Size()%common.PageBlobPageBytes != 0) {
-		fmt.Println("cannot perform the upload since the blob-type is page blob and source cannot be uploaded in exact multiple page of 512")
-		return false
-	}
 	// attempt to parse the destination url
 	destinationUrl, err := url.Parse(commandLineInput.Destination)
 	if err != nil {
+		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
 
-	// TODO add source id = last modified time
-	// uploading entire directory to Azure Storage
-	// listing needs to be performed
-	if sourceFileInfo.IsDir() {
-		files, err := ioutil.ReadDir(commandLineInput.Source)
-
-		// since source was already validated, it would be surprising if file/directory cannot be accessed at this point
-		if err != nil {
-			panic("cannot access source, not a valid local file system path")
-		}
-
-		// make sure this is a container url
-		//TODO root container handling
-		if strings.Contains(destinationUrl.Path[1:], "/") {
-			panic("destination is not a valid container url")
-		}
-
-		// temporarily save the path of the container
-		cleanContainerPath := destinationUrl.Path
-		var Transfers []common.CopyTransfer
-		numInTransfers := 0
-		partNumber := 0
-
-		for _, f := range files {
-			if !f.IsDir() {
-				destinationUrl.Path = fmt.Sprintf("%s/%s", cleanContainerPath, f.Name())
-				Transfers = append(Transfers, common.CopyTransfer{
-					Source:           path.Join(commandLineInput.Source, f.Name()),
-					Destination:      destinationUrl.String(),
-					LastModifiedTime: f.ModTime(),
-					SourceSize:       f.Size(),
-				})
-				numInTransfers += 1
-
-				if numInTransfers == NumOfFilesPerUploadJobPart {
-					jobPartOrderToFill.Transfers = Transfers //TODO make truth, more defensive, consider channel
-					jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
-					partNumber += 1
-					jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-					if !jobStarted {
-						fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
-						return jobStarted
-					}
-					Transfers = []common.CopyTransfer{}
-					numInTransfers = 0
-				}
-			}
-		}
-
-		if numInTransfers != 0 {
-			jobPartOrderToFill.Transfers = Transfers
-		} else {
-			jobPartOrderToFill.Transfers = []common.CopyTransfer{}
-		}
-		jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
-		jobPartOrderToFill.IsFinalPart = true
-		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-		if !jobStarted {
-			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
-			return jobStarted
-		}
-
-	} else { // upload single file
-
-		// if a container url is given, must append file name to it
-		if !strings.Contains(destinationUrl.Path[1:], "/") {
-			destinationUrl.Path = fmt.Sprintf("%s/%s", destinationUrl.Path, sourceFileInfo.Name())
-		}
-		//fmt.Println("Upload", path.Join(commandLineInput.Source), "to", destinationUrl.String(), "with size", sourceFileInfo.Size())
-		singleTask := common.CopyTransfer{
-			Source:           commandLineInput.Source,
-			Destination:      destinationUrl.String(),
-			LastModifiedTime: sourceFileInfo.ModTime(),
-			SourceSize:       sourceFileInfo.Size(),
-		}
-		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
-		jobPartOrderToFill.PartNum = 0
-		jobPartOrderToFill.IsFinalPart = true
-		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
-		if !jobStarted {
-			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
-			return jobStarted
-		}
+	// list the source files and directories
+	matches, err := filepath.Glob(commandLineInput.Source)
+	if err != nil || len(matches) == 0 {
+		fmt.Println("Cannot find source to upload.")
+		return false
 	}
-	return true
+
+	enumerator := newUploadTaskEnumerator(jobPartOrderToFill)
+	err = enumerator.enumerate(matches, commandLineInput.Recursive, destinationUrl)
+
+	if err != nil {
+		fmt.Printf("Cannot start job due to error: %s.\n", err)
+		return false
+	} else {
+		return true
+	}
 }
 
-func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAndFlags,
+func handleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
+	util := copyHandlerUtil{}
+
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
@@ -267,10 +191,7 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 			SourceSize:       blobProperties.ContentLength(),
 		}
 		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
-		jobPartOrderToFill.IsFinalPart = true
-		jobPartOrderToFill.PartNum = 0
-
-		jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
+		jobStarted, errorMsg := util.sendJobPartOrderToSTE(jobPartOrderToFill, 0, true)
 		if !jobStarted {
 			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 			return jobStarted
@@ -302,93 +223,17 @@ func HandleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 				Transfers = append(Transfers, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime: blobInfo.Properties.LastModified, SourceSize: *blobInfo.Properties.ContentLength})
 			}
 			jobPartOrderToFill.Transfers = Transfers
-			jobPartOrderToFill.PartNum = common.PartNumber(partNumber)
-			partNumber += 1
-			if !marker.NotDone() { // if there is no more segment
-				jobPartOrderToFill.IsFinalPart = true
-			}
-			jobStarted, errorMsg := sendJobPartOrderToSTE(jobPartOrderToFill)
+			jobStarted, errorMsg := util.sendJobPartOrderToSTE(jobPartOrderToFill, common.PartNumber(partNumber), !marker.NotDone())
+
 			if !jobStarted {
 				fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
 				return jobStarted
 			}
+
+			partNumber += 1
 		}
 	}
 	// erase the blob type, as it does not matter
 	commandLineInput.BlobType = ""
 	return true
-}
-
-func ApplyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrderRequest) {
-	optionalAttributes := common.BlobTransferAttributes{
-		BlobType:                 common.BlobTypeStringToBlobType(commandLineInput.BlobType),
-		BlockSizeinBytes:         commandLineInput.BlockSize,
-		ContentType:              commandLineInput.ContentType,
-		ContentEncoding:          commandLineInput.ContentEncoding,
-		Metadata:                 commandLineInput.Metadata,
-		NoGuessMimeType:          commandLineInput.NoGuessMimeType,
-		PreserveLastModifiedTime: commandLineInput.PreserveLastModifiedTime,
-	}
-
-	jobPartOrderToFill.OptionalAttributes = optionalAttributes
-	jobPartOrderToFill.LogVerbosity = common.LogLevel(commandLineInput.LogVerbosity)
-	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
-}
-
-func sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest) (bool, string) {
-
-	for tryCount := 0; tryCount < 3; tryCount++ {
-		resp, err := common.Rpc("copy", jobOrder)
-		if err == nil {
-			return parseCopyJobPartResponse(resp)
-		} else {
-			// in case the transfer engine has not finished booting up, we must wait
-			time.Sleep(time.Duration(tryCount) * time.Second)
-		}
-	}
-	return false, ""
-}
-
-func fetchJobStatus(jobId common.JobID) string {
-	lsCommand := common.ListRequest{JobId: jobId}
-
-	responseBytes, _ := common.Rpc("listJobProgressSummary", lsCommand)
-
-	if len(responseBytes) == 0 {
-		return ""
-	}
-	var summary common.ListJobSummaryResponse
-	json.Unmarshal(responseBytes, &summary)
-
-	tm.Clear()
-	tm.MoveCursor(1, 1)
-
-	fmt.Println("----------------- Progress Summary for JobId ", jobId, "------------------")
-	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfers)
-	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberofTransferCompleted)
-	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberofFailedTransfer)
-	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)
-
-	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress)), tm.WHITE), tm.GREEN))
-	//tm.Println(tm.Background(tm.Color(tm.Bold(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024)), tm.WHITE), tm.BLUE))
-
-	tm.Println(fmt.Sprintf("Job Progress: %d %%", summary.PercentageProgress))
-	tm.Println(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024))
-
-	for index := 0; index < len(summary.FailedTransfers); index++ {
-		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
-		fmt.Println(message)
-	}
-	tm.Flush()
-
-	return summary.JobStatus
-}
-
-func parseCopyJobPartResponse(data []byte) (bool, string) {
-	var copyJobPartResponse common.CopyJobPartOrderResponse
-	err := json.Unmarshal(data, &copyJobPartResponse)
-	if err != nil {
-		panic(err)
-	}
-	return copyJobPartResponse.JobStarted, copyJobPartResponse.ErrorMsg
 }
