@@ -11,6 +11,8 @@ import (
 	"reflect"
 	"time"
 	"unsafe"
+	"strings"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 )
 
 var currFileDirectory string = "."
@@ -34,6 +36,23 @@ func initializeJobPartPlanInfo(jobContext context.Context, fileName string) (*Jo
 
 	// gets the memory map JobPartPlanHeader for given JobPartOrder
 	jPartPlan := job.getJobPartPlanPointer()
+
+	// if some metadata is passed, then parse the given metadata and store it in azblob.Metadata format
+	if jPartPlan.BlobData.MetaDataLength > 0 {
+		// get the metadata for JobPart from memorymap slice
+		metaDataString := string(jPartPlan.BlobData.MetaData[:jPartPlan.BlobData.MetaDataLength])
+		var mData = make(map[string]string)
+		// Split the meta data string using ';' to get key=value pairs
+		metaDataKeyValues := strings.Split(metaDataString, ";")
+		for index := 0; index < len(metaDataKeyValues); index++ {
+			// Splitting each key=value pair to get key and values
+			keyValue := strings.Split(metaDataKeyValues[index], "=")
+			mData[keyValue[0]] = keyValue[1]
+		}
+		job.metaData = mData
+	}else{
+		job.metaData = azblob.Metadata{}
+	}
 
 	// initializes the transferInfo slice
 	transferInfo := make([]TransferInfo, jPartPlan.NumTransfers)

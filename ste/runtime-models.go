@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync/atomic"
 	"time"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 )
 
 // TransfersInfo represents the runtime information of a transfer of a JobPartOrder
@@ -48,6 +49,9 @@ type JobPartPlanInfo struct {
 
 	// TransfersInfo list of transfer info of the transfers of JobPartOrder
 	TransfersInfo []TransferInfo
+
+	metaData azblob.Metadata
+
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed

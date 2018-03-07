@@ -6,7 +6,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -80,7 +79,9 @@ func (t *TransferMsg) TransferStatus(transferStatus common.TransferStatus) {
 func (t *TransferMsg) blobHttpHeaderAndMetadata(sourceBytes []byte) (httpHeaderProperties azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
 
 	// jPartPlanHeader is the JobPartPlan header for memory mapped JobPartOrder File
-	jPartPlanHeader := t.jobInfo.JobPartPlanInfo(t.partNumber).getJobPartPlanPointer()
+
+	jPartPlanInfo := t.jobInfo.JobPartPlanInfo(t.partNumber)
+	jPartPlanHeader := jPartPlanInfo.getJobPartPlanPointer()
 	contentTpe := ""
 	contentEncoding := ""
 	// If NoGuessMimeType is set to true, then detecting the content type
@@ -98,20 +99,8 @@ func (t *TransferMsg) blobHttpHeaderAndMetadata(sourceBytes []byte) (httpHeaderP
 	}
 	httpHeaderProperties = azblob.BlobHTTPHeaders{ContentType: contentTpe, ContentEncoding: contentEncoding}
 
-	if jPartPlanHeader.BlobData.MetaDataLength == 0 {
-		return
-	}
-	var mData azblob.Metadata
-	// metaDataString is meta data stored as string in JobPartOrder file
-	metaDataString := string(jPartPlanHeader.BlobData.MetaData[:])
-	// Split the meta data string using ';' to get key=value pairs
-	metaDataKeyValues := strings.Split(metaDataString, ";")
-	for index := 0; index < len(metaDataKeyValues); index++ {
-		// Splitting each key=value pair to get key and values
-		keyValue := strings.Split(metaDataKeyValues[index], "=")
-		mData[keyValue[0]] = keyValue[1]
-	}
-	metadata = mData
+	metadata = jPartPlanInfo.metaData
+	
 	return
 }
 
