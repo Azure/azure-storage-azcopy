@@ -97,11 +97,17 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 	return func(workerId int) {
 		t := localToPageBlob.transfer
 		file := localToPageBlob.srcFileHandler
-		if t.TransferContext.Err() != nil {
-			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up page %d", startPage))
+		// chunk done is the function called after success / failure of each chunk.
+		// If the calling chunk is the last chunk of transfer, then it updates the transfer status,
+		// mark transfer done, unmap the source memory map and close the source file descriptor.
+		pageDone := func(status common.TransferStatus){
 			if t.ChunksDone() == numberOfPages {
+				// Transfer status
+				if status != common.TransferInProgress {
+					t.TransferStatus(status)
+				}
 				t.Log(common.LogInfo,
-					fmt.Sprintf("has worker %d which is finalizing cancellation of transfer", workerId))
+					fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
 				t.TransferDone()
 				localToPageBlob.memoryMappedFile.Unmap()
 				err := file.Close()
@@ -109,10 +115,14 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 					t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
 				}
 			}
+		}
+
+		if t.TransferContext.Err() != nil {
+			t.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up page %d", startPage))
+			pageDone(common.TransferInProgress)
 		} else {
 			// pageBytes is the byte slice of Page for the given page range
 			pageBytes := localToPageBlob.memoryMappedFile[startPage:startPage+pageSize]
-
 			// converted the bytes slice to int64 array.
 			// converting each of 8 bytes of byteSlice to an integer.
 			int64Slice := (*(*[]int64)(unsafe.Pointer(&pageBytes)))[:len(pageBytes)/8]
@@ -133,16 +143,7 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			// Updating number of chunks done.
 			if allBytesZero{
 				t.Log(common.LogInfo , fmt.Sprintf("has worker %d which is not performing PutPages for Page range from %d to %d since all the bytes are zero", workerId, startPage, startPage+pageSize))
-				if t.ChunksDone() == numberOfPages{
-					t.TransferDone()
-					t.TransferStatus(common.TransferComplete)
-					t.Log(common.LogInfo, "successfully completed")
-					localToPageBlob.memoryMappedFile.Unmap()
-					err := file.Close()
-					if err != nil {
-						t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
-					}
-				}
+				pageDone(common.TransferComplete)
 				return
 			}
 
@@ -151,37 +152,29 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			_, err := localToPageBlob.pageBlobUrl.PutPages(t.TransferContext, azblob.PageRange{Start: int32(startPage), End: int32(startPage + pageSize - 1)},
 				body, azblob.BlobAccessConditions{})
 			if err != nil {
+				status := common.TransferInProgress
 				if t.TransferContext.Err() != nil {
 					t.Log(common.LogError,
 						fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because transfer was cancelled", workerId, startPage, startPage+pageSize))
 				} else {
 					t.Log(common.LogError,
 						fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage+pageSize, err.Error()))
-					t.TransferStatus(common.TransferFailed)
+					// cancelling the transfer
+					t.TransferCancelFunc()
+					status = common.TransferFailed
 				}
-				if t.ChunksDone() == numberOfPages {
-					t.TransferDone()
-					localToPageBlob.memoryMappedFile.Unmap()
-					err = file.Close()
-					if err != nil {
-						t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
-					}
-					return
-				}
+				pageDone(status)
+				return
 			}
 			t.Log(common.LogInfo, fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
 
 			//updating the through put counter of the Job
 			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(pageSize))
-			if t.ChunksDone() == numberOfPages {
-				t.TransferDone()
-				t.TransferStatus(common.TransferComplete)
-				t.Log(common.LogInfo, "successfully completed")
-				localToPageBlob.memoryMappedFile.Unmap()
-				err = file.Close()
-				if err != nil {
-					t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
-				}
+			// this check is to cover the scenario when the last page is successfully updated, but transfer was cancelled.
+			if t.TransferContext.Err() != nil{
+				pageDone(common.TransferInProgress)
+			}else{
+				pageDone(common.TransferComplete)
 			}
 		}
 	}
