@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"github.com/Azure/azure-storage-azcopy/handlers"
+	"unsafe"
 )
 
 type localToPageBlob struct {
@@ -109,7 +110,43 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 				}
 			}
 		} else {
-			body := newRequestBodyPacer(bytes.NewReader(localToPageBlob.memoryMappedFile[startPage:startPage+pageSize]), localToPageBlob.pacer)
+			// pageBytes is the byte slice of Page for the given page range
+			pageBytes := localToPageBlob.memoryMappedFile[startPage:startPage+pageSize]
+
+			// converted the bytes slice to int64 array.
+			// converting each of 8 bytes of byteSlice to an integer.
+			int64Slice := (*(*[]int64)(unsafe.Pointer(&pageBytes)))[:len(pageBytes)/8]
+
+			allBytesZero := true
+			// Iterating though each integer of in64 array to check if any of the number is greater than 0 or not.
+			// If any no is greater than 0, it means that the 8 bytes slice represented by that integer has atleast one byte greater than 0
+			// If all integers are 0, it means that the 8 bytes slice represented by each integer has no byte greater than 0
+			for index := 0; index < len(int64Slice); index++{
+				if int64Slice[index] > 0{
+					// If one number is greater than 0, then we need to perform the PutPage update.
+					allBytesZero = false
+					break
+				}
+			}
+
+			// If all the bytes in the pageBytes is 0, then we do not need to perform the PutPage
+			// Updating number of chunks done.
+			if allBytesZero{
+				t.Log(common.LogInfo , fmt.Sprintf("has worker %d which is not performing PutPages for Page range from %d to %d since all the bytes are zero", workerId, startPage, startPage+pageSize))
+				if t.ChunksDone() == numberOfPages{
+					t.TransferDone()
+					t.TransferStatus(common.TransferComplete)
+					t.Log(common.LogInfo, "successfully completed")
+					localToPageBlob.memoryMappedFile.Unmap()
+					err := file.Close()
+					if err != nil {
+						t.Log(common.LogError, fmt.Sprintf("got an error while closing file % because of %s", file.Name(), err.Error()))
+					}
+				}
+				return
+			}
+
+			body := newRequestBodyPacer(bytes.NewReader(pageBytes), localToPageBlob.pacer)
 
 			_, err := localToPageBlob.pageBlobUrl.PutPages(t.TransferContext, azblob.PageRange{Start: int32(startPage), End: int32(startPage + pageSize - 1)},
 				body, azblob.BlobAccessConditions{})
