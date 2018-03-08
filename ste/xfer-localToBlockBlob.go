@@ -115,14 +115,20 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adjustedChunkSize int64, startIndex int64) chunkFunc {
 	return func(workerId int) {
 		totalNumOfChunks := uint32(localToBlockBlob.transfer.NumChunks)
+		transferDone := func(){
+			localToBlockBlob.transfer.TransferDone()
+			localToBlockBlob.memoryMappedFile.Unmap()
 
+			err := localToBlockBlob.srcFileHandler.Close()
+			if err != nil {
+				localToBlockBlob.transfer.Log(common.LogError,
+					fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
+						workerId, err.Error()))
+			}
+		}
 		if localToBlockBlob.transfer.TransferContext.Err() != nil {
 			localToBlockBlob.transfer.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
-			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
-				localToBlockBlob.transfer.Log(common.LogInfo,
-					fmt.Sprintf("has worker %d which is finalizing cancellation of transfer", workerId))
-				localToBlockBlob.transfer.TransferDone()
-			}
+			transferDone()
 		} else {
 			// step 1: generate block ID
 			blockId := common.NewUUID().String()
@@ -138,29 +144,24 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 			putBlockResponse, err := blockBlobUrl.PutBlock(localToBlockBlob.transfer.TransferContext, encodedBlockId, body, azblob.LeaseAccessConditions{})
 
 			if err != nil {
-				// cancel entire transfer because this chunk has failed
-				localToBlockBlob.transfer.TransferCancelFunc()
-				localToBlockBlob.transfer.Log(common.LogInfo,
-					fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
-						workerId, chunkId, startIndex))
+				if localToBlockBlob.transfer.TransferContext.Err() != nil{
+					localToBlockBlob.transfer.Log(common.LogInfo,
+						fmt.Sprintf("has worker %d which failed to upload chunkId %d because transfer was cancelled",
+							workerId, chunkId))
+				}else {
+					// cancel entire transfer because this chunk has failed
+					localToBlockBlob.transfer.TransferCancelFunc()
+					localToBlockBlob.transfer.Log(common.LogInfo,
+						fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
+							workerId, chunkId, startIndex))
 
-				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-				localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
-
+					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
+					localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
+				}
 				if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
 					localToBlockBlob.transfer.Log(common.LogInfo,
 						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
-					localToBlockBlob.transfer.TransferDone()
-
-					localToBlockBlob.memoryMappedFile.Unmap()
-
-					err := localToBlockBlob.srcFileHandler.Close()
-					if err != nil {
-						localToBlockBlob.transfer.Log(common.LogError,
-							fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
-								workerId, err.Error()))
-					}
-
+					transferDone()
 				}
 				return
 			}
@@ -175,7 +176,7 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
 				// If the transfer gets cancelled before the putblock list
 				if localToBlockBlob.transfer.TransferContext.Err() != nil {
-					localToBlockBlob.transfer.TransferDone()
+					transferDone()
 					return
 				}
 				// step 5: this is the last block, perform EPILOGUE
@@ -193,7 +194,7 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 						fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
 							workerId, chunkId, string(err.Error())))
 					localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
-					localToBlockBlob.transfer.TransferDone()
+					transferDone()
 					return
 				}
 
@@ -203,17 +204,7 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 
 				localToBlockBlob.transfer.Log(common.LogInfo, "completed successfully")
 				localToBlockBlob.transfer.TransferStatus(common.TransferComplete)
-				localToBlockBlob.transfer.TransferDone()
-
-				// unmapping the memory map file
-				localToBlockBlob.memoryMappedFile.Unmap()
-
-				err = localToBlockBlob.srcFileHandler.Close()
-				if err != nil {
-					localToBlockBlob.transfer.Log(common.LogError,
-						fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
-							workerId, err.Error()))
-				}
+				transferDone()
 			}
 		}
 	}
