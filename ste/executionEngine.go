@@ -26,6 +26,7 @@ import (
 	"os"
 	"time"
 	"github.com/Azure/azure-storage-azcopy/handlers"
+	"strings"
 )
 
 // TODO move execution engine as internal package
@@ -120,7 +121,7 @@ func (*executionEngine) computeTransferFactory(sourceLocationType, destinationLo
 type executionEngineHelper struct{}
 
 // opens file with desired flags and return *os.File
-func (executionEngineHelper executionEngineHelper) openFile(filePath string, flags int) *os.File {
+func (executionEngineHelper) openFile(filePath string, flags int) *os.File {
 	f, err := os.OpenFile(filePath, flags, 0644)
 	if err != nil {
 		panic(fmt.Sprintf("Error opening file: %s", err))
@@ -129,30 +130,58 @@ func (executionEngineHelper executionEngineHelper) openFile(filePath string, fla
 }
 
 // maps a *os.File into memory and return a byte slice (mmap.MMap)
-func (executionEngineHelper executionEngineHelper) mapFile(file *os.File) handlers.MMap {
+func (executionEngineHelper) mapFile(file *os.File) handlers.MMap {
 	fileInfo, err := file.Stat()
 	if err != nil{
 		panic(err)
 	}
 	memoryMappedFile, err := handlers.Map(file, true, 0, int(fileInfo.Size()))
 	if err != nil {
-		panic(fmt.Sprintf("Error mapping: %s", err))
+		panic(fmt.Sprintf("Error mapping: %s for file with name %s", err, file.Name()))
 	}
 	return memoryMappedFile
 }
 
 // create and memory map a file, given its path and length
-func (executionEngineHelper executionEngineHelper) createAndMemoryMapFile(destinationPath string, fileSize int64) (handlers.MMap,*os.File) {
-	f := executionEngineHelper.openFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC)
+func (executionEngineHelper) createAndMemoryMapFile(destinationPath string, fileSize int64) (handlers.MMap,*os.File) {
+	executionEngineHelper{}.createParentDirectoryIfNotExist(destinationPath)
+	f := executionEngineHelper{}.openFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC)
 	if truncateError := f.Truncate(fileSize); truncateError != nil {
 		panic(truncateError)
 	}
 
-	return executionEngineHelper.mapFile(f), f
+	return executionEngineHelper{}.mapFile(f), f
+}
+
+// in some cases (download), the file's parent directory must be created before the file can be created
+func (executionEngineHelper) createParentDirectoryIfNotExist (destinationPath string) {
+	// check if parent directory exists
+	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, string(os.PathSeparator))]
+	_, err := os.Stat(parentDirectory)
+
+	// if the parent directory does not exist, create it and all its parents
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(parentDirectory, os.ModePerm)
+
+		if err != nil {
+			panic(err)
+		}
+	} else if err != nil {
+		// TODO this needs to be handled, to consider: what other errors can happen? Are they recoverable?
+		panic(err)
+	}
+}
+
+// create an empty file and its parent directories, without any content
+func (executionEngineHelper) createEmptyFile(destinationPath string) {
+	executionEngineHelper{}.createParentDirectoryIfNotExist(destinationPath)
+
+	f := executionEngineHelper{}.openFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC)
+	f.Close()
 }
 
 // open and memory map a file, given its path
-func (executionEngineHelper executionEngineHelper) openAndMemoryMapFile(destinationPath string) (handlers.MMap, *os.File) {
-	f := executionEngineHelper.openFile(destinationPath, os.O_RDWR)
-	return executionEngineHelper.mapFile(f), f
+func (executionEngineHelper) openAndMemoryMapFile(destinationPath string) (handlers.MMap, *os.File) {
+	f := executionEngineHelper{}.openFile(destinationPath, os.O_RDWR)
+	return executionEngineHelper{}.mapFile(f), f
 }

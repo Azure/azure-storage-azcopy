@@ -72,27 +72,41 @@ func (blobToLocal *blobToLocal) runPrologue(chunkChannel chan<- ChunkMsg) {
 	blobSize := int64(blobToLocal.transfer.SourceSize)
 	downloadChunkSize := int64(blobToLocal.transfer.BlockSize)
 
-	// step 3: prep local file before download starts
-	blobToLocal.memoryMappedFile, blobToLocal.srcFileHandler = executionEngineHelper{}.createAndMemoryMapFile(blobToLocal.transfer.Destination, blobSize)
+	// step 3a: short-circuit if source has no content
+	if blobSize == 0 {
+		fmt.Println("Got here for destination", blobToLocal.transfer.Destination)
+		executionEngineHelper{}.createEmptyFile(blobToLocal.transfer.Destination)
+		blobToLocal.preserveLastModifiedTimeOfSourceToDestination()
 
-	// step 4: go through the blob range and schedule download chunk jobs
-	blockIdCount := int32(0)
-	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
-		adjustedChunkSize := downloadChunkSize
+		// run epilogue early
+		blobToLocal.transfer.Log(common.LogInfo," concluding the download Transfer of job after creating an empty file")
+		blobToLocal.transfer.TransferStatus(common.TransferComplete)
+		blobToLocal.transfer.TransferDone()
 
-		// compute exact size of the chunk
-		if startIndex+downloadChunkSize > blobSize {
-			adjustedChunkSize = blobSize - startIndex
+	} else { // 3b: source has content
+
+		// step 4: prep local file before download starts
+		blobToLocal.memoryMappedFile, blobToLocal.srcFileHandler = executionEngineHelper{}.createAndMemoryMapFile(blobToLocal.transfer.Destination, blobSize)
+
+		// step 5: go through the blob range and schedule download chunk jobs
+		blockIdCount := int32(0)
+		for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
+			adjustedChunkSize := downloadChunkSize
+
+			// compute exact size of the chunk
+			if startIndex+downloadChunkSize > blobSize {
+				adjustedChunkSize = blobSize - startIndex
+			}
+
+			// schedule the download chunk job
+			chunkChannel <- ChunkMsg{
+				doTransfer: blobToLocal.generateDownloadFunc(
+					blockIdCount, // serves as index of chunk
+					adjustedChunkSize,
+					startIndex),
+			}
+			blockIdCount += 1
 		}
-
-		// schedule the download chunk job
-		chunkChannel <- ChunkMsg{
-			doTransfer: blobToLocal.generateDownloadFunc(
-				blockIdCount, // serves as index of chunk
-				adjustedChunkSize,
-				startIndex),
-		}
-		blockIdCount += 1
 	}
 }
 
@@ -101,7 +115,6 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 	return func(workerId int) {
 		totalNumOfChunks := uint32(blobToLocal.transfer.NumChunks)
 
-		// TODO consider encapsulating this check operation on transferMsg
 		if blobToLocal.transfer.TransferContext.Err() != nil {
 			if blobToLocal.transfer.ChunksDone() == totalNumOfChunks {
 				blobToLocal.transfer.Log(common.LogInfo,
@@ -147,11 +160,8 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 				// step 4: this is the last block, perform EPILOGUE
 				blobToLocal.transfer.Log(common.LogInfo,
 					fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
-				//fmt.Println("Worker", workerId, "is concluding download TRANSFER job with", transferIdentifierStr, "after processing chunkId", chunkId)
 				blobToLocal.transfer.TransferStatus(common.TransferComplete)
-				blobToLocal.transfer.Log(common.LogInfo,
-					fmt.Sprintf(" has worker %d is finalizing cancellation of Transfer", workerId))
-				blobToLocal.transfer.TransferDone()
+				blobToLocal.transfer.TransferDone() //TODO rename to MarkTransferAsDone? ChunksDone also uses Done but return a number instead of updating status
 
 				blobToLocal.memoryMappedFile.Unmap()
 				err := blobToLocal.srcFileHandler.Close()
@@ -160,16 +170,22 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 						fmt.Sprintf(" has worker %v which failed to close the file %s and failed with error %s", workerId, blobToLocal.srcFileHandler.Name(),err.Error()))
 				}
 
-				lastModifiedTime, preserveLastModifiedTime := blobToLocal.transfer.PreserveLastModifiedTime()
-				if preserveLastModifiedTime {
-					err := os.Chtimes(blobToLocal.transfer.Destination, lastModifiedTime, lastModifiedTime)
-					if err != nil {
-						blobToLocal.transfer.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", blobToLocal.transfer.Destination))
-						return
-					}
-					blobToLocal.transfer.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", blobToLocal.transfer.Destination))
-				}
+				blobToLocal.preserveLastModifiedTimeOfSourceToDestination()
 			}
 		}
+	}
+}
+
+func (blobToLocal *blobToLocal) preserveLastModifiedTimeOfSourceToDestination() {
+	// TODO this doesn't seem to be working (on Mac), the date is set to Wednesday, December 31, 1969 at 4:00 PM for some reason
+	// TODO need more investigation + tests
+	lastModifiedTime, preserveLastModifiedTime := blobToLocal.transfer.PreserveLastModifiedTime()
+	if preserveLastModifiedTime {
+		err := os.Chtimes(blobToLocal.transfer.Destination, lastModifiedTime, lastModifiedTime)
+		if err != nil {
+			blobToLocal.transfer.Log(common.LogError, fmt.Sprintf(" not able to preserve last modified time for destionation %s", blobToLocal.transfer.Destination))
+			return
+		}
+		blobToLocal.transfer.Log(common.LogInfo, fmt.Sprintf("successfully preserve the last modified time for destinaton %s", blobToLocal.transfer.Destination))
 	}
 }
