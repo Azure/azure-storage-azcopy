@@ -86,13 +86,13 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 		case <-cancelChannel:
 			fmt.Println("Cancelling Job")
 			HandleCancelCommand(jobId.String())
-			os.Exit(1)
+			os.Exit(0)
 		default:
 			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobId)
 
 			// happy ending to the front end
 			if jobStatus == "JobCompleted" {
-				os.Exit(1)
+				os.Exit(0)
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
