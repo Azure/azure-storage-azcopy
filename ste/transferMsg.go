@@ -7,6 +7,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"net/http"
 	"time"
+	"bytes"
 )
 
 // TransferMsg represents the transfer message for scheduling the transfers
@@ -43,8 +44,12 @@ type TransferMsg struct {
 // If the given log level is greater than Minimum Log level
 // of the transfer, then messages will not be logged.
 func (t *TransferMsg) Log(level common.LogLevel, msg string) {
+	var buffer bytes.Buffer
 	jobId := t.jobInfo.JobPartPlanInfo(t.partNumber).getJobPartPlanPointer().Id
-	t.jobInfo.Log(level, fmt.Sprintf("transfer %d of job with jobId %s and part number %d %s", t.transferIndex, jobId.String(), t.partNumber, msg))
+	transferIdentifierString := fmt.Sprintf("transfer %d of job with jobId %s and part number %d ", t.transferIndex, jobId.String(), t.partNumber)
+	buffer.WriteString(transferIdentifierString)
+	buffer.WriteString(msg)
+	t.jobInfo.Log(level, buffer.String())
 }
 
 // ChunksDone increments numberOfChunksDone counter by 1
