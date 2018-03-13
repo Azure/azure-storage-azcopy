@@ -204,7 +204,7 @@ func createJobPartPlanFile(jobPartOrder common.CopyJobPartOrderRequest, data Job
 			SrcLength:               uint16(len(jobPartOrder.Transfers[index].Source)),
 			DstLength:               uint16(len(jobPartOrder.Transfers[index].Destination)),
 			ChunkNum:                getNumChunks(uint64(jobPartOrder.Transfers[index].SourceSize), uint64(data.BlockSize)),
-			ModifiedTime:            uint32(jobPartOrder.Transfers[index].LastModifiedTime.Nanosecond()),
+			ModifiedTime:            jobPartOrder.Transfers[index].LastModifiedTime.UnixNano(),
 			SourceSize:              uint64(jobPartOrder.Transfers[index].SourceSize),
 			CompletionTime:          0,
 			transferStatus_doNotUse: common.TransferInProgress}
