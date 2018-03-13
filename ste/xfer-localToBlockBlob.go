@@ -128,7 +128,11 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 		}
 		if localToBlockBlob.transfer.TransferContext.Err() != nil {
 			localToBlockBlob.transfer.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
-			transferDone()
+			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
+				localToBlockBlob.transfer.Log(common.LogInfo,
+					fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
+				transferDone()
+			}
 		} else {
 			// step 1: generate block ID
 			blockId := common.NewUUID().String()
