@@ -33,8 +33,8 @@ func init() {
 	resumeCmd := &cobra.Command{
 		Use:        "resume",
 		SuggestFor: []string{"resme", "esume", "resue"},
-		Short:      "resume resumes the existing job for given JobId",
-		Long:       `resume resumes the existing job for given JobId`,
+		Short:      "resume resumes the existing job for given JobId.",
+		Long:       `resume resumes the existing job for given JobId.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the resume command requires necessarily to have an argument
 			// resume jobId -- resumes all the parts of an existing job for given jobId
