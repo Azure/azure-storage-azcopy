@@ -108,8 +108,10 @@ func (*executionEngine) computeTransferFactory(sourceLocationType, destinationLo
 			return newLocalToBlockBlob
 		case common.AppendBlob:
 			return newLocalToAppendBlob
-		default:
+		case common.PageBlob:
 			return newLocalToPageBlob
+		default:
+			return nil
 		}
 	default:
 		return nil

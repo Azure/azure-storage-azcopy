@@ -59,6 +59,12 @@ func (t *TransferMsg) ChunksDone() uint32 {
 	return t.jobInfo.JobPartPlanInfo(t.partNumber).TransfersInfo[t.transferIndex].ChunksDone()
 }
 
+// GetChunksDone returns the number of chunks done of a transfer.
+// this api is exposed for developers to debug the code.
+func (t *TransferMsg) GetChunksDone() uint32{
+	return t.jobInfo.JobPartPlanInfo(t.partNumber).TransfersInfo[t.transferIndex].getNumberOfChunksDone()
+}
+
 // UpdateNumTransferDone api increments the var numberOfTransfersDone_doNotUse by 1 atomically
 // If this numberOfTransfersDone_doNotUse equals the number of transfer in a job part,
 // all transfers of Job Part have either paused, cancelled or completed
