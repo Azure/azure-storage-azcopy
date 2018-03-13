@@ -121,7 +121,7 @@ type JobPartPlanTransfer struct {
 	// ChunkNum represents the num of chunks a transfer is split into
 	ChunkNum uint16
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
-	ModifiedTime uint32
+	ModifiedTime int64
 	// SourceSize represents the actual size of the source on disk
 	SourceSize uint64
 	// CompletionTime represents the time at which transfer was completed

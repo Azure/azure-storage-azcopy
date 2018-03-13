@@ -120,7 +120,7 @@ func (t *TransferMsg) PreserveLastModifiedTime() (time.Time, bool) {
 	jPartPlanInfo := t.jobInfo.JobPartPlanInfo(t.partNumber)
 	if jPartPlanInfo.getJobPartPlanPointer().BlobData.PreserveLastModifiedTime {
 		lastModifiedTime := jPartPlanInfo.Transfer(t.transferIndex).ModifiedTime
-		return time.Unix(0, int64(lastModifiedTime)), true
+		return time.Unix(0, lastModifiedTime), true
 	}
 	return time.Time{}, false
 }
