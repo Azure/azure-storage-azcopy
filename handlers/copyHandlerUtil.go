@@ -21,10 +21,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	tm "github.com/buger/goterm"
 	"net/url"
 	"os"
@@ -57,8 +59,8 @@ func (copyHandlerUtil) applyFlags(commandLineInput *common.CopyCmdArgsAndFlags, 
 }
 
 // checks whether a given url contains a prefix pattern
-func (copyHandlerUtil) urlContainsMagic(url string) bool {
-	return strings.ContainsAny(url, `*`)
+func (copyHandlerUtil) numOfStarInUrl(url string) int {
+	return strings.Count(url, "*")
 }
 
 // checks if a given url points to a container, as opposed to a blob
@@ -77,8 +79,14 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 	// root path contains the entire absolute path to the root directory, so we need to take away everything except the root directory from filePath
 	// example: rootPath = "/dir1/dir2/dir3" filePath = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt" scrubAway="/dir1/dir2/"
 
-	// +1 because we want to include the / at the end of the dir
-	scrubAway := rootPath[:strings.LastIndex(rootPath, string(os.PathSeparator))+1]
+	var scrubAway string
+	// test if root path finishes with a /, if yes, ignore it
+	if rootPath[len(rootPath)-1:] == string(os.PathSeparator) {
+		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], string(os.PathSeparator))+1]
+	} else {
+		// +1 because we want to include the / at the end of the dir
+		scrubAway = rootPath[:strings.LastIndex(rootPath, string(os.PathSeparator))+1]
+	}
 
 	result := strings.Replace(filePath, scrubAway, "", 1)
 
@@ -87,6 +95,57 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 		result = strings.Replace(result, "\\", "/", -1)
 	}
 	return result
+}
+
+// this function can tell if a path represents a directory (must exist)
+func (util copyHandlerUtil) isPathDirectory(pathString string) bool {
+	// check if path exists
+	destinationInfo, err := os.Stat(pathString)
+
+	if err == nil && destinationInfo.IsDir() {
+		return true
+	}
+
+	return false
+}
+
+func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
+	// check if the directory path ends with the path separator
+	if strings.LastIndex(directoryPath, string(os.PathSeparator)) == len(directoryPath)-1 {
+		return fmt.Sprintf("%s%s", directoryPath, fileName)
+	}
+
+	return fmt.Sprintf("%s%s%s", directoryPath, string(os.PathSeparator), fileName)
+}
+
+func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
+	// return everything after the second /
+	return strings.SplitAfterN(path[1:], "/", 2)[1]
+}
+
+func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
+	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
+	url.Path = "/" + containerName
+	return url
+}
+
+func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) string {
+	containerUrl.Path = containerUrl.Path + blobName
+	return containerUrl.String()
+}
+
+func (util copyHandlerUtil) getLastVirtualDirectoryFromPath(path string) string {
+	if path == "" {
+		return ""
+	}
+
+	lastSlashIndex := strings.LastIndex(path, "/")
+
+	if lastSlashIndex == -1 {
+		return path
+	}
+
+	return path[0: lastSlashIndex]
 }
 
 func (util copyHandlerUtil) sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest, partNum common.PartNumber, isFinalPart bool) (bool, string) {
@@ -165,7 +224,7 @@ func (enumerator *uploadTaskEnumerator) addTransfer(transfer common.CopyTransfer
 	enumerator.transfers = append(enumerator.transfers, transfer)
 
 	// if the transfer to be added is a page blob, we need to validate its file size
-	if enumerator.jobPartOrderToFill.OptionalAttributes.BlobType == common.PageBlob && transfer.SourceSize % 512 != 0 {
+	if enumerator.jobPartOrderToFill.OptionalAttributes.BlobType == common.PageBlob && transfer.SourceSize%512 != 0 {
 		return errors.New(fmt.Sprintf("cannot perform upload for %s as a page blob because its size is not an exact multiple 512 bytes", transfer.Source))
 	}
 
@@ -200,7 +259,7 @@ func (enumerator *uploadTaskEnumerator) dispatchFinalPart() error {
 	return nil
 }
 
-// this function accepts the list of files/directories to transfer and process them
+// this function accepts the list of files/directories to transfer and processes them
 func (enumerator *uploadTaskEnumerator) enumerate(listOfFilesAndDirectories []string, isRecursiveOn bool, destinationUrl *url.URL) error {
 	util := copyHandlerUtil{}
 
@@ -212,7 +271,7 @@ func (enumerator *uploadTaskEnumerator) enumerate(listOfFilesAndDirectories []st
 		}
 
 		if !f.IsDir() {
-			// append file name as blob name in case the given URL is a blob
+			// append file name as blob name in case the given URL is a container
 			if util.urlIsContainer(destinationUrl) {
 				destinationUrl.Path = util.generateBlobPath(destinationUrl.Path, f.Name())
 			}
@@ -292,4 +351,181 @@ func (enumerator *uploadTaskEnumerator) enumerate(listOfFilesAndDirectories []st
 		return errors.New("nothing can be uploaded, please use --recursive to upload directories")
 	}
 	return enumerator.dispatchFinalPart()
+}
+
+type downloadTaskEnumerator struct {
+	jobPartOrderToFill *common.CopyJobPartOrderRequest
+	transfers          []common.CopyTransfer
+	partNumber         int
+}
+
+// return a download task enumerator with a given job part order template
+// downloadTaskEnumerator can walk through the list of blobs requested and dispatch the job part orders using the template
+func newDownloadTaskEnumerator(jobPartOrderToFill *common.CopyJobPartOrderRequest) *downloadTaskEnumerator {
+	enumerator := downloadTaskEnumerator{}
+	enumerator.jobPartOrderToFill = jobPartOrderToFill
+	return &enumerator
+}
+
+// this function accepts a url (with or without *) to blobs for download and processes them
+func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string) error {
+	util := copyHandlerUtil{}
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	// attempt to parse the source url
+	sourceUrl, err := url.Parse(sourceUrlString)
+	if err != nil {
+		return errors.New("cannot parse source URL")
+	}
+
+	// get the container url to be used later
+	literalContainerUrl := util.getContainerURLFromString(*sourceUrl)
+	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
+
+	// check if the given url is a container
+	if util.urlIsContainer(sourceUrl) {
+		return errors.New("cannot download an entire container, use prefix match with a * at the end of path instead")
+	}
+
+	numOfStarInUrlPath := util.numOfStarInUrl(sourceUrl.Path)
+	if numOfStarInUrlPath == 1 { // prefix search
+
+		// the * must be at the end of the path
+		if strings.LastIndex(sourceUrl.Path, "*") != len(sourceUrl.Path)-1 {
+			return errors.New("the * in the source URL must be at the end of the path")
+		}
+
+		// the destination must be a directory, otherwise we don't know where to put the files
+		if !util.isPathDirectory(destinationPath) {
+			return errors.New("the destination must be an existing container in this download scenario")
+		}
+
+		// get the search prefix to query the service
+		searchPrefix := util.getBlobNameFromURL(sourceUrl.Path)
+		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
+
+		closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix) + "/"
+
+		// perform a list blob
+		for marker := (azblob.Marker{}); marker.NotDone(); {
+			// look for all blobs that start with the prefix
+			listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix: searchPrefix})
+			if err != nil {
+				return errors.New("cannot list blobs for download")
+			}
+
+			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
+			for _, blobInfo := range listBlob.Blobs.Blob {
+				blobNameAfterPrefix := strings.Replace(blobInfo.Name, closestVirtualDirectory, "", 1)
+				if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
+					continue
+				}
+
+				enumerator.addTransfer(common.CopyTransfer{
+					Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
+					Destination:      util.generateLocalPath(destinationPath, blobNameAfterPrefix),
+					LastModifiedTime: blobInfo.Properties.LastModified,
+					SourceSize:       *blobInfo.Properties.ContentLength})
+			}
+
+			marker = listBlob.NextMarker
+			enumerator.dispatchPart(false)
+		}
+
+		enumerator.dispatchPart(true)
+
+	} else if numOfStarInUrlPath == 0 { // no prefix search
+
+		// see if source blob exists
+		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
+		blobProperties, err := blobUrl.GetPropertiesAndMetadata(context.Background(), azblob.BlobAccessConditions{})
+
+		// for a single blob, the destination can either be a file or a directory
+		var singleBlobDestinationPath string
+		if util.isPathDirectory(destinationPath) {
+			singleBlobDestinationPath = util.generateLocalPath(destinationPath, util.getBlobNameFromURL(sourceUrl.Path))
+		} else {
+			singleBlobDestinationPath = destinationPath
+		}
+
+		// if the single blob exists, upload it
+		if err == nil {
+			enumerator.addTransfer(common.CopyTransfer{
+				Source:           sourceUrl.String(),
+				Destination:      singleBlobDestinationPath,
+				LastModifiedTime: blobProperties.LastModified(),
+				SourceSize:       blobProperties.ContentLength(),
+			})
+
+			enumerator.dispatchPart(false)
+		} else if err != nil && !isRecursiveOn {
+			return errors.New("cannot get source blob properties, make sure it exists, for virtual directory download please use --recursive")
+		}
+
+		// if recursive happens to be turned on, then we will attempt to download a virtual directory
+		if isRecursiveOn {
+			// recursively download everything that is under the given path, that is a virtual directory
+			searchPrefix := util.getBlobNameFromURL(sourceUrl.Path) + "/"
+
+			// the destination must be a directory, otherwise we don't know where to put the files
+			if !util.isPathDirectory(destinationPath) {
+				return errors.New("the destination must be an existing container in this download scenario")
+			}
+
+			// perform a list blob
+			for marker := (azblob.Marker{}); marker.NotDone(); {
+				// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
+				listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix: searchPrefix})
+				if err != nil {
+					return errors.New("cannot list blobs for download")
+				}
+
+				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
+				for _, blobInfo := range listBlob.Blobs.Blob {
+					enumerator.addTransfer(common.CopyTransfer{
+						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
+						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name)),
+						LastModifiedTime: blobInfo.Properties.LastModified,
+						SourceSize:       *blobInfo.Properties.ContentLength})
+				}
+
+				marker = listBlob.NextMarker
+				enumerator.dispatchPart(false)
+			}
+		}
+
+		enumerator.dispatchPart(true)
+
+	} else { // more than one * is not supported
+		return errors.New("only one * is allowed in the source URL")
+	}
+	return nil
+	//return errors.New("testing")
+}
+
+// accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
+func (enumerator *downloadTaskEnumerator) addTransfer(transfer common.CopyTransfer) {
+	enumerator.transfers = append(enumerator.transfers, transfer)
+}
+
+// send the current list of transfer to the STE
+func (enumerator *downloadTaskEnumerator) dispatchPart(isFinalPart bool) error {
+
+	enumerator.jobPartOrderToFill.Transfers = enumerator.transfers
+	enumerator.jobPartOrderToFill.PartNum = common.PartNumber(enumerator.partNumber)
+
+	//// TODO debug ONLY
+	//enumerator.jobPartOrderToFill.IsFinalPart = isFinalPart
+	//result, _ := json.MarshalIndent(enumerator.jobPartOrderToFill, "", "  ")
+	//fmt.Println(string(result))
+
+	jobStarted, errorMsg := copyHandlerUtil{}.sendJobPartOrderToSTE(enumerator.jobPartOrderToFill, common.PartNumber(enumerator.partNumber), isFinalPart)
+
+	if !jobStarted {
+		return errors.New(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", enumerator.jobPartOrderToFill.ID, enumerator.jobPartOrderToFill.PartNum, errorMsg))
+	}
+
+	enumerator.transfers = []common.CopyTransfer{}
+	enumerator.partNumber += 1
+	return nil
 }
