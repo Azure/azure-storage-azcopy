@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
 )
 
 func main() {
@@ -67,9 +68,7 @@ func main() {
 		//args = append(os.Args, "--detached")
 		newProcessCommand := exec.Command(os.Args[0], "ste")
 		// to create the child process in new process group to avoid receiving signals from parent process
-		//newProcessCommand.SysProcAttr = &syscall.SysProcAttr{
-		//	CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-		//}
+		newProcessCommand.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid:0,}
 		err := newProcessCommand.Start()
 		if err != nil {
 			panic(err)
