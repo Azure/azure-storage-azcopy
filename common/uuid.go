@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"strconv"
+	"unsafe"
 )
 
 // The JobID reserved variants.
@@ -16,26 +16,33 @@ const (
 )
 
 // A UUID representation compliant with specification in RFC 4122 document.
-type UUID [16]byte
+type UUID struct {
+	D1 uint32
+	D2 uint16
+	D3 uint16
+	D4 [8]uint8
+}
 
 // NewUUID returns a new UUID using RFC 4122 algorithm.
 func NewUUID() (u UUID) {
 	u = UUID{}
 	// Set all bits to randomly (or pseudo-randomly) chosen values.
-	_, err := rand.Read(u[:])
+	uuid := (*[16]byte)(unsafe.Pointer(&u))[:]
+	_, err := rand.Reader.Read(uuid)
 	if err != nil {
-		panic("ran.Read failed")
+		panic("rand.Read failed")
 	}
-	u[8] = (u[8] | reservedRFC4122) & 0x7F // u.setVariant(ReservedRFC4122)
+	uuid[8] = (uuid[8] | reservedRFC4122) & 0x7F // u.setVariant(ReservedRFC4122)
 
 	var version byte = 4
-	u[6] = (u[6] & 0xF) | (version << 4) // u.setVersion(4)
+	uuid[6] = (uuid[6] & 0xF) | (version << 4) // u.setVersion(4)
 	return
 }
 
 // String returns an unparsed version of the generated UUID sequence.
 func (u UUID) String() string {
-	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:])
+	return fmt.Sprintf("%08x-%04x-%04x-%2x%2x-%02x%02x%02x%02x%02x%02x",
+		u.D1, u.D2, u.D3, u.D4[0], u.D4[1], u.D4[2], u.D4[3], u.D4[4], u.D4[5], u.D4[6], u.D4[7])
 }
 
 // Implementing MarshalJSON() method for type UUID
@@ -61,45 +68,15 @@ func (u *UUID) UnmarshalJSON(b []byte) error {
 // ParseUUID parses a string formatted as "003020100-0504-0706-0809-0a0b0c0d0e0f"
 // or "{03020100-0504-0706-0809-0a0b0c0d0e0f}" into a UUID.
 func ParseUUID(uuidStr string) (UUID, error) {
-	var hexEncodeErr error = nil
-	char := func(hexString string) byte {
-		i, err := strconv.ParseUint(hexString, 16, 8)
-		if err != nil {
-			hexEncodeErr = err
-		}
-		return byte(i)
-	}
 	if uuidStr[0] == '{' {
 		uuidStr = uuidStr[1:] // Skip over the '{'
 	}
-	// 03020100 - 05 04 - 07 06 - 08 09 - 0a 0b 0c 0d 0e 0f
-	//             1 11 1 11 11 1 12 22 2 22 22 22 33 33 33
-	// 01234567 8 90 12 3 45 67 8 90 12 3 45 67 89 01 23 45
-	uuidVal := UUID{
-		char(uuidStr[0:2]),
-		char(uuidStr[2:4]),
-		char(uuidStr[4:6]),
-		char(uuidStr[6:8]),
-
-		char(uuidStr[9:11]),
-		char(uuidStr[11:13]),
-
-		char(uuidStr[14:16]),
-		char(uuidStr[16:18]),
-
-		char(uuidStr[19:21]),
-		char(uuidStr[21:23]),
-
-		char(uuidStr[24:26]),
-		char(uuidStr[26:28]),
-		char(uuidStr[28:30]),
-		char(uuidStr[30:32]),
-		char(uuidStr[32:34]),
-		char(uuidStr[34:36]),
+	uuid := UUID{}
+	_, err := fmt.Sscanf(uuidStr, "%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x",
+		&uuid.D1, &uuid.D2, &uuid.D3,
+		&uuid.D4[0], &uuid.D4[1], &uuid.D4[2], &uuid.D4[3], &uuid.D4[4], &uuid.D4[5], &uuid.D4[6], &uuid.D4[7])
+	if err != nil {
+		return UUID{}, err
 	}
-	if hexEncodeErr != nil {
-		return UUID{}, hexEncodeErr
-	} else {
-		return uuidVal, nil
-	}
+	return uuid, nil
 }

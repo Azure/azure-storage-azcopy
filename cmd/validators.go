@@ -30,11 +30,11 @@ type validator struct{}
 
 func (validator validator) determineLocationType(stringToParse string) common.LocationType {
 	if validator.isLocalPath(stringToParse) {
-		return common.Local
+		return (common.LocationType{}).Local()
 	} else if validator.isUrl(stringToParse) {
-		return common.Blob
+		return (common.LocationType{}).Blob()
 	} else {
-		return common.Unknown
+		return (common.LocationType{}).Unknown()
 	}
 }
 

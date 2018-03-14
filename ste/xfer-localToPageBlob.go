@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
 	"os"
-	"github.com/Azure/azure-storage-azcopy/handlers"
 	"unsafe"
 )
 
@@ -16,7 +15,7 @@ type localToPageBlob struct {
 	transfer         *TransferMsg
 	pacer            *pacer
 	pageBlobUrl      azblob.PageBlobURL
-	memoryMappedFile handlers.MMap
+	memoryMappedFile common.MMF
 	srcFileHandler   *os.File
 }
 
@@ -100,7 +99,7 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 		// chunk done is the function called after success / failure of each chunk.
 		// If the calling chunk is the last chunk of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
-		pageDone := func(status common.TransferStatus){
+		pageDone := func(status common.TransferStatus) {
 			if t.ChunksDone() == numberOfPages {
 				// Transfer status
 				if status != common.TransferInProgress {
@@ -122,7 +121,7 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			pageDone(common.TransferInProgress)
 		} else {
 			// pageBytes is the byte slice of Page for the given page range
-			pageBytes := localToPageBlob.memoryMappedFile[startPage:startPage+pageSize]
+			pageBytes := localToPageBlob.memoryMappedFile[startPage : startPage+pageSize]
 			// converted the bytes slice to int64 array.
 			// converting each of 8 bytes of byteSlice to an integer.
 			int64Slice := (*(*[]int64)(unsafe.Pointer(&pageBytes)))[:len(pageBytes)/8]
@@ -131,8 +130,8 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			// Iterating though each integer of in64 array to check if any of the number is greater than 0 or not.
 			// If any no is greater than 0, it means that the 8 bytes slice represented by that integer has atleast one byte greater than 0
 			// If all integers are 0, it means that the 8 bytes slice represented by each integer has no byte greater than 0
-			for index := 0; index < len(int64Slice); index++{
-				if int64Slice[index] != 0{
+			for index := 0; index < len(int64Slice); index++ {
+				if int64Slice[index] > 0 {
 					// If one number is greater than 0, then we need to perform the PutPage update.
 					allBytesZero = false
 					break
@@ -141,15 +140,15 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 
 			// If all the bytes in the pageBytes is 0, then we do not need to perform the PutPage
 			// Updating number of chunks done.
-			if allBytesZero{
-				t.Log(common.LogInfo , fmt.Sprintf("has worker %d which is not performing PutPages for Page range from %d to %d since all the bytes are zero", workerId, startPage, startPage+pageSize))
+			if allBytesZero {
+				t.Log(common.LogInfo, fmt.Sprintf("has worker %d which is not performing PutPages for Page range from %d to %d since all the bytes are zero", workerId, startPage, startPage+pageSize))
 				pageDone(common.TransferComplete)
 				return
 			}
 
 			body := newRequestBodyPacer(bytes.NewReader(pageBytes), localToPageBlob.pacer)
 
-			_, err := localToPageBlob.pageBlobUrl.PutPages(t.TransferContext, azblob.PageRange{Start: int32(startPage), End: int32(startPage + pageSize - 1)},
+			_, err := localToPageBlob.pageBlobUrl.UploadPages(t.TransferContext, azblob.PageRange{Start: int64(startPage), End: int64(startPage + pageSize - 1)},
 				body, azblob.BlobAccessConditions{})
 			if err != nil {
 				status := common.TransferInProgress
@@ -171,9 +170,9 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			//updating the through put counter of the Job
 			t.jobInfo.JobThroughPut.updateCurrentBytes(int64(pageSize))
 			// this check is to cover the scenario when the last page is successfully updated, but transfer was cancelled.
-			if t.TransferContext.Err() != nil{
+			if t.TransferContext.Err() != nil {
 				pageDone(common.TransferInProgress)
-			}else{
+			} else {
 				pageDone(common.TransferComplete)
 			}
 		}

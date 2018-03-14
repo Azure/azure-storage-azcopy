@@ -26,9 +26,8 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
-	"github.com/Azure/azure-storage-azcopy/handlers"
 	"os"
 )
 
@@ -37,7 +36,7 @@ type localToBlockBlob struct {
 	transfer         *TransferMsg
 	pacer            *pacer
 	blobURL          azblob.BlobURL
-	memoryMappedFile handlers.MMap
+	memoryMappedFile common.MMF
 	blockIds         []string
 	srcFileHandler   *os.File
 }
@@ -78,7 +77,7 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 
 	// step 3: map in the file to upload before transferring chunks
 	if blobSize > 0 {
-		localToBlockBlob.memoryMappedFile, localToBlockBlob.srcFileHandler= executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
+		localToBlockBlob.memoryMappedFile, localToBlockBlob.srcFileHandler = executionEngineHelper{}.openAndMemoryMapFile(localToBlockBlob.transfer.Source)
 	}
 
 	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
@@ -115,7 +114,7 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adjustedChunkSize int64, startIndex int64) chunkFunc {
 	return func(workerId int) {
 		totalNumOfChunks := uint32(localToBlockBlob.transfer.NumChunks)
-		transferDone := func(){
+		transferDone := func() {
 			localToBlockBlob.transfer.TransferDone()
 			localToBlockBlob.memoryMappedFile.Unmap()
 
@@ -145,14 +144,14 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 			blockBlobUrl := localToBlockBlob.blobURL.ToBlockBlobURL()
 
 			body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile[startIndex:startIndex+adjustedChunkSize]), localToBlockBlob.pacer)
-			putBlockResponse, err := blockBlobUrl.PutBlock(localToBlockBlob.transfer.TransferContext, encodedBlockId, body, azblob.LeaseAccessConditions{})
+			putBlockResponse, err := blockBlobUrl.StageBlock(localToBlockBlob.transfer.TransferContext, encodedBlockId, body, azblob.LeaseAccessConditions{})
 
 			if err != nil {
-				if localToBlockBlob.transfer.TransferContext.Err() != nil{
+				if localToBlockBlob.transfer.TransferContext.Err() != nil {
 					localToBlockBlob.transfer.Log(common.LogInfo,
 						fmt.Sprintf("has worker %d which failed to upload chunkId %d because transfer was cancelled",
 							workerId, chunkId))
-				}else {
+				} else {
 					// cancel entire transfer because this chunk has failed
 					localToBlockBlob.transfer.TransferCancelFunc()
 					localToBlockBlob.transfer.Log(common.LogInfo,
@@ -192,7 +191,7 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 				// fetching the metadata passed with the JobPartOrder
 				blobHttpHeader, metaData := localToBlockBlob.transfer.blobHttpHeaderAndMetadata(localToBlockBlob.memoryMappedFile)
 
-				putBlockListResponse, err := blockBlobUrl.PutBlockList(localToBlockBlob.transfer.TransferContext, localToBlockBlob.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+				putBlockListResponse, err := blockBlobUrl.CommitBlockList(localToBlockBlob.transfer.TransferContext, localToBlockBlob.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 				if err != nil {
 					localToBlockBlob.transfer.Log(common.LogError,
 						fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
@@ -225,10 +224,10 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 
 	// take care of empty blobs
 	if localToBlockBlob.transfer.SourceSize == 0 {
-		putBlobResp, err = blockBlobUrl.PutBlob(localToBlockBlob.transfer.TransferContext, nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		putBlobResp, err = blockBlobUrl.Upload(localToBlockBlob.transfer.TransferContext, nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	} else {
 		body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile), localToBlockBlob.pacer)
-		putBlobResp, err = blockBlobUrl.PutBlob(localToBlockBlob.transfer.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		putBlobResp, err = blockBlobUrl.Upload(localToBlockBlob.transfer.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	}
 
 	// if the put blob is a failure, updating the transfer status to failed

@@ -22,7 +22,8 @@ package cmd
 
 import (
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/handlers"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
 
@@ -47,8 +48,30 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			handlers.HandleCancelCommand(commandLineInput)
+			HandleCancelCommand(commandLineInput)
 		},
 	}
 	rootCmd.AddCommand(cancelCmd)
+}
+
+// handles the cancel command
+// dispatches the cancel Job order to the storage engine
+func HandleCancelCommand(jobIdString string) {
+	// parsing the given JobId to validate its format correctness
+	jobID, err := common.ParseUUID(jobIdString)
+	if err != nil {
+		// If parsing gives an error, hence it is not a valid JobId format
+		fmt.Println("invalid jobId string passed. Failed while parsing string to jobID")
+		return
+	}
+
+	var cancelJobResponse common.CancelPauseResumeResponse
+	if err := Rpc((common.RpcCmd{}).CancelJob(), jobID, &cancelJobResponse); err != nil {
+		panic(err)
+	}
+	if !cancelJobResponse.CancelledPauseResumed {
+		fmt.Println(fmt.Sprintf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg))
+		return
+	}
+	fmt.Println(fmt.Sprintf("Job %s cancelled successfully", jobID))
 }

@@ -23,10 +23,10 @@ package cmd
 import (
 	"errors"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
 	"fmt"
 	"os"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // TODO check file size, max is 4.75TB
@@ -58,23 +58,23 @@ Usage:
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
 				sourceType := validator{}.determineLocationType(args[0])
-				if sourceType != common.Blob {
+				if sourceType != common.ELocation.Blob() {
 					return errors.New("the provided blob URL for redirection is not valid")
 				}
 				commandLineInput.BlobUrlForRedirection = args[0]
 
 			} else if len(args) == 2 { // normal copy
 				sourceType := validator{}.determineLocationType(args[0])
-				if sourceType == common.Unknown {
+				if sourceType == common.ELocation.Unknown() {
 					return errors.New("the provided source is invalid")
 				}
 
 				destinationType := validator{}.determineLocationType(args[1])
-				if destinationType == common.Unknown {
+				if destinationType == common.ELocation.Unknown() {
 					return errors.New("the provided destination is invalid")
 				}
 
-				if sourceType == common.Blob && destinationType == common.Blob || sourceType == common.Local && destinationType == common.Local {
+				if sourceType == common.ELocation.Blob() && destinationType == common.ELocation.Blob() || sourceType == common.ELocation.Local() && destinationType == common.ELocation.Local() {
 					return errors.New("the provided source/destination pair is invalid")
 				}
 
@@ -91,14 +91,14 @@ Usage:
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 1 {
-				err := handlers.HandleRedirectionCommand(commandLineInput)
+				err := HandleRedirectionCommand(commandLineInput)
 
 				if err != nil {
 					fmt.Println("Copy through redirection has failed due to error: ", err.Error())
 					os.Exit(1)
 				}
 			} else {
-				handlers.HandleCopyCommand(commandLineInput)
+				HandleCopyCommand(commandLineInput)
 			}
 		},
 	}
@@ -125,5 +125,5 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.IsaBackgroundOp, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging", uint8(common.LogWarning), "defines the log verbosity to be saved to log file")
+	cpCmd.PersistentFlags().Uint8Var(&commandLineInput.LogVerbosity, "Logging", uint8(pipeline.LogWarning), "defines the log verbosity to be saved to log file")
 }

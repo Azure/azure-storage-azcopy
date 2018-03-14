@@ -23,58 +23,9 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"os"
 	"os/exec"
-	"strconv"
-	"syscall"
 )
 
-func main() {
-	if len(os.Args) == 1 {
-		cmd.Execute()
-		return
-	}
-	httpClient := common.NewHttpClient("http://localhost:1337")
-	common.Rpc = httpClient.Send
-	switch os.Args[1] {
-	case "inproc": // STE is launched in process
-		go ste.InitializeSTE(100, 500)
-		cmd.Execute()
-	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
-		if len(os.Args) == 4 {
-			numOfEngineWorker, err := strconv.Atoi(os.Args[2])
-			if err != nil {
-				panic("Cannot parse number of engine workers, please give a positive integer.")
-			}
-
-			targetRateInMBps, err := strconv.Atoi(os.Args[3])
-			if err != nil {
-				panic("Cannot parse target rate in MB/s, please give a positive integer.")
-			}
-
-			ste.InitializeSTE(numOfEngineWorker, targetRateInMBps)
-		} else if len(os.Args) == 2 {
-			// use default number of engine worker and target rate to initialize ste
-			ste.InitializeSTE(100, 500)
-		} else {
-			panic("Wrong number of arguments for STE mode! Please contact your developer.")
-		}
-	default:
-		//STE is launched as an independent process
-		//args := append(os.Args, "ste")
-		//args = append(os.Args, "--detached")
-		newProcessCommand := exec.Command(os.Args[0], "ste")
-		// to create the child process in new process group to avoid receiving signals from parent process
-		newProcessCommand.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid:0,}
-		err := newProcessCommand.Start()
-		if err != nil {
-			panic(err)
-			os.Exit(1)
-		}
-		cmd.Execute()
-	}
-	//ste.InitializeSTE()
+func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
+	return cmd
 }

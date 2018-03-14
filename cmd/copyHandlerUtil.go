@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package handlers
+package cmd
 
 import (
 	"context"
@@ -44,20 +44,22 @@ const (
 type copyHandlerUtil struct{}
 
 // apply the flags from command line input to the job part order
-func (copyHandlerUtil) applyFlags(commandLineInput *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrderRequest) {
+func (copyHandlerUtil) applyFlags(copyArgs *common.CopyCmdArgsAndFlags, jobPartOrderToFill *common.CopyJobPartOrderRequest) {
+	bt, err:= (common.BlobType{}).Parse(copyArgs.BlobType)
+	if err != nil { return }	// TODO: Fix
 	optionalAttributes := common.BlobTransferAttributes{
-		BlobType:                 common.BlobTypeStringToBlobType(commandLineInput.BlobType),
-		BlockSizeinBytes:         commandLineInput.BlockSize,
-		ContentType:              commandLineInput.ContentType,
-		ContentEncoding:          commandLineInput.ContentEncoding,
-		Metadata:                 commandLineInput.Metadata,
-		NoGuessMimeType:          commandLineInput.NoGuessMimeType,
-		PreserveLastModifiedTime: commandLineInput.PreserveLastModifiedTime,
+		BlobType:                 bt,
+		BlockSizeinBytes:         copyArgs.BlockSize,
+		ContentType:              copyArgs.ContentType,
+		ContentEncoding:          copyArgs.ContentEncoding,
+		Metadata:                 copyArgs.Metadata,
+		NoGuessMimeType:          copyArgs.NoGuessMimeType,
+		PreserveLastModifiedTime: copyArgs.PreserveLastModifiedTime,
 	}
 
 	jobPartOrderToFill.OptionalAttributes = optionalAttributes
-	jobPartOrderToFill.LogVerbosity = common.LogLevel(commandLineInput.LogVerbosity)
-	jobPartOrderToFill.IsaBackgroundOp = commandLineInput.IsaBackgroundOp
+	jobPartOrderToFill.LogVerbosity = common.LogLevel{ copyArgs.LogVerbosity}	// TODO: Fix via parsing
+	jobPartOrderToFill.IsaBackgroundOp = copyArgs.IsaBackgroundOp
 }
 
 // checks whether a given url contains a prefix pattern

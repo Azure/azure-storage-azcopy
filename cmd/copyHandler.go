@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package handlers
+package cmd
 
 import (
 	"fmt"
@@ -38,34 +38,27 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	copyHandlerUtil{}.applyFlags(&commandLineInput, &jobPartOrder)
 
 	// generate job id
-	jobId := common.JobID(common.NewUUID())
-	jobPartOrder.ID = jobId
+	jobPartOrder.JobID = common.NewJobID()
 	jobStarted := true
 
-	// not having a valid blob type is a fatal error
-	if jobPartOrder.OptionalAttributes.BlobType == common.InvalidBlob {
-		fmt.Println("Invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
-		os.Exit(1)
-	}
-
 	// depending on the source and destination type, we process the cp command differently
-	if commandLineInput.SourceType == common.Local && commandLineInput.DestinationType == common.Blob {
+	if commandLineInput.SourceType == common.ELocation.Local() && commandLineInput.DestinationType == common.ELocation.Blob() {
 		jobStarted = handleUploadFromLocalToBlobStorage(&commandLineInput, &jobPartOrder)
-	} else if commandLineInput.SourceType == common.Blob && commandLineInput.DestinationType == common.Local {
+	} else if commandLineInput.SourceType == common.ELocation.Blob() && commandLineInput.DestinationType == common.ELocation.Local() {
 		jobStarted = handleDownloadFromBlobStorageToLocal(&commandLineInput, &jobPartOrder)
 	}
 
 	// unexpected errors can happen while communicating with the transfer engine
 	if !jobStarted {
-		fmt.Print("Job with id", jobId, "was not abe to start. Please try again")
-		os.Exit(1)
+		fmt.Println("Job with id", jobPartOrder.JobID, "was not abe to start. Please try again")
+		return
 	}
 
 	// in background mode we would spit out the job id and quit
 	// in foreground mode we would continuously print out status updates for the job, so the job id is not important
-	fmt.Println("Job Started and has JobId ", jobId)
+	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
 	if commandLineInput.IsaBackgroundOp {
-		os.Exit(0)
+		return
 	}
 
 	// created a signal channel to receive the Interrupt and Kill signal send to OS
@@ -79,10 +72,10 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 		select {
 		case <-cancelChannel:
 			fmt.Println("Cancelling Job")
-			HandleCancelCommand(jobId.String())
-			os.Exit(0)
+			HandleCancelCommand(jobPartOrder.JobID.String())
+			os.Exit(1)
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobId)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobPartOrder.JobID)
 
 			// happy ending to the front end
 			if jobStatus == "JobCompleted" {
@@ -100,8 +93,8 @@ func handleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
 
 	// set the source and destination type
-	jobPartOrderToFill.SourceType = common.Local
-	jobPartOrderToFill.DestinationType = common.Blob
+	jobPartOrderToFill.SrcLocation = common.ELocation.Local()
+	jobPartOrderToFill.DstLocation = common.ELocation.Blob()
 
 	// attempt to parse the destination url
 	destinationUrl, err := url.Parse(commandLineInput.Destination)
@@ -132,8 +125,8 @@ func handleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAn
 	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
 
 	// set the source and destination type
-	jobPartOrderToFill.SourceType = common.Blob
-	jobPartOrderToFill.DestinationType = common.Local
+	jobPartOrderToFill.SrcLocation = common.ELocation.Blob()
+	jobPartOrderToFill.DstLocation = common.ELocation.Local()
 
 	enumerator := newDownloadTaskEnumerator(jobPartOrderToFill)
 	err := enumerator.enumerate(commandLineInput.Source, commandLineInput.Recursive, commandLineInput.Destination)

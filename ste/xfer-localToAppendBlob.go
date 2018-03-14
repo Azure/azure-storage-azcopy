@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
 	"os"
-	"github.com/Azure/azure-storage-azcopy/handlers"
 )
 
 type localToAppendBlob struct {
 	transfer         *TransferMsg
 	pacer            *pacer
 	appendBlobURL    azblob.AppendBlobURL
-	memoryMappedFile handlers.MMap
+	memoryMappedFile common.MMF
 	srcFileHandler   *os.File
 }
 

@@ -1,3 +1,5 @@
+// +build linux darwin
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,21 +20,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package common
 
-import "time"
+import (
+	"os"
+	"syscall"
+)
 
-// upload related
-const UploadMaxTries = 5
-const UploadTryTimeout = time.Minute * 10
-const UploadRetryDelay = time.Second * 1
-const UploadMaxRetryDelay = time.Second * 3
+type MMF []byte
 
-// download related
-const DownloadMaxTries = 5
-const DownloadTryTimeout = time.Minute * 10
-const DownloadRetryDelay = time.Second * 1
-const DownloadMaxRetryDelay = time.Second * 3
+func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, error) {
+	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
+	if writable {
+		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
+	}
+	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
+	return MMF(addr), err
+}
 
-// pacer related
-const PacerTimeToWaitInMs = 50
+func (m *MMF) Unmap() {
+	err := syscall.Munmap(*m)
+	*m = nil
+	if err != nil {
+		panic(err)
+	}
+}
