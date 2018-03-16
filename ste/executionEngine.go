@@ -83,7 +83,7 @@ func (executionEngine *executionEngine) engineWorker(workerId int, executionEngi
 							transferMsg.Log(common.LogError,
 								fmt.Sprintf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
 									transferMsg.SourceType, transferMsg.DestinationType))
-							panic(fmt.Errorf("Unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
+							panic(fmt.Errorf("unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d",
 								transferMsg.SourceType, transferMsg.DestinationType))
 						}
 						xfer := xferFactory(&transferMsg, executionEngine.pacer)

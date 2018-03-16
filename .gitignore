@@ -1,3 +1,7 @@
+## Ignore deps
+vendor/
+
+
 ## Ignore the STE job tracking files
 *.stev*
 azcopy
