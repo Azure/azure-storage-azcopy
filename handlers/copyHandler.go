@@ -57,7 +57,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 
 	// unexpected errors can happen while communicating with the transfer engine
 	if !jobStarted {
-		fmt.Print("Job with id", jobId, "was not abe to start. Please try again")
+		fmt.Println("Job with id", jobId, "was not abe to start. Please try again")
 		return
 	}
 

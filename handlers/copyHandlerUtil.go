@@ -63,10 +63,17 @@ func (copyHandlerUtil) numOfStarInUrl(url string) int {
 	return strings.Count(url, "*")
 }
 
-// checks if a given url points to a container, as opposed to a blob
+// checks if a given url points to a container, as opposed to a blob or prefix match
 func (copyHandlerUtil) urlIsContainer(url *url.URL) bool {
 	// if the path contains more than one "/", then it means it points to a blob, and not a container
-	return !strings.Contains(url.Path[1:], "/")
+	numOfSlashes := strings.Count(url.Path[1:], "/")
+
+	if numOfSlashes == 0 {
+		return true
+	} else if numOfSlashes == 1 && url.Path[len(url.Path)-1:] == "/" { // this checks if container_name/ was given
+		return true
+	}
+	return false
 }
 
 // append a file name to the container path to generate a blob path
@@ -110,12 +117,19 @@ func (util copyHandlerUtil) isPathDirectory(pathString string) bool {
 }
 
 func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
+	var result string
+
 	// check if the directory path ends with the path separator
 	if strings.LastIndex(directoryPath, string(os.PathSeparator)) == len(directoryPath)-1 {
-		return fmt.Sprintf("%s%s", directoryPath, fileName)
+		result = fmt.Sprintf("%s%s", directoryPath, fileName)
+	} else {
+		result = fmt.Sprintf("%s%s%s", directoryPath, string(os.PathSeparator), fileName)
 	}
 
-	return fmt.Sprintf("%s%s%s", directoryPath, string(os.PathSeparator), fileName)
+	if os.PathSeparator == '\\' {
+		return strings.Replace(result, "/", "\\", -1)
+	}
+	return result
 }
 
 func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
@@ -134,18 +148,18 @@ func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName strin
 	return containerUrl.String()
 }
 
+// for a given virtual directory, find the directory directly above the virtual file
 func (util copyHandlerUtil) getLastVirtualDirectoryFromPath(path string) string {
 	if path == "" {
 		return ""
 	}
 
 	lastSlashIndex := strings.LastIndex(path, "/")
-
 	if lastSlashIndex == -1 {
-		return path
+		return ""
 	}
 
-	return path[0: lastSlashIndex]
+	return path[0:lastSlashIndex]
 }
 
 func (util copyHandlerUtil) sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest, partNum common.PartNumber, isFinalPart bool) (bool, string) {
@@ -378,7 +392,7 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 		return errors.New("cannot parse source URL")
 	}
 
-	// get the container url to be used later
+	// get the container url to be used later for listing
 	literalContainerUrl := util.getContainerURLFromString(*sourceUrl)
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
 
@@ -397,14 +411,19 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 
 		// the destination must be a directory, otherwise we don't know where to put the files
 		if !util.isPathDirectory(destinationPath) {
-			return errors.New("the destination must be an existing container in this download scenario")
+			return errors.New("the destination must be an existing directory in this download scenario")
 		}
 
 		// get the search prefix to query the service
 		searchPrefix := util.getBlobNameFromURL(sourceUrl.Path)
 		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
 
-		closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix) + "/"
+		closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
+
+		// strip away the leading / in the closest virtual directory
+		if len(closestVirtualDirectory) > 0 && closestVirtualDirectory[0:1] == "/" {
+			closestVirtualDirectory = closestVirtualDirectory[1:]
+		}
 
 		// perform a list blob
 		for marker := (azblob.Marker{}); marker.NotDone(); {
@@ -416,7 +435,7 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
-				blobNameAfterPrefix := strings.Replace(blobInfo.Name, closestVirtualDirectory, "", 1)
+				blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
 				if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
 					continue
 				}
@@ -429,10 +448,16 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 			}
 
 			marker = listBlob.NextMarker
-			enumerator.dispatchPart(false)
+			err = enumerator.dispatchPart(false)
+			if err != nil {
+				return err
+			}
 		}
 
-		enumerator.dispatchPart(true)
+		err = enumerator.dispatchPart(true)
+		if err != nil {
+			return err
+		}
 
 	} else if numOfStarInUrlPath == 0 { // no prefix search
 
@@ -457,7 +482,10 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 				SourceSize:       blobProperties.ContentLength(),
 			})
 
-			enumerator.dispatchPart(false)
+			err = enumerator.dispatchPart(false)
+			if err != nil {
+				return err
+			}
 		} else if err != nil && !isRecursiveOn {
 			return errors.New("cannot get source blob properties, make sure it exists, for virtual directory download please use --recursive")
 		}
@@ -465,11 +493,16 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 		// if recursive happens to be turned on, then we will attempt to download a virtual directory
 		if isRecursiveOn {
 			// recursively download everything that is under the given path, that is a virtual directory
-			searchPrefix := util.getBlobNameFromURL(sourceUrl.Path) + "/"
+			searchPrefix := util.getBlobNameFromURL(sourceUrl.Path)
+
+			// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
+			if strings.LastIndex(searchPrefix, "/") != len(searchPrefix) - 1 {
+				searchPrefix += "/"
+			}
 
 			// the destination must be a directory, otherwise we don't know where to put the files
 			if !util.isPathDirectory(destinationPath) {
-				return errors.New("the destination must be an existing container in this download scenario")
+				return errors.New("the destination must be an existing directory in this download scenario")
 			}
 
 			// perform a list blob
@@ -490,17 +523,22 @@ func (enumerator *downloadTaskEnumerator) enumerate(sourceUrlString string, isRe
 				}
 
 				marker = listBlob.NextMarker
-				enumerator.dispatchPart(false)
+				err = enumerator.dispatchPart(false)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
-		enumerator.dispatchPart(true)
+		err = enumerator.dispatchPart(true)
+		if err != nil {
+			return err
+		}
 
 	} else { // more than one * is not supported
 		return errors.New("only one * is allowed in the source URL")
 	}
 	return nil
-	//return errors.New("testing")
 }
 
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
@@ -510,21 +548,21 @@ func (enumerator *downloadTaskEnumerator) addTransfer(transfer common.CopyTransf
 
 // send the current list of transfer to the STE
 func (enumerator *downloadTaskEnumerator) dispatchPart(isFinalPart bool) error {
+	// if the job is empty, throw an error
+	if !isFinalPart && len(enumerator.transfers) == 0 {
+		return errors.New("cannot initiate empty job, please make sure source is not empty")
+	}
 
+	// add the transfers and part number to template
 	enumerator.jobPartOrderToFill.Transfers = enumerator.transfers
 	enumerator.jobPartOrderToFill.PartNum = common.PartNumber(enumerator.partNumber)
 
-	//// TODO debug ONLY
-	//enumerator.jobPartOrderToFill.IsFinalPart = isFinalPart
-	//result, _ := json.MarshalIndent(enumerator.jobPartOrderToFill, "", "  ")
-	//fmt.Println(string(result))
-
 	jobStarted, errorMsg := copyHandlerUtil{}.sendJobPartOrderToSTE(enumerator.jobPartOrderToFill, common.PartNumber(enumerator.partNumber), isFinalPart)
-
 	if !jobStarted {
 		return errors.New(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", enumerator.jobPartOrderToFill.ID, enumerator.jobPartOrderToFill.PartNum, errorMsg))
 	}
 
+	// empty the transfers and increment part number count
 	enumerator.transfers = []common.CopyTransfer{}
 	enumerator.partNumber += 1
 	return nil
