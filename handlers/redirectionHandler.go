@@ -44,6 +44,7 @@ const DownloadTryTimeout = time.Minute * 10
 const DownloadRetryDelay = time.Second * 1
 const DownloadMaxRetryDelay = time.Second * 3
 
+// TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
 func HandleRedirectionCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	// check the Stdin to see if we are uploading or downloading
 	info, err := os.Stdin.Stat()
@@ -64,7 +65,8 @@ func handleDownloadBlob(blobUrl string) {
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
-		panic("Fatal: cannot write to Stdout due to error: " + err.Error())
+		fmt.Println("Fatal: cannot write to Stdout due to error: " + err.Error())
+		return
 	}
 
 	// step 1: initialize pipeline
@@ -81,7 +83,8 @@ func handleDownloadBlob(blobUrl string) {
 	// step 2: parse source url
 	u, err := url.Parse(blobUrl)
 	if err != nil {
-		panic("Fatal: cannot parse source blob URL due to error: " + err.Error())
+		fmt.Println("Fatal: cannot parse source blob URL due to error: " + err.Error())
+		return
 	}
 
 	// step 3: start download
@@ -92,7 +95,7 @@ func handleDownloadBlob(blobUrl string) {
 	// step 4: pipe everything into Stdout
 	_, err = io.Copy(os.Stdout, blobStream)
 	if err != nil {
-		panic("Fatal: cannot download blob to Stdout due to error: " + err.Error())
+		fmt.Println("Fatal: cannot download blob to Stdout due to error: " + err.Error())
 		return
 	}
 }
@@ -101,7 +104,8 @@ func handleUploadToBlob(blobUrl string) {
 	// step 0: pipe everything from Stdin into a buffer
 	input, err := ioutil.ReadAll(os.Stdin)
 	if err != nil {
-		panic("Fatal: cannot read from Stdin due to error: " + err.Error())
+		fmt.Println("Fatal: cannot read from Stdin due to error: " + err.Error())
+		return
 	}
 
 	// step 1: initialize pipeline
@@ -118,13 +122,15 @@ func handleUploadToBlob(blobUrl string) {
 	// step 2: parse destination url
 	u, err := url.Parse(blobUrl)
 	if err != nil {
-		panic("Fatal: cannot parse destination blob URL due to error: " + err.Error())
+		fmt.Println("Fatal: cannot parse destination blob URL due to error: " + err.Error())
+		return
 	}
 
 	// step 3: start upload
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
 	_, err = azblob.UploadBufferToBlockBlob(context.Background(), input, blockBlobUrl, azblob.UploadToBlockBlobOptions{})
 	if err != nil {
-		panic("Fatal: failed to upload to blob due to error: " + err.Error())
+		fmt.Println("Fatal: failed to upload to blob due to error: " + err.Error())
+		return
 	}
 }
