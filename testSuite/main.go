@@ -1,7 +1,7 @@
 package main
 
 import (
-	"testSuite/cmd"
+	"github.com/Azure/azure-storage-azcopy/testSuite/cmd"
 )
 
 func main() {

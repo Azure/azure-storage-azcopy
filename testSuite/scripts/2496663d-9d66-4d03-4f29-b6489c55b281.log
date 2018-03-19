@@ -1,0 +1,395 @@
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: successfully scheduled transfer 0 with priority 0 for Job 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 has worker 81 which is processing TRANSFER
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ymuyndcxmtytzduwnc00mzayltrlyzutzdnhyzu0otmyztcx&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [d7d80596-401b-4a96-6280-d71529619ffd]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=n2uxyjhhmdqtotflmc00ywq4ltq4ogetzgq5njgxnzjhmtlj&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [84f4e784-6be9-45ab-6efa-81e0ac9d9c6c]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=yzhhntm1mzctzjuzzi00mmrllty0mwqtmtfhztljotzlodq3&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [55f9d0fc-7963-4c92-4a01-829df08a34f8]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ogi0ymjjytyty2mxmi00yjezltu0otktndg0mzziyzm0oda3&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [23dfe15f-5d91-4425-4ed9-b9ab16201281]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=nzc0njhjzjmtmzrkys00m2yxltu5y2utndi1ode5zdc4mdfm&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [24d5a46d-0008-4bb3-7b24-877b78ed2ab4]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=mmnmmdnlzdqtzwrjzi00zwm4ltc2otutm2u0ogqwm2u5yme4&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [04e01446-8a66-411b-7174-6986f3dbada9]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=otvlmzi2ytctmwvkmy00odrkltvjztetoti3ytbmzgqyogix&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [aae44e21-7566-48a8-5f3b-90958958fc0e]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ngmyy2nmymetm2vlns00zmixltqxmdutmmvjogi0nwyzmtyw&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [65352ab3-07b4-4f0d-5732-7c05b871480f]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=zdjjytcwzgqtzwfjmy00zge2lty1zdutzjm4zjy5njiyztfi&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [ba8ad3f5-afe9-4736-55a2-28b15f92ea3d]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=m2uxytyxztmtztczmc00y2y0ltvkmdqtm2eymjnmmjg0nzk1&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [991751a8-d1ae-43fe-6aa3-3c0841fab5c2]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=njgynzc1mtutnzq1oc00ogmyltrimjutzdlhnwi1odayyzuy&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [c1f512d0-60fd-4d84-46a0-ce1198126292]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=m2y5zwq2ndctnjm2zc00oge3ltzjzdctmzyyztlimza0y2q1&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [876df999-b3b3-426b-603d-4e56e81c78d4]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=mtdhmjm3ogetodewnc00mzrjltcwngmtnthjnjy1zmzmzjhm&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [8bc68140-e8c9-4e3a-7bec-5edf6745b731]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ntlhnwu5zmqtyte1zi00owq2lty2nzctzda2ndm5zjcxmdgw&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [b254d0b4-0e98-4c27-6ce6-a6b8ceb8182e]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=njkxmmm2zgqtogrjyy00mzu2ltdkmdktn2u2ztm5zgjkyzay&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [a072f2c3-7cf0-41e5-738b-ec3c9d8ca9d4]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=m2fmntc5ndctywe4nc00m2rhltvlmzitngm4yzg1othhmtey&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [3145728]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [bc0d91f5-3ecd-44e8-68f5-9515203dc43c]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m4.9071006s[SLOW >3s], OpTime=1m4.9106031s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=mtdhmjm3ogetodewnc00mzrjltcwngmtnthjnjy1zmzmzjhm&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [8bc68140-e8c9-4e3a-7bec-5edf6745b731]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:42 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [83fb3f3e-401e-0045-4951-bfe5f8000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m8.6803354s[SLOW >3s], OpTime=1m8.6838379s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=m2fmntc5ndctywe4nc00m2rhltvlmzitngm4yzg1othhmtey&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [3145728]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [bc0d91f5-3ecd-44e8-68f5-9515203dc43c]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [ruJJLzUmfnu7WWiB0sfrkg==]
+   Date: [Mon, 19 Mar 2018 07:12:45 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [597c6a85-e01e-0084-7351-bf6e41000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m17.2790604s[SLOW >3s], OpTime=1m17.2830611s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ngmyy2nmymetm2vlns00zmixltqxmdutmmvjogi0nwyzmtyw&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [65352ab3-07b4-4f0d-5732-7c05b871480f]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:54 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [218be9d4-401e-0067-2a51-bf8bce000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m20.0544649s[SLOW >3s], OpTime=1m20.059965s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ymuyndcxmtytzduwnc00mzayltrlyzutzdnhyzu0otmyztcx&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [d7d80596-401b-4a96-6280-d71529619ffd]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:57 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [3a93c007-101e-007f-2151-bfa65b000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m21.8295577s[SLOW >3s], OpTime=1m21.8335584s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=m2uxytyxztmtztczmc00y2y0ltvkmdqtm2eymjnmmjg0nzk1&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [991751a8-d1ae-43fe-6aa3-3c0841fab5c2]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:59 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [fc648da2-701e-004d-4551-bffe8b000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m22.2584193s[SLOW >3s], OpTime=1m22.26242s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=otvlmzi2ytctmwvkmy00odrkltvjztetoti3ytbmzgqyogix&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [aae44e21-7566-48a8-5f3b-90958958fc0e]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:59 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [e0cf9b12-101e-0074-4851-bfbe2f000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m22.3289621s[SLOW >3s], OpTime=1m22.3329628s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=zdjjytcwzgqtzwfjmy00zge2lty1zdutzjm4zjy5njiyztfi&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [ba8ad3f5-afe9-4736-55a2-28b15f92ea3d]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:59 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [598bdf41-d01e-0004-3151-bfcdeb000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m22.4120009s[SLOW >3s], OpTime=1m22.416501s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=nzc0njhjzjmtmzrkys00m2yxltu5y2utndi1ode5zdc4mdfm&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [24d5a46d-0008-4bb3-7b24-877b78ed2ab4]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:12:59 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [8a63645d-b01e-0014-4a51-bffb0d000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m27.0144365s[SLOW >3s], OpTime=1m27.0184387s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=m2y5zwq2ndctnjm2zc00oge3ltzjzdctmzyyztlimza0y2q1&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [876df999-b3b3-426b-603d-4e56e81c78d4]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:04 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [49ff47e9-001e-0120-5051-bf12f0000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m27.0409057s[SLOW >3s], OpTime=1m27.0454058s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=yzhhntm1mzctzjuzzi00mmrllty0mwqtmtfhztljotzlodq3&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [55f9d0fc-7963-4c92-4a01-829df08a34f8]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:05 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [bac775fb-301e-00c9-4b51-bfa8a3000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m27.4566285s[SLOW >3s], OpTime=1m27.4611286s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ogi0ymjjytyty2mxmi00yjezltu0otktndg0mzziyzm0oda3&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [23dfe15f-5d91-4425-4ed9-b9ab16201281]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:05 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [bd4249d8-601e-0052-7a51-bf259b000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m29.3659629s[SLOW >3s], OpTime=1m29.3694654s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=ntlhnwu5zmqtyte1zi00owq2lty2nzctzda2ndm5zjcxmdgw&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [b254d0b4-0e98-4c27-6ce6-a6b8ceb8182e]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:06 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [174becb4-801e-00db-5951-bf9cbf000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m29.427496s[SLOW >3s], OpTime=1m29.4314967s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=mmnmmdnlzdqtzwrjzi00zwm4ltc2otutm2u0ogqwm2u5yme4&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [04e01446-8a66-411b-7174-6986f3dbada9]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:07 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [aa85400b-f01e-009b-5651-bfb551000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m29.5070023s[SLOW >3s], OpTime=1m29.511502s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=n2uxyjhhmdqtotflmc00ywq4ltq4ogetzgq5njgxnzjhmtlj&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [84f4e784-6be9-45ab-6efa-81e0ac9d9c6c]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:07 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [bfc85999-101e-005d-0c51-bfc86d000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m30.4864401s[SLOW >3s], OpTime=1m30.4899426s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=njkxmmm2zgqtogrjyy00mzu2ltdkmdktn2u2ztm5zgjkyzay&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [a072f2c3-7cf0-41e5-738b-ec3c9d8ca9d4]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:08 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [69d06356-a01e-00aa-6751-bfee86000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/1m30.653045s[SLOW >3s], OpTime=1m30.6575468s) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?blockid=njgynzc1mtutnzq1oc00ogmyltrimjutzdlhnwi1odayyzuy&comp=block&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [4194304]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Client-Request-Id: [c1f512d0-60fd-4d84-46a0-ce1198126292]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [1encopDqjYVhg1V6MdXrcg==]
+   Date: [Mon, 19 Mar 2018 07:13:07 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [bea0df62-d01e-0026-0751-bfa3dd000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 has worker 92 which is concluding download transfer after processing chunkId 10 with blocklist [YmUyNDcxMTYtZDUwNC00MzAyLTRlYzUtZDNhYzU0OTMyZTcx N2UxYjhhMDQtOTFlMC00YWQ4LTQ4OGEtZGQ5NjgxNzJhMTlj YzhhNTM1MzctZjUzZi00MmRlLTY0MWQtMTFhZTljOTZlODQ3 OGI0YmJjYTYtY2MxMi00YjEzLTU0OTktNDg0MzZiYzM0ODA3 Nzc0NjhjZjMtMzRkYS00M2YxLTU5Y2UtNDI1ODE5ZDc4MDFm MmNmMDNlZDQtZWRjZi00ZWM4LTc2OTUtM2U0OGQwM2U5YmE4 OTVlMzI2YTctMWVkMy00ODRkLTVjZTEtOTI3YTBmZGQyOGIx NGMyY2NmYmEtM2VlNS00ZmIxLTQxMDUtMmVjOGI0NWYzMTYw ZDJjYTcwZGQtZWFjMy00ZGE2LTY1ZDUtZjM4ZjY5NjIyZTFi M2UxYTYxZTMtZTczMC00Y2Y0LTVkMDQtM2EyMjNmMjg0Nzk1 NjgyNzc1MTUtNzQ1OC00OGMyLTRiMjUtZDlhNWI1ODAyYzUy M2Y5ZWQ2NDctNjM2ZC00OGE3LTZjZDctMzYyZTliMzA0Y2Q1 MTdhMjM3OGEtODEwNC00MzRjLTcwNGMtNThjNjY1ZmZmZjhm NTlhNWU5ZmQtYTE1Zi00OWQ2LTY2NzctZDA2NDM5ZjcxMDgw NjkxMmM2ZGQtOGRjYy00MzU2LTdkMDktN2U2ZTM5ZGJkYzAy M2FmNTc5NDctYWE4NC00M2RhLTVlMzItNGM4Yzg1OThhMTEy]
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> OUTGOING REQUEST (Try=1)
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?comp=blocklist&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [1063]
+   Content-Type: [application/xml]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Blob-Cache-Control: []
+   X-Ms-Blob-Content-Disposition: []
+   X-Ms-Blob-Content-Encoding: []
+   X-Ms-Blob-Content-Language: []
+   X-Ms-Blob-Content-Type: [text/plain; charset=utf-8]
+   X-Ms-Client-Request-Id: [6c91fc09-2e86-4ec3-7430-f3d48eff6892]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 ==> REQUEST/RESPONSE (Try=1/195.6929ms, OpTime=195.6929ms) -- RESPONSE SUCCESSFULLY RECEIVED
+   PUT https://azcopynextgendev1.blob.core.windows.net/test-container-1/test63Mb_blob.txt?comp=blocklist&se=2018-03-30t18%3A11%3A00z&sig=REDACTED&sp=rwdl&sr=c&st=2018-03-18t18%3A11%3A00z&sv=2017-04-17&timeout=601
+   Content-Length: [1063]
+   Content-Type: [application/xml]
+   User-Agent: [Azure-Storage/0.1 (go1.9.2; Windows_NT)]
+   X-Ms-Blob-Cache-Control: []
+   X-Ms-Blob-Content-Disposition: []
+   X-Ms-Blob-Content-Encoding: []
+   X-Ms-Blob-Content-Language: []
+   X-Ms-Blob-Content-Type: [text/plain; charset=utf-8]
+   X-Ms-Client-Request-Id: [6c91fc09-2e86-4ec3-7430-f3d48eff6892]
+   X-Ms-Version: [2016-05-31]
+   --------------------------------------------------------------------------------
+   RESPONSE Status: 201 Created
+   Content-Md5: [VXTC79mZAz4E3S3UvivENg==]
+   Date: [Mon, 19 Mar 2018 07:13:08 GMT]
+   Etag: ["0x8D58D68DE4F417E"]
+   Last-Modified: [Mon, 19 Mar 2018 07:13:08 GMT]
+   Server: [Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0]
+   X-Ms-Request-Id: [07af5584-901e-00c4-5051-bf47af000000]
+   X-Ms-Request-Server-Encrypted: [true]
+   X-Ms-Version: [2016-05-31]
+
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 completed successfully
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: transfer 0 of job with jobId 2496663d-9d66-4d03-4f29-b6489c55b281 and part number 0 has total number 0 of transfers paused, cancelled or completed
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: is part of Job which 0 total number of parts done 
+C:/Go/externals/src/github.com/Azure/azure-storage-azcopy/ste/jobinfo.go:167: all parts of Job 2496663d-9d66-4d03-4f29-b6489c55b281 successfully completed, cancelled or paused

@@ -2,9 +2,44 @@ import os
 import subprocess
 import shutil
 
+class Command(object):
+    def __init__(self, command_type):
+        self.command_type = command_type
+        self.flags = dict()
+        self.args = list()
+
+    def add_arguments(self, argument):
+        self.args.append(argument)
+        return self
+
+    def add_flags(self, flag, value):
+        self.flags[flag] = value
+        return self
+
+    def string(self):
+        command = self.command_type
+        for arg in self.args:
+            if (len(arg) > 0):
+                command += " " + '"' + arg + '"'
+        if len(self.flags) > 0:
+            for key, value in self.flags.items():
+                command += " --" + key + "=" + value
+        return command
+
+    def execute_azcopy_command(self):
+        self.add_arguments(test_container_url)
+        return execute_azcopy_command(self.string())
+
+    def execute_azcopy_verify(self):
+        self.add_arguments(test_directory_path)
+        self.add_arguments(test_container_url)
+        return verify_operation(self.string())
+
 def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
+    global test_directory_path
+    global test_container_url
+    new_dir_path = os.path.join(test_dir_path, "test_data")
     try:
-        new_dir_path = os.path.join(test_dir_path, "test_data")
         #removing the directory and its contents, if directory exists
         shutil.rmtree(new_dir_path)
         os.mkdir(new_dir_path)
@@ -12,6 +47,7 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
         # if the directory exists and cannot be removed, then we need to ask for another directory to execute the test
         os.mkdir(new_dir_path)
 
+    test_container_url = container_sas
     # TODO validate the continer url
 
     # copying the azcopy executable to the newly created test directory.
@@ -31,23 +67,31 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
     else:
         print("please verify the test suite executable location")
         return False
-
+    test_directory_path = new_dir_path
     return True
 
-def create_test_file(filepath, filename , size):
-    file_path = os.path.join(filepath , filename)
+def create_test_file(filename , size):
+    file_path = os.path.join(test_directory_path , filename)
     if os.path.isfile(file_path):
         os.remove(file_path)
     f = open(file_path, 'w')
-    num_chars = size
-    print(f.write('0' * num_chars))
+    if size > 1024 * 1024:
+        total_size = size
+        while total_size > 0:
+            num_chars = 1024 * 1024
+            if total_size < num_chars:
+                num_chars = total_size
+            f.write('0' * num_chars)
+            total_size = total_size - num_chars
+    else:
+        num_chars = size
+        f.write('0' * num_chars)
     f.close()
     return file_path
 
-def execute_azcopy_command(test_dir_path, command):
-    azspath = os.path.join(test_dir_path, "azs.exe")
+def execute_azcopy_command(command):
+    azspath = os.path.join(test_directory_path, "azs.exe")
     cmnd = azspath + " " + command
-    print("command ", command)
     try:
         subprocess.check_output(
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
@@ -58,10 +102,9 @@ def execute_azcopy_command(test_dir_path, command):
     else:
         return True
 
-def verify_operation(test_dir_path , command):
-    test_suite_path = os.path.join(test_dir_path, "testSuite.exe")
+def verify_operation(command):
+    test_suite_path = os.path.join(test_directory_path, "testSuite.exe")
     command = test_suite_path + " " + command
-    print("command " , command)
     try:
         subprocess.check_output(
             command, stderr=subprocess.STDOUT, shell=True, timeout=180,
@@ -79,14 +122,23 @@ def get_resource_sas(container_sas, resource_name):
     resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
     return resource_sas
 
-def create_test_n_files(filespath, size, numberOfFiles):
-    filesprefix = "test" +str(numberOfFiles) + (size)
+def create_test_n_files(size, numberOfFiles):
+
+    dir_n_files_path = os.path.join(test_directory_path, "dir_n_1kb_files")
+    try:
+        shutil.rmtree(dir_n_files_path)
+        os.mkdir(dir_n_files_path)
+    except:
+        os.mkdir(dir_n_files_path)
+
+    filesprefix = "test" +str(numberOfFiles) + str(size)
     for index in range(0, numberOfFiles):
-        filepath = os.path.join(filespath, filesprefix + '_' + str(index) + "txt")
+        filepath = os.path.join(dir_n_files_path, filesprefix + '_' + str(index) + "txt")
         if os.path.isfile(filepath):
             print("file already exists")
             continue
         f = open(filepath, 'w')
         num_chars = size
-        print(f.write('0' * num_chars))
+        f.write('0' * num_chars)
         f.close()
+    return dir_n_files_path

@@ -1,9 +1,12 @@
-from scripts.utility import *
 from scripts.test_upload_blob import *
+from scripts.utility import *
 
-def execute_user_scenario_1(test_dir_path, container_sas) :
-    test_1kb_blob_upload(test_dir_path, container_sas)
-    test_63mb_blob_upload(test_dir_path, container_sas)
+def execute_user_scenario_1() :
+    #test_1kb_blob_upload()
+    #test_63mb_blob_upload()
+    #test_n_1kb_blob_upload(10)
+    #test_1G_blob_upload()
+    test_block_size(4 * 1024 * 1024)
 
 def init():
     # test_dir = input("please enter the location directory where you want to execute the test \n")
@@ -15,7 +18,7 @@ def init():
     test_dir_path = "C:\\Users\\prjain\\Documents\\Sample_Files"
 
     # container_sas is the shared access signature of the container where test data will be uploaded to and downloaded from.
-    container_sas = "https://azcopynextgendev1.blob.core.windows.net/test-container-1?st=2018-03-15T11%3A48%3A00Z&se=2018-03-24T11%3A48%3A00Z&sp=rwdl&sv=2017-04-17&sr=c&sig=pfRQCDGDT6Y4qpwSgqACU%2FX31FoW7SXB8DMlVcxuYbU%3D"
+    container_sas = "https://azcopynextgendev1.blob.core.windows.net/test-container-1?st=2018-03-18T18%3A11%3A00Z&se=2018-03-30T18%3A11%3A00Z&sp=rwdl&sv=2017-04-17&sr=c&sig=6zF5e2WZZqeI1Nmgo9hQRuYrLbxsD1uWq2%2BFPtn1eGM%3D"
 
     # azcopy_exec_location is the location of the azcopy executable
     # azcopy executable will be copied to test data folder.
@@ -25,16 +28,14 @@ def init():
     # test suite executable will be copied to test data folder.
     test_suite_exec_location = "C:\\Go\\externals\\src\\github.com\\Azure\\azure-storage-azcopy\\testSuite\\testSuite.exe"
 
-    result = initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location)
-
-    if result == False:
+    if not initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
         test_dir_path += "\\test_data"
 
     # call the scenario's
-    execute_user_scenario_1(test_dir_path, container_sas)
+    execute_user_scenario_1()
 
 def main():
     init()
