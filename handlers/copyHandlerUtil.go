@@ -33,6 +33,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"encoding/binary"
+	"encoding/base64"
 )
 
 const (
@@ -160,6 +162,14 @@ func (util copyHandlerUtil) getLastVirtualDirectoryFromPath(path string) string 
 	}
 
 	return path[0:lastSlashIndex]
+}
+
+func (util copyHandlerUtil) blockIDIntToBase64 (blockID int) string {
+	blockIDBinaryToBase64 := func(blockID []byte) string { return base64.StdEncoding.EncodeToString(blockID) }
+
+	binaryBlockID := (&[4]byte{})[:] // All block IDs are 4 bytes long
+	binary.LittleEndian.PutUint32(binaryBlockID, uint32(blockID))
+	return blockIDBinaryToBase64(binaryBlockID)
 }
 
 func (util copyHandlerUtil) sendJobPartOrderToSTE(jobOrder *common.CopyJobPartOrderRequest, partNum common.PartNumber, isFinalPart bool) (bool, string) {
