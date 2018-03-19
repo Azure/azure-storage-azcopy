@@ -11,6 +11,7 @@ import (
 	"strings"
 	"path"
 	"io/ioutil"
+	"net/http"
 )
 
 type TestBlobCommand struct{
@@ -19,6 +20,7 @@ type TestBlobCommand struct{
 	ContainerUrl      string
 	IsObjectDirectory bool
 	MetaData        string
+	NoGuessMimeType bool
 	ContentType     string
 	ContentEncoding string
 	VerifyBlockSize bool
@@ -49,10 +51,12 @@ func init(){
 	}
 	rootCmd.AddCommand(testBlobCmd)
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.MetaData, "metadata", "", "metadata expected from the blob in the container")
-	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "contentType", "", "content type expected from the blob in the container")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "content-type", "", "content type expected from the blob in the container")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.IsObjectDirectory, "is-object-dir", false, "set the type of object to verify against the subject")
 	testBlobCmd.PersistentFlags().Uint64Var(&cmdInput.BlockSize, "block-size", 100*1024*1024, "Use this block size to verify the number of blocks uploaded")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.VerifyBlockSize, "verify-block-size", false, "this flag verify the block size by determining the number of blocks")
+	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.NoGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 }
 
 // Verify Blob gets the
@@ -178,9 +182,6 @@ func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metad
 }
 
 func validateString(expected string, actual string) (bool){
-	if len(expected) == 0{
-		return true
-	}
 	if strings.Compare(expected, actual) != 0{
 		return false
 	}
@@ -247,7 +248,13 @@ func verifySingleBlobUpload(testBlobCmd TestBlobCommand){
 	}
 
 	// verify the content-type
-	if !validateString(testBlobCmd.ContentType, get.ContentType()) {
+	expectedContentType := ""
+	if testBlobCmd.NoGuessMimeType {
+		expectedContentType = testBlobCmd.ContentType
+	}else{
+		expectedContentType = http.DetectContentType(mmap)
+	}
+	if !validateString(expectedContentType, get.ContentType()) {
 		fmt.Println("mismatch content type between actual and user given blob content type")
 		os.Exit(1)
 	}
@@ -257,6 +264,7 @@ func verifySingleBlobUpload(testBlobCmd TestBlobCommand){
 		fmt.Println("mismatch content encoding between actual and user given blob content encoding")
 		os.Exit(1)
 	}
+
 	mmap.Unmap()
 	file.Close()
 

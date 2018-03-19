@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"math"
+	"os"
 )
 
 // handles the list command
@@ -101,11 +102,11 @@ func PrintJobProgressSummary(summaryData []byte) {
 	err := json.Unmarshal(summaryData, &summary)
 	if err != nil {
 		panic(fmt.Errorf("error unmarshaling the progress summary. Failed with error %s", err.Error()))
-		return
+		os.Exit(1)
 	}
 	if summary.ErrorMessage != "" {
 		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMessage))
-		return
+		os.Exit(1)
 	}
 	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobId))
 	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfers)

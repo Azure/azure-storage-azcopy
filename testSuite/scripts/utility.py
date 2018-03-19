@@ -9,6 +9,8 @@ class Command(object):
         self.args = list()
 
     def add_arguments(self, argument):
+        if argument == None:
+            return
         self.args.append(argument)
         return self
 
@@ -18,17 +20,22 @@ class Command(object):
 
     def string(self):
         command = self.command_type
-        for arg in self.args:
-            if (len(arg) > 0):
-                command += " " + '"' + arg + '"'
-        if len(self.flags) > 0:
-            for key, value in self.flags.items():
-                command += " --" + key + "=" + value
+        if len(self.args) > 0:
+            for arg in self.args:
+                if (len(arg) > 0):
+                    command += " " + '"' + arg + '"'
+            if len(self.flags) > 0:
+                for key, value in self.flags.items():
+                    command += " --" + key + "=" + '"' +value +'"'
         return command
 
     def execute_azcopy_command(self):
         self.add_arguments(test_container_url)
         return execute_azcopy_command(self.string())
+
+    def execute_azcopy_command_get_output(self):
+        self.add_arguments(test_container_url)
+        return execute_azcopy_command_get_output(self.string())
 
     def execute_azcopy_verify(self):
         self.add_arguments(test_directory_path)
@@ -89,6 +96,19 @@ def create_test_file(filename , size):
     f.close()
     return file_path
 
+def create_test_html_file(filename):
+    file_path = os.path.join(test_directory_path , filename)
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+    f = open(file_path, 'w')
+    message = """<html>
+                    <head></head>
+                        <body><p>Hello World!</p></body>
+                </html>"""
+    f.write(message)
+    f.close()
+    return file_path
+
 def execute_azcopy_command(command):
     azspath = os.path.join(test_directory_path, "azs.exe")
     cmnd = azspath + " " + command
@@ -101,6 +121,20 @@ def execute_azcopy_command(command):
         return False
     else:
         return True
+
+def execute_azcopy_command_get_output(command):
+    azspath = os.path.join(test_directory_path, "azs.exe")
+    cmnd = azspath + " " + command
+    output = ""
+    try:
+        output = subprocess.check_output(
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
+            universal_newlines=True)
+    except subprocess.CalledProcessError as exec:
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        return None
+    else:
+        return output
 
 def verify_operation(command):
     test_suite_path = os.path.join(test_directory_path, "testSuite.exe")

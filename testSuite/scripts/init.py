@@ -1,12 +1,15 @@
 from scripts.test_upload_blob import *
 from scripts.utility import *
+from scripts.test_azcopy_operations import *
 
 def execute_user_scenario_1() :
     #test_1kb_blob_upload()
     #test_63mb_blob_upload()
     #test_n_1kb_blob_upload(10)
     #test_1G_blob_upload()
-    test_block_size(4 * 1024 * 1024)
+    #test_metaData_content_encoding_content_type()
+    #test_block_size(4 * 1024 * 1024)
+    test_cancel_job()
 
 def init():
     # test_dir = input("please enter the location directory where you want to execute the test \n")

@@ -51,7 +51,7 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	// not having a valid blob type is a fatal error
 	if jobPartOrder.OptionalAttributes.BlobType == common.InvalidBlob {
 		fmt.Println("Invalid blob type passed. Please enter the valid blob type - BlockBlob, AppendBlob, PageBlob")
-		return
+		os.Exit(1)
 	}
 
 	// depending on the source and destination type, we process the cp command differently
@@ -64,14 +64,14 @@ func HandleCopyCommand(commandLineInput common.CopyCmdArgsAndFlags) {
 	// unexpected errors can happen while communicating with the transfer engine
 	if !jobStarted {
 		fmt.Print("Job with id", jobId, "was not abe to start. Please try again")
-		return
+		os.Exit(1)
 	}
 
 	// in background mode we would spit out the job id and quit
 	// in foreground mode we would continuously print out status updates for the job, so the job id is not important
-	fmt.Println("Job with id", jobId, "has started.")
+	fmt.Println("Job Started and has JobId ", jobId)
 	if commandLineInput.IsaBackgroundOp {
-		return
+		os.Exit(0)
 	}
 
 	// created a signal channel to receive the Interrupt and Kill signal send to OS
