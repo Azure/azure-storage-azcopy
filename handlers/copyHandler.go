@@ -21,19 +21,13 @@
 package handlers
 
 import (
-	"context"
-
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 
-	"log"
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -136,104 +130,18 @@ func handleUploadFromLocalToBlobStorage(commandLineInput *common.CopyCmdArgsAndF
 
 func handleDownloadFromBlobStorageToLocal(commandLineInput *common.CopyCmdArgsAndFlags,
 	jobPartOrderToFill *common.CopyJobPartOrderRequest) bool {
-	util := copyHandlerUtil{}
 
 	// set the source and destination type
 	jobPartOrderToFill.SourceType = common.Blob
 	jobPartOrderToFill.DestinationType = common.Local
 
-	// attempt to parse the container/blob url
-	sourceUrl, err := url.Parse(commandLineInput.Source)
+	enumerator := newDownloadTaskEnumerator(jobPartOrderToFill)
+	err := enumerator.enumerate(commandLineInput.Source, commandLineInput.Recursive, commandLineInput.Destination)
+
 	if err != nil {
-		panic(err)
+		fmt.Printf("Cannot start job due to error: %s.\n", err)
+		return false
+	} else {
+		return true
 	}
-	sourcePathParts := strings.Split(sourceUrl.Path[1:], "/")
-
-	destinationFileInfo, err := os.Stat(commandLineInput.Destination)
-	// something is wrong with the destination, handle if it does not exist, else throw
-	if err != nil {
-
-		// create the destination if it does not exist
-		if os.IsNotExist(err) {
-			if len(sourcePathParts) < 2 { // create the directory if the source is a container
-				err = os.MkdirAll(commandLineInput.Destination, os.ModePerm)
-				if err != nil {
-					panic("failed to create the destination on the local file system")
-				}
-			}
-
-			destinationFileInfo, err = os.Stat(commandLineInput.Destination)
-		} else {
-			panic("cannot access destination, not a valid local file system path")
-		}
-	}
-
-	// source is a single blob
-	if len(sourcePathParts) > 1 {
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-		blobProperties, err := blobUrl.GetPropertiesAndMetadata(context.Background(), azblob.BlobAccessConditions{})
-		if err != nil {
-			panic("Cannot get blob properties")
-		}
-
-		//TODO figure out what to do when destination is dir for a single blob download
-		//unless file info tells us, it is impossible to know whether the destination is a dir
-		//if destinationFileInfo.IsDir() { // destination is dir, therefore the file name needs to be generated
-		//	blobName := sourcePathParts[1]
-		//	commandLineInput.Destination = path.Join(commandLineInput.Destination, blobName)
-		//}
-
-		singleTask := common.CopyTransfer{
-			Source:           sourceUrl.String(),
-			Destination:      commandLineInput.Destination,
-			LastModifiedTime: blobProperties.LastModified(),
-			SourceSize:       blobProperties.ContentLength(),
-		}
-		jobPartOrderToFill.Transfers = []common.CopyTransfer{singleTask}
-		jobStarted, errorMsg := util.sendJobPartOrderToSTE(jobPartOrderToFill, 0, true)
-		if !jobStarted {
-			fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
-			return jobStarted
-		}
-	} else { // source is a container
-		if !destinationFileInfo.IsDir() {
-			panic("destination should be a directory")
-		}
-
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		containerUrl := azblob.NewContainerURL(*sourceUrl, p)
-		// temporarily save the path of the container
-		cleanContainerPath := sourceUrl.Path
-		var Transfers []common.CopyTransfer
-		partNumber := 0
-
-		// iterate over the container
-		for marker := (azblob.Marker{}); marker.NotDone(); {
-			// Get a result segment starting with the blob indicated by the current Marker.
-			listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{})
-			if err != nil {
-				log.Fatal(err)
-			}
-			marker = listBlob.NextMarker
-
-			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-			for _, blobInfo := range listBlob.Blobs.Blob {
-				sourceUrl.Path = cleanContainerPath + "/" + blobInfo.Name
-				Transfers = append(Transfers, common.CopyTransfer{Source: sourceUrl.String(), Destination: path.Join(commandLineInput.Destination, blobInfo.Name), LastModifiedTime: blobInfo.Properties.LastModified, SourceSize: *blobInfo.Properties.ContentLength})
-			}
-			jobPartOrderToFill.Transfers = Transfers
-			jobStarted, errorMsg := util.sendJobPartOrderToSTE(jobPartOrderToFill, common.PartNumber(partNumber), !marker.NotDone())
-
-			if !jobStarted {
-				fmt.Println(fmt.Sprintf("copy job part order with JobId %s and part number %d failed because %s", jobPartOrderToFill.ID, jobPartOrderToFill.PartNum, errorMsg))
-				return jobStarted
-			}
-
-			partNumber += 1
-		}
-	}
-	// erase the blob type, as it does not matter
-	commandLineInput.BlobType = ""
-	return true
 }

@@ -33,8 +33,8 @@ func init() {
 	pauseCmd := &cobra.Command{
 		Use:        "pause",
 		SuggestFor: []string{"pase", "ause", "paue"},
-		Short:      "pause pauses the existing job for given JobId",
-		Long:       `pause pauses the existing job for given JobId`,
+		Short:      "pause pauses the existing job for given JobId.",
+		Long:       `pause pauses the existing job for given JobId.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the pause command requires necessarily to have an argument
 			// pause jobId -- pause all the parts of an existing job for given jobId

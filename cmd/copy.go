@@ -25,6 +25,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/handlers"
 	"github.com/spf13/cobra"
+	"fmt"
+	"os"
 )
 
 // TODO check file size, max is 4.75TB
@@ -89,7 +91,12 @@ Usage:
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 1 {
-				handlers.HandleRedirectionCommand(commandLineInput)
+				err := handlers.HandleRedirectionCommand(commandLineInput)
+
+				if err != nil {
+					fmt.Println("Copy through redirection has failed due to error: ", err.Error())
+					os.Exit(1)
+				}
 			} else {
 				handlers.HandleCopyCommand(commandLineInput)
 			}
@@ -108,7 +115,7 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&commandLineInput.WithSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
 
 	// options
-	cpCmd.PersistentFlags().Uint32Var(&commandLineInput.BlockSize, "block-size", 0, "Use this block size when uploading to Azure Storage.")
+	cpCmd.PersistentFlags().Uint32Var(&commandLineInput.BlockSize, "block-size", 100 * 1024 * 1024, "Use this block size when uploading to Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.BlobType, "blob-type", "BlockBlob", "Upload to Azure Storage using this blob type.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.BlobTier, "blob-tier", "", "Upload to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&commandLineInput.Metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
