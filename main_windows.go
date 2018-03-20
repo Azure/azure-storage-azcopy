@@ -42,6 +42,12 @@ func main() {
 	switch os.Args[1] {
 	case "inproc": // STE is launched in process
 		go ste.InitializeSTE(100, 500)
+
+		// deleting the inproc argument from os.Args
+		// this is done to let cobra execute the rest of arguments passed
+		// without parsing the inproc as an argument.
+		os.Args = append(os.Args[:1], os.Args[2:]...)
+		
 		cmd.Execute()
 	case "ste": // the program is being launched as the STE, the init function runs on main go-routine
 		if len(os.Args) == 4 {
