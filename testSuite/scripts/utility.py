@@ -58,20 +58,36 @@ class Command(object):
         self.add_arguments(test_container_url)
         return verify_operation(self.string())
 
+    def execute_azcopy_clean(self):
+        return verify_operation(self.string())
+
+def clean_test_container():
+    result = Command("clean").add_arguments(test_container_url).execute_azcopy_clean()
+    if not result:
+        print("error cleaning the container. please check the container sas provided")
+        return False
+    return True
+
+
 def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
+
+    # test_directory_path is global variable holding the location of test directory to execute all the test cases.
+    # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
+
+    # test_container_url is a global variable used in the entire testSuite holding the user given container shared access signature.
+    # all files / directory are uploaded and downloaded to and from this container.
     global test_container_url
+
+    # creating a test_directory in the location given by user.
+    # this directory will be used to created and download all the test files.
     new_dir_path = os.path.join(test_dir_path, "test_data")
     try:
         #removing the directory and its contents, if directory exists
         shutil.rmtree(new_dir_path)
         os.mkdir(new_dir_path)
     except:
-        # if the directory exists and cannot be removed, then we need to ask for another directory to execute the test
         os.mkdir(new_dir_path)
-
-    test_container_url = container_sas
-    # TODO validate the continer url
 
     # copying the azcopy executable to the newly created test directory.
     # this copying is done to avoid using the executables at location which might be used by the user
@@ -90,7 +106,15 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
     else:
         print("please verify the test suite executable location")
         return False
+
     test_directory_path = new_dir_path
+
+    #cleaning the test container provided
+    # all blob inside the container will be deleted.
+    test_container_url = container_sas
+    if not clean_test_container():
+        return False
+
     return True
 
 def create_test_file(filename , size):
@@ -126,7 +150,7 @@ def create_test_html_file(filename):
     return file_path
 
 def execute_azcopy_command(command):
-    azspath = os.path.join(test_directory_path, "azs.exe")
+    azspath = os.path.join(test_directory_path, "azs.exe inproc")
     cmnd = azspath + " " + command
     try:
         subprocess.check_output(
@@ -139,7 +163,7 @@ def execute_azcopy_command(command):
         return True
 
 def execute_azcopy_command_get_output(command):
-    azspath = os.path.join(test_directory_path, "azs.exe")
+    azspath = os.path.join(test_directory_path, "azs.exe inproc")
     cmnd = azspath + " " + command
     output = ""
     try:
@@ -222,3 +246,5 @@ def create_partial_sparse_file(filename, filesize):
 def get_resource_sas(resource_name):
     parts = test_container_url.split("?")
     return parts[0] + "/" + resource_name + "?" + parts[1]
+
+

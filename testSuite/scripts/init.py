@@ -47,11 +47,10 @@ def init():
     else:
         test_dir_path += "\\test_data"
 
-    # call the scenario's
-    execute_user_scenario_1()
 
 def main():
     init()
+    execute_user_scenario_1()
 
 main()
     
