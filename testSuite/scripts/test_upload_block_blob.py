@@ -23,7 +23,7 @@ def test_1kb_blob_upload():
 
 def test_63mb_blob_upload():
     filename = "test63Mb_blob.txt"
-    file_path = create_test_file(filename, 63 * 1024 * 1024)
+    file_path = create_test_file(filename, 8 * 1024 * 1024)
 
     result = Command("copy").add_arguments(file_path).add_flags("Logging", "5").\
         add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
@@ -114,7 +114,12 @@ def test_block_size(block_size):
     # Verifying the uploaded blob
 
     # calling the testblob validator to verify whether blob has been successfully uploaded or not
-    result = Command("testBlob").add_arguments(filename).add_flags("verify-block-size", "true").add_flags("block-size", "4194304").execute_azcopy_verify()
+    if (63*1024*1024) % block_size == 0:
+        number_of_blocks = int(63*1024*1024 / block_size)
+    else:
+        number_of_blocks = int(63*1024*1024 / block_size) + 1
+
+    result = Command("testBlob").add_arguments(filename).add_flags("verify-block-size", "true").add_flags("number-blocks-or-pages", str(number_of_blocks)).execute_azcopy_verify()
 
     if not result:
         print("test_block_size test failed")

@@ -1,12 +1,12 @@
-from scripts.test_upload_block_blob import *
-from scripts.utility import *
 from scripts.test_azcopy_operations import *
 from scripts.test_upload_page_blob import *
+from scripts.test_blob_download import *
+from scripts.test_upload_block_blob import *
 
 def execute_user_scenario_1() :
-    #test_1kb_blob_upload()
-    #test_63mb_blob_upload()
-    #test_n_1kb_blob_upload(10)
+    test_1kb_blob_upload()
+    test_63mb_blob_upload()
+    test_n_1kb_blob_upload(5)
     #test_1G_blob_upload()
     #test_metaData_content_encoding_content_type()
     #test_block_size(4 * 1024 * 1024)
@@ -15,8 +15,10 @@ def execute_user_scenario_1() :
     #test_pause_resume_job_200Mb_file()
     #test_pause_resume_job_20Mb_file()
     #test_page_blob_upload_1mb()
-    #test_page_range_for_sparse_file()
-    test_page_blob_upload_100mb()
+    #test_page_range_for_complete_sparse_file()
+    #test_page_blob_upload_100mb()
+    #test_page_blob_upload_partial_sparse_file()
+    test_download_1kb_blob()
     
 
 def init():

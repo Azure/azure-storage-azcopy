@@ -26,7 +26,8 @@ type TestBlobCommand struct{
 	ContentEncoding       string
 	VerifyBlockOrPageSize bool
 	BlobType              string
-	BlockOrPageSize       uint64
+	NumberOfBlocksOrPages uint64
+	PreserveLastModifiedTime bool
 }
 
 // initializes the testblob command, its aliases and description.
@@ -56,10 +57,11 @@ func init(){
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "content-type", "", "content type expected from the blob in the container")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.IsObjectDirectory, "is-object-dir", false, "set the type of object to verify against the subject")
-	testBlobCmd.PersistentFlags().Uint64Var(&cmdInput.BlockOrPageSize, "block-size", 100*1024*1024, "Use this block size to verify the number of blocks uploaded")
+	testBlobCmd.PersistentFlags().Uint64Var(&cmdInput.NumberOfBlocksOrPages, "number-blocks-or-pages", 0, "Use this block size to verify the number of blocks uploaded")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.VerifyBlockOrPageSize, "verify-block-size", false, "this flag verify the block size by determining the number of blocks")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.NoGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobType, "blob-type", "BlockBlob", "Upload to Azure Storage using this blob type.")
+	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 }
 
 // Verify Blob gets the
@@ -71,7 +73,7 @@ func verifyBlobUpload(testBlobCmd TestBlobCommand){
 		if testBlobCmd.IsObjectDirectory{
 			verifyBlockBlobDirUpload(testBlobCmd)
 		}else{
-			verifySingleBlockBlobUpload(testBlobCmd)
+			verifySingleBlockBlob(testBlobCmd)
 		}
 	}
 }
@@ -221,7 +223,6 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
-	blobsize := int(get.ContentLength())
 
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
 	if get.Response().Body != nil{
@@ -275,21 +276,12 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 
 	// verify the block size
 	if testBlobCmd.VerifyBlockOrPageSize {
-		numberOfPages := int(0)
-		if testBlobCmd.BlockOrPageSize == 0 {
-			numberOfPages = 0
-		}else if (blobsize % int(testBlobCmd.BlockOrPageSize)) == 0{
-			numberOfPages = blobsize / int(testBlobCmd.BlockOrPageSize)
-		}else{
-			numberOfPages = blobsize / int(testBlobCmd.BlockOrPageSize) + 1
-		}
-		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset:0, Count:4*1024*1024}, azblob.BlobAccessConditions{})
+		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
+		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset:0, Count:0}, azblob.BlobAccessConditions{})
 		if err != nil{
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
 		}
-		fmt.Println("number of page ", numberOfPages)
-		fmt.Println("number of page ranges ", len(resp.PageRange), resp.PageRange[0].Start, resp.PageRange[0].End )
 		if numberOfPages != (len(resp.PageRange)){
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
@@ -297,7 +289,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 	}
 }
 
-func verifySingleBlockBlobUpload(testBlobCmd TestBlobCommand){
+func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 
 	objectLocalPath := path.Join(testBlobCmd.TestDirPath, testBlobCmd.Object)
 	fileInfo, err := os.Stat(objectLocalPath)
@@ -326,7 +318,6 @@ func verifySingleBlockBlobUpload(testBlobCmd TestBlobCommand){
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
-	blobsize := int(get.ContentLength())
 
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
 	if get.Response().Body != nil{
@@ -375,18 +366,20 @@ func verifySingleBlockBlobUpload(testBlobCmd TestBlobCommand){
 		os.Exit(1)
 	}
 
+	if testBlobCmd.PreserveLastModifiedTime{
+		if fileInfo.ModTime().Unix() != get.LastModified().Unix() {
+			fmt.Println("modified time of downloaded and actual blob does not match")
+			os.Exit(1)
+		}
+	}
+
 	mmap.Unmap()
 	file.Close()
 
 	// verify the block size
 	if testBlobCmd.VerifyBlockOrPageSize {
 		blockBlobUrl := azblob.NewBlockBlobURL(*sourceURL, p)
-		numberOfBlocks := int(0)
-		if (blobsize % int(testBlobCmd.BlockOrPageSize)) == 0{
-			numberOfBlocks = blobsize / int(testBlobCmd.BlockOrPageSize)
-		}else{
-			numberOfBlocks = blobsize / int(testBlobCmd.BlockOrPageSize) + 1
-		}
+		numberOfBlocks := int(testBlobCmd.NumberOfBlocksOrPages)
 		resp, err := blockBlobUrl.GetBlockList(context.Background(), azblob.BlockListNone, azblob.LeaseAccessConditions{})
 		if err != nil{
 			fmt.Println("error getting the block blob list")

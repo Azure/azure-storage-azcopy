@@ -30,12 +30,24 @@ class Command(object):
                     command += " --" + key + "=" + '"' +value +'"'
         return command
 
-    def execute_azcopy_copy_command(self):
-        self.add_arguments(test_container_url)
+    def execute_azcopy_copy_command(self, download = None):
+        if download is None:
+            self.add_arguments(test_container_url)
+        else:
+            resource_sas = get_resource_sas(self.args[0])
+            local_path = test_directory_path + "/" + self.args[0]
+            self.args[0] = resource_sas
+            self.add_arguments(local_path)
         return execute_azcopy_command(self.string())
 
-    def execute_azcopy_copy_command_get_output(self):
-        self.add_arguments(test_container_url)
+    def execute_azcopy_copy_command_get_output(self, download=None):
+        if download is None:
+            self.add_arguments(test_container_url)
+        else:
+            resource_sas = get_resource_sas(self.args[0])
+            local_path = test_directory_path + "/" + self.args[0]
+            self.args[0] = resource_sas
+            self.add_arguments(local_path)
         return execute_azcopy_command_get_output(self.string())
 
     def execute_azcopy_operation_get_output(self):
@@ -171,7 +183,7 @@ def create_test_n_files(size, numberOfFiles):
 
     filesprefix = "test" +str(numberOfFiles) + str(size)
     for index in range(0, numberOfFiles):
-        filepath = os.path.join(dir_n_files_path, filesprefix + '_' + str(index) + "txt")
+        filepath = os.path.join(dir_n_files_path, filesprefix + '_' + str(index) + ".txt")
         if os.path.isfile(filepath):
             print("file already exists")
             continue
@@ -181,9 +193,32 @@ def create_test_n_files(size, numberOfFiles):
         f.close()
     return dir_n_files_path
 
-def create_sparse_file(filename, filesize):
+def create_complete_sparse_file(filename, filesize):
     file_path = os.path.join(test_directory_path , filename)
     sparse = Path(file_path)
     sparse.touch()
     os.truncate(str(sparse), filesize)
     return file_path
+
+def create_partial_sparse_file(filename, filesize):
+    file_path = os.path.join(test_directory_path , filename)
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+    f = open(file_path, 'w')
+    if filesize < 8*1024*1024 or filesize % (8 * 1024 * 1024) != 0:
+        return None
+    else:
+        total_size = filesize
+        while total_size > 0:
+            num_chars = 4* 1024 * 1024
+            f.write('0' *  num_chars)
+            total_size = total_size - num_chars
+            if total_size <= 0:
+                break
+            f.write('\0' * num_chars)
+            total_size = total_size - num_chars
+    return file_path
+
+def get_resource_sas(resource_name):
+    parts = test_container_url.split("?")
+    return parts[0] + "/" + resource_name + "?" + parts[1]
