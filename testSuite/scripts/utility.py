@@ -1,6 +1,7 @@
 import os
 import subprocess
 import shutil
+from pathlib import Path
 
 class Command(object):
     def __init__(self, command_type):
@@ -29,13 +30,16 @@ class Command(object):
                     command += " --" + key + "=" + '"' +value +'"'
         return command
 
-    def execute_azcopy_command(self):
+    def execute_azcopy_copy_command(self):
         self.add_arguments(test_container_url)
         return execute_azcopy_command(self.string())
 
-    def execute_azcopy_command_get_output(self):
+    def execute_azcopy_copy_command_get_output(self):
         self.add_arguments(test_container_url)
         return execute_azcopy_command_get_output(self.string())
+
+    def execute_azcopy_operation_get_output(self):
+        return  execute_azcopy_command_get_output(self.string())
 
     def execute_azcopy_verify(self):
         self.add_arguments(test_directory_path)
@@ -141,7 +145,7 @@ def verify_operation(command):
     command = test_suite_path + " " + command
     try:
         subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True, timeout=180,
+            command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         print("command failed with error code " , exec.returncode , " and message " + exec.output)
@@ -176,3 +180,10 @@ def create_test_n_files(size, numberOfFiles):
         f.write('0' * num_chars)
         f.close()
     return dir_n_files_path
+
+def create_sparse_file(filename, filesize):
+    file_path = os.path.join(test_directory_path , filename)
+    sparse = Path(file_path)
+    sparse.touch()
+    os.truncate(str(sparse), filesize)
+    return file_path

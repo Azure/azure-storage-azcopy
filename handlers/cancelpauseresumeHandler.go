@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"os"
 )
 
 // handles the cancel command
@@ -65,7 +66,7 @@ func HandleResumeCommand(jobIdString string) {
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
-		return
+		os.Exit(1)
 	}
 
 	responseBytes, _ := common.Rpc("resume", jobId)
@@ -77,7 +78,7 @@ func HandleResumeCommand(jobIdString string) {
 	}
 	if !resumeJobResponse.CancelledPauseResumed {
 		fmt.Println(fmt.Sprintf("job cannot be resumed because %s", resumeJobResponse.ErrorMsg))
-		return
+		os.Exit(1)
 	}
 	fmt.Println(fmt.Sprintf("Job %s resume successfully", jobId))
 }

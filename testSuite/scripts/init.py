@@ -1,6 +1,7 @@
-from scripts.test_upload_blob import *
+from scripts.test_upload_block_blob import *
 from scripts.utility import *
 from scripts.test_azcopy_operations import *
+from scripts.test_upload_page_blob import *
 
 def execute_user_scenario_1() :
     #test_1kb_blob_upload()
@@ -9,7 +10,14 @@ def execute_user_scenario_1() :
     #test_1G_blob_upload()
     #test_metaData_content_encoding_content_type()
     #test_block_size(4 * 1024 * 1024)
-    test_cancel_job()
+    #test_1G_blob_upload()
+    #test_cancel_job()
+    #test_pause_resume_job_200Mb_file()
+    #test_pause_resume_job_20Mb_file()
+    #test_page_blob_upload_1mb()
+    #test_page_range_for_sparse_file()
+    test_page_blob_upload_100mb()
+    
 
 def init():
     # test_dir = input("please enter the location directory where you want to execute the test \n")

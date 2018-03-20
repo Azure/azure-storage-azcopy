@@ -132,7 +132,7 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			// If any no is greater than 0, it means that the 8 bytes slice represented by that integer has atleast one byte greater than 0
 			// If all integers are 0, it means that the 8 bytes slice represented by each integer has no byte greater than 0
 			for index := 0; index < len(int64Slice); index++{
-				if int64Slice[index] > 0{
+				if int64Slice[index] != 0{
 					// If one number is greater than 0, then we need to perform the PutPage update.
 					allBytesZero = false
 					break

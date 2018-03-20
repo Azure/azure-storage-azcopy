@@ -6,7 +6,7 @@ def test_1kb_blob_upload():
     file_path = create_test_file(filename, 1024)
 
     result = Command("copy").add_arguments(file_path).\
-                add_flags("Logging", "5").add_flags("recursive", "true").execute_azcopy_command()
+                add_flags("Logging", "5").add_flags("recursive", "true").execute_azcopy_copy_command()
 
     #executing the azcopy command
     if not result:
@@ -26,7 +26,7 @@ def test_63mb_blob_upload():
     file_path = create_test_file(filename, 63 * 1024 * 1024)
 
     result = Command("copy").add_arguments(file_path).add_flags("Logging", "5").\
-        add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_command()
+        add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
 
     if not result:
         print("failed uploading file", filename, " to the container")
@@ -47,7 +47,7 @@ def test_n_1kb_blob_upload(number_of_files):
 
     dir_n_files_path = create_test_n_files(1024, number_of_files)
 
-    result = Command("copy").add_arguments(dir_n_files_path).add_flags("recursive", "true").add_flags("Logging", "5").execute_azcopy_command()
+    result = Command("copy").add_arguments(dir_n_files_path).add_flags("recursive", "true").add_flags("Logging", "5").execute_azcopy_copy_command()
 
     if not result:
         print("test_n_1kb_blob_upload failed while uploading ", number_of_files, " files to the container")
@@ -66,7 +66,7 @@ def test_metaData_content_encoding_content_type():
     file_path = create_test_file(filename, 2048)
     result = Command("copy").add_arguments(file_path).add_flags("Logging", "5"). \
                         add_flags("recursive", "true").add_flags("metadata", "author=prjain;viewport=width;description=test file").\
-                        add_flags("content-type", "testctype").add_flags("content-encoding", "testenc").add_flags("no-guess-mime-type", "true").execute_azcopy_command()
+                        add_flags("content-type", "testctype").add_flags("content-encoding", "testenc").add_flags("no-guess-mime-type", "true").execute_azcopy_copy_command()
     if not result:
         print("uploading 2KB file with metadata, content type and content-encoding failed")
         return
@@ -84,7 +84,7 @@ def test_1G_blob_upload():
     filename = "test_1G_blob.txt"
     file_path =create_test_file(filename, 1*1024*1024*1024)
     result = Command("copy").add_arguments(file_path).add_flags("Logging", "5"). \
-        add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_command()
+        add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1G file", filename, " to the container")
         return
@@ -105,7 +105,7 @@ def test_block_size(block_size):
     file_path = create_test_file(filename, 63 * 1024 * 1024)
 
     result = Command("copy").add_arguments(file_path).add_flags("Logging", "5"). \
-        add_flags("block-size", str(block_size)).add_flags("recursive", "true").execute_azcopy_command()
+        add_flags("block-size", str(block_size)).add_flags("recursive", "true").execute_azcopy_copy_command()
 
     if not result:
         print("failed uploading file", filename, " with block size 4MB to the container")
@@ -127,7 +127,7 @@ def test_guess_mime_type():
     file_path = create_test_html_file(filename)
 
     result = Command("copy").add_arguments(file_path).add_flags("Logging", "5").\
-        add_flags("recursive", "true").execute_azcopy_command()
+        add_flags("recursive", "true").execute_azcopy_copy_command()
 
     if not result:
         print("uploading file ", filename, " failed")
