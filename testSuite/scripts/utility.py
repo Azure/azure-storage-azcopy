@@ -65,7 +65,6 @@ class Command(object):
             # adding test_container url as a second argument.
             self.add_arguments(test_container_url)
         else:
-
             # if the copy is to download from container, then container url needs to be added first.
             # resource_sas is the sas of resource to be downloaded.
             resource_sas = get_resource_sas(self.args[0])
@@ -117,6 +116,7 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
     new_dir_path = os.path.join(test_dir_path, "test_data")
+    #todo finally
     try:
         #removing the directory and its contents, if directory exists
         shutil.rmtree(new_dir_path)
@@ -152,6 +152,7 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
 
     return True
 
+#todo : find better way
 # create_test_file creates a file with given file name and of given size inside the test directory.
 # returns the local file path.
 def create_test_file(filename , size):
@@ -271,6 +272,7 @@ def create_partial_sparse_file(filename, filesize):
 # execute_azcopy_command executes the given azcopy command in "inproc" mode.
 # returns true / false on success / failure of command.
 def execute_azcopy_command(command):
+    # todo timout to be taken as an argument.
     # azcopy executable path location concatenated with inproc keyword.
     azspath = os.path.join(test_directory_path, "azs.exe inproc")
     cmnd = azspath + " " + command
@@ -280,6 +282,7 @@ def execute_azcopy_command(command):
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
+        # todo kill azcopy command in case of timeout
         print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:

@@ -2,6 +2,7 @@ from scripts.test_azcopy_operations import *
 from scripts.test_upload_page_blob import *
 from scripts.test_blob_download import *
 from scripts.test_upload_block_blob import *
+import sys
 
 def execute_user_scenario_1() :
     
@@ -21,7 +22,7 @@ def execute_user_scenario_1() :
     test_download_1kb_blob()
     test_recursive_download_blob()
     
-
+# todo one config file with creds for each os.
 def init():
     # test_dir = input("please enter the location directory where you want to execute the test \n")
     # container_sas = input ("please enter the container shared access signature where you want to perform the test \n")
@@ -50,6 +51,7 @@ def init():
 
 
 def main():
+    print(sys.maxsize)
     init()
     execute_user_scenario_1()
 

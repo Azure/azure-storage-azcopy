@@ -17,6 +17,9 @@ import (
 
 // TestBlobCommand represents the struct to get command
 // for validating azcopy operations.
+
+// todo check the number of contents uploaded while verifying.
+
 type TestBlobCommand struct{
 	// name of the resource to be verified locally and on the container.
 	Object                string
@@ -24,7 +27,7 @@ type TestBlobCommand struct{
 	TestDirPath           string
 	// directory of container in which all test cases are executed.
 	ContainerUrl          string
-	// If the resource to be validated is a directory.
+	// If the resource to be validated is a directory. //todo: comments more explanatory
 	IsObjectDirectory     bool
 	// Metadata of the blob to be validated.
 	MetaData              string
@@ -36,11 +39,14 @@ type TestBlobCommand struct{
 	ContentEncoding       string
 	// Represents the flag to determine whether number of blocks or pages needs
 	// to be verified or not.
+	// todo always set this to true
 	VerifyBlockOrPageSize bool
 	// BlobType of the resource to be validated.
 	BlobType              string
 	// Number of Blocks or Pages Expected from the blob.
 	NumberOfBlocksOrPages uint64
+	// todo : numberofblockorpages can be an array with offset : end url.
+	//todo consecutive page ranges get squashed.
 	// PreserveLastModifiedTime represents the azcopy PreserveLastModifiedTime flag while downloading the blob.
 	PreserveLastModifiedTime bool
 }
@@ -325,6 +331,8 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 
 // verifySingleBlockBlob verifies the blockblob uploaded or downloaded
 // against the blob locally.
+
+// todo close the file as soon as possible.
 func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 	// opening the resource on local path in test directory.
 	objectLocalPath := path.Join(testBlobCmd.TestDirPath, testBlobCmd.Object)
@@ -429,6 +437,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
 		}
+		// todo only commited blocks
 		if numberOfBlocks != (len(resp.CommittedBlocks) + len(resp.UncommittedBlocks)){
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)

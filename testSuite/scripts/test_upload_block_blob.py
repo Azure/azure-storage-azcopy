@@ -6,7 +6,7 @@ def test_1kb_blob_upload():
     filename = "test1KB.txt"
     file_path = create_test_file(filename, 1024)
 
-    #executing the azcopy command
+    # executing the azcopy command
     result = Command("copy").add_arguments(file_path).\
                 add_flags("Logging", "5").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
