@@ -3,12 +3,16 @@ import subprocess
 import shutil
 from pathlib import Path
 
+# Command Class is used to create azcopy commands and validator commands.
 class Command(object):
     def __init__(self, command_type):
         self.command_type = command_type
+        # initializing dictionary to store flags and its values.
         self.flags = dict()
+        # initializing list to store arguments for azcopy and validator.
         self.args = list()
 
+    # this api is used by command class instance to add arguments.
     def add_arguments(self, argument):
         if argument == None:
             return
@@ -19,56 +23,87 @@ class Command(object):
         self.flags[flag] = value
         return self
 
+    # returns the command by combining arguments and flags.
     def string(self):
         command = self.command_type
         if len(self.args) > 0:
             for arg in self.args:
                 if (len(arg) > 0):
+                    # add '"' at start and end of each argument.
                     command += " " + '"' + arg + '"'
+            # iterating through all the values in dict and combining them.
             if len(self.flags) > 0:
                 for key, value in self.flags.items():
                     command += " --" + key + "=" + '"' +value +'"'
         return command
 
+    # this api is used to execute a azcopy copy command.
+    # by default, command execute a upload command.
+    # return true or false for success or failure of command.
     def execute_azcopy_copy_command(self, download = None):
         if download is None:
+            # adding test_container url as a second argument.
             self.add_arguments(test_container_url)
         else:
+            # if the copy is to download from container, then container url needs to be added first.
+            # resource_sas is the sas of resource to be downloaded.
             resource_sas = get_resource_sas(self.args[0])
-            local_path = test_directory_path + "/" + self.args[0]
+
+            # local_path is the location where resouce needs to be downloaded.
+            local_path = test_directory_path
+
+            # since reosource is added first, changing the position of resource_sas and local_path in args list.
             self.args[0] = resource_sas
             self.add_arguments(local_path)
         return execute_azcopy_command(self.string())
 
+    # this api is used to execute a azcopy copy command.
+    # by default, command execute a upload command.
+    # return azcopy console output on successful execution.
     def execute_azcopy_copy_command_get_output(self, download=None):
         if download is None:
+            # adding test_container url as a second argument.
             self.add_arguments(test_container_url)
         else:
+
+            # if the copy is to download from container, then container url needs to be added first.
+            # resource_sas is the sas of resource to be downloaded.
             resource_sas = get_resource_sas(self.args[0])
-            local_path = test_directory_path + "/" + self.args[0]
+
+            # local_path is the location where resouce needs to be downloaded.
+            local_path = test_directory_path
+
+            # since reosource is added first, changing the position of resource_sas and local_path in args list.
             self.args[0] = resource_sas
             self.add_arguments(local_path)
         return execute_azcopy_command_get_output(self.string())
 
+    # api execute other azcopy commands like cancel, pause, resume or list.
     def execute_azcopy_operation_get_output(self):
         return  execute_azcopy_command_get_output(self.string())
 
+    # api executes the azcopy validator to verify the azcopy operation.
     def execute_azcopy_verify(self):
+        # adds the test_directory.
         self.add_arguments(test_directory_path)
+        # add the test container url.
         self.add_arguments(test_container_url)
         return verify_operation(self.string())
 
+    # api executes the clean command to delete the blob or container contents.
     def execute_azcopy_clean(self):
         return verify_operation(self.string())
 
+# api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container():
+    # execute the clean command.
     result = Command("clean").add_arguments(test_container_url).execute_azcopy_clean()
     if not result:
         print("error cleaning the container. please check the container sas provided")
         return False
     return True
 
-
+# initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
 
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
@@ -117,11 +152,17 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
 
     return True
 
+# create_test_file creates a file with given file name and of given size inside the test directory.
+# returns the local file path.
 def create_test_file(filename , size):
+    # creating the file path
     file_path = os.path.join(test_directory_path , filename)
+    # if file already exists, then removing the file.
     if os.path.isfile(file_path):
         os.remove(file_path)
     f = open(file_path, 'w')
+    # since size of file can very large and size variable can overflow while holding the file size
+    # file is written in blocks of 1MB.
     if size > 1024 * 1024:
         total_size = size
         while total_size > 0:
@@ -136,10 +177,15 @@ def create_test_file(filename , size):
     f.close()
     return file_path
 
+# creates the a test html file inside the test directory.
+# returns the local file path.
 def create_test_html_file(filename):
+    # creating the file path
     file_path = os.path.join(test_directory_path , filename)
+    # if file already exists, then removing the file.
     if os.path.isfile(file_path):
         os.remove(file_path)
+
     f = open(file_path, 'w')
     message = """<html>
                     <head></head>
@@ -149,74 +195,28 @@ def create_test_html_file(filename):
     f.close()
     return file_path
 
-def execute_azcopy_command(command):
-    azspath = os.path.join(test_directory_path, "azs.exe inproc")
-    cmnd = azspath + " " + command
-    try:
-        subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
-            universal_newlines=True)
-    except subprocess.CalledProcessError as exec:
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
-        return False
-    else:
-        return True
-
-def execute_azcopy_command_get_output(command):
-    azspath = os.path.join(test_directory_path, "azs.exe inproc")
-    cmnd = azspath + " " + command
-    output = ""
-    try:
-        output = subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
-            universal_newlines=True)
-    except subprocess.CalledProcessError as exec:
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
-        return None
-    else:
-        return output
-
-def verify_operation(command):
-    test_suite_path = os.path.join(test_directory_path, "testSuite.exe")
-    command = test_suite_path + " " + command
-    try:
-        subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True, timeout=600,
-            universal_newlines=True)
-    except subprocess.CalledProcessError as exec:
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
-        return False
-    else:
-        return True
-
-def get_resource_sas(container_sas, resource_name):
-    # Splitting the container URL to add the uploaded blob name to the SAS
-    url_parts = container_sas.split("?")
-    # adding the blob name after the container name
-    resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
-    return resource_sas
-
-def create_test_n_files(size, numberOfFiles):
-
-    dir_n_files_path = os.path.join(test_directory_path, "dir_n_1kb_files")
+# create_test_n_files creates given number of files for given size
+# inside directory inside test directory.
+# returns the path of directory in which n files are created.
+def create_test_n_files(size, n, dir_name):
+    # creating directory inside test directory.
+    dir_n_files_path = os.path.join(test_directory_path, dir_name)
     try:
         shutil.rmtree(dir_n_files_path)
         os.mkdir(dir_n_files_path)
     except:
         os.mkdir(dir_n_files_path)
 
-    filesprefix = "test" +str(numberOfFiles) + str(size)
-    for index in range(0, numberOfFiles):
-        filepath = os.path.join(dir_n_files_path, filesprefix + '_' + str(index) + ".txt")
-        if os.path.isfile(filepath):
-            print("file already exists")
-            continue
-        f = open(filepath, 'w')
-        num_chars = size
-        f.write('0' * num_chars)
-        f.close()
+    # creating file prefix
+    filesprefix = "test" + str(n) + str(size)
+    # creating n files.
+    for index in range(0, n):
+        filename = filesprefix + '_' + str(index) + ".txt"
+        create_test_file(filename, size)
     return dir_n_files_path
 
+# create_complete_sparse_file creates an empty used to
+# test the page blob operations of azcopy
 def create_complete_sparse_file(filename, filesize):
     file_path = os.path.join(test_directory_path , filename)
     sparse = Path(file_path)
@@ -224,11 +224,17 @@ def create_complete_sparse_file(filename, filesize):
     os.truncate(str(sparse), filesize)
     return file_path
 
+# create_partial_sparse_file create a sparse file in test directory
+# of size multiple of 8MB. for each 8MB, first 4MB is '0'
+# and next 4MB is '\0'.
+# return the local file path of created file.
 def create_partial_sparse_file(filename, filesize):
     file_path = os.path.join(test_directory_path , filename)
     if os.path.isfile(file_path):
         os.remove(file_path)
     f = open(file_path, 'w')
+    # file size is less than 8MB or given size is not multiple of 8MB,
+    # no file is created.
     if filesize < 8*1024*1024 or filesize % (8 * 1024 * 1024) != 0:
         return None
     else:
@@ -243,8 +249,65 @@ def create_partial_sparse_file(filename, filesize):
             total_size = total_size - num_chars
     return file_path
 
-def get_resource_sas(resource_name):
-    parts = test_container_url.split("?")
-    return parts[0] + "/" + resource_name + "?" + parts[1]
+# execute_azcopy_command executes the given azcopy command in "inproc" mode.
+# returns true / false on success / failure of command.
+def execute_azcopy_command(command):
+    # azcopy executable path location concatenated with inproc keyword.
+    azspath = os.path.join(test_directory_path, "azs.exe inproc")
+    cmnd = azspath + " " + command
+    try:
+        # executing the command with timeout to set 3 minutes / 180 sec.
+        subprocess.check_output(
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
+            universal_newlines=True)
+    except subprocess.CalledProcessError as exec:
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        return False
+    else:
+        return True
+
+# execute_azcopy_command_get_output executes the given azcopy command in "inproc" mode.
+# returns azcopy console output or none on success / failure of command.
+def execute_azcopy_command_get_output(command):
+    # azcopy executable path location concatenated with inproc keyword.
+    azspath = os.path.join(test_directory_path, "azs.exe inproc")
+    cmnd = azspath + " " + command
+    output = ""
+    try:
+        # executing the command with timeout set to 3 minutes / 180 sec.
+        output = subprocess.check_output(
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
+            universal_newlines=True)
+    except subprocess.CalledProcessError as exec:
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        return None
+    else:
+        return output
+
+# verify_operation executes the validator command to verify the azcopy operations.
+# return true / false on success / failure of command.
+def verify_operation(command):
+    # testSuite executable local path inside the test directory.
+    test_suite_path = os.path.join(test_directory_path, "testSuite.exe")
+    command = test_suite_path + " " + command
+    try:
+        # executing the command with timeout set to 3 minutes / 180 sec.
+        subprocess.check_output(
+            command, stderr=subprocess.STDOUT, shell=True, timeout=600,
+            universal_newlines=True)
+    except subprocess.CalledProcessError as exec:
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        return False
+    else:
+        return True
+# get_resource_sas return the shared access signature for the given resource
+# using the container url.
+def get_resource_sas(container_sas, resource_name):
+    # Splitting the container URL to add the uploaded blob name to the SAS
+    url_parts = container_sas.split("?")
+    # adding the blob name after the container name
+    resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
+    return resource_sas
+
 
 

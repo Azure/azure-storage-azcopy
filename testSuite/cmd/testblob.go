@@ -15,18 +15,33 @@ import (
 	"time"
 )
 
+// TestBlobCommand represents the struct to get command
+// for validating azcopy operations.
 type TestBlobCommand struct{
+	// name of the resource to be verified locally and on the container.
 	Object                string
+	// directory of local path in which all test cases are executed.
 	TestDirPath           string
+	// directory of container in which all test cases are executed.
 	ContainerUrl          string
+	// If the resource to be validated is a directory.
 	IsObjectDirectory     bool
+	// Metadata of the blob to be validated.
 	MetaData              string
+	// NoGuessMimeType represent the azcopy NoGuessMimeType flag set while uploading the blob.
 	NoGuessMimeType       bool
+	// Content Type of the blob to be validated.
 	ContentType           string
+	// Content Encoding of the blob to be validated.
 	ContentEncoding       string
+	// Represents the flag to determine whether number of blocks or pages needs
+	// to be verified or not.
 	VerifyBlockOrPageSize bool
+	// BlobType of the resource to be validated.
 	BlobType              string
+	// Number of Blocks or Pages Expected from the blob.
 	NumberOfBlocksOrPages uint64
+	// PreserveLastModifiedTime represents the azcopy PreserveLastModifiedTime flag while downloading the blob.
 	PreserveLastModifiedTime bool
 }
 
@@ -43,16 +58,20 @@ func init(){
 			if len(args) <= 2 {
 				return fmt.Errorf("invalid arguments for test blob command")
 			}
+			// first argument is the resource name.
 			cmdInput.Object = args[0]
+			// second argument is the test directory.
 			cmdInput.TestDirPath = args[1]
+			// third argument is the test container url.
 			cmdInput.ContainerUrl = args[2]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			verifyBlobUpload(cmdInput)
+			verifyBlob(cmdInput)
 		},
 	}
 	rootCmd.AddCommand(testBlobCmd)
+	// add flags.
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.MetaData, "metadata", "", "metadata expected from the blob in the container")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "content-type", "", "content type expected from the blob in the container")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
@@ -64,9 +83,8 @@ func init(){
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 }
 
-// Verify Blob gets the
-func verifyBlobUpload(testBlobCmd TestBlobCommand){
-	// check whether destination provided is valid or not.
+// verify the blob downloaded or uploaded.
+func verifyBlob(testBlobCmd TestBlobCommand){
 	if testBlobCmd.BlobType == "PageBlob"{
 		verifySinglePageBlobUpload(testBlobCmd)
 	}else {
@@ -78,9 +96,10 @@ func verifyBlobUpload(testBlobCmd TestBlobCommand){
 	}
 }
 
+// verifyBlockBlobDirUpload verifies the directory recursively uploaded to the container.
 func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
+	// parse the container url.
 	sasUrl, err := url.Parse(testBlobCmd.ContainerUrl)
-
 	if err != nil{
 		fmt.Println("error parsing the container sas ", testBlobCmd.ContainerUrl)
 		os.Exit(1)
@@ -89,10 +108,11 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	containerUrl := azblob.NewContainerURL(*sasUrl, p)
 
-	// perform a list blob
+	// perform a list blob with search prefix "dirname/"
+	searchPrefix := testBlobCmd.Object + "/"
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{})
+		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix:searchPrefix})
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas")
 			os.Exit(1)
@@ -100,6 +120,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Blobs.Blob {
+			// get the blob
 			size := blobInfo.Properties.ContentLength
 			get, err := containerUrl.NewBlobURL(blobInfo.Name).GetBlob(context.Background(),
 				azblob.BlobRange{0, *size}, azblob.BlobAccessConditions{}, false)
@@ -109,16 +130,17 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 				os.Exit(1)
 			}
 
+			// read all bytes.
 			blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error reading the body of blob %s downloaded and failed with error %s", blobInfo.Name, err.Error()))
 				os.Exit(1)
 			}
 
-
+			// blob path on local disk.
 			objectLocalPath := testBlobCmd.TestDirPath + "/" + blobInfo.Name
 
-			fmt.Println("subject path ", objectLocalPath)
+			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
 			if err != nil{
 				fmt.Println("error geting the subject blob file info on local disk ")
@@ -134,12 +156,14 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 			if err != nil{
 				fmt.Println("error memory mapping the file ", sFileInfo.Name())
 			}
-			actualMd5 := md5.Sum(blobBytesDownloaded)
 
+			// calculating the md5 of blob on container.
+			actualMd5 := md5.Sum(blobBytesDownloaded)
+			// calculating md5 of resource locally.
 			expectedMd5 := md5.Sum(sMap)
 
 			if actualMd5 != expectedMd5 {
-				fmt.Println("the upload blob md5 is not equal to the md5 of actual blob on disk")
+				fmt.Println("the upload blob md5 is not equal to the md5 of actual blob on disk for blob ", blobInfo.Name)
 				os.Exit(1)
 			}
 		}
@@ -148,12 +172,15 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 
 }
 
+// getResourceSas returns the shared access signature of resource from
+// container url
 func getResourceSas(container_sas string, resource string) (string){
 	parts := strings.Split(container_sas, "?")
 	return parts[0] + "/" + resource + "?" + parts[1]
 }
 
-
+// validateMetadata compares the meta data provided while
+// uploading and metadata with blob in the container.
 func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metadata) (bool){
 	if len(expectedMetaDataString) > 0{
 		// split the meta data string to get the map of key value pair
@@ -166,7 +193,8 @@ func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metad
 			keyValue := strings.Split(keyValuePair[index], "=")
 			expectedMetaData[keyValue[0]] = keyValue[1]
 		}
-
+		// if number of metadata provided while uploading
+		// doesn't match the metadata with blob on the container
 		if len(expectedMetaData) != len(actualMetaData){
 			fmt.Println("number of user given key value pair of the actual metadata differs from key value pair of expected metaData")
 			return false
@@ -186,6 +214,7 @@ func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metad
 	return true
 }
 
+// validateString compares the two strings.
 func validateString(expected string, actual string) (bool){
 	if strings.Compare(expected, actual) != 0{
 		return false
@@ -193,8 +222,10 @@ func validateString(expected string, actual string) (bool){
 	return true
 }
 
+// verifySinglePageBlobUpload verifies the pageblob uploaded or downloaded
+// against the blob locally.
 func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
-
+	// opening the resource on local path.
 	objectLocalPath := path.Join(testBlobCmd.TestDirPath, testBlobCmd.Object)
 	fileInfo, err := os.Stat(objectLocalPath)
 	if err != nil{
@@ -206,47 +237,49 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 		fmt.Println("error opening the file ", objectLocalPath)
 	}
 
+	// getting the shared access signature of the resource.
 	sourceSas := getResourceSas(testBlobCmd.ContainerUrl, testBlobCmd.Object)
-	fmt.Println("source sas ", sourceSas)
 	sourceURL, err := url.Parse(sourceSas)
 	if err != nil{
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
 		os.Exit(1)
 	}
-	fmt.Println("source sas ", sourceURL)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry:azblob.RetryOptions{TryTimeout:time.Minute*10,}})
 
+	// creating the page blob url of the resource on container.
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry:azblob.RetryOptions{TryTimeout:time.Minute*10,}})
 	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
 	get, err := pageBlobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset:0, Count:fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
-
 	if err != nil{
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
 
+	// reading all the bytes downloaded.
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
 	if get.Response().Body != nil{
 		get.Response().Body.Close()
 	}
-
 	if err != nil{
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
 		os.Exit(1)
 	}
 
+	// memory mapping the resource on local path.
 	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
 	if err != nil{
 		fmt.Println("error mapping the destination blob file ", err.Error())
 		os.Exit(1)
 	}
 
+	// calculating and verify the md5 of the resource
+	// both locally and on the container.
 	actualMd5 := md5.Sum(mmap)
 	expectedMd5 := md5.Sum(blobBytesDownloaded)
-
 	if actualMd5 != expectedMd5 {
-		fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5")
+		fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5 for blob ", objectLocalPath)
 		os.Exit(1)
 	}
+
 	// verify the user given metadata supplied while uploading the blob against the metadata actually present in the blob
 	if !validateMetadata(testBlobCmd.MetaData, get.NewMetadata()) {
 		fmt.Println("meta data does not match between the actual and uploaded blob.")
@@ -274,7 +307,8 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 	mmap.Unmap()
 	file.Close()
 
-	// verify the block size
+	// verify the number of pageranges.
+	// this verifies the page-size and azcopy pageblob implementation.
 	if testBlobCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
 		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset:0, Count:0}, azblob.BlobAccessConditions{})
@@ -289,8 +323,10 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 	}
 }
 
+// verifySingleBlockBlob verifies the blockblob uploaded or downloaded
+// against the blob locally.
 func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
-
+	// opening the resource on local path in test directory.
 	objectLocalPath := path.Join(testBlobCmd.TestDirPath, testBlobCmd.Object)
 	fileInfo, err := os.Stat(objectLocalPath)
 	if err != nil{
@@ -302,6 +338,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 		fmt.Println("error opening the file ", objectLocalPath)
 	}
 
+	// getting the shared access signature of the resource.
 	sourceSas := getResourceSas(testBlobCmd.ContainerUrl, testBlobCmd.Object)
 	fmt.Println("source sas ", sourceSas)
 	sourceURL, err := url.Parse(sourceSas)
@@ -309,32 +346,34 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
 		os.Exit(1)
 	}
-	fmt.Println("source sas ", sourceURL)
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry:azblob.RetryOptions{TryTimeout:time.Minute*10,}})
 
+	// creating the blockblob url of the resource on container.
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry:azblob.RetryOptions{TryTimeout:time.Minute*10,}})
 	blobUrl := azblob.NewBlobURL(*sourceURL, p)
 	get, err := blobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset:0, Count:fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
 	if err != nil{
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
-
+	// reading all the blob bytes.
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
 	if get.Response().Body != nil{
 		get.Response().Body.Close()
 	}
-
 	if err != nil{
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
 		os.Exit(1)
 	}
 
+	// memory mapping the resource on local path.
 	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
 	if err != nil{
 		fmt.Println("error mapping the destination blob file ", err.Error())
 		os.Exit(1)
 	}
 
+	// calculating and verify the md5 of the resource
+	// both locally and on the container.
 	actualMd5 := md5.Sum(mmap)
 	expectedMd5 := md5.Sum(blobBytesDownloaded)
 
