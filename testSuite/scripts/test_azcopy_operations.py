@@ -35,10 +35,10 @@ def test_cancel_job():
     print("test_cancel_job test successfully passed")
 
 # test_pause_resume_job_20Mb_file verifies the azcopy pause and resume functionality.
-def test_pause_resume_job_20Mb_file():
+def test_pause_resume_job_95Mb_file():
     # create test file of 20 MB
-    file_name = "test_pause_resume_file.txt"
-    file_path = create_test_file(file_name, 20*1024*1024)
+    file_name = "test_pause_resume_file_95.txt"
+    file_path = create_test_file(file_name, 95*1024*1024)
 
     # execute azcopy file upload in background.
     output = Command("copy").add_arguments(file_path).add_flags("Logging", "5").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()

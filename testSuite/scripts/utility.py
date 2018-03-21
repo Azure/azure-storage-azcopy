@@ -32,9 +32,9 @@ class Command(object):
                     # add '"' at start and end of each argument.
                     command += " " + '"' + arg + '"'
             # iterating through all the values in dict and combining them.
-            if len(self.flags) > 0:
-                for key, value in self.flags.items():
-                    command += " --" + key + "=" + '"' +value +'"'
+        if len(self.flags) > 0:
+            for key, value in self.flags.items():
+                command += " --" + key + "=" + '"' +value +'"'
         return command
 
     # this api is used to execute a azcopy copy command.
@@ -212,7 +212,26 @@ def create_test_n_files(size, n, dir_name):
     # creating n files.
     for index in range(0, n):
         filename = filesprefix + '_' + str(index) + ".txt"
-        create_test_file(filename, size)
+        # creating the file path
+        file_path = os.path.join(dir_n_files_path , filename)
+        # if file already exists, then removing the file.
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+        f = open(file_path, 'w')
+        # since size of file can very large and size variable can overflow while holding the file size
+        # file is written in blocks of 1MB.
+        if size > 1024 * 1024:
+            total_size = size
+            while total_size > 0:
+                num_chars = 1024 * 1024
+                if total_size < num_chars:
+                    num_chars = total_size
+                f.write('0' * num_chars)
+                total_size = total_size - num_chars
+        else:
+            num_chars = size
+            f.write('0' * num_chars)
+        f.close()
     return dir_n_files_path
 
 # create_complete_sparse_file creates an empty used to
@@ -300,11 +319,12 @@ def verify_operation(command):
         return False
     else:
         return True
+
 # get_resource_sas return the shared access signature for the given resource
 # using the container url.
-def get_resource_sas(container_sas, resource_name):
+def get_resource_sas(resource_name):
     # Splitting the container URL to add the uploaded blob name to the SAS
-    url_parts = container_sas.split("?")
+    url_parts = test_container_url.split("?")
     # adding the blob name after the container name
     resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
     return resource_sas
