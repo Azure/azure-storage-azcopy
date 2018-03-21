@@ -33,7 +33,7 @@ import (
 var steCtx = context.Background()
 
 // mainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrentConnections int, targetRateInMBps int64) error {
+func mainSTE(concurrentConnections int, targetRateInMBps int64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, 500, targetRateInMBps)
 	JobsAdmin.ResurrectJobParts()
@@ -79,9 +79,9 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64) error {
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobTransfers().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
+			var payload common.ListRequest
 			deserialize(request, &payload)
-			serialize(getTransferList(payload, common.ETransferStatus.All()), writer) // TODO: make struct and fix transfer status
+			serialize(getTransferList(payload), writer) // TODO: make struct
 		})
 	http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -296,9 +296,9 @@ func getJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():
-				js.TotalNumberofTransferCompleted++
+				js.TotalNumberOfTransferCompleted++
 			case common.TransferStatus{}.Failed():
-				js.TotalNumberofFailedTransfer++
+				js.TotalNumberOfFailedTransfer++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
 				// appending to list of failed transfer
@@ -313,7 +313,7 @@ func getJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (js.TotalNumberOfTransfers == js.TotalNumberofFailedTransfer+js.TotalNumberofTransferCompleted) {
+	if (js.CompleteJobOrdered) && (js.TotalNumberOfTransfers == js.TotalNumberOfFailedTransfer+js.TotalNumberOfTransferCompleted) {
 		js.JobStatus = common.JobStatus{}.Completed()
 	}
 	/*

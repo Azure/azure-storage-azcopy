@@ -1,12 +1,21 @@
 package cmd
 
 import (
-	"net/http"
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"io/ioutil"
+	"net/http"
 )
 
 // Global singleton for sending RPC requests from the frontend to the STE
-var Rpc func(cmd common.RpcCmd, request interface{}, response interface{}) error = NewHttpClient("").send
+var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
+	err := NewHttpClient("").send(cmd, request, response)
+	if err != nil {
+		panic(err)
+	}
+}
 
 // NewHttpClient returns the instance of struct containing an instance of http.client and url
 func NewHttpClient(url string) *HTTPClient {

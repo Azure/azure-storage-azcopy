@@ -41,7 +41,7 @@ func (j JobID) IsEmpty() bool {
 	return j == JobID{}
 }
 
-func ParseJobId(jobID string) (JobID, error) {
+func ParseJobID(jobID string) (JobID, error) {
 	uuid, err := ParseUUID(jobID)
 	if err != nil {
 		return JobID{}, err
@@ -189,38 +189,6 @@ const (
 )
 
 ////////////////////////////////////////////////
-
-// represents the raw copy command input from the user
-type CopyCmdArgsAndFlags struct {
-	// from arguments
-	Source                string
-	Destination           string
-	BlobUrlForRedirection string
-
-	// inferred from arguments
-	SourceType      Location
-	DestinationType Location
-
-	// filters from flags
-	Include        string
-	Exclude        string
-	Recursive      bool
-	FollowSymlinks bool
-	WithSnapshots  bool
-
-	// options from flags
-	BlockSize                uint32
-	BlobType                 string
-	BlobTier                 string
-	Metadata                 string
-	ContentType              string
-	ContentEncoding          string
-	NoGuessMimeType          bool
-	PreserveLastModifiedTime bool
-	IsaBackgroundOp          bool
-	Acl                      string
-	LogVerbosity             byte
-}
 
 // This struct represent a single transfer entry with source and destination details
 type CopyTransfer struct {

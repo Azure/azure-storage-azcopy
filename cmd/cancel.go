@@ -27,8 +27,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type rawCancelCmdArgs struct {
+	jobID string
+}
+
+func (raw rawCancelCmdArgs) cook() (cookedCancelCmdArgs, error) {
+	//parsing the given JobId to validate its format correctness
+	jobID, err := common.ParseJobID(raw.jobID)
+	if err != nil {
+		// If parsing gives an error, hence it is not a valid JobId format
+		return cookedCancelCmdArgs{}, fmt.Errorf("invalid jobId string passed: %q", raw.jobID)
+	}
+
+	return cookedCancelCmdArgs{jobID: jobID}, nil
+}
+
+type cookedCancelCmdArgs struct {
+	jobID common.JobID
+}
+
+// handles the cancel command
+// dispatches the cancel Job order to the storage engine
+func (cca cookedCancelCmdArgs) process() error {
+	var cancelJobResponse common.CancelPauseResumeResponse
+	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
+
+	if !cancelJobResponse.CancelledPauseResumed {
+		return fmt.Errorf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg)
+	}
+	fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
+	return nil
+}
+
 func init() {
-	var commandLineInput = ""
+	raw := rawCancelCmdArgs{}
 
 	// cancelCmd represents the pause command
 	cancelCmd := &cobra.Command{
@@ -37,41 +69,29 @@ func init() {
 		Short:      "cancels an existing job",
 		Long:       "cancels an existing job",
 		Args: func(cmd *cobra.Command, args []string) error {
-			// the cancel command requires a JobId argument;
-			// it then cancels all parts of the specified job.
+			// the cancel command requires a JobId argument
+			// it then cancels all parts of the specified job
 
 			// If no argument is passed then it is not valid
 			if len(args) != 1 {
-				return errors.New("this command only requires jobId")
+				return errors.New("this command requires only a jobID")
 			}
-			commandLineInput = args[0]
+			raw.jobID = args[0]
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
-			HandleCancelCommand(commandLineInput)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cooked, err := raw.cook()
+			if err != nil {
+				return fmt.Errorf("failed to parse user input due to error %s", err)
+			}
+
+			err = cooked.process()
+			if err != nil {
+				return fmt.Errorf("failed to perform copy command due to error %s", err)
+			}
+
+			return nil
 		},
 	}
 	rootCmd.AddCommand(cancelCmd)
-}
-
-// handles the cancel command
-// dispatches the cancel Job order to the storage engine
-func HandleCancelCommand(jobIdString string) {
-	// parsing the given JobId to validate its format correctness
-	jobID, err := common.ParseUUID(jobIdString)
-	if err != nil {
-		// If parsing gives an error, hence it is not a valid JobId format
-		fmt.Println("invalid jobId string passed. Failed while parsing string to jobID")
-		return
-	}
-
-	var cancelJobResponse common.CancelPauseResumeResponse
-	if err := Rpc((common.RpcCmd{}).CancelJob(), jobID, &cancelJobResponse); err != nil {
-		panic(err)
-	}
-	if !cancelJobResponse.CancelledPauseResumed {
-		fmt.Println(fmt.Sprintf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg))
-		return
-	}
-	fmt.Println(fmt.Sprintf("Job %s cancelled successfully", jobID))
 }

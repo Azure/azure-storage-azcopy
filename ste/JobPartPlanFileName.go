@@ -84,14 +84,14 @@ func (jpfn JobPartPlanFileName) Map() JobPartPlanMMF {
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
 func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// Validate that the passed-in strings can fit in their respective fields
-	if len(order.OptionalAttributes.ContentType) > len(JobPartPlanDstBlob{}.ContentType) {
-		panic(fmt.Errorf("content type string it too large: %q", order.OptionalAttributes.ContentType))
+	if len(order.BlobAttributes.ContentType) > len(JobPartPlanDstBlob{}.ContentType) {
+		panic(fmt.Errorf("content type string it too large: %q", order.BlobAttributes.ContentType))
 	}
-	if len(order.OptionalAttributes.ContentEncoding) > len(JobPartPlanDstBlob{}.ContentEncoding) {
-		panic(fmt.Errorf("content encoding string it too large: %q", order.OptionalAttributes.ContentEncoding))
+	if len(order.BlobAttributes.ContentEncoding) > len(JobPartPlanDstBlob{}.ContentEncoding) {
+		panic(fmt.Errorf("content encoding string it too large: %q", order.BlobAttributes.ContentEncoding))
 	}
-	if len(order.OptionalAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
-		panic(fmt.Errorf("metadata string it too large: %q", order.OptionalAttributes.Metadata))
+	if len(order.BlobAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
+		panic(fmt.Errorf("metadata string it too large: %q", order.BlobAttributes.Metadata))
 	}
 
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
@@ -127,9 +127,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	defer file.Close()
 
 	// if block size from the front-end is set to 0, block size is set to default block size
-	blockSize := order.OptionalAttributes.BlockSizeinBytes
+	blockSize := order.BlobAttributes.BlockSizeinBytes
 	if blockSize == 0 {
-		switch order.OptionalAttributes.BlobType {
+		switch order.BlobAttributes.BlobType {
 		case common.BlobType{}.Block():
 			blockSize = common.DefaultBlockBlobBlockSize
 		case common.BlobType{}.Append():
@@ -153,22 +153,22 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			NumTransfers:       uint32(len(order.Transfers)),
 			LogLevel:           order.LogLevel,
 			DstBlobData: JobPartPlanDstBlob{
-				BlobType:              order.OptionalAttributes.BlobType,
-				NoGuessMimeType:       order.OptionalAttributes.NoGuessMimeType,
-				ContentTypeLength:     uint16(len(order.OptionalAttributes.ContentType)),
-				ContentEncodingLength: uint16(len(order.OptionalAttributes.ContentEncoding)),
-				MetadataLength:        uint16(len(order.OptionalAttributes.Metadata)),
+				BlobType:              order.BlobAttributes.BlobType,
+				NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
+				ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
+				ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
+				MetadataLength:        uint16(len(order.BlobAttributes.Metadata)),
 				BlockSize:             blockSize,
 			},
 			DstLocalData: JobPartPlanDstLocal{
-				PreserveLastModifiedTime: order.OptionalAttributes.PreserveLastModifiedTime,
+				PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 			},
 			atomicJobStatus: common.JobStatus{}.InProgress(), // We default to InProgress
 		}
 		// Copy any strings into their respective fields
-		copy(jpph.DstBlobData.ContentType[:], order.OptionalAttributes.ContentType)
-		copy(jpph.DstBlobData.ContentEncoding[:], order.OptionalAttributes.ContentEncoding)
-		copy(jpph.DstBlobData.Metadata[:], order.OptionalAttributes.Metadata)
+		copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
+		copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
+		copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 		eof += writeValue(file, &jpph)
 
 		// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer

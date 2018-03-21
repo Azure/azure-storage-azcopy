@@ -21,11 +21,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 	"math"
-	"encoding/json"
 )
 
 type ListReq struct {
@@ -171,8 +171,8 @@ func PrintJobProgressSummary(summaryData []byte) {
 	}
 	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobId))
 	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfers)
-	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberofTransferCompleted)
-	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberofFailedTransfer)
+	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberOfTransferCompleted)
+	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberOfFailedTransfer)
 	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
 	fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
 	for index := 0; index < len(summary.FailedTransfers); index++ {

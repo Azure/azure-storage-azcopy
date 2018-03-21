@@ -21,11 +21,11 @@
 package cmd
 
 import (
-	"errors"
-	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"fmt"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/spf13/cobra"
 )
 
 func init() {

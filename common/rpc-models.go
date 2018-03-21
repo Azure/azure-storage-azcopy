@@ -31,17 +31,21 @@ func (c RpcCmd) Parse(s string) (RpcCmd, error) {
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
-	Version            uint32     // version of the azcopy
-	JobID              JobID      // Guid - job identifier
-	PartNum            PartNumber // part number of the job
-	IsFinalPart        bool       // to determine the final part for a specific job
-	Priority           uint8      // priority of the task
-	SrcLocation        Location
-	DstLocation        Location
-	Transfers          []CopyTransfer
-	LogLevel           LogLevel
-	IsaBackgroundOp    bool
-	OptionalAttributes BlobTransferAttributes
+	Version        Version     // version of the azcopy
+	JobID          JobID      // Guid - job identifier
+	PartNum        PartNumber // part number of the job
+	IsFinalPart    bool       // to determine the final part for a specific job
+	Priority       JobPriority      // priority of the task
+	SrcLocation    Location
+	DstLocation    Location
+	Transfers      []CopyTransfer
+	LogLevel       LogLevel
+	BlobAttributes BlobTransferAttributes
+}
+
+type CopyJobPartOrderResponse struct {
+	ErrorMsg   string
+	JobStarted bool
 }
 
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
@@ -52,7 +56,7 @@ type ListRequest struct {
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
-	BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
+	//BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
 	ContentType              string   //The content type specified for the blob.
 	ContentEncoding          string   //Specifies which content encodings have been applied to the blob.
 	Metadata                 string   //User-defined name-value pairs associated with the blob
@@ -75,8 +79,8 @@ type ListJobSummaryResponse struct {
 	CompleteJobOrdered             bool
 	JobStatus                      JobStatus
 	TotalNumberOfTransfers         uint32
-	TotalNumberofTransferCompleted uint32
-	TotalNumberofFailedTransfer    uint32
+	TotalNumberOfTransferCompleted uint32
+	TotalNumberOfFailedTransfer    uint32
 	//NumberOfTransferCompletedafterCheckpoint uint32
 	//NumberOfTransferFailedAfterCheckpoint    uint32
 	FailedTransfers             []TransferDetail
@@ -93,15 +97,6 @@ type TransferDetail struct {
 type CancelPauseResumeResponse struct {
 	ErrorMsg              string
 	CancelledPauseResumed bool
-}
-
-type CopyJobPartOrderResponse struct {
-	ErrorMsg   string
-	JobStarted bool
-}
-
-type FooResponse struct { // TODO: What is this?
-	ErrorMsg string
 }
 
 // represents the list of Details and details of number of transfers
