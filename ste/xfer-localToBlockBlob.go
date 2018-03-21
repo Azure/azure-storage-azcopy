@@ -233,8 +233,14 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 
 	// if the put blob is a failure, updating the transfer status to failed
 	if err != nil {
-		localToBlockBlob.transfer.Log(common.LogInfo, " put blob failed and so cancelling the transfer")
-		localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
+		// If the transfer context was cancelled, put blob failed because of cancelled context.
+		if localToBlockBlob.transfer.TransferContext.Err() != nil{
+			localToBlockBlob.transfer.Log(common.LogInfo, " put blob failed because transfer was cancelled")
+		}else{
+			// If put blob due to some reason other than context cancelled, mark transfer as failed.
+			localToBlockBlob.transfer.Log(common.LogInfo, " put blob failed and so cancelling the transfer")
+			localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
+		}
 	} else {
 		// if the put blob is a success, updating the transfer status to success
 		localToBlockBlob.transfer.Log(common.LogInfo,

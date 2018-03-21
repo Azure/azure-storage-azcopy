@@ -412,8 +412,13 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 		}
 	}
 
+	// unmap and closing the memory map file.
 	mmap.Unmap()
-	file.Close()
+	err = file.Close()
+	if err != nil{
+		fmt.Println(fmt.Sprintf("error closing the file %s and failed with error %s. Error could be while validating the blob.", file.Name(), err.Error()))
+		os.Exit(1)
+	}
 
 	// verify the block size
 	if testBlobCmd.VerifyBlockOrPageSize {
