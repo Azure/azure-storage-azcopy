@@ -49,7 +49,7 @@ type jobPartTransferMgr struct {
 
 	// Call cancel to cancel the transfer
 	cancel context.CancelFunc
-
+	// TODO: add Transfer Factory Func Interface
 	numChunks uint32
 	// NumberOfChunksDone represents the number of chunks of a transfer
 	// which are either completed or failed.
@@ -92,7 +92,6 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone uint32) {
 	chunksDone = atomic.AddUint32(&jptm.atomicChunksDone, 1)
 	return chunksDone == jptm.numChunks, chunksDone
-	// TODO: Tell the part that this transfer is done?
 }
 
 // TransferStatus updates the status of given transfer for given jobId and partNumber
@@ -107,7 +106,9 @@ func (jptm *jobPartTransferMgr) SetStatus(status common.TransferStatus) {
 
 func (jptm *jobPartTransferMgr) Cancel()           { jptm.cancel() }
 func (jptm *jobPartTransferMgr) WasCanceled() bool { return jptm.ctx.Err() != nil }
-func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool { 	return jptm.jobPartMgr.ShouldLog(level) }
+func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
+	return jptm.jobPartMgr.ShouldLog(level)
+}
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
 	jptm.jobPartMgr.Log(level, fmt.Sprintf("JobID=%v, Part#=%d, Transfer#=%d: "+msg, plan.JobID, plan.PartNum, jptm.transferIndex))
@@ -118,4 +119,5 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 // TODO: I feel like this should take the status & we kill SetStatus
 func (jptm *jobPartTransferMgr) ReportTransferDone() (lastTransfer bool, transfersDone uint32) {
 	return jptm.jobPartMgr.ReportTransferDone()
+	// todo : last transfer should tell that part is done.
 }

@@ -36,7 +36,7 @@ type PartNumber = common.PartNumber
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
-	Throughput() XferThroughput
+	Progress() (numberOfBytesTransferred, totalBytesToTransfer uint64)
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context)
 	Cancel()
@@ -53,7 +53,8 @@ func newJobMgr(jobID common.JobID, appCtx context.Context) IJobMgr {
 
 func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
-	jm.throughput = common.NewCountPerSecond()
+	atomic.StoreUint64(&jm.atomicNumberOfBytesTransferred, 0)
+	atomic.StoreUint64(&jm.atomicTotalBytesToTransfer, 0)
 	jm.partsDone = 0
 	return jm
 }
@@ -67,14 +68,20 @@ type jobMgr struct {
 
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 	partsDone   uint32
-	throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
+	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
+
+	atomicNumberOfBytesTransferred uint64
+	atomicTotalBytesToTransfer     uint64
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
+func (jm *jobMgr) Progress() (uint64, uint64) {
+	return atomic.LoadUint64(&jm.atomicNumberOfBytesTransferred),
+		atomic.LoadUint64(&jm.atomicTotalBytesToTransfer)
+}
 
-// JobID returns the JobID fthat this jobMgr managers
+// JobID returns the JobID that this jobMgr managers
 func (jm *jobMgr) JobID() common.JobID { return jm.jobID }
 
 // JobPartMgr looks up a job's part
@@ -136,7 +143,7 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 }
 */
 
-func (jm *jobMgr) Cancel() { jm.cancel() }
+func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }
 func (jm *jobMgr) Panic(err error)                         { jm.logger.Panic(err) }
@@ -201,11 +208,11 @@ func (m *jobPartToJobPartMgr) Iterate(readonly bool, f func(k common.PartNumber,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // ThroughputState struct holds the attribute to monitor the through of an existing JobOrder
-type XferThroughput struct {
-	lastCheckedTime  time.Time
-	lastCheckedBytes int64
-	currentBytes     int64
-}
+//type XferThroughput struct {
+//	lastCheckedTime  time.Time
+//	lastCheckedBytes int64
+//	currentBytes     int64
+//}
 
 // getLastCheckedTime api returns the lastCheckedTime of ThroughputState instance in thread-safe manner
 func (t *XferThroughput) LastCheckedTime() time.Time { return t.lastCheckedTime }

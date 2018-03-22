@@ -32,8 +32,8 @@ import (
 
 var steCtx = context.Background()
 
-// mainSTE initializes the Storage Transfer Engine
-func mainSTE(concurrentConnections int, targetRateInMBps int64) error {
+// MainSTE initializes the Storage Transfer Engine
+func MainSTE(concurrentConnections int, targetRateInMBps int64) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, 500, targetRateInMBps)
 	JobsAdmin.ResurrectJobParts()

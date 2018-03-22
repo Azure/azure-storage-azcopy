@@ -37,10 +37,8 @@ func (exitCode) success() exitCode { return exitCode{Value: 0} }
 func (exitCode) error() exitCode   { return exitCode{Value: -1} }
 
 func main() {
-	cmd.Execute()
 	os.Exit(int(mainWithExitCode().Value))
 }
-
 
 func mainWithExitCode() exitCode {
 	// If insufficient arguments, show usage & terminate
@@ -92,4 +90,3 @@ func mainWithExitCode() exitCode {
 	//}
 	////ste.InitializeSTE()
 }
-

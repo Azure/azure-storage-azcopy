@@ -32,10 +32,10 @@ func (c RpcCmd) Parse(s string) (RpcCmd, error) {
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
 	Version        Version     // version of the azcopy
-	JobID          JobID      // Guid - job identifier
-	PartNum        PartNumber // part number of the job
-	IsFinalPart    bool       // to determine the final part for a specific job
-	Priority       JobPriority      // priority of the task
+	JobID          JobID       // Guid - job identifier
+	PartNum        PartNumber  // part number of the job
+	IsFinalPart    bool        // to determine the final part for a specific job
+	Priority       JobPriority // priority of the task
 	SrcLocation    Location
 	DstLocation    Location
 	Transfers      []CopyTransfer
@@ -57,11 +57,11 @@ type ListRequest struct {
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
 	//BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
-	ContentType              string   //The content type specified for the blob.
-	ContentEncoding          string   //Specifies which content encodings have been applied to the blob.
-	Metadata                 string   //User-defined name-value pairs associated with the blob
-	NoGuessMimeType          bool     // represents user decision to interpret the content-encoding from source file
-	PreserveLastModifiedTime bool     // when downloading, tell engine to set file's timestamp to timestamp of blob
+	ContentType              string //The content type specified for the blob.
+	ContentEncoding          string //Specifies which content encodings have been applied to the blob.
+	Metadata                 string //User-defined name-value pairs associated with the blob
+	NoGuessMimeType          bool   // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime bool   // when downloading, tell engine to set file's timestamp to timestamp of blob
 	BlockSizeinBytes         uint32
 }
 

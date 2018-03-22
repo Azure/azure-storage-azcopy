@@ -21,9 +21,9 @@
 package common
 
 import (
-	"os"
-	"log"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"log"
+	"os"
 )
 
 type ILogger interface {
@@ -41,6 +41,7 @@ type ILoggerCloser interface {
 
 func NewAppLogger(minimumLevelToLog pipeline.LogLevel) ILoggerCloser {
 	// TODO: Put start date time in file name
+	// TODO: log life time management.
 	appLogFile, err := os.OpenFile("azcopy.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
 	if err != nil {
 		panic(err)
@@ -133,7 +134,7 @@ func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
 }
 
 func (jl jobLogger) Panic(err error) {
-	jl.logger.Println(err)	// We do NOT panic here as the app would terminate; we just log it
-	jl.appLogger.Panic(err)	// We panic here that it logs and the app terminates
+	jl.logger.Println(err)  // We do NOT panic here as the app would terminate; we just log it
+	jl.appLogger.Panic(err) // We panic here that it logs and the app terminates
 	// We should never reach this line of code!
 }

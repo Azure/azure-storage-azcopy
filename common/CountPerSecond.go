@@ -15,15 +15,15 @@ func NewCountPerSecond() CountPerSecond {
 type CountPerSecond interface {
 	// Add atomically adds delta to *addr and returns the new value.
 	// To subtract a signed positive constant value c, do Add(^uint64(c-1)).
-	Add(delta uint64) uint64	// Pass 0 to get the current count value
+	Add(delta uint64) uint64 // Pass 0 to get the current count value
 	LatestRate() float64
 	Reset()
 }
 
 type countPerSecond struct {
 	nocopy NoCopy
-	start int64 // Unix time allowing atomic update: Seconds since 1/1/1970
-	count uint64
+	start  int64 // Unix time allowing atomic update: Seconds since 1/1/1970
+	count  uint64
 }
 
 func (cps *countPerSecond) Add(delta uint64) uint64 {

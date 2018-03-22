@@ -2,7 +2,7 @@ package common
 
 // GetBlocksRoundedUp returns the number of blocks given sie, rounded up
 func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
-	return uint16(size / blockSize) + Iffuint16((size%blockSize) == 0, 0, 1)
+	return uint16(size/blockSize) + Iffuint16((size%blockSize) == 0, 0, 1)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

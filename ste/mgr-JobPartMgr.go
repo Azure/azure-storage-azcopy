@@ -6,9 +6,9 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"net/http"
 	"strings"
 	"sync/atomic"
-	"net/http"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -18,7 +18,7 @@ type IJobPartMgr interface {
 	ScheduleTransfers(jobCtx context.Context)
 
 	ReportTransferDone() (lastTransfer bool, transfersCompleted uint32)
-	CancelJob()
+	//CancelJob()
 	Close()
 	common.ILogger
 }
@@ -50,7 +50,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
-	jpm.atomicTransfersDone = 0	// Reset the # of transfers done back to 0
+	jpm.atomicTransfersDone = 0      // Reset the # of transfers done back to 0
 	jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
 
@@ -72,6 +72,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 	jpm.Transfers = make([]IJobPartTransferMgr, plan.NumTransfers)
 
+	//TODO : calculate transfer factory func.
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < uint32(len(jpm.Transfers)); t++ {
 		jppt := plan.Transfer(t)
@@ -88,6 +89,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			transferIndex:       t,
 			ctx:                 transferCtx,
 			cancel:              transferCancel,
+			//TODO: insert the factory func interface in jptm.
 			// numChunks will be set by the transfer's prologue method
 		}
 		if jpm.ShouldLog(pipeline.LogInfo) {
@@ -111,17 +113,18 @@ func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
 // TODO: Return true for last transfer?
+// TODO : Should lastTransfer and transferDone be deleted.
 func (jpm *jobPartMgr) ReportTransferDone() (lastTransfer bool, transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	if jpm.ShouldLog(pipeline.LogInfo) {
-		plan:= jpm.Plan()
+		plan := jpm.Plan()
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
 
 	// TODO: If last transfer, notify Part?
 	return transfersDone == jpm.planMMF.Plan().NumTransfers, transfersDone
 }
-func (jpm *jobPartMgr) CancelJob() { jpm.jobMgr.Cancel() }
+//func (jpm *jobPartMgr) CancelJob() { jpm.jobMgr.Cancel() }
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
 	// Clear other fields to all for GC

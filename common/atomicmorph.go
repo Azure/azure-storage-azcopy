@@ -77,4 +77,3 @@ func AtomicMorphUint64(target *uint64, morpher AtomicMorpherUint64) interface{} 
 		}
 	}
 }
-

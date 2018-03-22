@@ -21,4 +21,3 @@ func (nc *NoCopy) Check() {
 	// The receiver's reference doesn't match the persisted reference; this must be a copy
 	panic(errors.New("nocopy detected copy by value"))
 }
-

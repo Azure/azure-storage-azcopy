@@ -21,8 +21,8 @@
 package ste
 
 import (
-	"time"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"time"
 )
 
 // upload related
@@ -39,7 +39,6 @@ const DownloadMaxRetryDelay = time.Second * 3
 
 // pacer related
 const PacerTimeToWaitInMs = 50
-
 
 type ChunkMsg struct {
 	doTransfer chunkFunc
@@ -63,7 +62,7 @@ type IJobPartXfer interface {
 }
 
 // the xfer factory is generated based on the type of source and destination
-func computeTransferFactory(srcLocation, dstLocation common.Location, blobType common.BlobType) /*NewJobXfer */xferFactory {
+func computeTransferFactory(srcLocation, dstLocation common.Location, blobType common.BlobType) /*NewJobXfer */ xferFactory {
 	switch {
 	case srcLocation == (common.Location{}).Blob() && dstLocation == (common.Location{}).Local(): // download from Azure Blob to local file system
 		return newBlobToLocal
@@ -86,7 +85,6 @@ func computeTransferFactory(srcLocation, dstLocation common.Location, blobType c
 		return nil // unknown src/dst location transfer
 	}
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

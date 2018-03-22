@@ -63,7 +63,7 @@ func initJobsAdmin(appContext context.Context, concurrentConnections int, target
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan ChunkMsg, channelSize)
 
 	// Create suicide channel which is used to scale back on the number of workers
-	suicideCh := make(chan SuicideJob, 100000)
+	suicideCh := make(chan SuicideJob, concurrentConnections)
 
 	ja := &jobsAdmin{
 		logger:  common.NewAppLogger(pipeline.LogInfo),
@@ -118,6 +118,7 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 
 						srcLocation, dstLocation, blobType := jptm.Locations()
 						// the xferFactory is generated based on the type of transfer (source and destination pair)
+						//TODO : get rid of execution engine.
 						xferFactory := executionEngine.computeTransferFactory(srcLocation, dstLocation, blobType)
 						if xferFactory == nil {
 							jptm.Panic(fmt.Errorf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", srcLocation, dstLocation))
@@ -126,6 +127,7 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 						xfer.runPrologue(ja.xferChannels.normalChunckCh)
 					}
 				default:
+					//TODO: lower priorities todo
 					// lower priorities should go here in the future
 					time.Sleep(1 * time.Millisecond)
 				}
@@ -192,16 +194,7 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (IJobMgr, bool) {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID, appCtx context.Context) IJobMgr {
-	var jm IJobMgr
-	// If there is no JobMgr, create it
-	ja.jobIDToJobMgr.AtomicOp(true, func() {
-		// NOTE: We look up the desired IJobMgr and add it if it's not there atomically using a write lock
-		if jm, ok := ja.jobIDToJobMgr.Get(jobID); !ok {
-			jm = newJobMgr(jobID, appCtx)
-			ja.jobIDToJobMgr.Set(jobID, jm)
-		}
-	})
-	return jm // Return existing or new IJobMgr to caller
+	return ja.jobIDToJobMgr.EnsureExists(jobID, appCtx) // Return existing or new IJobMgr to caller
 }
 
 func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
@@ -229,26 +222,26 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		return files
 	}("TODO: JobPartPlanFileName.FileExtension()")
 
+	// TODO : sort the file.
 	for f := 0; f < len(files); f++ {
 		planFile := JobPartPlanFileName(files[f].Name())
-		jobID, partNum, err:= planFile.Parse()
-		if err != nil { continue }
-		mmf:= planFile.Map()
+		jobID, partNum, err := planFile.Parse()
+		if err != nil {
+			continue
+		}
+		mmf := planFile.Map()
+		// TODO : skip part file for job which is cancelled.
 		if mmf.Plan().JobStatus() == common.EJobStatus.Cancelled() {
 			mmf.Unmap()
-			// TODO: We need to know that all parts are cancelled so that we don't create managers for them
-			//jobsInfoMap.cleanUpJob(jobID)
 		}
-		jm:= ja.JobMgrEnsureExists(jobID, ja.appCtx)
+		jm := ja.JobMgrEnsureExists(jobID, ja.appCtx)
 		jm.AddJobPart(partNum, planFile, true)
 	}
-	// checking for cancelled jobs and to cleanup those jobs
-	// this api is called to ensure that no cancelled jobs exists in in-memory
-	//checkCancelledJobsInJobMap(jobsInfoMap)
 }
 
 // TODO: I think something is wrong here: I think delete and cleanup should be merged together.
 // DeleteJobInfo api deletes an entry of given JobId the JobsInfo
+// TODO: add the clean up logic for all Jobparts.
 func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
 	ja.jobIDToJobMgr.Delete(jobID)
 }
@@ -262,14 +255,16 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
     * Closes the logger file opened for logging logs related to given job
 	* Removes the entry of given JobId from JobsInfo
 */
+// TODO: take care fo this.
 func (ja *jobsAdmin) cleanUpJob(jobID common.JobID) {
 	jm, found := ja.JobMgr(jobID)
 	if !found {
 		ja.Panic(fmt.Errorf("no job found with JobID %v to clean up", jobID))
 	}
-	for p:=PartNumber(0); true; p++ {
+	for p := PartNumber(0); true; p++ {
 		jpm, found := jm.JobPartMgr(p)
-		if !found {/* TODO*/ }
+		if !found { /* TODO*/
+		}
 		// TODO: Fix jpm.planMMF.Unmap()	// unmapping the memory map JobPart file
 		err := jpm.filename.Delete()
 		if err != nil {
@@ -311,6 +306,19 @@ func (j *jobIDToJobMgr) Get(key common.JobID) (value IJobMgr, found bool) {
 	return
 }
 
+func (j *jobIDToJobMgr) EnsureExists(jobID common.JobID, appCtx context.Context) IJobMgr {
+	j.nocopy.Check()
+	j.lock.Lock()
+	var jm IJobMgr
+	// NOTE: We look up the desired IJobMgr and add it if it's not there atomically using a write lock
+	if jm, found := j.m[jobID]; !found {
+		jm = newJobMgr(jobID, appCtx)
+		j.m[jobID] = jm
+	}
+	j.lock.Unlock()
+	return jm
+}
+
 func (j *jobIDToJobMgr) Delete(key common.JobID) {
 	j.nocopy.Check()
 	j.lock.Lock()
@@ -328,17 +336,6 @@ func (j *jobIDToJobMgr) Iterate(write bool, f func(k common.JobID, v IJobMgr)) {
 	for k, v := range j.m {
 		f(k, v)
 	}
-	locker.Unlock()
-}
-
-func (j *jobIDToJobMgr) AtomicOp(write bool, f func()) {
-	j.nocopy.Check()
-	locker := sync.Locker(&j.lock)
-	if !write {
-		locker = j.lock.RLocker()
-	}
-	locker.Lock()
-	f()
 	locker.Unlock()
 }
 
