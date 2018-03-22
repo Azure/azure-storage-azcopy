@@ -37,6 +37,11 @@ type ILoggerCloser interface {
 	CloseLog()
 }
 
+type ILoggerResetable interface {
+	OpenLog()
+	MinimumLogLevel() pipeline.LogLevel
+	ILoggerCloser
+}
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewAppLogger(minimumLevelToLog pipeline.LogLevel) ILoggerCloser {
@@ -90,27 +95,37 @@ func (al *appLogger) Panic(err error) {
 type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
+	jobID 	JobID
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
 	file              *os.File          // The job's log file
 	logger            *log.Logger       // The Job's logger
 	appLogger         ILogger
 }
 
-func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) ILoggerCloser {
+func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) ILoggerResetable {
 	if appLogger == nil {
 		panic("You must pass a appLogger when creating a JobLogger")
 	}
 
-	jobLogFile, err := os.OpenFile(jobID.String()+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
+	return &jobLogger{
+		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
+		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
+		//file:              jobLogFile,
+		//logger:            log.New(jobLogFile, "", log.LstdFlags|log.LUTC),
+	}
+}
+
+func (jl *jobLogger) OpenLog(){
+	file, err := os.OpenFile(jl.jobID.String()+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
 	if err != nil {
 		panic(err)
 	}
-	return &jobLogger{
-		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
-		file:              jobLogFile,
-		logger:            log.New(jobLogFile, "", log.LstdFlags|log.LUTC),
-		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
-	}
+	jl.file = file
+	jl.logger = log.New(jl.file, "", log.LstdFlags|log.LUTC)
+}
+
+func (jl *jobLogger) MinimumLogLevel() pipeline.LogLevel {
+	return jl.minimumLevelToLog
 }
 
 func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {

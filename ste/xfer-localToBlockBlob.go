@@ -33,7 +33,7 @@ import (
 
 // this struct is created for each transfer
 type localToBlockBlob struct {
-	transfer         *TransferMsg
+	jptm         *jobPartTransferMgr
 	pacer            *pacer
 	blobURL          azblob.BlobURL
 	memoryMappedFile common.MMF
@@ -42,8 +42,8 @@ type localToBlockBlob struct {
 }
 
 // return a new localToBlockBlob struct targeting a specific transfer
-func newLocalToBlockBlob(transfer *TransferMsg, pacer *pacer) xfer {
-	return &localToBlockBlob{transfer: transfer, pacer: pacer}
+func newLocalToBlockBlob(jptm *jobPartTransferMgr, pacer *pacer) xfer {
+	return &localToBlockBlob{jptm: jptm, pacer: pacer}
 }
 
 // this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
@@ -60,10 +60,12 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				localToBlockBlob.transfer.Log(common.LogLevel(l), msg)
+				if localToBlockBlob.jptm.ShouldLog(l){
+					localToBlockBlob.jptm.Log(l , msg)
+				}
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(localToBlockBlob.transfer.MinimumLogLevel)
+				return pipeline.LogLevel(localToBlockBlob.jptm.jobPartMgr.Plan().LogLevel)
 			},
 		},
 	})

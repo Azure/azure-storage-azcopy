@@ -40,18 +40,18 @@ type IJobMgr interface {
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context)
 	Cancel()
-
 	//Close()
 	common.ILoggerCloser
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(jobID common.JobID, appCtx context.Context) IJobMgr {
-	return jobMgr{jobID: jobID /*Other fields remain zero-value until this job is scheduled */}.reset(appCtx)
+func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel) IJobMgr {
+	return jobMgr{jobID: jobID, logger:common.NewJobLogger(jobID, level, appLogger)/*Other fields remain zero-value until this job is scheduled */}.reset(appCtx)
 }
 
 func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
+	jm.logger.OpenLog()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesTransferred, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToTransfer, 0)
@@ -61,7 +61,7 @@ func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
 
 // jobMgr represents the runtime information for a Job
 type jobMgr struct {
-	logger common.ILoggerCloser
+	logger common.ILoggerResetable
 	jobID  common.JobID // The Job's unique ID
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -146,6 +146,12 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }
+func (jm *jobMgr) PipelineLogInfo() (pipeline.LogOptions) {
+	return pipeline.LogOptions{
+		Log: jm.Log,
+		MinimumLevelToLog: func() pipeline.LogLevel { return jm.logger.MinimumLogLevel() },
+	}
+}
 func (jm *jobMgr) Panic(err error)                         { jm.logger.Panic(err) }
 func (jm *jobMgr) CloseLog()                               { jm.logger.CloseLog() }
 

@@ -109,6 +109,11 @@ func (jptm *jobPartTransferMgr) WasCanceled() bool { return jptm.ctx.Err() != ni
 func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }
+
+func (jptm *jobPartTransferMgr) PipelineLogInfo() (pipeline.LogOptions) {
+	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).PipelineLogInfo()
+}
+
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
 	jptm.jobPartMgr.Log(level, fmt.Sprintf("JobID=%v, Part#=%d, Transfer#=%d: "+msg, plan.JobID, plan.PartNum, jptm.transferIndex))

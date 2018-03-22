@@ -193,8 +193,11 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (IJobMgr, bool) {
 
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
-func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID, appCtx context.Context) IJobMgr {
-	return ja.jobIDToJobMgr.EnsureExists(jobID, appCtx) // Return existing or new IJobMgr to caller
+func (ja *jobsAdmin) JobMgrEnsureExists(appLogger common.ILogger, jobID common.JobID,
+								appCtx context.Context, level common.LogLevel) IJobMgr {
+
+	return ja.jobIDToJobMgr.EnsureExists(jobID,
+		func () IJobMgr {return newJobMgr(appLogger, jobID, appCtx, level) }) // Return existing or new IJobMgr to caller
 }
 
 func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
@@ -234,7 +237,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		if mmf.Plan().JobStatus() == common.EJobStatus.Cancelled() {
 			mmf.Unmap()
 		}
-		jm := ja.JobMgrEnsureExists(jobID, ja.appCtx)
+		jm := ja.JobMgrEnsureExists(ja.logger, jobID, ja.appCtx, mmf.Plan().LogLevel)
 		jm.AddJobPart(partNum, planFile, true)
 	}
 }
@@ -306,13 +309,13 @@ func (j *jobIDToJobMgr) Get(key common.JobID) (value IJobMgr, found bool) {
 	return
 }
 
-func (j *jobIDToJobMgr) EnsureExists(jobID common.JobID, appCtx context.Context) IJobMgr {
+func (j *jobIDToJobMgr) EnsureExists(jobID common.JobID, newJobMgr func() IJobMgr) IJobMgr {
 	j.nocopy.Check()
 	j.lock.Lock()
 	var jm IJobMgr
 	// NOTE: We look up the desired IJobMgr and add it if it's not there atomically using a write lock
 	if jm, found := j.m[jobID]; !found {
-		jm = newJobMgr(jobID, appCtx)
+		jm = newJobMgr()
 		j.m[jobID] = jm
 	}
 	j.lock.Unlock()
