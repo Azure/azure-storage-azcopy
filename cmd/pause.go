@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -60,23 +59,14 @@ func init() {
 func HandlePauseCommand(jobIdString string) {
 
 	// parsing the given JobId to validate its format correctness
-	jobId, err := common.ParseUUID(jobIdString)
+	jobID, err := common.ParseJobID(jobIdString)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
 		return
 	}
 
-	responseBytes, _ := common.Rpc("pause", jobId)
-
 	var pauseJobResponse common.CancelPauseResumeResponse
-	err = json.Unmarshal(responseBytes, &pauseJobResponse)
-	if err != nil {
-		panic(err)
-	}
-	if !pauseJobResponse.CancelledPauseResumed {
-		fmt.Println(fmt.Sprintf("job cannot be paused because %s", pauseJobResponse.ErrorMsg))
-		return
-	}
-	fmt.Println(fmt.Sprintf("Job %s paused successfully", jobId))
+	Rpc(common.ERpcCmd.PauseJob(), jobID, &pauseJobResponse)
+	fmt.Println(fmt.Sprintf("Job %s paused successfully", jobID))
 }

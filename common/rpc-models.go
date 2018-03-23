@@ -9,10 +9,11 @@ var ERpcCmd = RpcCmd{}
 // JobStatus indicates the status of a Job; the default is InProgress.
 type RpcCmd EnumString
 
+func (RpcCmd) None() RpcCmd             { return RpcCmd{"--none--"} }
 func (RpcCmd) CopyJobPartOrder() RpcCmd { return RpcCmd{"CopyJobPartOrder"} }
 func (RpcCmd) ListJobs() RpcCmd         { return RpcCmd{"ListJobs"} }
 func (RpcCmd) ListJobSummary() RpcCmd   { return RpcCmd{"ListJobSummary"} }
-func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd{Value: "ListJobTransfers"} }
+func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd{"ListJobTransfers"} }
 func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd{"CancelJob"} }
 func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd{"PauseJob"} }
 func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd{"ResumeJob"} }
@@ -23,7 +24,7 @@ func (c RpcCmd) String() string {
 func (c RpcCmd) Pattern() string { return "/" + c.String() }
 
 func (c RpcCmd) Parse(s string) (RpcCmd, error) {
-	e, err := EnumString{}.Parse(reflect.TypeOf(c), s, true)
+	e, err := EnumString{}.Parse(reflect.TypeOf(c), s, false, true)
 	return RpcCmd(e), err
 }
 
@@ -36,8 +37,7 @@ type CopyJobPartOrderRequest struct {
 	PartNum        PartNumber  // part number of the job
 	IsFinalPart    bool        // to determine the final part for a specific job
 	Priority       JobPriority // priority of the task
-	SrcLocation    Location
-	DstLocation    Location
+	FromTo         FromTo
 	Transfers      []CopyTransfer
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
@@ -51,7 +51,7 @@ type CopyJobPartOrderResponse struct {
 // represents the raw list command input from the user when requested the list of transfer with given status for given JobId
 type ListRequest struct {
 	JobID    JobID
-	OfStatus string
+	OfStatus string // TODO: OfStatus with string type sounds not good, change it to enum
 }
 
 // This struct represents the optional attribute for blob request header
@@ -62,7 +62,7 @@ type BlobTransferAttributes struct {
 	Metadata                 string //User-defined name-value pairs associated with the blob
 	NoGuessMimeType          bool   // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool   // when downloading, tell engine to set file's timestamp to timestamp of blob
-	BlockSizeinBytes         uint32
+	BlockSizeInBytes         uint32
 }
 
 // ListJobsResponse represent the Job with JobId and
@@ -85,6 +85,11 @@ type ListJobSummaryResponse struct {
 	//NumberOfTransferFailedAfterCheckpoint    uint32
 	FailedTransfers             []TransferDetail
 	ThroughputInBytesPerSeconds float64
+}
+
+type ListJobTransfersRequest struct {
+	JobID    JobID
+	OfStatus TransferStatus
 }
 
 // represents the Details and details of a single transfer

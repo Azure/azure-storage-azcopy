@@ -44,9 +44,11 @@ type JobPartPlanFileName string
 
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"
 
+var planDir = ""	// TODO: Fix
+
 // TODO: This needs testing
 func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
-	var dataSchemaVersion uint32
+	var dataSchemaVersion common.Version
 	n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
 	if err != nil || n != 3 {
 		panic(err)
@@ -127,9 +129,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	defer file.Close()
 
 	// if block size from the front-end is set to 0, block size is set to default block size
-	blockSize := order.BlobAttributes.BlockSizeinBytes
-	if blockSize == 0 {
-		switch order.BlobAttributes.BlobType {
+	blockSize := order.BlobAttributes.BlockSizeInBytes
+	if blockSize == 0 { // TODO: Fix below
+		blockSize = common.DefaultBlockBlobBlockSize
+		/*switch order.BlobAttributes.BlobType {
 		case common.BlobType{}.Block():
 			blockSize = common.DefaultBlockBlobBlockSize
 		case common.BlobType{}.Append():
@@ -138,7 +141,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			blockSize = common.DefaultPageBlobChunkSize
 		default:
 			panic(errors.New("unrecognized blob type"))
-		}
+		}*/
 
 		// Initialize the Job Part's Plan header
 		jpph := JobPartPlanHeader{
@@ -146,14 +149,13 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			JobID:              order.JobID,
 			PartNum:            order.PartNum,
 			IsFinalPart:        order.IsFinalPart,
-			Priority:           common.JobPriority{Value: order.Priority},
+			Priority:           order.Priority,
 			TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
-			SrcLocation:        order.SrcLocation,
-			DstLocation:        order.DstLocation,
+			FromTo:        order.FromTo,
 			NumTransfers:       uint32(len(order.Transfers)),
 			LogLevel:           order.LogLevel,
 			DstBlobData: JobPartPlanDstBlob{
-				BlobType:              order.BlobAttributes.BlobType,
+				//BlobType:              order.OptionalAttributes.BlobType,
 				NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
 				ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
 				ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),

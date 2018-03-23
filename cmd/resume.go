@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -59,23 +58,14 @@ func init() {
 // dispatches the resume Job order to the storage engine
 func HandleResumeCommand(jobIdString string) {
 	// parsing the given JobId to validate its format correctness
-	jobId, err := common.ParseUUID(jobIdString)
+	jobID, err := common.ParseJobID(jobIdString)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
 		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
 		return
 	}
 
-	responseBytes, _ := common.Rpc("resume", jobId)
 	var resumeJobResponse common.CancelPauseResumeResponse
-
-	err = json.Unmarshal(responseBytes, &resumeJobResponse)
-	if err != nil {
-		panic(err)
-	}
-	if !resumeJobResponse.CancelledPauseResumed {
-		fmt.Println(fmt.Sprintf("job cannot be resumed because %s", resumeJobResponse.ErrorMsg))
-		return
-	}
-	fmt.Println(fmt.Sprintf("Job %s resume successfully", jobId))
+	Rpc(common.ERpcCmd.ResumeJob(), jobID, &resumeJobResponse)
+	fmt.Println(fmt.Sprintf("Job %s resume successfully", jobID))
 }

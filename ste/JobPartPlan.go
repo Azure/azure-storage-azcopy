@@ -35,14 +35,13 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version            uint32              // The version of data schema format of header; see the dataSchemaVersion constant
+	Version            common.Version               // The version of data schema format of header; see the dataSchemaVersion constant
 	JobID              common.JobID        // Job Part's JobID
 	PartNum            common.PartNumber   // Job Part's part number (0+)
 	IsFinalPart        bool                // True if this is the Job's last part; else false
 	Priority           common.JobPriority  // The Job Part's priority
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
-	SrcLocation        common.Location     // The location of the transfer's source
-	DstLocation        common.Location     // The location of the transfer's destination
+	FromTo             common.FromTo       // The location of the transfer's source & destination
 	NumTransfers       uint32              // The number of transfers in the Job part
 	LogLevel           common.LogLevel     // This Job Part's minimal log level
 	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations

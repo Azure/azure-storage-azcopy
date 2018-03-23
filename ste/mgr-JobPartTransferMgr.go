@@ -11,18 +11,21 @@ import (
 )
 
 type IJobPartTransferMgr interface {
-	Locations() (srcLocation, dstLocation common.Location, blobType common.BlobType)
+	Priority() common.JobPriority
+	FromTo() common.FromTo
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
-
+	ScheduleChunk(chunkFunc chunkFunc)
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
 	SetStatus(status common.TransferStatus)
 	ReportTransferDone() (lastTransfer bool, transfersDone uint32)
 
+	/*
+	TODO: @Parteek this is removed 3/23 morning
 	SetChunkChannel(chunkChannel chan <- ChunkMsg)
 	ChunkChannel() (chan <- ChunkMsg)
-	RunPrologue(pacer *pacer)
+	RunPrologue(pacer *pacer)*/
 	Cancel()
 	WasCanceled() bool
 	common.ILogger
@@ -41,6 +44,8 @@ type TransferInfo struct {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type chunkFunc func()
+
 // jobPartTransferMgr represents the runtime information for a Job Part's transfer
 type jobPartTransferMgr struct {
 	jobPartMgr          IJobPartMgr // Refers to the "owning" Job Part
@@ -52,20 +57,34 @@ type jobPartTransferMgr struct {
 
 	// Call cancel to cancel the transfer
 	cancel context.CancelFunc
-	// TODO: add Transfer Factory Func Interface
+
+	newJobXfer newJobXfer // Method used to start the transfer
+	priority   common.JobPriority
+	chunkCh    chan chunkFunc // Channel used to queue transfer chunks
+	pacer      pacer          // Pacer used by chunks when uploading data
+
 	numChunks uint32
 	// NumberOfChunksDone represents the number of chunks of a transfer
 	// which are either completed or failed.
 	// NumberOfChunksDone determines the final cancellation or completion of a transfer
 	atomicChunksDone uint32
 
+	/*
+	@Parteek removed 3/23 morning, as jeff ad equivalent
 	// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
-	chunkChannel chan<- ChunkMsg
+	chunkChannel chan<- ChunkMsg*/
 }
 
-func (jptm *jobPartTransferMgr) Locations() (srcLocation, dstLocation common.Location, blobType common.BlobType) {
-	plan := jptm.jobPartMgr.Plan()
-	return plan.SrcLocation, plan.DstLocation, plan.DstBlobData.BlobType
+func (jptm *jobPartTransferMgr) Priority() common.JobPriority {
+	return jptm.priority
+}
+
+func (jptm *jobPartTransferMgr) FromTo() common.FromTo {
+	return jptm.jobPartMgr.Plan().FromTo
+}
+
+func (jptm *jobPartTransferMgr) ScheduleChunk(chunkFunc chunkFunc) {
+	JobsAdmin.ScheduleChunk(jptm, chunkFunc)
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
@@ -84,13 +103,13 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer common.MMF) (headers 
 	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
 }
 
-func (jptm *jobPartTransferMgr) SetChunkChannel(chunkChannel chan <- ChunkMsg) {
+/*func (jptm *jobPartTransferMgr) SetChunkChannel(chunkChannel chan <- ChunkMsg) {
 	jptm.chunkChannel = chunkChannel
 }
 
 func (jptm *jobPartTransferMgr) ChunkChannel() (chan <- ChunkMsg){
 	return jptm.chunkChannel
-}
+}*/
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
 // If PreserveLastModifiedTime is set to true, it returns the lastModifiedTime of the source.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
 	"strings"
 )
@@ -59,7 +59,8 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 		// perform a list blob
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			// look for all blobs that start with the prefix
-			listBlob, err := containerUrl.ListBlobs(context.TODO(), marker, azblob.ListBlobsOptions{Prefix: searchPrefix})
+			listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
+				azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 			if err != nil {
 				return errors.New("cannot list blobs for download")
 			}
@@ -91,10 +92,9 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 		}
 
 	} else if numOfStarInUrlPath == 0 { // no prefix search
-
 		// see if source blob exists
 		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-		blobProperties, err := blobUrl.GetPropertiesAndMetadata(context.Background(), azblob.BlobAccessConditions{})
+		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
 
 		// for a single blob, the destination can either be a file or a directory
 		var singleBlobDestinationPath string
@@ -139,7 +139,8 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 			// perform a list blob
 			for marker := (azblob.Marker{}); marker.NotDone(); {
 				// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-				listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix: searchPrefix})
+				listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
+					azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 				if err != nil {
 					return errors.New("cannot list blobs for download")
 				}

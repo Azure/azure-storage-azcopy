@@ -34,7 +34,6 @@ type jobPartMgr struct {
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF   JobPartPlanMMF        // This Job part plan's MMF
-	Transfers []IJobPartTransferMgr // Transfers holds the set of this job part's transfers
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blobHTTPHeaders          azblob.BlobHTTPHeaders
@@ -71,11 +70,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		jpm.blobMetadata[kv[0]] = kv[1]
 	}
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
-	jpm.Transfers = make([]IJobPartTransferMgr, plan.NumTransfers)
 
 	//TODO : calculate transfer factory func.
 	// *** Schedule this job part's transfers ***
-	for t := uint32(0); t < uint32(len(jpm.Transfers)); t++ {
+	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
 		if ts := jppt.TransferStatus(); ts == common.ETransferStatus.Success() || ts == common.ETransferStatus.Failed() {
 			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
@@ -84,7 +82,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
-		jpm.Transfers[t] = &jobPartTransferMgr{
+		jptm := &jobPartTransferMgr{
+			newJobXfer:computeJobXfer(plan.FromTo),
+			priority: plan.Priority,
+			//TODO: pacer: ja.pacer,
 			jobPartMgr:          jpm,
 			jobPartPlanTransfer: jppt,
 			transferIndex:       t,
@@ -96,7 +97,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		if jpm.ShouldLog(pipeline.LogInfo) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
-		JobsAdmin.ScheduleTransfer(plan.Priority, jpm.Transfers[t])
+		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jptm)
 	}
 }
 
@@ -136,7 +137,6 @@ func (jpm *jobPartMgr) Close() {
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{}
 	jpm.blobMetadata = azblob.Metadata{}
 	jpm.preserveLastModifiedTime = false
-	jpm.Transfers = []IJobPartTransferMgr{}
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
 		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))

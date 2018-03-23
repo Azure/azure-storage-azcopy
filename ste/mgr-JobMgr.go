@@ -26,7 +26,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 var _ IJobMgr = &jobMgr{}
@@ -36,7 +35,7 @@ type PartNumber = common.PartNumber
 type IJobMgr interface {
 	JobID() common.JobID
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
-	Progress() (numberOfBytesTransferred, totalBytesToTransfer uint64)
+	//Throughput() XferThroughput
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context)
 	Cancel()
@@ -48,7 +47,8 @@ type IJobMgr interface {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel) IJobMgr {
-	return jobMgr{jobID: jobID, logger:common.NewJobLogger(jobID, level, appLogger)/*Other fields remain zero-value until this job is scheduled */}.reset(appCtx)
+	jm := jobMgr{jobID: jobID, logger:common.NewJobLogger(jobID, level, appLogger)/*Other fields remain zero-value until this job is scheduled */}
+	return jm.reset(appCtx)
 }
 
 func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
@@ -84,6 +84,8 @@ func (jm *jobMgr) Progress() (uint64, uint64) {
 	return atomic.LoadUint64(&jm.atomicNumberOfBytesTransferred),
 		atomic.LoadUint64(&jm.atomicTotalBytesToTransfer)
 }
+
+//func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }
 
 // JobID returns the JobID that this jobMgr managers
 func (jm *jobMgr) JobID() common.JobID { return jm.jobID }
@@ -229,7 +231,7 @@ func (m *jobPartToJobPartMgr) Iterate(readonly bool, f func(k common.PartNumber,
 //}
 
 // getLastCheckedTime api returns the lastCheckedTime of ThroughputState instance in thread-safe manner
-func (t *XferThroughput) LastCheckedTime() time.Time { return t.lastCheckedTime }
+/*func (t *XferThroughput) LastCheckedTime() time.Time { return t.lastCheckedTime }
 
 // updateLastCheckTime api updates the lastCheckedTime of ThroughputState instance in thread-safe manner
 func (t *XferThroughput) SetLastCheckTime(currentTime time.Time) { t.lastCheckedTime = currentTime }
@@ -249,3 +251,4 @@ func (t *XferThroughput) CurrentBytes() int64 { return atomic.LoadInt64(&t.curre
 func (t *XferThroughput) SetCurrentBytes(bytes int64) int64 {
 	return atomic.AddInt64(&t.currentBytes, bytes)
 }
+*/

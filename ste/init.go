@@ -69,31 +69,31 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64) error {
 		func(writer http.ResponseWriter, request *http.Request) {
 			//var payload common.ListRequest
 			//deserialize(request, &payload)
-			serialize(listExistingJobs( /*payload*/ ), writer)
+			serialize(ListJobs( /*payload*/ ), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobSummary().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.JobID
 			deserialize(request, &payload)
-			serialize(getJobSummary(payload), writer)
+			serialize(GetJobSummary(payload), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ListJobTransfers().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ListRequest
+			var payload common.ListJobTransfersRequest
 			deserialize(request, &payload)
-			serialize(getTransferList(payload), writer) // TODO: make struct
+			serialize(ListJobTransfers(payload), writer) // TODO: make struct
 		})
 	http.HandleFunc(common.ERpcCmd.CancelJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.JobID
 			deserialize(request, &payload)
-			serialize(cancelpauseJobOrder(payload, common.EJobStatus.Cancelled()), writer)
+			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelled()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.JobID
 			deserialize(request, &payload)
-			serialize(cancelpauseJobOrder(payload, common.EJobStatus.Paused()), writer)
+			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Paused()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -117,7 +117,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                      // Convert the order to a plan file
-	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, steCtx) // Get a this job part's job manager (create it if it doesn't exist)
+	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
 	jpm.AddJobPart(order.PartNum, jppfn, true)               // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
@@ -128,7 +128,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
     * If all the transfers in the Job are either failed or completed, then Job cannot be cancelled or paused
     * If a job is already paused, it cannot be paused again
 */
-func cancelpauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
+func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) common.CancelPauseResumeResponse {
 	verb := common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being paused/canceled
 	if !found {
@@ -251,7 +251,7 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 	return jr
 }
 
-// getJobSummary api returns the job progress summary of an active job
+// GetJobSummary api returns the job progress summary of an active job
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
@@ -262,7 +262,7 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 * PercentageProgress - job progress reported in terms of percentage
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
-func getJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
+func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	//fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
@@ -333,18 +333,18 @@ func getJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	return js
 }
 
-// getTransferList api returns the list of transfer with specific status for given jobId in http response
-func getTransferList(jobID common.JobID, ofStatus common.TransferStatus) common.ListJobTransfersResponse {
+// ListJobTransfers api returns the list of transfer with specific status for given jobId in http response
+func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersResponse {
 	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and partNumber
-	jm, found := JobsAdmin.JobMgr(jobID)
+	jm, found := JobsAdmin.JobMgr(r.JobID)
 	if !found {
 		return common.ListJobTransfersResponse{
-			ErrorMsg: fmt.Sprintf("there is no active Job with jobId %s", jobID),
+			ErrorMsg: fmt.Sprintf("there is no active Job with jobId %s", r.JobID),
 		}
 	}
 
 	ljt := common.ListJobTransfersResponse{
-		JobID:   jobID,
+		JobID:   r.JobID,
 		Details: []common.TransferDetail{},
 	}
 	for partNum := PartNumber(0); true; partNum++ {
@@ -360,7 +360,7 @@ func getTransferList(jobID common.JobID, ofStatus common.TransferStatus) common.
 			// getting transfer header of transfer at index index for given jobId and part number
 			transferEntry := jpp.Transfer(t)
 			// if the expected status is not to list all transfer and status of current transfer is not equal to the expected status, then we skip this transfer
-			if ofStatus != common.ETransferStatus.All() && transferEntry.TransferStatus() != ofStatus {
+			if r.OfStatus != common.ETransferStatus.All() && transferEntry.TransferStatus() != r.OfStatus {
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.
@@ -372,8 +372,8 @@ func getTransferList(jobID common.JobID, ofStatus common.TransferStatus) common.
 	return ljt
 }
 
-// listExistingJobs returns the jobId of all the jobs existing in the current instance of azcopy
-func listExistingJobs() common.ListJobsResponse {
+// listJobs returns the jobId of all the jobs existing in the current instance of azcopy
+func ListJobs() common.ListJobsResponse {
 	// building the ListJobsResponse for sending response back to front-end
 	return common.ListJobsResponse{ErrorMessage: "", JobIDs: JobsAdmin.JobIDs()}
 }

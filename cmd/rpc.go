@@ -5,17 +5,51 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"net/http"
 )
 
 // Global singleton for sending RPC requests from the frontend to the STE
 var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
-	err := NewHttpClient("").send(cmd, request, response)
+	err := inprocSend(cmd, request, response)
+	//err := NewHttpClient("").send(cmd, request, response)
 	if err != nil {
 		panic(err)
 	}
 }
+
+// Send method on HttpClient sends the data passed in the interface for given command type to the client url
+func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
+	switch rpcCmd {
+	case common.ERpcCmd.CopyJobPartOrder():
+		responseData = ste.ExecuteNewCopyJobPartOrder(requestData.(common.CopyJobPartOrderRequest))
+
+	case common.ERpcCmd.ListJobs():
+		responseData = ste.ListJobs()
+
+	case common.ERpcCmd.ListJobSummary():
+		responseData = ste.GetJobSummary(requestData.(common.JobID))
+
+	case common.ERpcCmd.ListJobTransfers():
+		responseData = ste.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
+
+	case common.ERpcCmd.PauseJob():
+		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
+
+	case common.ERpcCmd.CancelJob():
+		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelled())
+
+	case common.ERpcCmd.ResumeJob():
+		responseData = ste.ResumeJobOrder(requestData.(common.JobID))
+
+	default:
+		panic(fmt.Errorf("Unrecognized RpcCmd: %q", rpcCmd.String()))
+	}
+	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // NewHttpClient returns the instance of struct containing an instance of http.client and url
 func NewHttpClient(url string) *HTTPClient {
@@ -24,8 +58,6 @@ func NewHttpClient(url string) *HTTPClient {
 		url:    url,
 	}
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // todo : use url in case of string
 type HTTPClient struct {
@@ -36,7 +68,7 @@ type HTTPClient struct {
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
 func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
 	// Create HTTP request with command in query parameter & request data as JSON payload
-	requestJson, err := json.Marshal(v)
+	requestJson, err := json.Marshal(requestData)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error marshalling request payload for command type %q", rpcCmd.String()))
 		return err

@@ -41,11 +41,12 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, appCtx context.Context) IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel) IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
-	ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr)
+	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
+	ScheduleChunk(jptm IJobPartTransferMgr, chunkFunc chunkFunc)
 	ResurrectJobParts()
 
 	//DeleteJob(jobID common.JobID)
@@ -59,8 +60,8 @@ func initJobsAdmin(appContext context.Context, concurrentConnections int, target
 
 	const channelSize = 100000
 	// Create normal & low transfer/chunk channels
-	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan ChunkMsg, channelSize)
-	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan ChunkMsg, channelSize)
+	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
+	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 
 	// Create suicide channel which is used to scale back on the number of workers
 	suicideCh := make(chan SuicideJob, concurrentConnections)
@@ -90,46 +91,48 @@ func initJobsAdmin(appContext context.Context, concurrentConnections int, target
 
 // general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs
 func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
+	startTransfer := func(jptm IJobPartTransferMgr) {
+		if jptm.WasCanceled() {
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" is not picked up worked %d because transfer was cancelled", workerID))
+			}
+			jptm.ReportTransferDone()
+		} else {
+			// TODO fix preceding space
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER", workerID))
+			}
+			jptm.(*jobPartTransferMgr).newJobXfer(jptm)
+		}
+	}
+
 	for {
-		// priority 0: whether to commit suicide, this is used to scale back
+		// We check for suicides first to shrink goroutine pool
+		// Then, we check chunks: normal & low priority
+		// Then, we check transfers: normal & low priority
 		select {
 		case <-ja.xferChannels.suicideCh:
 			return
 		default:
-			// priority 1: high priority chunk channel, do actual upload/download
 			select {
-			case chunkJobItem := <-ja.xferChannels.normalChunckCh:
-				chunkJobItem.doTransfer(workerID)
+			case chunkFunc := <-ja.xferChannels.normalChunckCh:
+				chunkFunc()
 			default:
-				// priority 2: high priority transfer channel, schedule chunkMsgs
 				select {
-				case jptm := <-ja.xferChannels.normalTransferCh:
-					// if the transfer Msg has been cancelled
-					if jptm.WasCanceled() {
-						if jptm.ShouldLog(pipeline.LogInfo) {
-							jptm.Log(pipeline.LogInfo, fmt.Sprintf(" is not picked up worked %d because transfer was cancelled", workerID))
-						}
-						jptm.ReportTransferDone()
-					} else {
-						// TODO fix preceding space
-						if jptm.ShouldLog(pipeline.LogInfo) {
-							jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER", workerID))
-						}
-
-						//srcLocation, dstLocation, blobType := jptm.Locations()
-						// the xferFactory is generated based on the type of transfer (source and destination pair)
-						//TODO : get rid of execution engine.
-						//xferFactory := executionEngine.computeTransferFactory(srcLocation, dstLocation, blobType)
-						//if xferFactory == nil {
-						//	jptm.Panic(fmt.Errorf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", srcLocation, dstLocation))
-						//}
-						//xfer := xferFactory(jptm, ja.pacer)
-						jptm.RunPrologue(ja.pacer)
-					}
+				case chunkFunc := <-ja.xferChannels.lowChunkCh:
+					chunkFunc()
 				default:
-					//TODO: lower priorities todo
-					// lower priorities should go here in the future
-					time.Sleep(1 * time.Millisecond)
+					select {
+					case jptm := <-ja.xferChannels.normalTransferCh:
+						startTransfer(jptm)
+					default:
+						select {
+						case jptm := <-ja.xferChannels.lowTransferCh:
+							startTransfer(jptm)
+						default:
+							time.Sleep(1 * time.Millisecond) // Sleep before looping around
+						}
+					}
 				}
 			}
 		}
@@ -160,8 +163,8 @@ type CoordinatorChannels struct {
 type XferChannels struct {
 	normalTransferCh <-chan IJobPartTransferMgr // Read-only
 	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
-	normalChunckCh   chan ChunkMsg              // Read-write
-	lowChunkCh       chan ChunkMsg              // Read-write
+	normalChunckCh   chan chunkFunc             // Read-write
+	lowChunkCh       chan chunkFunc             // Read-write
 	suicideCh        <-chan SuicideJob          // Read-only
 }
 
@@ -193,23 +196,34 @@ func (ja *jobsAdmin) JobMgr(jobID common.JobID) (IJobMgr, bool) {
 
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
-func (ja *jobsAdmin) JobMgrEnsureExists(appLogger common.ILogger, jobID common.JobID,
-								appCtx context.Context, level common.LogLevel) IJobMgr {
+func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
+	level common.LogLevel) IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
-		func () IJobMgr {return newJobMgr(appLogger, jobID, appCtx, level) }) // Return existing or new IJobMgr to caller
+		func () IJobMgr {return newJobMgr(ja.logger, jobID, ja.appCtx, level) }) // Return existing or new IJobMgr to caller
 }
 
-func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
-	switch priority { // priority determines which channel handles the job part's transfers
+func (ja *jobsAdmin) ScheduleTransfer(jptm IJobPartTransferMgr) {
+	switch jptm.Priority(){ // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
-		jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
+		//jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		ja.coordinatorChannels.normalTransferCh <- jptm
 	case common.EJobPriority.Low():
-		jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
+		//jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		ja.coordinatorChannels.lowTransferCh <- jptm
 	default:
-		ja.Panic(fmt.Errorf("invalid priority: %q", priority.String()))
+		ja.Panic(fmt.Errorf("invalid priority: %q", jptm.Priority()))
+	}
+}
+
+func (ja *jobsAdmin) ScheduleChunk(jptm IJobPartTransferMgr, chunkFunc chunkFunc) {
+	switch jptm.Priority() { // priority determines which channel handles the job part's transfers
+	case common.EJobPriority.Normal():
+		ja.xferChannels.normalChunckCh <- chunkFunc
+	case common.EJobPriority.Low():
+		ja.xferChannels.lowChunkCh <- chunkFunc
+	default:
+		ja.Panic(fmt.Errorf("invalid priority: %q", jptm.Priority()))
 	}
 }
 
@@ -240,7 +254,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 			mmf.Unmap()
 		}
 		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(ja.logger, jobID, ja.appCtx, mmf.Plan().LogLevel)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel)
 		jm.AddJobPart(partNum, planFile, true)
 	}
 }
@@ -261,15 +275,16 @@ func (ja *jobsAdmin) DeleteJob(jobID common.JobID) {
     * Closes the logger file opened for logging logs related to given job
 	* Removes the entry of given JobId from JobsInfo
 */
+
 // TODO: take care fo this.
-func (ja *jobsAdmin) cleanUpJob(jobID common.JobID) {
+/*func (ja *jobsAdmin) cleanUpJob(jobID common.JobID) {
 	jm, found := ja.JobMgr(jobID)
 	if !found {
 		ja.Panic(fmt.Errorf("no job found with JobID %v to clean up", jobID))
 	}
 	for p := PartNumber(0); true; p++ {
 		jpm, found := jm.JobPartMgr(p)
-		if !found { /* TODO*/
+		if !found { // TODO
 		}
 		// TODO: Fix jpm.planMMF.Unmap()	// unmapping the memory map JobPart file
 		err := jpm.filename.Delete()
@@ -282,7 +297,7 @@ func (ja *jobsAdmin) cleanUpJob(jobID common.JobID) {
 	// deletes the entry for given JobId from Map
 	ja.DeleteJob(jobID)
 }
-
+*/
 func (ja *jobsAdmin) ShouldLog(level pipeline.LogLevel) bool  { return ja.logger.ShouldLog(level) }
 func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(level, msg) }
 func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }

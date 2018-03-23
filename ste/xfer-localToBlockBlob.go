@@ -20,6 +20,7 @@
 
 package ste
 
+/*
 import (
 	"bytes"
 	"encoding/base64"
@@ -33,8 +34,7 @@ import (
 
 // this struct is created for each transfer
 type localToBlockBlob struct {
-	jptm         *jobPartTransferMgr
-	pacer            *pacer
+	jptm             IJobPartTransferMgr
 	blobURL          azblob.BlobURL
 	memoryMappedFile common.MMF
 	blockIds         []string
@@ -42,12 +42,8 @@ type localToBlockBlob struct {
 }
 
 // return a new localToBlockBlob struct targeting a specific transfer
-func newLocalToBlockBlob(jptm *jobPartTransferMgr, pacer *pacer) xfer {
-	return &localToBlockBlob{jptm: jptm, pacer: pacer}
-}
-
-// this function performs the setup for each transfer and schedules the corresponding chunkMsgs into the chunkChannel
-func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkMsg) {
+func newLocalToBlockBlob(jptm IJobPartTransferMgr) {
+	localToBlockBlob := &localToBlockBlob{jptm: jptm}
 
 	// step 1: create pipeline for the destination blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
@@ -60,22 +56,21 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 		},
 		Log: pipeline.LogOptions{
 			Log: func(l pipeline.LogLevel, msg string) {
-				if localToBlockBlob.jptm.ShouldLog(l){
-					localToBlockBlob.jptm.Log(l , msg)
-				}
+
+				localToBlockBlob.jptm.Log(common.LogLevel(l), msg)
 			},
 			MinimumLevelToLog: func() pipeline.LogLevel {
-				return pipeline.LogLevel(localToBlockBlob.jptm.jobPartMgr.Plan().LogLevel)
+				return pipeline.LogLevel(localToBlockBlob.jptm.MinimumLogLevel)
 			},
 		},
 	})
 
-	u, _ := url.Parse(localToBlockBlob.transfer.Destination)
+	u, _ := url.Parse(localToBlockBlob.jptm.Destination)
 	localToBlockBlob.blobURL = azblob.NewBlobURL(*u, p)
 
 	// step 2: get size info from transfer
-	blobSize := int64(localToBlockBlob.transfer.SourceSize)
-	chunkSize := int64(localToBlockBlob.transfer.BlockSize)
+	blobSize := int64(localToBlockBlob.jptm.SourceSize)
+	chunkSize := int64(localToBlockBlob.jptm.BlockSize)
 
 	// step 3: map in the file to upload before transferring chunks
 	if blobSize > 0 {
@@ -89,7 +84,7 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 	}
 
 	// step 4.b: get the number of blocks and create a slice to hold the blockIDs of each chunk
-	localToBlockBlob.blockIds = make([]string, localToBlockBlob.transfer.NumChunks)
+	localToBlockBlob.blockIds = make([]string, localToBlockBlob.jptm.NumChunks)
 	blockIdCount := int32(0)
 
 	// step 5: go through the file and schedule chunk messages to upload each chunk
@@ -114,26 +109,27 @@ func (localToBlockBlob *localToBlockBlob) runPrologue(chunkChannel chan<- ChunkM
 
 // this generates a function which performs the uploading of a single chunk
 func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adjustedChunkSize int64, startIndex int64) chunkFunc {
-	return func(workerId int) {
-		totalNumOfChunks := uint32(localToBlockBlob.transfer.NumChunks)
+	return func() {
+		// TODO: remove the mockNum, workerId is not necessary considering  similar thing as gorountine Id is not necessary for debugging
+		// and the chunkFunc has been changed to the version without param workId
+		mockNum := 0
+		workerId := mockNum
+
+		totalNumOfChunks := uint32(localToBlockBlob.jptm.NumChunks)
 		transferDone := func() {
-			localToBlockBlob.transfer.TransferDone()
+			localToBlockBlob.jptm.TransferDone()
 			localToBlockBlob.memoryMappedFile.Unmap()
 
 			err := localToBlockBlob.srcFileHandler.Close()
 			if err != nil {
-				localToBlockBlob.transfer.Log(common.LogError,
+				localToBlockBlob.jptm.Log(common.LogError,
 					fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
 						workerId, err.Error()))
 			}
 		}
-		if localToBlockBlob.transfer.TransferContext.Err() != nil {
-			localToBlockBlob.transfer.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
-			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
-				localToBlockBlob.transfer.Log(common.LogInfo,
-					fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
-				transferDone()
-			}
+		if localToBlockBlob.jptm.TransferContext.Err() != nil {
+			localToBlockBlob.jptm.Log(common.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
+			transferDone()
 		} else {
 			// step 1: generate block ID
 			blockId := common.NewUUID().String()
@@ -146,25 +142,25 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 			blockBlobUrl := localToBlockBlob.blobURL.ToBlockBlobURL()
 
 			body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile[startIndex:startIndex+adjustedChunkSize]), localToBlockBlob.pacer)
-			putBlockResponse, err := blockBlobUrl.StageBlock(localToBlockBlob.transfer.TransferContext, encodedBlockId, body, azblob.LeaseAccessConditions{})
+			putBlockResponse, err := blockBlobUrl.StageBlock(localToBlockBlob.jptm.TransferContext, encodedBlockId, body, azblob.LeaseAccessConditions{})
 
 			if err != nil {
-				if localToBlockBlob.transfer.TransferContext.Err() != nil {
-					localToBlockBlob.transfer.Log(common.LogInfo,
+				if localToBlockBlob.jptm.TransferContext.Err() != nil {
+					localToBlockBlob.jptm.Log(common.LogInfo,
 						fmt.Sprintf("has worker %d which failed to upload chunkId %d because transfer was cancelled",
 							workerId, chunkId))
 				} else {
 					// cancel entire transfer because this chunk has failed
-					localToBlockBlob.transfer.TransferCancelFunc()
-					localToBlockBlob.transfer.Log(common.LogInfo,
+					localToBlockBlob.jptm.TransferCancelFunc()
+					localToBlockBlob.jptm.Log(common.LogInfo,
 						fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
 							workerId, chunkId, startIndex))
 
 					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-					localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
+					localToBlockBlob.jptm.TransferStatus(common.TransferFailed)
 				}
-				if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
-					localToBlockBlob.transfer.Log(common.LogInfo,
+				if localToBlockBlob.jptm.ChunksDone() == totalNumOfChunks {
+					localToBlockBlob.jptm.Log(common.LogInfo,
 						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
 					transferDone()
 				}
@@ -175,30 +171,30 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 				putBlockResponse.Response().Body.Close()
 			}
 
-			localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
+			localToBlockBlob.jptm.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
 
 			// step 4: check if this is the last chunk
-			if localToBlockBlob.transfer.ChunksDone() == totalNumOfChunks {
+			if localToBlockBlob.jptm.ChunksDone() == totalNumOfChunks {
 				// If the transfer gets cancelled before the putblock list
-				if localToBlockBlob.transfer.TransferContext.Err() != nil {
+				if localToBlockBlob.jptm.TransferContext.Err() != nil {
 					transferDone()
 					return
 				}
 				// step 5: this is the last block, perform EPILOGUE
-				localToBlockBlob.transfer.Log(common.LogInfo,
+				localToBlockBlob.jptm.Log(common.LogInfo,
 					fmt.Sprintf("has worker %d which is concluding download transfer after processing chunkId %d with blocklist %s",
 						workerId, chunkId, localToBlockBlob.blockIds))
 
 				// fetching the blob http headers with content-type, content-encoding attributes
 				// fetching the metadata passed with the JobPartOrder
-				blobHttpHeader, metaData := localToBlockBlob.transfer.blobHttpHeaderAndMetadata(localToBlockBlob.memoryMappedFile)
+				blobHttpHeader, metaData := localToBlockBlob.jptm.blobHttpHeaderAndMetadata(localToBlockBlob.memoryMappedFile)
 
 				putBlockListResponse, err := blockBlobUrl.CommitBlockList(localToBlockBlob.transfer.TransferContext, localToBlockBlob.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 				if err != nil {
-					localToBlockBlob.transfer.Log(common.LogError,
+					localToBlockBlob.jptm.Log(common.LogError,
 						fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
 							workerId, chunkId, string(err.Error())))
-					localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
+					localToBlockBlob.jptm.TransferStatus(common.TransferFailed)
 					transferDone()
 					return
 				}
@@ -207,8 +203,8 @@ func (localToBlockBlob *localToBlockBlob) generateUploadFunc(chunkId int32, adju
 					putBlockListResponse.Response().Body.Close()
 				}
 
-				localToBlockBlob.transfer.Log(common.LogInfo, "completed successfully")
-				localToBlockBlob.transfer.TransferStatus(common.TransferComplete)
+				localToBlockBlob.jptm.Log(common.LogInfo, "completed successfully")
+				localToBlockBlob.jptm.TransferStatus(common.TransferComplete)
 				transferDone()
 			}
 		}
@@ -219,47 +215,41 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 
 	// transform blobURL and perform put blob operation
 	blockBlobUrl := localToBlockBlob.blobURL.ToBlockBlobURL()
-	blobHttpHeader, metaData := localToBlockBlob.transfer.blobHttpHeaderAndMetadata(localToBlockBlob.memoryMappedFile)
+	blobHttpHeader, metaData := localToBlockBlob.jptm.blobHttpHeaderAndMetadata(localToBlockBlob.memoryMappedFile)
 
 	var putBlobResp *azblob.BlobsPutResponse
 	var err error
 
 	// take care of empty blobs
-	if localToBlockBlob.transfer.SourceSize == 0 {
-		putBlobResp, err = blockBlobUrl.Upload(localToBlockBlob.transfer.TransferContext, nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+	if localToBlockBlob.jptm.SourceSize == 0 {
+		putBlobResp, err = blockBlobUrl.Upload(localToBlockBlob.jptm.TransferContext, nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	} else {
 		body := newRequestBodyPacer(bytes.NewReader(localToBlockBlob.memoryMappedFile), localToBlockBlob.pacer)
-		putBlobResp, err = blockBlobUrl.Upload(localToBlockBlob.transfer.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		putBlobResp, err = blockBlobUrl.Upload(localToBlockBlob.jptm.TransferContext, body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	}
 
 	// if the put blob is a failure, updating the transfer status to failed
 	if err != nil {
-		// If the transfer context was cancelled, put blob failed because of cancelled context.
-		if localToBlockBlob.transfer.TransferContext.Err() != nil{
-			localToBlockBlob.transfer.Log(common.LogInfo, " put blob failed because transfer was cancelled")
-		}else{
-			// If put blob due to some reason other than context cancelled, mark transfer as failed.
-			localToBlockBlob.transfer.Log(common.LogInfo, " put blob failed and so cancelling the transfer")
-			localToBlockBlob.transfer.TransferStatus(common.TransferFailed)
-		}
+		localToBlockBlob.jptm.Log(common.LogInfo, " put blob failed and so cancelling the transfer")
+		localToBlockBlob.jptm.TransferStatus(common.TransferFailed)
 	} else {
 		// if the put blob is a success, updating the transfer status to success
-		localToBlockBlob.transfer.Log(common.LogInfo,
+		localToBlockBlob.jptm.Log(common.LogInfo,
 			fmt.Sprintf("put blob successful"))
-		localToBlockBlob.transfer.TransferStatus(common.TransferComplete)
+		localToBlockBlob.jptm.TransferStatus(common.TransferComplete)
 	}
 
 	// updating number of transfers done for job part order
-	localToBlockBlob.transfer.TransferDone()
+	localToBlockBlob.jptm.TransferDone()
 
 	// perform clean up for the case where blob size is not 0
-	if localToBlockBlob.transfer.SourceSize != 0 {
-		localToBlockBlob.transfer.jobInfo.JobThroughPut.updateCurrentBytes(int64(localToBlockBlob.transfer.SourceSize))
+	if localToBlockBlob.jptm.SourceSize != 0 {
+		localToBlockBlob.jptm.jobInfo.JobThroughPut.updateCurrentBytes(int64(localToBlockBlob.jptm.SourceSize))
 
 		localToBlockBlob.memoryMappedFile.Unmap()
 		err = localToBlockBlob.srcFileHandler.Close()
 		if err != nil {
-			localToBlockBlob.transfer.Log(common.LogError,
+			localToBlockBlob.jptm.Log(common.LogError,
 				fmt.Sprintf("has worker which failed to close the file because of following error %s", err.Error()))
 		}
 	}
@@ -268,4 +258,4 @@ func (localToBlockBlob *localToBlockBlob) putBlob() {
 	if putBlobResp != nil {
 		putBlobResp.Response().Body.Close()
 	}
-}
+}*/

@@ -1,4 +1,5 @@
 package ste
+/*
 
 import (
 	"bytes"
@@ -177,4 +178,4 @@ func (localToPageBlob *localToPageBlob) generateUploadFunc(numberOfPages uint32,
 			}
 		}
 	}
-}
+}*/

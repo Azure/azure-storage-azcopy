@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
-	"math"
 )
 
 type ListReq struct {
@@ -71,7 +70,7 @@ func init() {
 					fmt.Print("invalid job Id given ", args[0])
 					return nil
 				}
-				commandLineInput.JobId = jobId
+				commandLineInput.JobID = jobId
 			}
 
 			return nil
@@ -91,29 +90,32 @@ func init() {
 
 // handles the list command
 // dispatches the list order to theZiyi Wang storage engine
-func HandleListCommand(commandLineInput common.ListRequest) {
-
+func HandleListCommand(listRequest common.ListRequest) {
 	// check whether ofstatus transfer status is valid or not
-	if commandLineInput.OfStatus != "" &&
-		common.TransferStatusStringToCode(commandLineInput.OfStatus) == math.MaxUint32 {
+	if listRequest.OfStatus != "" {
+		/* TODO: Fix this: &&
+		common.TransferStatusStringToCode(listRequest.OfStatus) == math.MaxUint32 */
 		fmt.Println("invalid transfer status passed. Please provide the correct transfer status flag")
 		return
 	}
 
 	var response []byte
 
-	if commandLineInput.JobId == common.EmptyJobId {
-		response, _ = common.Rpc("listJobs", commandLineInput)
-	} else if commandLineInput.OfStatus == "" {
-		response, _ = common.Rpc("listJobProgressSummary", commandLineInput)
+	rpcCmd := common.ERpcCmd.None()
+	if listRequest.JobID.IsEmpty() {
+		rpcCmd = common.ERpcCmd.ListJobs()
+	} else if listRequest.OfStatus == "" {
+		rpcCmd = common.ERpcCmd.ListJobSummary()
 	} else {
-		response, _ = common.Rpc("listJobTransfers", commandLineInput)
+		rpcCmd = common.ERpcCmd.ListJobTransfers()
 	}
+	resp := common.ListJobsResponse{}
+	Rpc(rpcCmd, listRequest, &resp)
 
 	// list Order command requested the list of existing jobs
-	if commandLineInput.JobId == common.EmptyJobId {
+	if listRequest.JobID.IsEmpty() {
 		PrintExistingJobIds(response)
-	} else if commandLineInput.OfStatus == "" { //list Order command requested the progress summary of an existing job
+	} else if listRequest.OfStatus == "" { //list Order command requested the progress summary of an existing job
 		PrintJobProgressSummary(response)
 	} else { //list Order command requested the list of specific transfer of an existing job
 		PrintJobTransfers(response)
@@ -127,14 +129,14 @@ func PrintExistingJobIds(data []byte) {
 	if err != nil {
 		panic(err)
 	}
-	if listJobResponse.Errormessage != "" {
-		fmt.Println(fmt.Sprintf("request failed with following error message %s", listJobResponse.Errormessage))
+	if listJobResponse.ErrorMessage != "" {
+		fmt.Println(fmt.Sprintf("request failed with following error message %s", listJobResponse.ErrorMessage))
 		return
 	}
 
 	fmt.Println("Existing Jobs ")
-	for index := 0; index < len(listJobResponse.JobIds); index++ {
-		fmt.Println(listJobResponse.JobIds[index].String())
+	for index := 0; index < len(listJobResponse.JobIDs); index++ {
+		fmt.Println(listJobResponse.JobIDs[index].String())
 	}
 }
 
@@ -145,12 +147,12 @@ func PrintJobTransfers(data []byte) {
 	if err != nil {
 		panic(err)
 	}
-	if listTransfersResponse.ErrorMessage != "" {
-		fmt.Println(fmt.Sprintf("request failed with following message %s", listTransfersResponse.ErrorMessage))
+	if listTransfersResponse.ErrorMsg != "" {
+		fmt.Println(fmt.Sprintf("request failed with following message %s", listTransfersResponse.ErrorMsg))
 		return
 	}
 
-	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", listTransfersResponse.JobId))
+	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", listTransfersResponse.JobID))
 	for index := 0; index < len(listTransfersResponse.Details); index++ {
 		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", listTransfersResponse.Details[index].Src, listTransfersResponse.Details[index].Dst,
 			listTransfersResponse.Details[index].TransferStatus))
@@ -165,16 +167,16 @@ func PrintJobProgressSummary(summaryData []byte) {
 		panic(fmt.Errorf("error unmarshaling the progress summary. Failed with error %s", err.Error()))
 		return
 	}
-	if summary.ErrorMessage != "" {
-		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMessage))
+	if summary.ErrorMsg != "" {
+		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMsg))
 		return
 	}
-	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobId))
+	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobID))
 	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfers)
 	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberOfTransferCompleted)
 	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberOfFailedTransfer)
 	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
-	fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
+	//fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
 	for index := 0; index < len(summary.FailedTransfers); index++ {
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
 		fmt.Println(message)

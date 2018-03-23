@@ -4,10 +4,16 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 )
 
 type EnumHelper struct{}
 type EnumValueComparer func(enumValue interface{}) bool
+
+func (EnumHelper) isValidEnumSymbolMethod(enumType reflect.Type, m reflect.Method) bool {
+	// A symbol method must take 1 arg (the receiver) and return 1 value whose type matches the enum's type
+	return m.Type.NumIn() == 1 && m.Type.NumOut() == 1 && m.Type.Out(0) == enumType
+}
 
 func (EnumHelper) String(enumType reflect.Type, underlyingType reflect.Type, valueComparer EnumValueComparer) string {
 	// Pass 1 argument that is a zero-value of t
@@ -16,8 +22,7 @@ func (EnumHelper) String(enumType reflect.Type, underlyingType reflect.Type, val
 	// Call enum methods looking for one that returns the same value we have
 	for m := 0; m < enumType.NumMethod(); m++ {
 		method := enumType.Method(m)
-		if method.Type.NumIn() != 1 || method.Type.NumOut() != 1 || method.Type.Out(0) != enumType {
-			// Only try methods that take 1 arg (the receiver) and return just 1 value whose type matches the enum's type
+		if !(EnumHelper{}).isValidEnumSymbolMethod(enumType, method) {
 			continue
 		}
 		// Call the enum method, convert the result to an EnumInt32 and compare its value to the passed-in value.
@@ -29,9 +34,10 @@ func (EnumHelper) String(enumType reflect.Type, underlyingType reflect.Type, val
 	return ""
 }
 
-func (EnumHelper) Parse(enumType reflect.Type, underlyingType reflect.Type, s string) (interface{}, error) {
+
+func (EnumHelper) Parse(enumType reflect.Type, underlyingType reflect.Type, s string, caseInsensitive bool) (interface{}, error) {
 	// Look for a method name that matches the string we're trying to parse (case-sensitive)
-	if m, found := enumType.MethodByName(s); found {
+	if m, found := (EnumHelper{}).findMethod(enumType, s, caseInsensitive); found {
 		// Pass 1 argument that is a zero-value of t.
 		args := [1]reflect.Value{reflect.Zero(enumType)}
 
@@ -40,6 +46,20 @@ func (EnumHelper) Parse(enumType reflect.Type, underlyingType reflect.Type, s st
 		return m.Func.Call(args[:])[0].Convert(underlyingType).Interface(), nil
 	}
 	return nil, fmt.Errorf("Couldn't parse symbol %q into an instance of %q", s, enumType.Name())
+}
+
+func (EnumHelper) findMethod(enumType reflect.Type, methodName string, caseInsensitive bool) (reflect.Method, bool) {
+	if !caseInsensitive {
+		return enumType.MethodByName(methodName)	// Look up the method by exact name and case
+	}
+	methodName = strings.ToLower(methodName)	// lowercase the passed method name
+	for m := 0; m < enumType.NumMethod(); m++ {	// Iterate through all the methods matching their lowercase equivalents
+		method := enumType.Method(m)
+		if strings.ToLower(method.Name) == methodName {
+			return method, true
+		}
+	}
+	return reflect.Method{}, false
 }
 
 /**********************************************************************************************************************/
@@ -56,8 +76,8 @@ func (e EnumInt32) String(enumType reflect.Type) string {
 	return strconv.FormatInt(int64(e.Value), 10) // No match, return the number as a string
 }
 
-func (e EnumInt32) Parse(enumType reflect.Type, s string, strict bool) (EnumInt32, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumInt32) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumInt32, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumInt32), nil
@@ -86,8 +106,8 @@ func (e EnumUint32) String(enumType reflect.Type) string {
 	return strconv.FormatUint(uint64(e.Value), 10) // No match, return the number as a string
 }
 
-func (e EnumUint32) Parse(enumType reflect.Type, s string, strict bool) (EnumUint32, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumUint32) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumUint32, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumUint32), nil
@@ -116,8 +136,8 @@ func (e EnumInt16) String(enumType reflect.Type) string {
 	return strconv.FormatInt(int64(e.Value), 10) // No match, return the number as a string
 }
 
-func (e EnumInt16) Parse(enumType reflect.Type, s string, strict bool) (EnumInt16, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumInt16) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumInt16, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumInt16), nil
@@ -146,8 +166,8 @@ func (e EnumUint16) String(enumType reflect.Type) string {
 	return strconv.FormatUint(uint64(e.Value), 10) // No match, return the number as a string
 }
 
-func (e EnumUint16) Parse(enumType reflect.Type, s string, strict bool) (EnumUint16, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumUint16) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumUint16, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumUint16), nil
@@ -176,8 +196,8 @@ func (e EnumInt8) String(enumType reflect.Type) string {
 	return strconv.FormatInt(int64(e.Value), 10) // No match, return the number as a string
 }
 
-func (e EnumInt8) Parse(enumType reflect.Type, s string, strict bool) (EnumInt8, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumInt8) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumInt8, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumInt8), nil
@@ -206,8 +226,8 @@ func (e EnumUint8) String(enumType reflect.Type) string {
 	return strconv.FormatUint(uint64(e.Value), 10) // No match, return the number as a string
 }
 
-func (e EnumUint8) Parse(enumType reflect.Type, s string, strict bool) (EnumUint8, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumUint8) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumUint8, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumUint8), nil
@@ -236,8 +256,8 @@ func (e EnumString) String(enumType reflect.Type) string {
 	return e.Value // No match, return the string as a string
 }
 
-func (e EnumString) Parse(enumType reflect.Type, s string, strict bool) (EnumString, error) {
-	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s)
+func (e EnumString) Parse(enumType reflect.Type, s string, caseInsensitive bool, strict bool) (EnumString, error) {
+	v, err := (EnumHelper{}).Parse(enumType, reflect.TypeOf(e), s, caseInsensitive)
 	switch {
 	case err == nil:
 		return v.(EnumString), err
@@ -264,7 +284,7 @@ func (c Color) String() string {
 }
 
 func (c Color) Parse(s string) (Color, error) {
-	e, err := EnumInt32{}.Parse(reflect.TypeOf(c), s, false)
+	e, err := EnumInt32{}.Parse(reflect.TypeOf(c), s,true, false)
 	return Color(e), err
 }
 
@@ -279,6 +299,6 @@ func (p SASProtocol) String() string {
 }
 
 func (p SASProtocol) Parse(s string) (SASProtocol, error) {
-	e, err := EnumString{}.Parse(reflect.TypeOf(p), s, true)
+	e, err := EnumString{}.Parse(reflect.TypeOf(p), s, false, true)
 	return SASProtocol(e), err
 }

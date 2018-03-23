@@ -1,5 +1,6 @@
 package ste
 
+/*
 import (
 	"bytes"
 	"fmt"
@@ -134,3 +135,4 @@ func (localToAppendBlob localToAppendBlob) generateUploadFunc() chunkFunc {
 		}
 	}
 }
+*/
