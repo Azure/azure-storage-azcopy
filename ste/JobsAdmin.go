@@ -46,7 +46,7 @@ var JobsAdmin interface {
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
-	ScheduleChunk(jptm IJobPartTransferMgr, chunkFunc chunkFunc)
+	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
 	ResurrectJobParts()
 
 	//DeleteJob(jobID common.JobID)
@@ -102,7 +102,7 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER", workerID))
 			}
-			jptm.(*jobPartTransferMgr).newJobXfer(jptm)
+			jptm.StartJobXfer()
 		}
 	}
 
@@ -116,11 +116,11 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 		default:
 			select {
 			case chunkFunc := <-ja.xferChannels.normalChunckCh:
-				chunkFunc()
+				chunkFunc(workerID)
 			default:
 				select {
 				case chunkFunc := <-ja.xferChannels.lowChunkCh:
-					chunkFunc()
+					chunkFunc(workerID)
 				default:
 					select {
 					case jptm := <-ja.xferChannels.normalTransferCh:
@@ -203,8 +203,8 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 		func () IJobMgr {return newJobMgr(ja.logger, jobID, ja.appCtx, level) }) // Return existing or new IJobMgr to caller
 }
 
-func (ja *jobsAdmin) ScheduleTransfer(jptm IJobPartTransferMgr) {
-	switch jptm.Priority(){ // priority determines which channel handles the job part's transfers
+func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority , jptm IJobPartTransferMgr) {
+	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
 		//jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		ja.coordinatorChannels.normalTransferCh <- jptm
@@ -212,18 +212,18 @@ func (ja *jobsAdmin) ScheduleTransfer(jptm IJobPartTransferMgr) {
 		//jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		ja.coordinatorChannels.lowTransferCh <- jptm
 	default:
-		ja.Panic(fmt.Errorf("invalid priority: %q", jptm.Priority()))
+		ja.Panic(fmt.Errorf("invalid priority: %q", priority))
 	}
 }
 
-func (ja *jobsAdmin) ScheduleChunk(jptm IJobPartTransferMgr, chunkFunc chunkFunc) {
-	switch jptm.Priority() { // priority determines which channel handles the job part's transfers
+func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc) {
+	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
 		ja.xferChannels.normalChunckCh <- chunkFunc
 	case common.EJobPriority.Low():
 		ja.xferChannels.lowChunkCh <- chunkFunc
 	default:
-		ja.Panic(fmt.Errorf("invalid priority: %q", jptm.Priority()))
+		ja.Panic(fmt.Errorf("invalid priority: %q", priority))
 	}
 }
 

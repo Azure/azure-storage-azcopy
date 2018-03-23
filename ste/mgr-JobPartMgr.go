@@ -16,9 +16,9 @@ var _ IJobPartMgr = &jobPartMgr{}
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
 	ScheduleTransfers(jobCtx context.Context)
-
+	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() (lastTransfer bool, transfersCompleted uint32)
-	RunPrologue(jptm IJobPartTransferMgr, pacer *pacer)
+	ScheduleChunks(chunkFunc chunkFunc)
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -39,6 +39,14 @@ type jobPartMgr struct {
 	blobHTTPHeaders          azblob.BlobHTTPHeaders
 	blobMetadata             azblob.Metadata
 	preserveLastModifiedTime bool
+
+	newJobXfer  	newJobXfer // Method used to start the transfer
+
+	priority   common.JobPriority
+
+	pacer      *pacer          // Pacer used by chunks when uploading data
+
+	pipeline	pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
@@ -71,7 +79,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	}
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
-	//TODO : calculate transfer factory func.
+	jpm.newJobXfer = computeJobXfer(plan.FromTo)
+
+	jpm.priority = plan.Priority
+
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
@@ -83,9 +94,6 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		jptm := &jobPartTransferMgr{
-			newJobXfer:computeJobXfer(plan.FromTo),
-			priority: plan.Priority,
-			//TODO: pacer: ja.pacer,
 			jobPartMgr:          jpm,
 			jobPartPlanTransfer: jppt,
 			transferIndex:       t,
@@ -97,8 +105,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		if jpm.ShouldLog(pipeline.LogInfo) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
-		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jptm)
+		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 	}
+}
+
+func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
+	JobsAdmin.ScheduleChunk(jpm.priority, chunkFunc)
+}
+
+func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
+	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
 func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
@@ -108,9 +124,6 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.Bl
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) RunPrologue(jptm IJobPartTransferMgr, pacer *pacer){
-	jpm.jobMgr.RunPrologue(jptm, pacer)
-}
 
 func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {
 	dstData := &jpm.Plan().DstLocalData

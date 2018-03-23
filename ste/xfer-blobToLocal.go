@@ -19,7 +19,7 @@
 // THE SOFTWARE.
 
 package ste
-/*
+
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -30,6 +30,141 @@ import (
 	"os"
 )
 
+func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+
+	info := jptm.Info()
+	u, _ := url.Parse(info.Source)
+	srcBlobURL := azblob.NewBlobURL(*u, p)
+
+	// step 2: get size info for the download
+	blobSize := int64(info.SourceSize)
+	downloadChunkSize := int64(info.BlockSize)
+
+	// step 3: prep local file before download starts
+	var err error
+	dstFile, err := os.Open(info.Destination)
+	if err != nil {
+		// TODO
+	}
+
+	dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
+	if err != nil {
+		dstFile.Close()
+		if jptm.ShouldLog(pipeline.LogInfo) {
+			jptm.Log(pipeline.LogInfo, "transfer failed because dst file did not memory mapped successfully")
+		}
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	jptm.SetNumberOfChunks(1)
+	blockIdCount := int32(0)
+	// step 4: go through the blob range and schedule download chunk jobs
+	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
+		adjustedChunkSize := downloadChunkSize
+
+		// compute exact size of the chunk
+		if startIndex+downloadChunkSize > blobSize {
+			adjustedChunkSize = blobSize - startIndex
+		}
+
+		// schedule the download chunk job
+		jptm.ScheduleChunks(generateDownloadFunc(jptm, srcBlobURL, blockIdCount, dstFile, dstMMF, startIndex, adjustedChunkSize))
+		blockIdCount++
+	}
+}
+
+func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+	return func(workerId int) {
+		chunkDone := func() {
+			lastChunk, _ := jptm.ReportChunkDone()
+			if lastChunk {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
+				}
+				jptm.ReportTransferDone()
+				destinationMMF.Unmap()
+				err := destinationFile.Close()
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogInfo) {
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
+					}
+				}
+			}
+		}
+		if jptm.WasCanceled() {
+			chunkDone()
+		} else {
+			// step 1: perform get
+			get, err := transferBlobURL.Download(jptm.Context(), startIndex, adjustedChunkSize, azblob.BlobAccessConditions{}, false)
+			if err != nil {
+				if !jptm.WasCanceled() {
+					jptm.Cancel()
+					if jptm.ShouldLog(pipeline.LogInfo) {
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+					}
+					jptm.SetStatus(common.ETransferStatus.Failed())
+				}
+				chunkDone()
+				return
+			}
+			// step 2: write the body into the memory mapped file directly
+			bytesRead, err := io.ReadFull(get.Body(), destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			get.Body().Close()
+			if int64(bytesRead) != adjustedChunkSize || err != nil {
+				// cancel entire transfer because this chunk has failed
+				if !jptm.WasCanceled() {
+					jptm.Cancel()
+					if jptm.ShouldLog(pipeline.LogInfo) {
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+					}
+					jptm.SetStatus(common.ETransferStatus.Failed())
+				}
+				chunkDone()
+				return
+			}
+			//TODO: add throughput for job
+			lastChunk, _ := jptm.ReportChunkDone()
+			// step 3: check if this is the last chunk
+			if lastChunk {
+				// step 4: this is the last block, perform EPILOGUE
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
+				}
+				jptm.SetStatus(common.ETransferStatus.Success())
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is finalizing Transfer", workerId))
+				}
+				jptm.ReportTransferDone()
+
+				destinationMMF.Unmap()
+				err := destinationFile.Close()
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogInfo) {
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
+					}
+				}
+
+				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
+				if preserveLastModifiedTime {
+					err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
+					if err != nil {
+						if jptm.ShouldLog(pipeline.LogInfo) {
+							jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, destinationFile.Name()))
+						}
+						return
+					}
+					if jptm.ShouldLog(pipeline.LogInfo) {
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which successfully preserve the last modified time for destinaton %s", workerId, destinationFile.Name()))
+					}
+				}
+			}
+		}
+	}
+}
+
+/*
 // this struct is created for each transfer
 type blobToLocal struct {
 	jptm       IJobPartTransferMgr
@@ -91,7 +226,7 @@ func newBlobToLocal(jptm IJobPartTransferMgr) {
 		// schedule the download chunk job
 		jptm.ScheduleChunk(func() {
 			blobToLocal.generateDownloadFunc(blockIdCount */
-/* chunk index*//*
+/* chunk index*/ /*
  , adjustedChunkSize, startIndex)
 		})
 		blockIdCount += 1

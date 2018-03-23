@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"time"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // upload related
@@ -45,13 +46,13 @@ const PacerTimeToWaitInMs = 50
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // These types are define the STE Coordinator
-type newJobXfer func(jptm IJobPartTransferMgr)	// TODO: Put chunk channel & pacer inside IJobPartTransferMgr
+type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer)
 
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo) newJobXfer {
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-		return nil // TODO newBlobToLocal
+		return BlobToLocalPrologue
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 		return nil //TODO
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system

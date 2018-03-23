@@ -11,21 +11,18 @@ import (
 )
 
 type IJobPartTransferMgr interface {
-	Priority() common.JobPriority
 	FromTo() common.FromTo
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
-	ScheduleChunk(chunkFunc chunkFunc)
+	//ScheduleChunk(chunkFunc chunkFunc)
+	Context() context.Context
+	StartJobXfer()
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
 	SetStatus(status common.TransferStatus)
+	SetNumberOfChunks(numChunks uint32)
 	ReportTransferDone() (lastTransfer bool, transfersDone uint32)
-
-	/*
-	TODO: @Parteek this is removed 3/23 morning
-	SetChunkChannel(chunkChannel chan <- ChunkMsg)
-	ChunkChannel() (chan <- ChunkMsg)
-	RunPrologue(pacer *pacer)*/
+	ScheduleChunks(chunkFunc chunkFunc)
 	Cancel()
 	WasCanceled() bool
 	common.ILogger
@@ -44,7 +41,7 @@ type TransferInfo struct {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type chunkFunc func()
+type chunkFunc func(int)
 
 // jobPartTransferMgr represents the runtime information for a Job Part's transfer
 type jobPartTransferMgr struct {
@@ -58,11 +55,6 @@ type jobPartTransferMgr struct {
 	// Call cancel to cancel the transfer
 	cancel context.CancelFunc
 
-	newJobXfer newJobXfer // Method used to start the transfer
-	priority   common.JobPriority
-	chunkCh    chan chunkFunc // Channel used to queue transfer chunks
-	pacer      pacer          // Pacer used by chunks when uploading data
-
 	numChunks uint32
 	// NumberOfChunksDone represents the number of chunks of a transfer
 	// which are either completed or failed.
@@ -75,16 +67,12 @@ type jobPartTransferMgr struct {
 	chunkChannel chan<- ChunkMsg*/
 }
 
-func (jptm *jobPartTransferMgr) Priority() common.JobPriority {
-	return jptm.priority
-}
-
 func (jptm *jobPartTransferMgr) FromTo() common.FromTo {
 	return jptm.jobPartMgr.Plan().FromTo
 }
 
-func (jptm *jobPartTransferMgr) ScheduleChunk(chunkFunc chunkFunc) {
-	JobsAdmin.ScheduleChunk(jptm, chunkFunc)
+func (jptm *jobPartTransferMgr) StartJobXfer(){
+	jptm.jobPartMgr.StartJobXfer(jptm)
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
@@ -97,6 +85,14 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:  plan.Transfer(jptm.transferIndex).SourceSize,
 		Destination: dst,
 	}
+}
+
+func (jptm *jobPartTransferMgr) Context() context.Context{
+	return jptm.ctx
+}
+
+func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc){
+	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
 func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
@@ -121,8 +117,8 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (jptm *jobPartTransferMgr) RunPrologue(pacer *pacer){
-	jptm.jobPartMgr.RunPrologue(jptm, pacer)
+func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32){
+	jptm.numChunks = numChunks
 }
 
 // Call Done when a chunk has completed its transfer; this method returns the number of chunks completed so far

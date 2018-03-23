@@ -95,9 +95,10 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 	return jm.jobPartMgrs.Get(partNumber)
 }
 
+
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
-	jpm := &jobPartMgr{jobMgr: jm, filename: planFile}
+	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
 	jm.jobPartMgrs.Set(partNum, jpm)
 	if scheduleTransfers {
 		jpm.ScheduleTransfers(jm.ctx)
