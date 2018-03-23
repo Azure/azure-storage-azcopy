@@ -31,21 +31,22 @@ import (
 )
 
 // this struct is created for each transfer
-type blobToLocal struct {
-	transfer   IJobPartTransferMgr
-	srcBlobURL azblob.BlobURL
-	dstFile    *os.File   // MUST be closed in the epilog
-	dstMMF     common.MMF // MUST be unmapped in the epilog
-	blockIds   []string   // Base64 block IDs
-}
+//type blobToLocal struct {
+//	jptm   IJobPartTransferMgr
+//	srcBlobURL azblob.BlobURL
+//	dstFile    *os.File   // MUST be closed in the epilog
+//	dstMMF     common.MMF // MUST be unmapped in the epilog
+//	blockIds   []string   // Base64 block IDs
+//}
 
 // return a new blobToLocal struct targeting a specific transfer
-func newBlobToLocal(transfer IJobPartTransferMgr, pacer *pacer) xfer {
-	// download is not paced
-	return &blobToLocal{transfer: transfer}
-}
+//func newBlobToLocal(jptm IJobPartTransferMgr, pacer *pacer) xfer {
+//	// download is not paced
+//	return &blobToLocal{jptm: jptm}
+//}
 
-func (blobToLocal *blobToLocal) runPrologue(chunkChannel chan<- ChunkMsg) {
+//func (blobToLocal *blobToLocal) Prologue(jptm IJobPartTransferMgr, pacer *pacer) {
+func BlobToLocalPrologue(jptm IJobPartTransferMgr, pacer *pacer) {
 	// step 1: create blobUrl for source blob
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Retry: azblob.RetryOptions{

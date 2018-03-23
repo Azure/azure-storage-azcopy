@@ -62,10 +62,10 @@ type IJobPartXfer interface {
 }
 
 // the xfer factory is generated based on the type of source and destination
-func computeTransferFactory(srcLocation, dstLocation common.Location, blobType common.BlobType) /*NewJobXfer */ xferFactory {
+func computeTransferFactory(srcLocation, dstLocation common.Location, blobType common.BlobType) xferFactory {
 	switch {
 	case srcLocation == (common.Location{}).Blob() && dstLocation == (common.Location{}).Local(): // download from Azure Blob to local file system
-		return newBlobToLocal
+		return BlobToLocalPrologue
 	case srcLocation == (common.Location{}).Local() && dstLocation == (common.Location{}).Blob(): // upload from local file system to Azure blob
 		switch blobType {
 		case (common.BlobType{}).Block():
@@ -174,7 +174,7 @@ func NewPipeline(logger Logger) Pipeline {
 */
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type xferFactory func(jptm IJobPartTransferMgr, pacer *pacer) xfer
+type xferFactory func(jptm IJobPartTransferMgr, pacer *pacer)
 type xfer interface {
 	runPrologue(chunkChannel chan<- ChunkMsg)
 }

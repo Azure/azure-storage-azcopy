@@ -40,6 +40,7 @@ type IJobMgr interface {
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context)
 	Cancel()
+	RunPrologue(jptm IJobPartTransferMgr, pacer *pacer)
 	//Close()
 	common.ILoggerCloser
 }
@@ -72,6 +73,9 @@ type jobMgr struct {
 
 	atomicNumberOfBytesTransferred uint64
 	atomicTotalBytesToTransfer     uint64
+
+	// prologue function to execute transfer.
+	prologue func(jptm IJobPartTransferMgr, pacer *pacer)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -97,6 +101,10 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		jpm.ScheduleTransfers(jm.ctx)
 	}
 	return jpm
+}
+
+func (jm *jobMgr) RunPrologue(jptm IJobPartTransferMgr, pacer *pacer){
+	jm.prologue(jptm, pacer)
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job

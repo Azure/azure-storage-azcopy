@@ -18,6 +18,7 @@ type IJobPartMgr interface {
 	ScheduleTransfers(jobCtx context.Context)
 
 	ReportTransferDone() (lastTransfer bool, transfersCompleted uint32)
+	RunPrologue(jptm IJobPartTransferMgr, pacer *pacer)
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -104,6 +105,10 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.Bl
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
+}
+
+func (jpm *jobPartMgr) RunPrologue(jptm IJobPartTransferMgr, pacer *pacer){
+	jpm.jobMgr.RunPrologue(jptm, pacer)
 }
 
 func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {

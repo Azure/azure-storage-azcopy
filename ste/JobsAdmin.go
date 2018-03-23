@@ -116,15 +116,15 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 							jptm.Log(pipeline.LogInfo, fmt.Sprintf("has worker %d which is processing TRANSFER", workerID))
 						}
 
-						srcLocation, dstLocation, blobType := jptm.Locations()
+						//srcLocation, dstLocation, blobType := jptm.Locations()
 						// the xferFactory is generated based on the type of transfer (source and destination pair)
 						//TODO : get rid of execution engine.
-						xferFactory := executionEngine.computeTransferFactory(srcLocation, dstLocation, blobType)
-						if xferFactory == nil {
-							jptm.Panic(fmt.Errorf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", srcLocation, dstLocation))
-						}
-						xfer := xferFactory(jptm, ja.pacer)
-						xfer.runPrologue(ja.xferChannels.normalChunckCh)
+						//xferFactory := executionEngine.computeTransferFactory(srcLocation, dstLocation, blobType)
+						//if xferFactory == nil {
+						//	jptm.Panic(fmt.Errorf(" has unrecognizable type of transfer with sourceLocationType as %d and destinationLocationType as %d", srcLocation, dstLocation))
+						//}
+						//xfer := xferFactory(jptm, ja.pacer)
+						jptm.RunPrologue(ja.pacer)
 					}
 				default:
 					//TODO: lower priorities todo
@@ -203,8 +203,10 @@ func (ja *jobsAdmin) JobMgrEnsureExists(appLogger common.ILogger, jobID common.J
 func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
+		jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
 		ja.coordinatorChannels.normalTransferCh <- jptm
 	case common.EJobPriority.Low():
+		jptm.SetChunkChannel(ja.xferChannels.lowChunkCh)
 		ja.coordinatorChannels.lowTransferCh <- jptm
 	default:
 		ja.Panic(fmt.Errorf("invalid priority: %q", priority.String()))
@@ -237,6 +239,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		if mmf.Plan().JobStatus() == common.EJobStatus.Cancelled() {
 			mmf.Unmap()
 		}
+		//todo : call the compute transfer function here for each job.
 		jm := ja.JobMgrEnsureExists(ja.logger, jobID, ja.appCtx, mmf.Plan().LogLevel)
 		jm.AddJobPart(partNum, planFile, true)
 	}

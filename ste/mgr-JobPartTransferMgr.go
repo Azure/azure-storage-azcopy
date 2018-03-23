@@ -20,6 +20,9 @@ type IJobPartTransferMgr interface {
 	SetStatus(status common.TransferStatus)
 	ReportTransferDone() (lastTransfer bool, transfersDone uint32)
 
+	SetChunkChannel(chunkChannel chan <- ChunkMsg)
+	ChunkChannel() (chan <- ChunkMsg)
+	RunPrologue(pacer *pacer)
 	Cancel()
 	WasCanceled() bool
 	common.ILogger
@@ -55,6 +58,9 @@ type jobPartTransferMgr struct {
 	// which are either completed or failed.
 	// NumberOfChunksDone determines the final cancellation or completion of a transfer
 	atomicChunksDone uint32
+
+	// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
+	chunkChannel chan<- ChunkMsg
 }
 
 func (jptm *jobPartTransferMgr) Locations() (srcLocation, dstLocation common.Location, blobType common.BlobType) {
@@ -78,6 +84,14 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer common.MMF) (headers 
 	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
 }
 
+func (jptm *jobPartTransferMgr) SetChunkChannel(chunkChannel chan <- ChunkMsg) {
+	jptm.chunkChannel = chunkChannel
+}
+
+func (jptm *jobPartTransferMgr) ChunkChannel() (chan <- ChunkMsg){
+	return jptm.chunkChannel
+}
+
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
 // If PreserveLastModifiedTime is set to true, it returns the lastModifiedTime of the source.
 func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
@@ -86,6 +100,10 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 		return time.Unix(0, int64(lastModifiedTime)), true
 	}
 	return time.Time{}, false
+}
+
+func (jptm *jobPartTransferMgr) RunPrologue(pacer *pacer){
+	jptm.jobPartMgr.RunPrologue(jptm, pacer)
 }
 
 // Call Done when a chunk has completed its transfer; this method returns the number of chunks completed so far
