@@ -66,8 +66,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	dstData := plan.DstBlobData
 
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
-		ContentType:     string(dstData.ContentType[:dstData.MetadataLength]),
-		ContentEncoding: string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
