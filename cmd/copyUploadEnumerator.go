@@ -26,7 +26,7 @@ func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer) error {
 	// while the frontend is still gathering more transfers
 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
 		resp := common.CopyJobPartOrderResponse{}
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), e, &resp)
+		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
@@ -42,8 +42,8 @@ func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer) error {
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 func (e *copyUploadEnumerator) dispatchFinalPart() error {
 	e.IsFinalPart = true
-	resp := common.CopyJobPartOrderResponse{}
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), e, &resp)
+	var resp common.CopyJobPartOrderResponse
+	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
 	if !resp.JobStarted {
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)

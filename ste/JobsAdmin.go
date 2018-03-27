@@ -53,7 +53,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appContext context.Context, concurrentConnections int, targetRateInMBps int64) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -68,8 +68,10 @@ func initJobsAdmin(appContext context.Context, concurrentConnections int, target
 
 	ja := &jobsAdmin{
 		logger:  common.NewAppLogger(pipeline.LogInfo),
+		jobIDToJobMgr:newJobIDToJobMgr(),
 		planDir: ".",
 		pacer:   newPacer(targetRateInMBps * 1024 * 1024),
+		appCtx:appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			normalTransferCh: normalTransferCh,
 			lowTransferCh:    lowTransferCh,
@@ -312,6 +314,10 @@ type jobIDToJobMgr struct {
 	m      map[common.JobID]IJobMgr
 }
 
+func newJobIDToJobMgr() jobIDToJobMgr{
+	return jobIDToJobMgr{m : make(map[common.JobID]IJobMgr)}
+}
+
 func (j *jobIDToJobMgr) Set(key common.JobID, value IJobMgr) {
 	j.nocopy.Check()
 	j.lock.Lock()
@@ -330,9 +336,14 @@ func (j *jobIDToJobMgr) Get(key common.JobID) (value IJobMgr, found bool) {
 func (j *jobIDToJobMgr) EnsureExists(jobID common.JobID, newJobMgr func() IJobMgr) IJobMgr {
 	j.nocopy.Check()
 	j.lock.Lock()
+
+	// defined variables both jm & found above condition since defined variables might get re-initialized
+	// in if condition if any variable in the left was not initialized.
 	var jm IJobMgr
+	var found bool
+
 	// NOTE: We look up the desired IJobMgr and add it if it's not there atomically using a write lock
-	if jm, found := j.m[jobID]; !found {
+	if jm, found = j.m[jobID]; !found {
 		jm = newJobMgr()
 		j.m[jobID] = jm
 	}

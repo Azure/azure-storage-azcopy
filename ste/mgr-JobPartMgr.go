@@ -73,10 +73,13 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
 	jpm.blobMetadata = azblob.Metadata{}
-	for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
-		kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
-		jpm.blobMetadata[kv[0]] = kv[1]
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			jpm.blobMetadata[kv[0]] = kv[1]
+		}
 	}
+
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
 	jpm.newJobXfer = computeJobXfer(plan.FromTo)
@@ -114,6 +117,19 @@ func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
+	if jpm.pipeline == nil{
+		jpm.pipeline = azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+
+			Retry: azblob.RetryOptions{
+				Policy:        azblob.RetryPolicyExponential,
+				MaxTries:      UploadMaxTries,
+				TryTimeout:    UploadTryTimeout,
+				RetryDelay:    UploadRetryDelay,
+				MaxRetryDelay: UploadMaxRetryDelay,
+			},
+			Log: jpm.jobMgr.PipelineLogInfo(),
+		})
+	}
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 

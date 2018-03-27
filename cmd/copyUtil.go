@@ -150,9 +150,9 @@ func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
 }
 
 func (copyHandlerUtil) fetchJobStatus(jobID common.JobID) common.JobStatus {
-	lsCommand := common.ListRequest{JobID: jobID}
+	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &lsCommand, &summary)
+	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
 
 	tm.Clear()
 	tm.MoveCursor(1, 1)
@@ -173,4 +173,8 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID) common.JobStatus {
 	tm.Flush()
 
 	return summary.JobStatus
+}
+
+func startsWith(s string, t string) bool{
+	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }

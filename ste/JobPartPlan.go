@@ -84,13 +84,13 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 
 	srcSlice := []byte{}
 	sh := (*reflect.SliceHeader)(unsafe.Pointer(&srcSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.Offset) // Address of Job Part Plan + this transfer's src string offset
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
 	sh.Len = int(jppt.SrcLength)
 	sh.Cap = sh.Len
 
 	dstSlice := []byte{}
 	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
-	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.Offset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
 	sh.Len = int(jppt.DstLength)
 	sh.Cap = sh.Len
 
@@ -141,8 +141,8 @@ type JobPartPlanDstLocal struct {
 type JobPartPlanTransfer struct {
 	// Once set, the following fields are constants; they should never be modified
 
-	// Offset represents the actual start offset transfer header written in JobPartOrder file
-	Offset int64
+	// SrcOffset represents the actual start offset transfer header written in JobPartOrder file
+	SrcOffset int64
 	// SrcLength represents the actual length of source string for specific transfer
 	SrcLength int16
 	// DstLength represents the actual length of destination string for specific transfer

@@ -76,7 +76,7 @@ func (jpfn JobPartPlanFileName) Map() JobPartPlanMMF {
 	if err != nil {
 		panic(err)
 	}
-	mmf, err := common.NewMMF(file, false, 0, fileInfo.Size())
+	mmf, err := common.NewMMF(file, true, 0, fileInfo.Size())
 	if err != nil {
 		panic(err)
 	}
@@ -99,8 +99,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
 	writeValue := func(writer io.Writer, v interface{}) int64 {
 		rv := reflect.ValueOf(v)
-		structSize := reflect.TypeOf(v).Len()
-		slice := reflect.SliceHeader{Data: rv.Pointer(), Len: structSize, Cap: structSize}
+		structSize := reflect.TypeOf(v).Elem().Size()
+		slice := reflect.SliceHeader{Data: rv.Pointer(), Len: int(structSize), Cap: int(structSize)}
 		byteSlice := *(*[]byte)(unsafe.Pointer(&slice))
 		err := binary.Write(writer, binary.LittleEndian, byteSlice)
 		if err != nil {
@@ -121,7 +121,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	 */
 
 	// create the Job Part Plan file
-	planPathname := planDir + "/" + string(jpfn)
+	//planPathname := planDir + "/" + string(jpfn)
+	planPathname := string(jpfn)
 	file, err := os.Create(planPathname)
 	if err != nil {
 		panic(fmt.Errorf("couldn't create job part plan file %q: %v", jpfn, err))
@@ -142,7 +143,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		default:
 			panic(errors.New("unrecognized blob type"))
 		}*/
-
+	}
 		// Initialize the Job Part's Plan header
 		jpph := JobPartPlanHeader{
 			Version:            DataSchemaVersion,
@@ -171,19 +172,20 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 		copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
 		copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
+		fmt.Println("")
 		eof += writeValue(file, &jpph)
 
 		// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
 		srcDstStringsOffset := make([]int64, jpph.NumTransfers)
 
 		// Initialize the offset for the 1st transfer's src/dst strings
-		srcDstStringsOffset[0] = eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
+		currentSrcStringOffset := eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
 
 		// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 		for t := range order.Transfers {
 			// Create & initialize this transfer's Job Part Plan Transfer
 			jppt := JobPartPlanTransfer{
-				Offset:               srcDstStringsOffset[t], // Offset of the src string
+				SrcOffset:            currentSrcStringOffset, // SrcOffset of the src string
 				SrcLength:            int16(len(order.Transfers[t].Source)),
 				DstLength:            int16(len(order.Transfers[t].Destination)),
 				ModifiedTime:         uint32(order.Transfers[t].LastModifiedTime.UnixNano()),
@@ -195,7 +197,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			eof += writeValue(file, &jppt) // Write the transfer entry
 
 			// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
-			srcDstStringsOffset[t+1] = srcDstStringsOffset[t] + int64(jppt.SrcLength+jppt.DstLength)
+			srcDstStringsOffset[t] = currentSrcStringOffset
+
+			currentSrcStringOffset += int64(jppt.SrcLength+jppt.DstLength)
 		}
 
 		// All the transfers were written; now write each each transfer's src/dst strings
@@ -219,5 +223,4 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			eof += int64(bytesWritten)
 		}
 		// the file is closed to due to defer above
-	}
 }

@@ -38,8 +38,8 @@ type IJobMgr interface {
 	//Throughput() XferThroughput
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context)
+	PipelineLogInfo() pipeline.LogOptions
 	Cancel()
-	RunPrologue(jptm IJobPartTransferMgr, pacer *pacer)
 	//Close()
 	common.ILoggerCloser
 }
@@ -47,8 +47,9 @@ type IJobMgr interface {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel) IJobMgr {
-	jm := jobMgr{jobID: jobID, logger:common.NewJobLogger(jobID, level, appLogger)/*Other fields remain zero-value until this job is scheduled */}
-	return jm.reset(appCtx)
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), logger:common.NewJobLogger(jobID, level, appLogger)/*Other fields remain zero-value until this job is scheduled */}
+	jm.reset(appCtx)
+	return &jm
 }
 
 func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
@@ -73,9 +74,6 @@ type jobMgr struct {
 
 	atomicNumberOfBytesTransferred uint64
 	atomicTotalBytesToTransfer     uint64
-
-	// prologue function to execute transfer.
-	prologue func(jptm IJobPartTransferMgr, pacer *pacer)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -106,9 +104,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	return jpm
 }
 
-func (jm *jobMgr) RunPrologue(jptm IJobPartTransferMgr, pacer *pacer){
-	jm.prologue(jptm, pacer)
-}
+
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
@@ -178,6 +174,10 @@ type jobPartToJobPartMgr struct {
 	nocopy common.NoCopy
 	lock   sync.RWMutex
 	m      map[PartNumber]IJobPartMgr
+}
+
+func newJobPartToJobPartMgr() jobPartToJobPartMgr{
+	return jobPartToJobPartMgr{m : make(map[PartNumber]IJobPartMgr)}
 }
 
 func (m *jobPartToJobPartMgr) Count() uint32 {

@@ -108,6 +108,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) IL
 	}
 
 	return &jobLogger{
+		jobID:jobID,
 		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
 		//file:              jobLogFile,

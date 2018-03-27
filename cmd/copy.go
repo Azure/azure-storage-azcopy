@@ -89,6 +89,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	cooked.src = raw.src
+	cooked.dst = raw.dst
+
 	cooked.fromTo = fromTo
 	/*
 		if raw.blobUrlForRedirection != "" { // redirection

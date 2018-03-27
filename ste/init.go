@@ -279,11 +279,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		CompleteJobOrdered: false,                           // default to false; returns true if ALL job parts have been ordered
 		FailedTransfers:    []common.TransferDetail{},
 	}
-
+	
 	for partNum := PartNumber(0); true; partNum++ {
 		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
 		jpm, found := jm.JobPartMgr(partNum)
 		if !found {
+			break
 		}
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart

@@ -54,7 +54,7 @@ func computeJobXfer(fromTo common.FromTo) newJobXfer {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 		return BlobToLocalPrologue
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-		return nil //TODO
+		return LocalToBlockBlob
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
 		return nil // TODO
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File

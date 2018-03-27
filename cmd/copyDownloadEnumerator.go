@@ -186,7 +186,7 @@ func (e *copyDownloadEnumerator) dispatchPart(isFinalPart bool) error {
 	}
 
 	e.IsFinalPart = isFinalPart
-	resp := common.CopyJobPartOrderResponse{}
+	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), e, &resp)
 
 	if !resp.JobStarted {

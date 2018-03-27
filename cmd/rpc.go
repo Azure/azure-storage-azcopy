@@ -23,13 +23,13 @@ var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
 func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
 	switch rpcCmd {
 	case common.ERpcCmd.CopyJobPartOrder():
-		responseData = ste.ExecuteNewCopyJobPartOrder(requestData.(common.CopyJobPartOrderRequest))
+		*(responseData.(*common.CopyJobPartOrderResponse)) = ste.ExecuteNewCopyJobPartOrder(*requestData.(*common.CopyJobPartOrderRequest))
 
 	case common.ERpcCmd.ListJobs():
 		responseData = ste.ListJobs()
 
 	case common.ERpcCmd.ListJobSummary():
-		responseData = ste.GetJobSummary(requestData.(common.JobID))
+		*(responseData.(*common.ListJobSummaryResponse)) = ste.GetJobSummary(*requestData.(*common.JobID))
 
 	case common.ERpcCmd.ListJobTransfers():
 		responseData = ste.ListJobTransfers(requestData.(common.ListJobTransfersRequest))

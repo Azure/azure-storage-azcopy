@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
-	"os"
 	"reflect"
 	"strings"
 )
@@ -106,21 +105,23 @@ func inferArgumentLocation(arg string) Location {
 	if arg == pipeLocation {
 		return Location{}.Pipe()
 	}
-	// Let's try to parse the argument as a URL
-	u, err := url.Parse(arg)
-
-	// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
-	if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
-		// Is the argument a URL to blob storage?
-		switch host := strings.ToLower(u.Host); true {
-		case strings.Contains(host, ".blob.core.windows.net"):
-			return Location{}.Blob()
-		case strings.Contains(host, ".file.core.windows.net"):
-			return Location{}.File()
+	if startsWith(arg, "http") {
+		// Let's try to parse the argument as a URL
+		u, err := url.Parse(arg)
+		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
+		if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
+			// Is the argument a URL to blob storage?
+			switch host := strings.ToLower(u.Host); true {
+			case strings.Contains(host, ".blob.core.windows.net"):
+				return Location{}.Blob()
+			case strings.Contains(host, ".file.core.windows.net"):
+				return Location{}.File()
+			}
 		}
-	} else if _, err := os.Stat(arg); err == nil {
+	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
 		return Location{}.Local()
 	}
+
 	return Location{}.Unknown()
 }

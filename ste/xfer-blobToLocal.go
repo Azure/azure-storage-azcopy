@@ -247,7 +247,7 @@ func (blobToLocal *blobToLocal) generateDownloadFunc(chunkId int32, adjustedChun
 			}
 		} else {
 			// step 1: perform get
-			get, err := blobToLocal.blobURL.Download(blobToLocal.transfer.TransferContext, azblob.BlobRange{Offset: startIndex, Count: adjustedChunkSize}, azblob.BlobAccessConditions{}, false)
+			get, err := blobToLocal.blobURL.Download(blobToLocal.transfer.TransferContext, azblob.BlobRange{SrcOffset: startIndex, Count: adjustedChunkSize}, azblob.BlobAccessConditions{}, false)
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				// TODO consider encapsulating cancel operation on transferMsg
