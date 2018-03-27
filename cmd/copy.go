@@ -370,7 +370,7 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:    common.NewJobID(),
+		 JobID:    common.NewJobID(),
 		FromTo:   cca.fromTo,
 		Priority: common.EJobPriority.Normal(),
 		LogLevel: cca.logVerbosity,

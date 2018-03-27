@@ -87,6 +87,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}else{
 		numChunks = uint32(info.SourceSize / int64(info.BlockSize)) + 1
 	}
+	jptm.SetNumberOfChunks(numChunks)
 
 	blockIds := make([]string, numChunks)
 	blockIdCount := int32(0)
@@ -101,14 +102,14 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 
 		// schedule the chunk job/msg
-		jptm.ScheduleChunks(blockBlobUploadFunc(jptm, srcFile, srcMmf, numChunks, blobUrl, pacer, blockIds, blockIdCount, startIndex, adjustedChunkSize))
+		jptm.ScheduleChunks(blockBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, blockIds, blockIdCount, startIndex, adjustedChunkSize))
 
 		blockIdCount += 1
 	}
 }
 
 // this generates a function which performs the uploading of a single chunk
-func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MMF, totalNumOfChunks uint32, blobURL azblob.BlobURL,
+func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MMF, blobURL azblob.BlobURL,
 														pacer *pacer, blockIds []string, chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		// TODO: remove the mockNum, workerId is not necessary considering  similar thing as gorountine Id is not necessary for debugging
@@ -165,7 +166,7 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
-				if  _,numChunks := jptm.ReportChunkDone(); numChunks == totalNumOfChunks {
+				if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
 					if jptm.ShouldLog(pipeline.LogInfo){
 						jptm.Log(pipeline.LogInfo,
 							fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
@@ -182,7 +183,7 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			//localToBlockBlob.jptm.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
 
 			// step 4: check if this is the last chunk
-			if  _,numChunks := jptm.ReportChunkDone(); numChunks == totalNumOfChunks {
+			if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
 				// If the transfer gets cancelled before the putblock list
 				if jptm.WasCanceled() {
 					transferDone()

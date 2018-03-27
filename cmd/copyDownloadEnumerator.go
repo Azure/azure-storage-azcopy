@@ -80,7 +80,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 			}
 
 			marker = listBlob.NextMarker
-			err = e.dispatchPart(false)
+			//err = e.dispatchPart(false)
 			if err != nil {
 				return err
 			}
@@ -104,7 +104,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 			singleBlobDestinationPath = destinationPath
 		}
 
-		// if the single blob exists, upload it
+		// if the single blob exists, download it
 		if err == nil {
 			e.addTransfer(common.CopyTransfer{
 				Source:           sourceUrl.String(),
@@ -113,7 +113,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 				SourceSize:       blobProperties.ContentLength(),
 			})
 
-			err = e.dispatchPart(false)
+			//err = e.dispatchPart(false)
 			if err != nil {
 				return err
 			}
@@ -155,7 +155,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 				}
 
 				marker = listBlob.NextMarker
-				err = e.dispatchPart(false)
+				//err = e.dispatchPart(false)
 				if err != nil {
 					return err
 				}
@@ -174,8 +174,21 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 }
 
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
-func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer) {
+func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer) (error){
 	e.Transfers = append(e.Transfers, transfer)
+
+	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
+		resp := common.CopyJobPartOrderResponse{}
+		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+
+		if !resp.JobStarted {
+			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+		}
+
+		e.Transfers = []common.CopyTransfer{}
+		e.PartNum++
+	}
+	return nil
 }
 
 // send the current list of transfer to the STE
@@ -187,7 +200,7 @@ func (e *copyDownloadEnumerator) dispatchPart(isFinalPart bool) error {
 
 	e.IsFinalPart = isFinalPart
 	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), e, &resp)
+	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
 	if !resp.JobStarted {
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
