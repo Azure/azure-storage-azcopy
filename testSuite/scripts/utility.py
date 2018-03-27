@@ -40,22 +40,8 @@ class Command(object):
     # this api is used to execute a azcopy copy command.
     # by default, command execute a upload command.
     # return true or false for success or failure of command.
-    def execute_azcopy_copy_command(self, download = None):
-        if download is None:
-            # adding test_container url as a second argument.
-            self.add_arguments(test_container_url)
-        else:
-            # if the copy is to download from container, then container url needs to be added first.
-            # resource_sas is the sas of resource to be downloaded.
-            resource_sas = get_resource_sas(self.args[0])
-
-            # local_path is the location where resouce needs to be downloaded.
-            local_path = test_directory_path
-
-            # since reosource is added first, changing the position of resource_sas and local_path in args list.
-            self.args[0] = resource_sas
-            self.add_arguments(local_path)
-        return execute_azcopy_command(self.string())
+    def execute_azcopy_copy_command(self):
+       return execute_azcopy_command(self.string())
 
     # this api is used to execute a azcopy copy command.
     # by default, command execute a upload command.
@@ -83,10 +69,6 @@ class Command(object):
 
     # api executes the azcopy validator to verify the azcopy operation.
     def execute_azcopy_verify(self):
-        # adds the test_directory.
-        self.add_arguments(test_directory_path)
-        # add the test container url.
-        self.add_arguments(test_container_url)
         return verify_operation(self.string())
 
     # api executes the clean command to delete the blob or container contents.
@@ -269,12 +251,11 @@ def create_partial_sparse_file(filename, filesize):
             total_size = total_size - num_chars
     return file_path
 
-# execute_azcopy_command executes the given azcopy command in "inproc" mode.
+# execute_azcopy_command executes the given azcopy command.
 # returns true / false on success / failure of command.
 def execute_azcopy_command(command):
-    # todo timout to be taken as an argument.
-    # azcopy executable path location concatenated with inproc keyword.
-    azspath = os.path.join(test_directory_path, "azs.exe inproc")
+    # azcopy executable path location.
+    azspath = os.path.join(test_directory_path, "azs.exe")
     cmnd = azspath + " " + command
     try:
         # executing the command with timeout to set 3 minutes / 180 sec.

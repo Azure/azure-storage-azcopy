@@ -1,26 +1,29 @@
-from scripts.test_azcopy_operations import *
-from scripts.test_upload_page_blob import *
-from scripts.test_blob_download import *
-from scripts.test_upload_block_blob import *
+# from ..scripts.test_azcopy_operations import *
+# from ..scripts.test_upload_page_blob import *
+from test_blob_download import *
+from test_upload_block_blob import *
 import sys
 
 def execute_user_scenario_1() :
-    
     test_1kb_blob_upload()
     test_63mb_blob_upload()
     test_n_1kb_blob_upload(5)
-    test_1G_blob_upload()
+    test_1GB_blob_upload()
     test_metaData_content_encoding_content_type()
     test_block_size(4 * 1024 * 1024)
-    test_cancel_job()
-    test_blob_download_63mb_in_4mb()
-    #test_pause_resume_job_200Mb_file()
-    #test_pause_resume_job_95Mb_file()
-    test_page_blob_upload_1mb()
-    test_page_range_for_complete_sparse_file()
-    test_page_blob_upload_partial_sparse_file()
+    test_guess_mime_type()
     test_download_1kb_blob()
+    test_download_perserve_last_modified_time()
+    test_blob_download_63mb_in_4mb()
     test_recursive_download_blob()
+    # test_cancel_job()
+    # test_blob_download_63mb_in_4mb()
+    # #test_pause_resume_job_200Mb_file()
+    # #test_pause_resume_job_95Mb_file()
+    # test_page_blob_upload_1mb()
+    # test_page_range_for_complete_sparse_file()
+    # test_page_blob_upload_partial_sparse_file()
+    # test_recursive_download_blob()
     
 # todo one config file with creds for each os.
 def init():
@@ -43,7 +46,7 @@ def init():
     # test suite executable will be copied to test data folder.
     test_suite_exec_location = "C:\\Go\\externals\\src\\github.com\\Azure\\azure-storage-azcopy\\testSuite\\testSuite.exe"
 
-    if not initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
+    if not util.initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
@@ -51,7 +54,6 @@ def init():
 
 
 def main():
-    print(sys.maxsize)
     init()
     execute_user_scenario_1()
 

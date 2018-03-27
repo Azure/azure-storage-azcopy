@@ -9,7 +9,6 @@ import (
 	"context"
 	"crypto/md5"
 	"strings"
-	"path"
 	"io/ioutil"
 	"net/http"
 	"time"
@@ -21,13 +20,12 @@ import (
 // todo check the number of contents uploaded while verifying.
 
 type TestBlobCommand struct{
-	// name of the resource to be verified locally and on the container.
+	// object is the resource which needs to be validated against a resource on container.
 	Object                string
-	// directory of local path in which all test cases are executed.
-	TestDirPath           string
-	// directory of container in which all test cases are executed.
-	ContainerUrl          string
-	// If the resource to be validated is a directory. //todo: comments more explanatory
+	//Subject is the remote resource against which object needs to be validated.
+	Subject 			 string
+	// IsObjectDirectory defines if the object is a directory or not.
+	// If the object is directory, then validation goes through another path.
 	IsObjectDirectory     bool
 	// Metadata of the blob to be validated.
 	MetaData              string
@@ -61,15 +59,15 @@ func init(){
 		Short:   "tests the blob created using AZCopy v2",
 
 		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) <= 2 {
+			if len(args) != 2 {
 				return fmt.Errorf("invalid arguments for test blob command")
 			}
 			// first argument is the resource name.
 			cmdInput.Object = args[0]
+
 			// second argument is the test directory.
-			cmdInput.TestDirPath = args[1]
-			// third argument is the test container url.
-			cmdInput.ContainerUrl = args[2]
+			cmdInput.Subject = args[1]
+
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -104,18 +102,22 @@ func verifyBlob(testBlobCmd TestBlobCommand){
 
 // verifyBlockBlobDirUpload verifies the directory recursively uploaded to the container.
 func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
-	// parse the container url.
-	sasUrl, err := url.Parse(testBlobCmd.ContainerUrl)
+	// parse the subject url.
+	sasUrl, err := url.Parse(testBlobCmd.Subject)
 	if err != nil{
-		fmt.Println("error parsing the container sas ", testBlobCmd.ContainerUrl)
+		fmt.Println("error parsing the container sas ", testBlobCmd.Subject)
 		os.Exit(1)
 	}
+
+	containerName := strings.SplitAfterN(sasUrl.Path[1:], "/", 2)[0]
+	sasUrl.Path = "/" + containerName
 
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	containerUrl := azblob.NewContainerURL(*sasUrl, p)
 
 	// perform a list blob with search prefix "dirname/"
-	searchPrefix := testBlobCmd.Object + "/"
+	dirName := strings.Split(testBlobCmd.Object, "/")
+	searchPrefix := dirName[len(dirName)-1] + "/"
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix:searchPrefix})
@@ -144,7 +146,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 			}
 
 			// blob path on local disk.
-			objectLocalPath := testBlobCmd.TestDirPath + "/" + blobInfo.Name
+			objectLocalPath := testBlobCmd.Object + "/" + blobInfo.Name
 
 			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
@@ -231,21 +233,19 @@ func validateString(expected string, actual string) (bool){
 // verifySinglePageBlobUpload verifies the pageblob uploaded or downloaded
 // against the blob locally.
 func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
-	// opening the resource on local path.
-	objectLocalPath := path.Join(testBlobCmd.TestDirPath, testBlobCmd.Object)
-	fileInfo, err := os.Stat(objectLocalPath)
+
+	fileInfo, err := os.Stat(testBlobCmd.Object)
 	if err != nil{
 		fmt.Println("error opening the destination blob on local disk ")
 		os.Exit(1)
 	}
-	file, err := os.Open(objectLocalPath)
+	file, err := os.Open(testBlobCmd.Object)
 	if err != nil{
-		fmt.Println("error opening the file ", objectLocalPath)
+		fmt.Println("error opening the file ", testBlobCmd.Object)
 	}
 
 	// getting the shared access signature of the resource.
-	sourceSas := getResourceSas(testBlobCmd.ContainerUrl, testBlobCmd.Object)
-	sourceURL, err := url.Parse(sourceSas)
+	sourceURL, err := url.Parse(testBlobCmd.Subject)
 	if err != nil{
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
 		os.Exit(1)
@@ -282,7 +282,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 	actualMd5 := md5.Sum(mmap)
 	expectedMd5 := md5.Sum(blobBytesDownloaded)
 	if actualMd5 != expectedMd5 {
-		fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5 for blob ", objectLocalPath)
+		fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5 for blob ", testBlobCmd.Object)
 		os.Exit(1)
 	}
 
@@ -335,7 +335,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 // todo close the file as soon as possible.
 func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 	// opening the resource on local path in test directory.
-	objectLocalPath := path.Join(testBlobCmd.TestDirPath, testBlobCmd.Object)
+	objectLocalPath := testBlobCmd.Object
 	fileInfo, err := os.Stat(objectLocalPath)
 	if err != nil{
 		fmt.Println("error opening the destination blob on local disk ")
@@ -347,7 +347,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 	}
 
 	// getting the shared access signature of the resource.
-	sourceSas := getResourceSas(testBlobCmd.ContainerUrl, testBlobCmd.Object)
+	sourceSas := testBlobCmd.Subject
 	fmt.Println("source sas ", sourceSas)
 	sourceURL, err := url.Parse(sourceSas)
 	if err != nil{
@@ -438,7 +438,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 			os.Exit(1)
 		}
 		// todo only commited blocks
-		if numberOfBlocks != (len(resp.CommittedBlocks) + len(resp.UncommittedBlocks)){
+		if numberOfBlocks != (len(resp.CommittedBlocks)){
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}

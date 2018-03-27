@@ -150,7 +150,7 @@ type JobPartPlanTransfer struct {
 	// ChunkCount represents the num of chunks a transfer is split into
 	//ChunkCount uint16	// TODO: Remove this, we need to determine it at runtime
 	// ModifiedTime represents the last time at which source was modified before start of transfer stored as nanoseconds.
-	ModifiedTime uint32
+	ModifiedTime int64
 	// SourceSize represents the actual size of the source on disk
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed

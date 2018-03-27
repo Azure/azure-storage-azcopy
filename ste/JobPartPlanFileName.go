@@ -188,7 +188,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 				SrcOffset:            currentSrcStringOffset, // SrcOffset of the src string
 				SrcLength:            int16(len(order.Transfers[t].Source)),
 				DstLength:            int16(len(order.Transfers[t].Destination)),
-				ModifiedTime:         uint32(order.Transfers[t].LastModifiedTime.UnixNano()),
+				ModifiedTime:         order.Transfers[t].LastModifiedTime.UnixNano(),
 				SourceSize:           order.Transfers[t].SourceSize,
 				CompletionTime:       0,
 				atomicTransferStatus: common.ETransferStatus.NotStarted(), // Default

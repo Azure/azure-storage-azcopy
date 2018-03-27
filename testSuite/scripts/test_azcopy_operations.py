@@ -1,4 +1,4 @@
-from scripts.utility import *
+from ..scripts.utility import *
 
 import time
 

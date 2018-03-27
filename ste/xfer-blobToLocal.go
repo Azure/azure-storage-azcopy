@@ -178,6 +178,8 @@ func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobU
 
 				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {
+					fmt.Println("last modified time ", lastModifiedTime)
+					fmt.Println("destination ", jptm.Info().Destination)
 					err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
 						if jptm.ShouldLog(pipeline.LogInfo) {

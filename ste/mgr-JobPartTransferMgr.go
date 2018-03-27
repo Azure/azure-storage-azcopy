@@ -112,7 +112,7 @@ func (jptm *jobPartTransferMgr) ChunkChannel() (chan <- ChunkMsg){
 func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 	if preserveLastModifiedTime := jptm.jobPartMgr.(*jobPartMgr).localDstData(); preserveLastModifiedTime {
 		lastModifiedTime := jptm.jobPartPlanTransfer.ModifiedTime
-		return time.Unix(0, int64(lastModifiedTime)), true
+		return time.Unix(0, lastModifiedTime), true
 	}
 	return time.Time{}, false
 }
