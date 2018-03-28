@@ -180,13 +180,6 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 
 }
 
-// getResourceSas returns the shared access signature of resource from
-// container url
-func getResourceSas(container_sas string, resource string) (string){
-	parts := strings.Split(container_sas, "?")
-	return parts[0] + "/" + resource + "?" + parts[1]
-}
-
 // validateMetadata compares the meta data provided while
 // uploading and metadata with blob in the container.
 func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metadata) (bool){
@@ -319,7 +312,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
 		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset:0, Count:0}, azblob.BlobAccessConditions{})
 		if err != nil{
-			fmt.Println("error getting the block blob list")
+			fmt.Println("error getting the block blob list ", err.Error())
 			os.Exit(1)
 		}
 		if numberOfPages != (len(resp.PageRange)){

@@ -29,9 +29,15 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"encoding/base64"
 	"bytes"
+	"unsafe"
+	"strings"
 )
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+
+	EndsWith := func(s string, t string) bool{
+		return len(s) >= len(t) && strings.EqualFold(s[len(s)-len(t):], t)
+	}
 
 	info := jptm.Info()
 
@@ -73,44 +79,91 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		return
 	}
 
+	if EndsWith(info.Source, ".vhd") &&
+		(blobSize % 512 == 0){
+		pageBlobUrl := blobUrl.ToPageBlobURL()
+		// todo: remove the hard coded chunk size in case of pageblob
+		chunkSize = (4* 1024 * 1024)
+		// step 2: Get http headers and meta data of page.
+		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
-	// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
-	if blobSize == 0 || blobSize <= chunkSize {
+		// step 3: Create Page Blob of the source size
+		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
+			0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
+		if err != nil {
+			if jptm.ShouldLog(pipeline.LogInfo){
+				jptm.Log(pipeline.LogInfo,
+					fmt.Sprintf("failed since PageCreate failed due to %s", err.Error()))
+			}
+			jptm.Cancel()
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			srcMmf.Unmap()
+			err = srcFile.Close()
+			if err != nil {
+				if jptm.ShouldLog(pipeline.LogInfo){
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
+				}
+			}
+			return
+		}
+		numPages := uint32(0)
+		if rem := blobSize % chunkSize; rem == 0 {
+			numPages = uint32(blobSize / chunkSize)
+		}else{
+			numPages = uint32(blobSize / chunkSize) + 1
+		}
+		jptm.SetNumberOfChunks(numPages)
+		// step 4: Scheduling page range update to the Page Blob created in Step 3
+		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
+			adjustedPageSize := chunkSize
+
+			// compute actual size of the chunk
+			if startIndex+ chunkSize > blobSize {
+				adjustedPageSize = blobSize - startIndex
+			}
+
+			// schedule the chunk job/msg
+			jptm.ScheduleChunks(pageBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, startIndex, adjustedPageSize))
+		}
+	}	else if blobSize == 0 || blobSize <= chunkSize {
+		// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
 		PutBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer)
 		return
-	}
-
-	// step 4.b: get the number of blocks and create a slice to hold the blockIDs of each chunk
-	numChunks := uint32(0)
-	if rem := info.SourceSize % int64(info.BlockSize); rem == 0{
-		numChunks = uint32(info.SourceSize / int64(info.BlockSize))
-	}else{
-		numChunks = uint32(info.SourceSize / int64(info.BlockSize)) + 1
-	}
-	jptm.SetNumberOfChunks(numChunks)
-
-	blockIds := make([]string, numChunks)
-	blockIdCount := int32(0)
-
-	// step 5: go through the file and schedule chunk messages to upload each chunk
-	for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
-		adjustedChunkSize := chunkSize
-
-		// compute actual size of the chunk
-		if startIndex+chunkSize > blobSize {
-			adjustedChunkSize = blobSize - startIndex
+	}	else{
+		// step 4.b: get the number of blocks and create a slice to hold the blockIDs of each chunk
+		numChunks := uint32(0)
+		if rem := info.SourceSize % int64(info.BlockSize); rem == 0{
+			numChunks = uint32(info.SourceSize / int64(info.BlockSize))
+		}else{
+			numChunks = uint32(info.SourceSize / int64(info.BlockSize)) + 1
 		}
+		jptm.SetNumberOfChunks(numChunks)
 
-		// schedule the chunk job/msg
-		jptm.ScheduleChunks(blockBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, blockIds, blockIdCount, startIndex, adjustedChunkSize))
+		blockIds := make([]string, numChunks)
+		blockIdCount := int32(0)
 
-		blockIdCount += 1
+		// step 5: go through the file and schedule chunk messages to upload each chunk
+		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
+			adjustedChunkSize := chunkSize
+
+			// compute actual size of the chunk
+			if startIndex+chunkSize > blobSize {
+				adjustedChunkSize = blobSize - startIndex
+			}
+
+			// schedule the chunk job/msg
+			jptm.ScheduleChunks(blockBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, blockIds, blockIdCount, startIndex, adjustedChunkSize))
+
+			blockIdCount += 1
+		}
 	}
 }
 
 // this generates a function which performs the uploading of a single chunk
 func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MMF, blobURL azblob.BlobURL,
-														pacer *pacer, blockIds []string, chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
+	pacer *pacer, blockIds []string, chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		// TODO: remove the mockNum, workerId is not necessary considering  similar thing as gorountine Id is not necessary for debugging
 		// and the chunkFunc has been changed to the version without param workId
@@ -227,7 +280,7 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 }
 
 func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MMF,
-									blobURL azblob.BlobURL, pacer *pacer) {
+	blobURL azblob.BlobURL, pacer *pacer) {
 
 	// transform blobURL and perform put blob operation
 	blockBlobUrl := blobURL.ToBlockBlobURL()
@@ -284,5 +337,103 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	// closing the put blob response body
 	if putBlobResp != nil {
 		putBlobResp.Response().Body.Close()
+	}
+}
+
+func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MMF, blobUrl azblob.BlobURL, pacer *pacer, startPage int64, pageSize int64) chunkFunc {
+	return func(workerId int) {
+		// pageDone is the function called after success / failure of each page.
+		// If the calling page is the last page of transfer, then it updates the transfer status,
+		// mark transfer done, unmap the source memory map and close the source file descriptor.
+		pageDone := func(status common.TransferStatus) {
+			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
+				// Transfer status
+				if status != common.ETransferStatus.Started() {
+					jptm.SetStatus(status)
+				}
+				if jptm.ShouldLog(pipeline.LogInfo){
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
+				}
+				jptm.ReportTransferDone()
+				srcMmf.Unmap()
+				err := srcFile.Close()
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogInfo){
+						jptm.Log(pipeline.LogInfo,
+							fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
+					}
+				}
+			}
+		}
+
+		if jptm.WasCanceled() {
+			if jptm.ShouldLog(pipeline.LogInfo){
+				jptm.Log(pipeline.LogInfo,
+					fmt.Sprintf("is cancelled. Hence not picking up page %d", startPage))
+			}
+			pageDone(common.ETransferStatus.Started())
+		} else {
+			// pageBytes is the byte slice of Page for the given page range
+			pageBytes := srcMmf[startPage : startPage+pageSize]
+			// converted the bytes slice to int64 array.
+			// converting each of 8 bytes of byteSlice to an integer.
+			int64Slice := (*(*[]int64)(unsafe.Pointer(&pageBytes)))[:len(pageBytes)/8]
+
+			allBytesZero := true
+			// Iterating though each integer of in64 array to check if any of the number is greater than 0 or not.
+			// If any no is greater than 0, it means that the 8 bytes slice represented by that integer has atleast one byte greater than 0
+			// If all integers are 0, it means that the 8 bytes slice represented by each integer has no byte greater than 0
+			for index := 0; index < len(int64Slice); index++ {
+				if int64Slice[index] > 0 {
+					// If one number is greater than 0, then we need to perform the PutPage update.
+					allBytesZero = false
+					break
+				}
+			}
+
+			// If all the bytes in the pageBytes is 0, then we do not need to perform the PutPage
+			// Updating number of chunks done.
+			if allBytesZero {
+				if jptm.ShouldLog(pipeline.LogInfo){
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("has worker %d which is not performing PutPages for Page range from %d to %d since all the bytes are zero", workerId, startPage, startPage+pageSize))
+				}
+				pageDone(common.ETransferStatus.Success())
+				return
+			}
+
+			body := newRequestBodyPacer(bytes.NewReader(pageBytes), pacer)
+			pageBlobUrl := blobUrl.ToPageBlobURL()
+			_, err := pageBlobUrl.UploadPages(jptm.Context(), startPage, body, azblob.BlobAccessConditions{})
+			if err != nil {
+				status := common.ETransferStatus.Started()
+				if jptm.WasCanceled() {
+					if jptm.ShouldLog(pipeline.LogInfo){
+						jptm.Log(pipeline.LogInfo,
+							fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because transfer was cancelled", workerId, startPage, startPage+pageSize))
+					}
+				} else {
+					if jptm.ShouldLog(pipeline.LogInfo){
+						jptm.Log(pipeline.LogInfo,
+							fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage+pageSize, err.Error()))
+					}
+					// cancelling the transfer
+					jptm.Cancel()
+					status = common.ETransferStatus.Failed()
+				}
+				pageDone(status)
+				return
+			}
+			if jptm.ShouldLog(pipeline.LogInfo){
+				jptm.Log(pipeline.LogInfo,
+					fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
+			}
+
+			//todo updating the through put counter of the Job
+
+			pageDone(common.ETransferStatus.Success())
+
+		}
 	}
 }

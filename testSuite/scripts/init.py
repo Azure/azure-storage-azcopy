@@ -1,7 +1,6 @@
-# from ..scripts.test_azcopy_operations import *
-# from ..scripts.test_upload_page_blob import *
 from test_blob_download import *
 from test_upload_block_blob import *
+from test_upload_page_blob import *
 import sys
 
 def execute_user_scenario_1() :
@@ -20,10 +19,9 @@ def execute_user_scenario_1() :
     # test_blob_download_63mb_in_4mb()
     # #test_pause_resume_job_200Mb_file()
     # #test_pause_resume_job_95Mb_file()
-    # test_page_blob_upload_1mb()
-    # test_page_range_for_complete_sparse_file()
-    # test_page_blob_upload_partial_sparse_file()
-    # test_recursive_download_blob()
+    test_page_blob_upload_1mb()
+    test_page_range_for_complete_sparse_file()
+    test_page_blob_upload_partial_sparse_file()
     
 # todo one config file with creds for each os.
 def init():
