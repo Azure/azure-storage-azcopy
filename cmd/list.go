@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
@@ -99,36 +98,27 @@ func HandleListCommand(listRequest common.ListRequest) {
 		return
 	}
 
-	var response []byte
-
 	rpcCmd := common.ERpcCmd.None()
 	if listRequest.JobID.IsEmpty() {
+		resp := common.ListJobsResponse{}
 		rpcCmd = common.ERpcCmd.ListJobs()
+		Rpc(rpcCmd, listRequest, &resp)
+		PrintExistingJobIds(resp)
 	} else if listRequest.OfStatus == "" {
+		resp := common.ListJobSummaryResponse{}
 		rpcCmd = common.ERpcCmd.ListJobSummary()
+		Rpc(rpcCmd, &listRequest.JobID, &resp)
+		PrintJobProgressSummary(resp)
 	} else {
+		resp := common.ListJobTransfersResponse{}
 		rpcCmd = common.ERpcCmd.ListJobTransfers()
-	}
-	resp := common.ListJobsResponse{}
-	Rpc(rpcCmd, listRequest, &resp)
-
-	// list Order command requested the list of existing jobs
-	if listRequest.JobID.IsEmpty() {
-		PrintExistingJobIds(response)
-	} else if listRequest.OfStatus == "" { //list Order command requested the progress summary of an existing job
-		PrintJobProgressSummary(response)
-	} else { //list Order command requested the list of specific transfer of an existing job
-		PrintJobTransfers(response)
+		Rpc(rpcCmd, listRequest, &resp)
+		PrintJobTransfers(resp)
 	}
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(data []byte) {
-	var listJobResponse common.ListJobsResponse
-	err := json.Unmarshal(data, &listJobResponse)
-	if err != nil {
-		panic(err)
-	}
+func PrintExistingJobIds(listJobResponse common.ListJobsResponse) {
 	if listJobResponse.ErrorMessage != "" {
 		fmt.Println(fmt.Sprintf("request failed with following error message %s", listJobResponse.ErrorMessage))
 		return
@@ -141,12 +131,7 @@ func PrintExistingJobIds(data []byte) {
 }
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
-func PrintJobTransfers(data []byte) {
-	var listTransfersResponse common.ListJobTransfersResponse
-	err := json.Unmarshal(data, &listTransfersResponse)
-	if err != nil {
-		panic(err)
-	}
+func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 	if listTransfersResponse.ErrorMsg != "" {
 		fmt.Println(fmt.Sprintf("request failed with following message %s", listTransfersResponse.ErrorMsg))
 		return
@@ -160,13 +145,7 @@ func PrintJobTransfers(data []byte) {
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
-func PrintJobProgressSummary(summaryData []byte) {
-	var summary common.ListJobSummaryResponse
-	err := json.Unmarshal(summaryData, &summary)
-	if err != nil {
-		panic(fmt.Errorf("error unmarshaling the progress summary. Failed with error %s", err.Error()))
-		return
-	}
+func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 	if summary.ErrorMsg != "" {
 		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMsg))
 		return
