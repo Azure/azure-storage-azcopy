@@ -56,6 +56,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %s", info.SourceSize))
 		}
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -65,6 +66,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error getting the source file Info of file %s", info.SourceSize))
 		}
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -75,6 +77,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 		srcFile.Close()
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -219,6 +222,9 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
+				//adding the chunk size to the bytes transferred to report the progress.
+				jptm.AddToBytesTransferred(adjustedChunkSize)
+
 				if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
 					if jptm.ShouldLog(pipeline.LogInfo){
 						jptm.Log(pipeline.LogInfo,
@@ -233,7 +239,8 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				putBlockResponse.Response().Body.Close()
 			}
 
-			//localToBlockBlob.jptm.jobInfo.JobThroughPut.updateCurrentBytes(adjustedChunkSize)
+			//adding the chunk size to the bytes transferred to report the progress.
+			jptm.AddToBytesTransferred(adjustedChunkSize)
 
 			// step 4: check if this is the last chunk
 			if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
@@ -318,6 +325,8 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 		jptm.SetStatus(common.ETransferStatus.Success())
 	}
 
+	// adding the bytes transferred to report the progress of transfer.
+	jptm.AddToBytesTransferred(jptm.Info().SourceSize)
 	// updating number of transfers done for job part order
 	jptm.ReportTransferDone()
 
@@ -346,6 +355,8 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 		// If the calling page is the last page of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		pageDone := func(status common.TransferStatus) {
+			// adding the page size to the bytes transferred.
+			jptm.AddToBytesTransferred(pageSize)
 			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
 				// Transfer status
 				if status != common.ETransferStatus.Started() {
@@ -429,8 +440,6 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 				jptm.Log(pipeline.LogInfo,
 					fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
 			}
-
-			//todo updating the through put counter of the Job
 
 			pageDone(common.ETransferStatus.Success())
 

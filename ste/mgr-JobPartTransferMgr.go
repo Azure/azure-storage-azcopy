@@ -23,6 +23,7 @@ type IJobPartTransferMgr interface {
 	SetNumberOfChunks(numChunks uint32)
 	ReportTransferDone() (lastTransfer bool, transfersDone uint32)
 	ScheduleChunks(chunkFunc chunkFunc)
+	AddToBytesTransferred(value int64) int64
 	Cancel()
 	WasCanceled() bool
 	common.ILogger
@@ -97,6 +98,10 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc){
 
 func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
+}
+
+func (jptm *jobPartTransferMgr) AddToBytesTransferred(value int64) int64{
+	return jptm.jobPartMgr.AddToBytesTransferred(value)
 }
 
 /*func (jptm *jobPartTransferMgr) SetChunkChannel(chunkChannel chan <- ChunkMsg) {

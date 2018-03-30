@@ -28,9 +28,21 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"net/http"
+	"math"
 )
 
 var steCtx = context.Background()
+
+// round api rounds up the float number after the decimal point.
+func round(num float64) int {
+	return int(num + math.Copysign(0.5, num))
+}
+
+// toFixed api returns the float number precised upto given decimal places.
+func toFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return float64(round(num * output)) / output
+}
 
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrentConnections int, targetRateInMBps int64) error {
@@ -279,13 +291,20 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		CompleteJobOrdered: false,                           // default to false; returns true if ALL job parts have been ordered
 		FailedTransfers:    []common.TransferDetail{},
 	}
-	
+
+	totalBytesToTransfer := int64(0)
+	totalBytesTransferred := int64(0)
+
 	for partNum := PartNumber(0); true; partNum++ {
 		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
 		jpm, found := jm.JobPartMgr(partNum)
 		if !found {
 			break
 		}
+
+		totalBytesToTransfer += jpm.BytesToTransfer()
+		totalBytesTransferred += jpm.BytesTransferred()
+
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalNumberOfTransfers += jpp.NumTransfers
@@ -312,25 +331,15 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		}
 	}
 
+	// calculating the progress of Job and rounding the progress upto 4 decimal.
+	js.JobProgress = toFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)
+
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
 	if (js.CompleteJobOrdered) && (js.TotalNumberOfTransfers == js.TotalNumberOfFailedTransfer+js.TotalNumberOfTransferCompleted) {
 		js.JobStatus = common.JobStatus{}.Completed()
 	}
-	/*
-		// get the throughput counts
-		jobThroughput:= jm.Throughput()
-		numOfBytesTransferredSinceLastCheckpoint := jobThroughput.CurrentBytes() - jobThroughput.LastCheckedBytes()
-		if numOfBytesTransferredSinceLastCheckpoint == 0 {
-			js.ThroughputInBytesPerSeconds = 0
-		} else {
-			js.ThroughputInBytesPerSeconds = float64(numOfBytesTransferredSinceLastCheckpoint) /
-				time.Since(jobThroughput.LastCheckedTime()).Seconds()
-		}
-		// update the throughput state
-		jobInfo.JobThroughPut.updateLastCheckedBytes(jobInfo.JobThroughPut.getCurrentBytes())
-		jobInfo.JobThroughPut.updateLastCheckTime(time.Now())
-	*/
+
 	return js
 }
 

@@ -158,18 +158,10 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID) common.JobStatus {
 	tm.MoveCursor(1, 1)
 
 	fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
-	tm.Println("Total Number of Transfers: ", summary.TotalNumberOfTransfers)
-	tm.Println("Total Number of Transfers Completed: ", summary.TotalNumberOfTransferCompleted)
-	tm.Println("Total Number of Transfers Failed: ", summary.TotalNumberOfFailedTransfer)
-	tm.Println("Job order fully received: ", summary.CompleteJobOrdered)
-
-	tm.Println(fmt.Sprintf("Job Progress: %d %%", (summary.TotalNumberOfTransferCompleted+summary.TotalNumberOfFailedTransfer)/summary.TotalNumberOfTransfers*100))
-	tm.Println(fmt.Sprintf("Realtime Throughput: %f MB/s", summary.ThroughputInBytesPerSeconds/1024/1024))
-
-	for index := 0; index < len(summary.FailedTransfers); index++ {
-		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
-		fmt.Println(message)
-	}
+	message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
+		summary.JobProgress, 0, summary.TotalNumberOfTransfers, summary.TotalNumberOfTransferCompleted, summary.TotalNumberOfFailedTransfer,
+			summary.TotalNumberOfTransfers - (summary.TotalNumberOfTransferCompleted + summary.TotalNumberOfFailedTransfer), summary.CompleteJobOrdered)
+	fmt.Println(message)
 	tm.Flush()
 
 	return summary.JobStatus

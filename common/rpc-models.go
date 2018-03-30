@@ -81,8 +81,7 @@ type ListJobSummaryResponse struct {
 	TotalNumberOfTransfers         uint32
 	TotalNumberOfTransferCompleted uint32
 	TotalNumberOfFailedTransfer    uint32
-	//NumberOfTransferCompletedafterCheckpoint uint32
-	//NumberOfTransferFailedAfterCheckpoint    uint32
+	JobProgress					   float64
 	FailedTransfers             []TransferDetail
 	ThroughputInBytesPerSeconds float64
 }

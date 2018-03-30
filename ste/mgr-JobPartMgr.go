@@ -19,6 +19,10 @@ type IJobPartMgr interface {
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() (lastTransfer bool, transfersCompleted uint32)
 	ScheduleChunks(chunkFunc chunkFunc)
+	AddToBytesTransferred(value int64) int64
+	AddToBytesToTransfer(value int64) int64
+	BytesTransferred() int64
+	BytesToTransfer() int64
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -52,6 +56,10 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
+
+	bytesTransferred int64
+
+	totalBytesToTransfer int64
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
@@ -89,8 +97,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
+		jpm.AddToBytesToTransfer(jppt.SourceSize)
 		if ts := jppt.TransferStatus(); ts == common.ETransferStatus.Success() || ts == common.ETransferStatus.Failed() {
 			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
+			jpm.AddToBytesTransferred(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
 			continue
 		}
 
@@ -131,6 +141,22 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
 		})
 	}
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
+}
+
+func (jpm *jobPartMgr) AddToBytesTransferred(value int64) (int64) {
+	return atomic.AddInt64(&jpm.bytesTransferred, value)
+}
+
+func (jpm *jobPartMgr) AddToBytesToTransfer(value int64) (int64) {
+	return atomic.AddInt64(&jpm.totalBytesToTransfer, value)
+}
+
+func (jpm *jobPartMgr) BytesTransferred() int64{
+	return atomic.LoadInt64(&jpm.bytesTransferred)
+}
+
+func (jpm *jobPartMgr) BytesToTransfer() int64{
+	return atomic.LoadInt64(&jpm.totalBytesToTransfer)
 }
 
 func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {

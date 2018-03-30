@@ -42,6 +42,13 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 	downloadChunkSize := int64(info.BlockSize)
 	numChunks := uint32(0)
 
+	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
+	if jptm.WasCanceled(){
+		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.ReportTransferDone()
+		return
+	}
+
 	// step 3: prep local file before download starts
 	if blobSize == 0 {
 		createEmptyFile(info.Destination)
@@ -107,6 +114,8 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
+			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
+			jptm.AddToBytesTransferred(adjustedChunkSize)
 			lastChunk, _ := jptm.ReportChunkDone()
 			if lastChunk {
 				if jptm.ShouldLog(pipeline.LogInfo) {
@@ -153,7 +162,8 @@ func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobU
 				chunkDone()
 				return
 			}
-			//TODO: add throughput for job
+
+
 			lastChunk, nc := jptm.ReportChunkDone()
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("is last chunk %s and no of chunk %d", lastChunk, nc))
 			// step 3: check if this is the last chunk
