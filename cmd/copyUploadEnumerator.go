@@ -7,12 +7,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 type copyUploadEnumerator common.CopyJobPartOrderRequest
 
 // accept a new transfer, if the threshold is reached, dispatch a job part order
-func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer) error {
+func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
+								waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	e.Transfers = append(e.Transfers, transfer)
 
 	// TODO move this to appropriate location
@@ -31,7 +33,11 @@ func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer) error {
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
 		}
-
+		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+		if e.PartNum == 0 {
+			wg.Add(1)
+			go waitUntilJobCompletion(e.JobID, wg)
+		}
 		e.Transfers = []common.CopyTransfer{}
 		e.PartNum++
 	}
@@ -53,7 +59,8 @@ func (e *copyUploadEnumerator) dispatchFinalPart() error {
 }
 
 // this function accepts the list of files/directories to transfer and processes them
-func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst string) error {
+func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
+								waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 
 	// attempt to parse the destination url
@@ -87,7 +94,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 				Destination:      destinationUrl.String(),
 				LastModifiedTime: f.ModTime(),
 				SourceSize:       f.Size(),
-			})
+			}, wg, waitUntilJobCompletion)
 
 			if err != nil {
 				return err
@@ -130,7 +137,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 							Destination:      destinationUrl.String(),
 							LastModifiedTime: f.ModTime(),
 							SourceSize:       f.Size(),
-						})
+						}, wg, waitUntilJobCompletion)
 						if err != nil {
 							return err
 						}
@@ -145,7 +152,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					Destination:      destinationUrl.String(),
 					LastModifiedTime: f.ModTime(),
 					SourceSize:       f.Size(),
-				})
+				}, wg, waitUntilJobCompletion)
 				if err != nil {
 					return err
 				}

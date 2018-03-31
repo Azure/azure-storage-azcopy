@@ -36,6 +36,7 @@ import (
 	"os/signal"
 	"sync/atomic"
 	"time"
+	"sync"
 )
 
 // upload related
@@ -384,14 +385,20 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
+	// wait group to monitor the go routines fetching the job progress summary
+	var wg sync.WaitGroup
+	// lastPartNumber determines the last part number order send for the Job.
+	var lastPartNumber common.PartNumber
 	// depending on the source and destination type, we process the cp command differently
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
 		e := copyUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobLocal():
 		e := copyDownloadEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
 	}
 
 	if err != nil {
@@ -405,11 +412,16 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return nil
 	}
 
-	cca.waitUntilJobCompletion(jobPartOrder.JobID)
+	// If there is only one, part then start fetching the JobPart Order.
+	if lastPartNumber == 0 {
+		wg.Add(1)
+		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
+	}
+	wg.Wait()
 	return nil
 }
 
-func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID) {
+func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
 	// created a signal channel to receive the Interrupt and Kill signal send to OS
 	cancelChannel := make(chan os.Signal, 1)
 	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
@@ -435,6 +447,7 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID) {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+	wg.Done()
 }
 
 func isStdinPipeIn() (bool, error) {

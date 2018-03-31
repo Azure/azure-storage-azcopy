@@ -75,9 +75,13 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 		dstFile, err := createFileOfSize(info.Destination, blobSize)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally")
+				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error " + err.Error())
 			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
 		}
+		
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
 			dstFile.Close()

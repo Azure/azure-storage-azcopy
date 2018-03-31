@@ -8,12 +8,14 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
 	"strings"
+	"sync"
 )
 
 type copyDownloadEnumerator common.CopyJobPartOrderRequest
 
 // this function accepts a url (with or without *) to blobs for download and processes them
-func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string) error {
+func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
+								wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
@@ -76,7 +78,8 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 					Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
 					Destination:      util.generateLocalPath(destinationPath, blobNameAfterPrefix),
 					LastModifiedTime: blobInfo.Properties.LastModified,
-					SourceSize:       *blobInfo.Properties.ContentLength})
+					SourceSize:       *blobInfo.Properties.ContentLength},
+					wg, waitUntilJobCompletion)
 			}
 
 			marker = listBlob.NextMarker
@@ -111,7 +114,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 				Destination:      singleBlobDestinationPath,
 				LastModifiedTime: blobProperties.LastModified(),
 				SourceSize:       blobProperties.ContentLength(),
-			})
+			}, wg, waitUntilJobCompletion)
 
 			//err = e.dispatchPart(false)
 			if err != nil {
@@ -151,7 +154,9 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
 						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name)),
 						LastModifiedTime: blobInfo.Properties.LastModified,
-						SourceSize:       *blobInfo.Properties.ContentLength})
+						SourceSize:       *blobInfo.Properties.ContentLength},
+						wg,
+						waitUntilJobCompletion)
 				}
 
 				marker = listBlob.NextMarker
@@ -174,7 +179,8 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 }
 
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
-func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer) (error){
+func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
+								waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error){
 	e.Transfers = append(e.Transfers, transfer)
 
 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
@@ -185,11 +191,16 @@ func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer) (erro
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
 		}
 
+		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+		if e.PartNum == 0{
+			go waitUntilJobCompletion(e.JobID, wg)
+		}
 		e.Transfers = []common.CopyTransfer{}
 		e.PartNum++
 	}
 	return nil
 }
+
 
 // send the current list of transfer to the STE
 func (e *copyDownloadEnumerator) dispatchPart(isFinalPart bool) error {
