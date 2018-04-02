@@ -23,6 +23,7 @@ type IJobPartMgr interface {
 	AddToBytesToTransfer(value int64) int64
 	BytesTransferred() int64
 	BytesToTransfer() int64
+	RescheduleTransfer(jptm IJobPartTransferMgr)
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -124,6 +125,10 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	JobsAdmin.ScheduleChunk(jpm.priority, chunkFunc)
+}
+
+func (jpm *jobPartMgr)RescheduleTransfer(jptm IJobPartTransferMgr){
+	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){

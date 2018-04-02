@@ -64,7 +64,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 			listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
 				azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 			if err != nil {
-				return errors.New("cannot list blobs for download")
+				return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 			}
 
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
@@ -145,7 +145,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 				listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
 					azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 				if err != nil {
-					return errors.New("cannot list blobs for download")
+					return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 				}
 
 				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)

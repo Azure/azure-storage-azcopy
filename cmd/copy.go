@@ -529,7 +529,7 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
 
 	// options
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 4*1024*1024, "Use this block size when uploading to Azure Storage.")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 100*1024*1024, "Use this block size when uploading to Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobTier, "blob-tier", "", "Upload to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")

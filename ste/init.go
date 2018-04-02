@@ -295,16 +295,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	totalBytesToTransfer := int64(0)
 	totalBytesTransferred := int64(0)
 
-	for partNum := PartNumber(0); true; partNum++ {
-		// currentJobPartPlanInfo represents the memory map JobPartPlanHeader for current partNo
-		jpm, found := jm.JobPartMgr(partNum)
-		if !found {
-			break
-		}
-
+	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr){
 		totalBytesToTransfer += jpm.BytesToTransfer()
 		totalBytesTransferred += jpm.BytesTransferred()
-
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalNumberOfTransfers += jpp.NumTransfers
@@ -329,7 +322,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 						TransferStatus: common.ETransferStatus.Failed()}) // TODO: Optimize
 			}
 		}
-	}
+	})
 
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
 	js.JobProgress = toFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)

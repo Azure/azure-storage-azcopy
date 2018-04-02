@@ -77,11 +77,18 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error " + err.Error())
 			}
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
+			if strings.Contains(err.Error(), "too many open files"){
+				// dst file could not be created because azcopy process
+				// reached the open file descriptor limit set for each process.
+				// Rescheduling the transfer.
+				jptm.RescheduleTransfer()
+			}else{
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
 			return
 		}
-		
+
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
 			dstFile.Close()

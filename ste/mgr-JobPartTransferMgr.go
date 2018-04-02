@@ -22,6 +22,7 @@ type IJobPartTransferMgr interface {
 	SetStatus(status common.TransferStatus)
 	SetNumberOfChunks(numChunks uint32)
 	ReportTransferDone() (lastTransfer bool, transfersDone uint32)
+	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
 	AddToBytesTransferred(value int64) int64
 	Cancel()
@@ -90,6 +91,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 
 func (jptm *jobPartTransferMgr) Context() context.Context{
 	return jptm.ctx
+}
+
+func (jptm *jobPartTransferMgr) RescheduleTransfer() {
+	jptm.jobPartMgr.RescheduleTransfer(jptm)
 }
 
 func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc){
