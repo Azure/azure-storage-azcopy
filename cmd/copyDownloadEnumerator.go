@@ -193,6 +193,8 @@ func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer, wg *s
 
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNum == 0{
+			// adding go routine to the wait group.
+			wg.Add(1)
 			go waitUntilJobCompletion(e.JobID, wg)
 		}
 		e.Transfers = []common.CopyTransfer{}

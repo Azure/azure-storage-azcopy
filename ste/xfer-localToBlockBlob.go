@@ -91,6 +91,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
 		// step 3: Create Page Blob of the source size
+		jptm.AddToBytesOverWire(uint64(blobSize))
 		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
 			0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
@@ -199,6 +200,9 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			blockIds[chunkId] = encodedBlockId
 
 			// step 3: perform put block
+			// adding the adjustedChunkSize to bytesOverWire for throughput.
+			jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
+
 			blockBlobUrl := blobURL.ToBlockBlobURL()
 
 			body := newRequestBodyPacer(bytes.NewReader(srcMmf[startIndex:startIndex+adjustedChunkSize]), pacer)
@@ -260,6 +264,8 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				// fetching the metadata passed with the JobPartOrder
 				blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
+				jptm.AddToBytesOverWire(uint64(len(blockId) * len(blockIds)))
+
 				putBlockListResponse, err := blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 				if err != nil {
 					if jptm.ShouldLog(pipeline.LogInfo){
@@ -296,6 +302,8 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	var putBlobResp *azblob.BlobsPutResponse
 	var err error
 
+	// add blobSize to bytesOverWire.
+	jptm.AddToBytesOverWire(uint64(jptm.Info().SourceSize))
 	// take care of empty blobs
 	if jptm.Info().SourceSize == 0 {
 		putBlobResp, err = blockBlobUrl.Upload(jptm.Context(), nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
@@ -414,6 +422,8 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 				return
 			}
 
+			//adding pageSize to bytesOverWire for throughput.
+			jptm.AddToBytesOverWire(uint64(pageSize))
 			body := newRequestBodyPacer(bytes.NewReader(pageBytes), pacer)
 			pageBlobUrl := blobUrl.ToPageBlobURL()
 			_, err := pageBlobUrl.UploadPages(jptm.Context(), startPage, body, azblob.BlobAccessConditions{})

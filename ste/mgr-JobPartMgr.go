@@ -58,8 +58,11 @@ type jobPartMgr struct {
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
 
+	// bytes transferred defines the number of bytes of a job part that are uploaded or downloaded successfully.
 	bytesTransferred int64
 
+	// totalBytesToTransfer defines the total number of bytes of JobPart that needs to uploaded or downloaded.
+	// It is the sum of size of all the transfer of a job part.
 	totalBytesToTransfer int64
 }
 

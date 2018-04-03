@@ -38,8 +38,8 @@ func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
 }
 
-// toFixed api returns the float number precised upto given decimal places.
-func toFixed(num float64, precision int) float64 {
+// ToFixed api returns the float number precised upto given decimal places.
+func ToFixed(num float64, precision int) float64 {
 	output := math.Pow(10, float64(precision))
 	return float64(round(num * output)) / output
 }
@@ -325,8 +325,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	})
 
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
-	js.JobProgress = toFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)
-
+	js.JobProgress = ToFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)
+	js.BytesOverWire = JobsAdmin.BytesOverWire()
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
 	if (js.CompleteJobOrdered) && (js.TotalNumberOfTransfers == js.TotalNumberOfFailedTransfer+js.TotalNumberOfTransferCompleted) {

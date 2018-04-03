@@ -47,7 +47,7 @@ func mainWithExitCode() exitCode {
 		return exitCode{}.success()
 	}
 
-	go ste.MainSTE(100, 500)
+	go ste.MainSTE(100, 2000)
 	cmd.Execute()
 	return exitCode{}.success()
 	//

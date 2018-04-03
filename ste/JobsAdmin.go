@@ -30,6 +30,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"sync/atomic"
 )
 
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
@@ -48,6 +49,11 @@ var JobsAdmin interface {
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
 	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
 	ResurrectJobParts()
+
+	// adds given value to the bytesOverWire.
+	AddToBytesOverWire(value uint64)
+	// returns the current value of bytesOverWire.
+	BytesOverWire() uint64
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -155,6 +161,9 @@ type jobsAdmin struct {
 	appCtx              context.Context
 	pacer               *pacer
 	numOfEngineWorker   int
+	// bytesOverWire defines the total bytes sent from azcopy to the service through sdk.
+	// It is used to calculated the throughput of azcopy.
+	bytesOverWire uint64
 }
 
 type CoordinatorChannels struct {
@@ -227,6 +236,14 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 	default:
 		ja.Panic(fmt.Errorf("invalid priority: %q", priority))
 	}
+}
+
+func(ja *jobsAdmin) AddToBytesOverWire(value uint64){
+	atomic.AddUint64(&ja.bytesOverWire, value)
+}
+
+func(ja *jobsAdmin) BytesOverWire() uint64{
+	return atomic.LoadUint64(&ja.bytesOverWire)
 }
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile

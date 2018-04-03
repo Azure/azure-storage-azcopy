@@ -407,13 +407,13 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// in background mode we would spit out the job id and quit
 	// in foreground mode we would continuously print out status updates for the job, so the job id is not important
-	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
 	if cca.background {
 		return nil
 	}
 
 	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
+		fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
 		wg.Add(1)
 		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
 	}
@@ -429,6 +429,8 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 
 	// waiting for signals from either cancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
+	lastCheckedTime := time.Now()
+	lastCheckedBytes := uint64(0)
 	for {
 		select {
 		case <-cancelChannel:
@@ -436,7 +438,7 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			cookedCancelCmdArgs{jobID: jobID}.process()
 			os.Exit(1)
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &lastCheckedTime, &lastCheckedBytes)
 
 			// happy ending to the front end
 			if jobStatus == common.EJobStatus.Completed() {
@@ -444,7 +446,7 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 		}
 	}
 	wg.Done()

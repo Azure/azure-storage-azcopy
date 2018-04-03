@@ -29,6 +29,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 const (
@@ -149,7 +151,7 @@ func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
 	return blockIDBinaryToBase64(binaryBlockID)
 }
 
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID) common.JobStatus {
+func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, lastCheckedTime *time.Time, lastCheckBytes *uint64) common.JobStatus {
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
@@ -158,8 +160,12 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID) common.JobStatus {
 	tm.MoveCursor(1, 1)
 
 	fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
+	throughPut := float64(float64(summary.BytesOverWire - *lastCheckBytes) / time.Since(*lastCheckedTime).Seconds())
+	throughPut = throughPut / float64(1024 * 1024)
+	*lastCheckedTime = time.Now()
+	*lastCheckBytes = summary.BytesOverWire
 	message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
-		summary.JobProgress, 0, summary.TotalNumberOfTransfers, summary.TotalNumberOfTransferCompleted, summary.TotalNumberOfFailedTransfer,
+		summary.JobProgress, ste.ToFixed(throughPut, 4), summary.TotalNumberOfTransfers, summary.TotalNumberOfTransferCompleted, summary.TotalNumberOfFailedTransfer,
 			summary.TotalNumberOfTransfers - (summary.TotalNumberOfTransferCompleted + summary.TotalNumberOfFailedTransfer), summary.CompleteJobOrdered)
 	fmt.Println(message)
 	tm.Flush()

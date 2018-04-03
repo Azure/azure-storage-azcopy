@@ -145,7 +145,8 @@ func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobU
 		if jptm.WasCanceled() {
 			chunkDone()
 		} else {
-			// step 1: perform get
+			// step 1: adding the chunks size to bytesOverWire and perform get
+			jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
 			get, err := transferBlobURL.Download(jptm.Context(), startIndex, adjustedChunkSize, azblob.BlobAccessConditions{}, false)
 			if err != nil {
 				if !jptm.WasCanceled() {

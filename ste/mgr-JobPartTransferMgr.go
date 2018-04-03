@@ -25,6 +25,7 @@ type IJobPartTransferMgr interface {
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
 	AddToBytesTransferred(value int64) int64
+	AddToBytesOverWire(value uint64)
 	Cancel()
 	WasCanceled() bool
 	common.ILogger
@@ -107,6 +108,10 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer common.MMF) (headers 
 
 func (jptm *jobPartTransferMgr) AddToBytesTransferred(value int64) int64{
 	return jptm.jobPartMgr.AddToBytesTransferred(value)
+}
+
+func (jptm *jobPartTransferMgr) AddToBytesOverWire(value uint64){
+	JobsAdmin.AddToBytesOverWire(value)
 }
 
 /*func (jptm *jobPartTransferMgr) SetChunkChannel(chunkChannel chan <- ChunkMsg) {
