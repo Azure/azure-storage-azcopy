@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"net/http"
+	"time"
 )
 
 // Global singleton for sending RPC requests from the frontend to the STE
@@ -21,6 +22,13 @@ var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
 
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
 func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
+	// waiting for JobsAdmin to initialize before the request are send to transfer engine.
+	for {
+		if ste.JobsAdmin != nil{
+			break;
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
 	switch rpcCmd {
 	case common.ERpcCmd.CopyJobPartOrder():
 		*(responseData.(*common.CopyJobPartOrderResponse)) = ste.ExecuteNewCopyJobPartOrder(*requestData.(*common.CopyJobPartOrderRequest))
