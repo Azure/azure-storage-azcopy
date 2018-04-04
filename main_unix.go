@@ -24,8 +24,21 @@ package main
 
 import (
 	"os/exec"
+	"os"
+	"path"
 )
 
 func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 	return cmd
+}
+
+// GetAzCopyAppPath returns the path of Azcopy folder in local appdata.
+// Azcopy folder in local appdata contains all the files created by azcopy locally.
+func GetAzCopyAppPath() string{
+	localAppData := os.Getenv("HOME")
+	azcopyAppDataFolder := path.Join(localAppData, "/.cache/Azcopy")
+	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err){
+		return ""
+	}
+	return azcopyAppDataFolder
 }

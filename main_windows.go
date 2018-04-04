@@ -23,6 +23,8 @@ package main
 import (
 	"os/exec"
 	"syscall"
+	"os"
+	"path"
 )
 
 func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
@@ -32,4 +34,14 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
 	}
 	return cmd
+}
+
+// GetAzCopyAppPath returns the path of Azcopy in local appdata.
+func GetAzCopyAppPath() string{
+	localAppData := os.Getenv("LOCALAPPDATA")
+	azcopyAppDataFolder := path.Join(localAppData, "\\Azcopy")
+	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err){
+		return ""
+	}
+	return azcopyAppDataFolder
 }

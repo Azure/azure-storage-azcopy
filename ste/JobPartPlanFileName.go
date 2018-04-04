@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"time"
 	"unsafe"
+	"path"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -42,6 +43,10 @@ func checkCancelledJobsInJobMap() {
 
 type JobPartPlanFileName string
 
+func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string{
+	return path.Join(JobsAdmin.AppPathFolder(), "/" + string(*jppfn))
+}
+
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"
 
 var planDir = ""	// TODO: Fix
@@ -65,7 +70,7 @@ func (jpfn JobPartPlanFileName) Delete() error {
 
 func (jpfn JobPartPlanFileName) Map() JobPartPlanMMF {
 	// opening the file with given filename
-	file, err := os.OpenFile(string(jpfn), os.O_RDWR, 0644) // TODO: Check this permission
+	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, 0644) // TODO: Check this permission
 	if err != nil {
 		panic(err)
 	}
@@ -122,8 +127,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// create the Job Part Plan file
 	//planPathname := planDir + "/" + string(jpfn)
-	planPathname := string(jpfn)
-	file, err := os.Create(planPathname)
+	file, err := os.Create(jpfn.GetJobPartPlanPath())
 	if err != nil {
 		panic(fmt.Errorf("couldn't create job part plan file %q: %v", jpfn, err))
 	}

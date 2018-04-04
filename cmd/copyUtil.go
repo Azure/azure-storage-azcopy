@@ -151,7 +151,7 @@ func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
 	return blockIDBinaryToBase64(binaryBlockID)
 }
 
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, lastCheckedTime *time.Time, lastCheckBytes *uint64) common.JobStatus {
+func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time) common.JobStatus {
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
@@ -160,10 +160,13 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, lastCheckedTime *time.
 	tm.MoveCursor(1, 1)
 
 	fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
-	throughPut := float64(float64(summary.BytesOverWire - *lastCheckBytes) / time.Since(*lastCheckedTime).Seconds())
-	throughPut = throughPut / float64(1024 * 1024)
-	*lastCheckedTime = time.Now()
-	*lastCheckBytes = summary.BytesOverWire
+	bytesInMb := float64(float64(summary.BytesOverWire) / float64(1024 * 1024))
+	timeElapsed := time.Since(startTime).Seconds()
+	throughPut :=  bytesInMb/ timeElapsed
+	// If the time elapsed is 0, then throughput is set to 0.
+	if timeElapsed == 0{
+		throughPut = 0
+	}
 	message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
 		summary.JobProgress, ste.ToFixed(throughPut, 4), summary.TotalNumberOfTransfers, summary.TotalNumberOfTransferCompleted, summary.TotalNumberOfFailedTransfer,
 			summary.TotalNumberOfTransfers - (summary.TotalNumberOfTransferCompleted + summary.TotalNumberOfFailedTransfer), summary.CompleteJobOrdered)

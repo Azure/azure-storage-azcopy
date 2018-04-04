@@ -52,6 +52,11 @@ var JobsAdmin interface {
 
 	// adds given value to the bytesOverWire.
 	AddToBytesOverWire(value uint64)
+
+	// AppPathFolder returns the Azcopy application path folder.
+	// JobPartPlanFile will be created inside this folder.
+	AppPathFolder() string
+
 	// returns the current value of bytesOverWire.
 	BytesOverWire() uint64
 
@@ -59,7 +64,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -75,7 +80,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	ja := &jobsAdmin{
 		logger:  common.NewAppLogger(pipeline.LogInfo),
 		jobIDToJobMgr:newJobIDToJobMgr(),
-		planDir: ".",
+		planDir: azcopyAppPathFolder,
 		pacer:   newPacer(targetRateInMBps * 1024 * 1024),
 		appCtx:appCtx,
 		coordinatorChannels: CoordinatorChannels{
@@ -203,6 +208,12 @@ func (ja *jobsAdmin) JobIDs() []common.JobID {
 // JobMgr returns the specified JobID's JobMgr if it exists
 func (ja *jobsAdmin) JobMgr(jobID common.JobID) (IJobMgr, bool) {
 	return ja.jobIDToJobMgr.Get(jobID)
+}
+
+// AppPathFolder returns the Azcopy application path folder.
+// JobPartPlanFile will be created inside this folder.
+func (ja *jobsAdmin) AppPathFolder() string {
+	return ja.planDir
 }
 
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
