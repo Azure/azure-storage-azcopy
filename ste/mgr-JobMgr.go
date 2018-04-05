@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
 	"sync/atomic"
+	"fmt"
 )
 
 var _ IJobMgr = &jobMgr{}
@@ -39,6 +40,7 @@ type IJobMgr interface {
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context)
 	PipelineLogInfo() pipeline.LogOptions
+	ReportJobPartDone() uint32
 	Cancel()
 	//Close()
 	common.ILoggerCloser
@@ -69,9 +71,11 @@ type jobMgr struct {
 	cancel context.CancelFunc
 
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
+	// partsDone keep the count of completed part of the Job.
 	partsDone   uint32
 	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
+	finalPartOrdered bool
 	atomicNumberOfBytesTransferred uint64
 	atomicTotalBytesToTransfer     uint64
 }
@@ -101,6 +105,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		jpm.ScheduleTransfers(jm.ctx)
 	}
 	jm.jobPartMgrs.Set(partNum, jpm)
+	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
 	return jpm
 }
 
@@ -119,10 +124,12 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
-/*func (jm *jobMgr) ReportJobPartDone() uint32 {
+func (jm *jobMgr) ReportJobPartDone() uint32 {
 	shouldLog := jm.ShouldLog(pipeline.LogInfo)
 	partsDone := atomic.AddUint32(&jm.partsDone, 1)
-	if partsDone != jm.jobPartMgrs.Count() { // This is NOT the last part
+	// If the last part is still awaited for other parts all still not complete,
+	// JobPart 0 status is not changed.
+	if partsDone != jm.jobPartMgrs.Count() && !jm.finalPartOrdered{
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
@@ -142,13 +149,13 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("all parts of Job %v successfully cancelled; cleaning up the Job", jm.jobID))
 		}
-		jm.jobsInfo.cleanUpJob(jm.jobID)
+		//jm.jobsInfo.cleanUpJob(jm.jobID)
 	case (common.JobStatus{}).InProgress():
 		part0Plan.SetJobStatus((common.JobStatus{}).Completed())
 	}
 	return partsDone
 }
-*/
+
 
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }

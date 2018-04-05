@@ -22,7 +22,7 @@ type IJobPartTransferMgr interface {
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
 	SetStatus(status common.TransferStatus)
 	SetNumberOfChunks(numChunks uint32)
-	ReportTransferDone() (lastTransfer bool, transfersDone uint32)
+	ReportTransferDone() uint32
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
 	AddToBytesTransferred(value int64) int64
@@ -175,7 +175,6 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed
 // TODO: I feel like this should take the status & we kill SetStatus
-func (jptm *jobPartTransferMgr) ReportTransferDone() (lastTransfer bool, transfersDone uint32) {
+func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	return jptm.jobPartMgr.ReportTransferDone()
-	// todo : last transfer should tell that part is done.
 }

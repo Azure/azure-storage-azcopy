@@ -17,7 +17,7 @@ type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
-	ReportTransferDone() (lastTransfer bool, transfersCompleted uint32)
+	ReportTransferDone() uint32
 	ScheduleChunks(chunkFunc chunkFunc)
 	AddToBytesTransferred(value int64) int64
 	AddToBytesToTransfer(value int64) int64
@@ -191,17 +191,18 @@ func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {
 }
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
-// TODO: Return true for last transfer?
-// TODO : Should lastTransfer and transferDone be deleted.
-func (jpm *jobPartMgr) ReportTransferDone() (lastTransfer bool, transfersDone uint32) {
+func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 	transfersDone = atomic.AddUint32(&jpm.atomicTransfersDone, 1)
 	if jpm.ShouldLog(pipeline.LogInfo) {
 		plan := jpm.Plan()
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
-
-	return transfersDone == jpm.planMMF.Plan().NumTransfers, transfersDone
+	if transfersDone == jpm.planMMF.Plan().NumTransfers {
+		jpm.jobMgr.ReportJobPartDone()
+	}
+	return transfersDone
 }
+
 //func (jpm *jobPartMgr) CancelJob() { jpm.jobMgr.Cancel() }
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
