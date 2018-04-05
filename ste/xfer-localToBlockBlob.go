@@ -72,7 +72,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	srcMmf, err := common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
 	if err != nil{
 		if jptm.ShouldLog(pipeline.LogInfo){
-			jptm.Log(pipeline.LogInfo, "error memory mapping the source file")
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error memory mapping the source file %s. Failed with error %s", srcFile.Name(), err.Error()))
 		}
 		srcFile.Close()
 		jptm.SetStatus(common.ETransferStatus.Failed())
