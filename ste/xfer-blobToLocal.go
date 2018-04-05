@@ -195,7 +195,8 @@ func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobU
 				return
 			}
 
-
+			jptm.AddToBytesTransferred(adjustedChunkSize)
+			
 			lastChunk, nc := jptm.ReportChunkDone()
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("is last chunk %s and no of chunk %d", lastChunk, nc))
 			// step 3: check if this is the last chunk
