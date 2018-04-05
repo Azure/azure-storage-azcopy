@@ -112,33 +112,27 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 
 		//set tier on pageBlob.
+		//If set tier fails, then cancelling the job.
 		if len(jptm.BlobTier()) > 0 {
-			_, err = pageBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
-			if err != nil{
-				if jptm.ShouldLog(pipeline.LogError){
-					jptm.Log(pipeline.LogError,
-						fmt.Sprintf("failed to set tier %s on blob and failed with error %s", jptm.BlobTier(), string(err.Error())))
-				}
+				_, err = pageBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+				if err != nil{
+					if jptm.ShouldLog(pipeline.LogInfo){
+						jptm.Log(pipeline.LogInfo,
+							fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
+					}
+					jptm.Cancel()
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.ReportTransferDone()
+					srcMmf.Unmap()
+					err = srcFile.Close()
+					if err != nil {
+						if jptm.ShouldLog(pipeline.LogInfo){
+							jptm.Log(pipeline.LogInfo,
+								fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
+						}
+					}
+				return
 			}
-		}
-
-		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo){
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
-			}
-			jptm.Cancel()
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			srcMmf.Unmap()
-			err = srcFile.Close()
-			if err != nil {
-				if jptm.ShouldLog(pipeline.LogInfo){
-					jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
-				}
-			}
-			return
 		}
 
 		numPages := uint32(0)
@@ -359,7 +353,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 			}
 		}else{
 			if jptm.ShouldLog(pipeline.LogInfo){
-				jptm.Log(pipeline.LogInfo, " put blob failed and cancelling the transfer")
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" put blob failed and cancelling the transfer. Failed with error %s", err.Error()))
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
@@ -379,12 +373,6 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 				jptm.Log(pipeline.LogError,
 					fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", jptm.BlobTier(), string(err.Error())))
 			}
-		}
-	}
-	if err != nil{
-		if jptm.ShouldLog(pipeline.LogError){
-			jptm.Log(pipeline.LogError,
-				fmt.Sprintf("failed to set tier %s on blob and failed with error %s",jptm.BlobTier(), string(err.Error())))
 		}
 	}
 
