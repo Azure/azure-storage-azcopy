@@ -69,16 +69,21 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		jptm.ReportTransferDone()
 		return
 	}
-	srcMmf, err := common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
-	if err != nil{
-		if jptm.ShouldLog(pipeline.LogInfo){
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error memory mapping the source file %s. Failed with error %s", srcFile.Name(), err.Error()))
+
+	var srcMmf common.MMF
+	if srcFileInfo.Size() > 0 {
+		// file needs to be memory mapped only when the file size is greater than 0.
+		srcMmf, err = common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
+		if err != nil{
+			if jptm.ShouldLog(pipeline.LogInfo){
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("error memory mapping the source file %s. Failed with error %s", srcFile.Name(), err.Error()))
+			}
+			srcFile.Close()
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.ReportTransferDone()
+			return
 		}
-		srcFile.Close()
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesTransferred(info.SourceSize)
-		jptm.ReportTransferDone()
-		return
 	}
 
 	if EndsWith(info.Source, ".vhd") && (blobSize % 512 == 0){
