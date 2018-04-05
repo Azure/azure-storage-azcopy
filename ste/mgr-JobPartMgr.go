@@ -24,6 +24,7 @@ type IJobPartMgr interface {
 	BytesTransferred() int64
 	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
+	BlobTier() string
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -42,6 +43,10 @@ type jobPartMgr struct {
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blobHTTPHeaders          azblob.BlobHTTPHeaders
+
+	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
+	blobTier                 string
+
 	blobMetadata             azblob.Metadata
 	preserveLastModifiedTime bool
 
@@ -81,6 +86,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
+
+	jpm.blobTier = string(dstData.BlobTier[:dstData.BlobTierLength])
 
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
@@ -174,6 +181,9 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.Bl
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
 }
 
+func (jpm *jobPartMgr) BlobTier() string{
+	return jpm.blobTier
+}
 
 func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {
 	dstData := &jpm.Plan().DstLocalData
@@ -190,7 +200,6 @@ func (jpm *jobPartMgr) ReportTransferDone() (lastTransfer bool, transfersDone ui
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, Part#=%d, TransfersDone=%d of %d", plan.JobID, plan.PartNum, transfersDone, plan.NumTransfers))
 	}
 
-	// TODO: If last transfer, notify Part?
 	return transfersDone == jpm.planMMF.Plan().NumTransfers, transfersDone
 }
 //func (jpm *jobPartMgr) CancelJob() { jpm.jobMgr.Cancel() }

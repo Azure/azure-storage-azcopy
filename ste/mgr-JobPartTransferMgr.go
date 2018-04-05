@@ -15,6 +15,7 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
+	BlobTier() (string)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	StartJobXfer()
@@ -130,6 +131,10 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 		return time.Unix(0, lastModifiedTime), true
 	}
 	return time.Time{}, false
+}
+
+func (jptm *jobPartTransferMgr) BlobTier() (string) {
+	return jptm.jobPartMgr.BlobTier()
 }
 
 func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32){

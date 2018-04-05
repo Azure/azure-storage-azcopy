@@ -17,6 +17,7 @@ const (
 	ContentTypeMaxBytes     = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
 	ContentEncodingMaxBytes = 256  // If > 65536, then jobPartPlanBlobData's ContentEncodingLength's type  field must change
 	MetadataMaxBytes        = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
+	BlobTierMaxBytes        = 10
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -118,6 +119,11 @@ type JobPartPlanDstBlob struct {
 	// Specifies which content encodings have been applied to the blob.
 	ContentEncoding [ContentEncodingMaxBytes]byte
 
+	// Specifies the length of BlobTier of the blob.
+	BlobTierLength       uint8
+
+	// Specifies the tier on the blob.
+	BlobTier		[BlobTierMaxBytes]byte
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
 
@@ -173,6 +179,6 @@ func (jppt *JobPartPlanTransfer) TransferStatus() common.TransferStatus {
 func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus) {
 	common.AtomicMorphInt32(&jppt.atomicTransferStatus.Value,
 		func(startVal int32) (val int32, morphResult interface{}) {
-			return common.Iffint32(val == (common.TransferStatus{}).Failed().Value, val, status.Value), nil
+			return common.Iffint32(startVal == (common.TransferStatus{}).Failed().Value, startVal, status.Value), nil
 		})
 }

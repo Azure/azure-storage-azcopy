@@ -36,7 +36,6 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 	info := jptm.Info()
 	u, _ := url.Parse(info.Source)
 	srcBlobURL := azblob.NewBlobURL(*u, p)
-
 	// step 2: get size info for the download
 	blobSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize)

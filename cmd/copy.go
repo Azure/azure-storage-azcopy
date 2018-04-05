@@ -82,6 +82,35 @@ type rawCopyCmdArgs struct {
 	logVerbosity             byte
 }
 
+func (raw rawCopyCmdArgs) ValidBlobTier() bool{
+	switch raw.blobTier{
+	case "Hot":
+		return true
+	case "Cool":
+		return true
+	case "Archive":
+		return true
+	case "":
+		return true
+	case "P10":
+		return true
+	case "P20":
+		return true
+	case "P30":
+		return true
+	case "P4":
+		return true
+	case "P40":
+		return true
+	case "P50":
+		return true
+	case "P6":
+		return true
+	default:
+		return false
+	}
+}
+
 // validates and transform raw input into cooked input
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{}
@@ -127,6 +156,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.withSnapshots = raw.withSnapshots
 
 	cooked.blockSize = raw.blockSize
+
+	// verify the input blob-tier.
+	// allowed blob-tier are Hot, Cold & Archive
+	if !raw.ValidBlobTier(){
+			return cooked, fmt.Errorf("invalid blob-tier %s  passed in input. Please verify the blobtier", raw.blobTier)
+		}
+
+
 	cooked.blobTier = raw.blobTier
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
@@ -379,6 +416,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
+			BlobTier:				  cca.blobTier,
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,

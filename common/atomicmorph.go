@@ -7,7 +7,7 @@ import "sync/atomic"
 // what the new value should be and the result that AtomicMorph should return to its caller.
 type AtomicMorpherInt32 func(startVal int32) (val int32, morphResult interface{})
 
-// AtomicMorph atomically morphs target in to new value (and result) as indicated bythe AtomicMorpher callback function.
+// AtomicMorph atomically morphs target in to new value (and result) as indicated by the AtomicMorpher callback function.
 func AtomicMorphInt32(target *int32, morpher AtomicMorpherInt32) interface{} {
 	if target == nil || morpher == nil {
 		panic("target and morpher mut not be nil")

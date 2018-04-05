@@ -59,6 +59,7 @@ type BlobTransferAttributes struct {
 	//BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
 	ContentType              string //The content type specified for the blob.
 	ContentEncoding          string //Specifies which content encodings have been applied to the blob.
+	BlobTier                 string // Specifies the tier to set on the blob.
 	Metadata                 string //User-defined name-value pairs associated with the blob
 	NoGuessMimeType          bool   // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool   // when downloading, tell engine to set file's timestamp to timestamp of blob
