@@ -221,6 +221,9 @@ func (e *copyDownloadEnumerator) dispatchPart(isFinalPart bool) error {
 
 	// empty the transfers and increment part number count
 	e.Transfers = []common.CopyTransfer{}
-	e.PartNum++
+	if !isFinalPart{
+		// part number needs to incremented only when the part is not the final part.
+		e.PartNum++
+	}
 	return nil
 }
