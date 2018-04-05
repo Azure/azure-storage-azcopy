@@ -483,7 +483,8 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			time.Sleep(2 * time.Second)
+			//time.Sleep(2 * time.Second)
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 	wg.Done()
