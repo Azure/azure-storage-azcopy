@@ -31,6 +31,8 @@ import (
 	"bytes"
 	"unsafe"
 	"strings"
+	"io"
+	"io/ioutil"
 )
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -401,6 +403,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	}
 	// closing the put blob response body
 	if putBlobResp != nil {
+		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
 		putBlobResp.Response().Body.Close()
 	}
 }
