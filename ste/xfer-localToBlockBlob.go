@@ -314,7 +314,7 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				}
 
 				if putBlockListResponse != nil {
-					io.Copy(ioutil.Discard, putBlockResponse.Response().Body)
+					io.Copy(ioutil.Discard, putBlockListResponse.Response().Body)
 					putBlockListResponse.Response().Body.Close()
 				}
 
