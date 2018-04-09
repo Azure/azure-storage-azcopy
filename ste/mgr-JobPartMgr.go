@@ -153,6 +153,7 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
 			Log: jpm.jobMgr.PipelineLogInfo(),
+			Telemetry:azblob.TelemetryOptions{Value:"azcopy-V2"},
 		})
 	}
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)

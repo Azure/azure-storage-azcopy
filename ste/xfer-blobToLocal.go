@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"io/ioutil"
 )
 
 func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -180,14 +181,15 @@ func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobU
 				return
 			}
 			// step 2: write the body into the memory mapped file directly
-			bytesRead, err := io.ReadFull(get.Body(), destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(get.Body(), destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			io.Copy(ioutil.Discard, get.Body())
 			get.Body().Close()
-			if int64(bytesRead) != adjustedChunkSize || err != nil {
+			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because reading the downloaded chunk failed. Failed with error %s", workerId, chunkId, err.Error()))
 					}
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -197,8 +199,7 @@ func generateDownloadFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobU
 
 			jptm.AddToBytesTransferred(adjustedChunkSize)
 			
-			lastChunk, nc := jptm.ReportChunkDone()
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("is last chunk %s and no of chunk %d", lastChunk, nc))
+			lastChunk, _ := jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
