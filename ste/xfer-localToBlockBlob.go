@@ -121,7 +121,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		//set tier on pageBlob.
 		//If set tier fails, then cancelling the job.
 		if len(jptm.BlobTier()) > 0 {
-			setTierResp, err := pageBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+				_, err = pageBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
 				if err != nil{
 					if jptm.ShouldLog(pipeline.LogInfo){
 						jptm.Log(pipeline.LogInfo,
@@ -139,10 +139,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 						}
 					}
 				return
-			}
-			if setTierResp != nil{
-				io.Copy(ioutil.Discard, setTierResp.Response().Body)
-				setTierResp.Response().Body.Close()
 			}
 		}
 
@@ -274,7 +270,6 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			}
 
 			if putBlockResponse != nil {
-				io.Copy(ioutil.Discard, putBlockResponse.Response().Body)
 				putBlockResponse.Response().Body.Close()
 			}
 
@@ -314,7 +309,6 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				}
 
 				if putBlockListResponse != nil {
-					io.Copy(ioutil.Discard, putBlockResponse.Response().Body)
 					putBlockListResponse.Response().Body.Close()
 				}
 
@@ -322,17 +316,13 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 					jptm.Log(pipeline.LogInfo, "completed successfully")
 				}
 				if len(jptm.BlobTier()) > 0 {
-					setTierResp , err := blockBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+					_, err = blockBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
 					if err != nil{
 						if jptm.ShouldLog(pipeline.LogError){
 							jptm.Log(pipeline.LogError,
 								fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
 									workerId, jptm.BlobTier(), string(err.Error())))
 						}
-					}
-					if setTierResp != nil{
-						io.Copy(ioutil.Discard, setTierResp.Response().Body)
-						setTierResp.Response().Body.Close()
 					}
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
@@ -384,16 +374,12 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	}
 
 	if len(jptm.BlobTier()) > 0 {
-		setTierResp, err := blockBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+		_, err = blockBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
 		if err != nil{
 			if jptm.ShouldLog(pipeline.LogError){
 				jptm.Log(pipeline.LogError,
 					fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", jptm.BlobTier(), string(err.Error())))
 			}
-		}
-		if setTierResp != nil{
-			io.Copy(ioutil.Discard, setTierResp.Response().Body)
-			setTierResp.Response().Body.Close()
 		}
 	}
 
@@ -488,7 +474,7 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 			jptm.AddToBytesOverWire(uint64(pageSize))
 			body := newRequestBodyPacer(bytes.NewReader(pageBytes), pacer)
 			pageBlobUrl := blobUrl.ToPageBlobURL()
-			resp, err := pageBlobUrl.UploadPages(jptm.Context(), startPage, body, azblob.BlobAccessConditions{})
+			_, err := pageBlobUrl.UploadPages(jptm.Context(), startPage, body, azblob.BlobAccessConditions{})
 			if err != nil {
 				if jptm.WasCanceled() {
 					if jptm.ShouldLog(pipeline.LogInfo){
@@ -510,11 +496,6 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 			if jptm.ShouldLog(pipeline.LogInfo){
 				jptm.Log(pipeline.LogInfo,
 					fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
-			}
-			//closing the page upload response.
-			if resp != nil{
-				io.Copy(ioutil.Discard, resp.Response().Body)
-				resp.Response().Body.Close()
 			}
 			pageDone()
 		}
