@@ -181,8 +181,6 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
 func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
 								waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error){
-	e.Transfers = append(e.Transfers, transfer)
-
 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
 		resp := common.CopyJobPartOrderResponse{}
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
@@ -200,6 +198,7 @@ func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer, wg *s
 		e.Transfers = []common.CopyTransfer{}
 		e.PartNum++
 	}
+	e.Transfers = append(e.Transfers, transfer)
 	return nil
 }
 

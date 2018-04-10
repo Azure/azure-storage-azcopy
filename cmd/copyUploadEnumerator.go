@@ -15,17 +15,7 @@ type copyUploadEnumerator common.CopyJobPartOrderRequest
 // accept a new transfer, if the threshold is reached, dispatch a job part order
 func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
 								waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	e.Transfers = append(e.Transfers, transfer)
 
-	// TODO move this to appropriate location
-	//// if the transfer to be added is a page blob, we need to validate its file size
-	//if enumerator.jpo.BlobAttributes.BlobType == common.PageBlob && transfer.SourceSize%512 != 0 {
-	//	return fmt.Errorf("cannot perform upload for %s as a page blob because its size is not an exact multiple 512 bytes", transfer.Source)
-	//}
-
-	// dispatch the transfers once the number reaches NumOfFilesPerUploadJobPart
-	// we do this so that in the case of large uploads, the transfer engine can get started
-	// while the frontend is still gathering more transfers
 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
 		resp := common.CopyJobPartOrderResponse{}
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
@@ -41,7 +31,7 @@ func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, wg *syn
 		e.Transfers = []common.CopyTransfer{}
 		e.PartNum++
 	}
-
+	e.Transfers = append(e.Transfers, transfer)
 	return nil
 }
 
