@@ -29,6 +29,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"math"
+	"time"
 )
 
 var steCtx = context.Background()
@@ -267,7 +268,7 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
-* TotalNumberOfTransfers - total number of transfers available for the given job
+* TotalTransfers - total number of transfers available for the given job
 * TotalNumberOfTransfersCompleted - total number of transfers in the job completed
 * NumberOfTransfersCompletedAfterCheckpoint - number of transfers completed after the last checkpoint
 * NumberOfTransferFailedAfterCheckpoint - number of transfers failed after last checkpoint timestamp
@@ -285,6 +286,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 
 	js := common.ListJobSummaryResponse{
+		Timestamp:time.Now().UTC(),
 		JobID:              jobID,
 		ErrorMsg:           "",
 		JobStatus:          common.JobStatus{}.InProgress(), // Default
@@ -300,7 +302,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		totalBytesTransferred += jpm.BytesTransferred()
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
-		js.TotalNumberOfTransfers += jpp.NumTransfers
+		js.TotalTransfers += jpp.NumTransfers
 
 		// Iterate through this job part's transfers
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
@@ -309,9 +311,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():
-				js.TotalNumberOfTransferCompleted++
+				js.TransfersCompleted++
 			case common.TransferStatus{}.Failed():
-				js.TotalNumberOfFailedTransfer++
+				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
 				// appending to list of failed transfer
@@ -325,11 +327,11 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	})
 
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
-	js.JobProgress = ToFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)
+	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)
 	js.BytesOverWire = JobsAdmin.BytesOverWire()
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (js.TotalNumberOfTransfers == js.TotalNumberOfFailedTransfer+js.TotalNumberOfTransferCompleted) {
+	if (js.CompleteJobOrdered) && (js.TotalTransfers == js.TransfersFailed+js.TransfersCompleted) {
 		js.JobStatus = common.JobStatus{}.Completed()
 	}
 

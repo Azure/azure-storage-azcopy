@@ -25,12 +25,12 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	tm "github.com/buger/goterm"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 	"github.com/Azure/azure-storage-azcopy/ste"
+	"encoding/json"
 )
 
 const (
@@ -151,28 +151,31 @@ func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
 	return blockIDBinaryToBase64(binaryBlockID)
 }
 
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time) common.JobStatus {
+func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, outputJson bool) common.JobStatus {
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
 
-	tm.Clear()
-	tm.MoveCursor(1, 1)
-
-	fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
-	bytesInMb := float64(float64(summary.BytesOverWire) / float64(1024 * 1024))
-	timeElapsed := time.Since(startTime).Seconds()
-	throughPut :=  bytesInMb/ timeElapsed
-	// If the time elapsed is 0, then throughput is set to 0.
-	if timeElapsed == 0{
-		throughPut = 0
+	if outputJson {
+		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil{
+			panic(err)
+		}
+		fmt.Println(string(jsonOutput))
+	}else{
+		fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
+		bytesInMb := float64(float64(summary.BytesOverWire) / float64(1024 * 1024))
+		timeElapsed := time.Since(startTime).Seconds()
+		throughPut :=  bytesInMb/ timeElapsed
+		// If the time elapsed is 0, then throughput is set to 0.
+		if timeElapsed == 0{
+			throughPut = 0
+		}
+		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
+			summary.JobProgressPercentage, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
+			summary.TotalTransfers- (summary.TransfersCompleted+ summary.TransfersFailed), summary.CompleteJobOrdered)
+		fmt.Println(message)
 	}
-	message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
-		summary.JobProgress, ste.ToFixed(throughPut, 4), summary.TotalNumberOfTransfers, summary.TotalNumberOfTransferCompleted, summary.TotalNumberOfFailedTransfer,
-			summary.TotalNumberOfTransfers - (summary.TotalNumberOfTransferCompleted + summary.TotalNumberOfFailedTransfer), summary.CompleteJobOrdered)
-	fmt.Println(message)
-	tm.Flush()
-
 	return summary.JobStatus
 }
 

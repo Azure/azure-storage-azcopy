@@ -104,6 +104,30 @@ var EJobStatus = JobStatus{}
 // JobStatus indicates the status of a Job; the default is InProgress.
 type JobStatus EnumUint32 // Must be 32-bit for atomic operations
 
+func (j JobStatus) Parse(s string) (JobStatus, error) {
+	e, err := EnumUint32{}.Parse(reflect.TypeOf(j), s, true, true)
+	return JobStatus(e), err
+}
+
+// Implementing MarshalJSON() method for type JobStatus
+func (j JobStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(j.String())
+}
+
+// Implementing UnmarshalJSON() method for type JobStatus
+func (j *JobStatus) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	jobStatus, err := EJobStatus.Parse(s)
+	if err != nil{
+		return err
+	}
+	*j = jobStatus
+	return nil
+}
+
 func (JobStatus) InProgress() JobStatus { return JobStatus{0} }
 func (JobStatus) Paused() JobStatus     { return JobStatus{1} }
 func (JobStatus) Cancelled() JobStatus  { return JobStatus{2} }

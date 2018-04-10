@@ -151,9 +151,9 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 		return
 	}
 	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobID))
-	fmt.Println("Total Number of Transfer ", summary.TotalNumberOfTransfers)
-	fmt.Println("Total Number of Transfer Completed ", summary.TotalNumberOfTransferCompleted)
-	fmt.Println("Total Number of Transfer Failed ", summary.TotalNumberOfFailedTransfer)
+	fmt.Println("Total Number of Transfer ", summary.TotalTransfers)
+	fmt.Println("Total Number of Transfer Completed ", summary.TransfersCompleted)
+	fmt.Println("Total Number of Transfer Failed ", summary.TransfersFailed)
 	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
 	//fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
 	for index := 0; index < len(summary.FailedTransfers); index++ {

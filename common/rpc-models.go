@@ -2,6 +2,7 @@ package common
 
 import (
 	"reflect"
+	"time"
 )
 
 var ERpcCmd = RpcCmd{}
@@ -72,18 +73,19 @@ type ListJobsResponse struct {
 	JobIDs       []JobID
 }
 
-// represents the JobProgress Summary response for list command when requested the Job Progress Summary for given JobId
+// represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListJobSummaryResponse struct {
 	ErrorMsg string
+	Timestamp time.Time
 	JobID    JobID
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
-	CompleteJobOrdered             bool
-	JobStatus                      JobStatus
-	TotalNumberOfTransfers         uint32
-	TotalNumberOfTransferCompleted uint32
-	TotalNumberOfFailedTransfer    uint32
-	JobProgress					   float64
-	BytesOverWire					uint64
+	CompleteJobOrdered          bool
+	JobStatus                   JobStatus
+	TotalTransfers              uint32
+	TransfersCompleted          uint32
+	TransfersFailed             uint32
+	JobProgressPercentage       float64
+	BytesOverWire               uint64
 	FailedTransfers             []TransferDetail
 	ThroughputInBytesPerSeconds float64
 }

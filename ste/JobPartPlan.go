@@ -165,7 +165,7 @@ type JobPartPlanTransfer struct {
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
 
-	// transferStatus_doNotUse represents the status of current transfer (TransferInProgress, TransferFailed or TransferCompleted)
+	// transferStatus_doNotUse represents the status of current transfer (TransferInProgress, TransferFailed or TransfersCompleted)
 	// transferStatus_doNotUse should not be directly accessed anywhere except by transferStatus and setTransferStatus
 	atomicTransferStatus common.TransferStatus
 }

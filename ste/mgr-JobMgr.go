@@ -57,8 +57,8 @@ func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Cont
 func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
 	jm.logger.OpenLog()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
-	atomic.StoreUint64(&jm.atomicNumberOfBytesTransferred, 0)
-	atomic.StoreUint64(&jm.atomicTotalBytesToTransfer, 0)
+	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
+	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
 	jm.partsDone = 0
 	return jm
 }
@@ -75,16 +75,16 @@ type jobMgr struct {
 	partsDone   uint32
 	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
-	finalPartOrdered bool
-	atomicNumberOfBytesTransferred uint64
-	atomicTotalBytesToTransfer     uint64
+	finalPartOrdered           bool
+	atomicNumberOfBytesCovered uint64
+	atomicTotalBytesToXfer     uint64
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func (jm *jobMgr) Progress() (uint64, uint64) {
-	return atomic.LoadUint64(&jm.atomicNumberOfBytesTransferred),
-		atomic.LoadUint64(&jm.atomicTotalBytesToTransfer)
+	return atomic.LoadUint64(&jm.atomicNumberOfBytesCovered),
+		atomic.LoadUint64(&jm.atomicTotalBytesToXfer)
 }
 
 //func (jm *jobMgr) Throughput() XferThroughput { return jm.throughput }

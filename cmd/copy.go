@@ -78,6 +78,7 @@ type rawCopyCmdArgs struct {
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	background               bool
+	outputJson				bool
 	acl                      string
 	logVerbosity             byte
 }
@@ -171,6 +172,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.background = raw.background
+	cooked.outputJson = raw.outputJson
 	cooked.acl = raw.acl
 	cooked.logVerbosity = common.LogLevel(raw.logVerbosity)
 
@@ -199,6 +201,7 @@ type cookedCopyCmdArgs struct {
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	background               bool
+	outputJson				 bool
 	acl                      string
 	logVerbosity             common.LogLevel
 }
@@ -451,7 +454,9 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
-		fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+		if !cca.outputJson{
+			fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+		}
 		wg.Add(1)
 		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
 	}
@@ -475,7 +480,7 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			cookedCancelCmdArgs{jobID: jobID}.process()
 			os.Exit(1)
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, startTime)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, startTime, cca.outputJson)
 
 			// happy ending to the front end
 			if jobStatus == common.EJobStatus.Completed() {
@@ -577,6 +582,7 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
+	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 	cpCmd.PersistentFlags().Uint8Var(&raw.logVerbosity, "Logging", uint8(pipeline.LogWarning), "defines the log verbosity to be saved to log file")
 }
