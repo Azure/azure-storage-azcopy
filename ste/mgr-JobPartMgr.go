@@ -24,7 +24,7 @@ type IJobPartMgr interface {
 	BytesTransferred() int64
 	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
-	BlobTier() string
+	BlobTiers() (azblob.AccessTierType, azblob.AccessTierType)
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -45,7 +45,10 @@ type jobPartMgr struct {
 	blobHTTPHeaders          azblob.BlobHTTPHeaders
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blobTier                 string
+	blockBlobTier 			string
+
+	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
+	pageBlobTier            string
 
 	blobMetadata             azblob.Metadata
 	preserveLastModifiedTime bool
@@ -87,7 +90,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
-	jpm.blobTier = string(dstData.BlockBlobTier[:dstData.BlockBlobTierLength])
+	jpm.blockBlobTier = string(dstData.BlockBlobTier[:dstData.BlockBlobTierLength])
+
+	jpm.pageBlobTier = string(dstData.PageBlobTier[:dstData.PageBlobTierLength])
 
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
@@ -182,8 +187,10 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.Bl
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) BlobTier() string{
-	return jpm.blobTier
+func (jpm *jobPartMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.AccessTierType){
+	blockBlobTier = azblob.AccessTierType(jpm.blockBlobTier)
+	pageBlobTier = azblob.AccessTierType(jpm.pageBlobTier)
+	return
 }
 
 func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {

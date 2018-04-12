@@ -120,15 +120,16 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 		//set tier on pageBlob.
 		//If set tier fails, then cancelling the job.
-		if len(jptm.BlobTier()) > 0 {
-			setTierResp, err := pageBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+		_, pageBlobTier := jptm.BlobTiers()
+		if pageBlobTier != azblob.AccessTierNone {
+			setTierResp, err := pageBlobUrl.SetTier(jptm.Context(), pageBlobTier)
 				if err != nil{
 					if jptm.ShouldLog(pipeline.LogInfo){
 						jptm.Log(pipeline.LogInfo,
 							fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
 					}
 					jptm.Cancel()
-					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 					jptm.ReportTransferDone()
 					srcMmf.Unmap()
 					err = srcFile.Close()
@@ -321,21 +322,24 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				if jptm.ShouldLog(pipeline.LogInfo){
 					jptm.Log(pipeline.LogInfo, "completed successfully")
 				}
-				if len(jptm.BlobTier()) > 0 {
-					setTierResp , err := blockBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+				blockBlobTier, _ := jptm.BlobTiers()
+				if blockBlobTier != azblob.AccessTierNone {
+					setTierResp , err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
 					if err != nil{
 						if jptm.ShouldLog(pipeline.LogError){
 							jptm.Log(pipeline.LogError,
 								fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
-									workerId, jptm.BlobTier(), string(err.Error())))
+									workerId, blockBlobTier, string(err.Error())))
 						}
+						jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+					}else{
+						jptm.SetStatus(common.ETransferStatus.Success())
 					}
 					if setTierResp != nil{
 						io.Copy(ioutil.Discard, setTierResp.Response().Body)
 						setTierResp.Response().Body.Close()
 					}
 				}
-				jptm.SetStatus(common.ETransferStatus.Success())
 				transferDone()
 			}
 		}
@@ -383,13 +387,15 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 		jptm.SetStatus(common.ETransferStatus.Success())
 	}
 
-	if len(jptm.BlobTier()) > 0 {
-		setTierResp, err := blockBlobUrl.SetTier(jptm.Context(), azblob.AccessTierType(jptm.BlobTier()))
+	blockBlobTier, _ := jptm.BlobTiers()
+	if blockBlobTier != azblob.AccessTierNone {
+		setTierResp, err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
 		if err != nil{
 			if jptm.ShouldLog(pipeline.LogError){
 				jptm.Log(pipeline.LogError,
-					fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", jptm.BlobTier(), string(err.Error())))
+					fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
 			}
+			jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 		}
 		if setTierResp != nil{
 			io.Copy(ioutil.Discard, setTierResp.Response().Body)

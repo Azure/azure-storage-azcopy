@@ -15,7 +15,7 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
-	BlobTier() (string)
+	BlobTiers() (azblob.AccessTierType, azblob.AccessTierType)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	StartJobXfer()
@@ -115,14 +115,6 @@ func (jptm *jobPartTransferMgr) AddToBytesOverWire(value uint64){
 	JobsAdmin.AddToBytesOverWire(value)
 }
 
-/*func (jptm *jobPartTransferMgr) SetChunkChannel(chunkChannel chan <- ChunkMsg) {
-	jptm.chunkChannel = chunkChannel
-}
-
-func (jptm *jobPartTransferMgr) ChunkChannel() (chan <- ChunkMsg){
-	return jptm.chunkChannel
-}*/
-
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
 // If PreserveLastModifiedTime is set to true, it returns the lastModifiedTime of the source.
 func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
@@ -133,8 +125,8 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (jptm *jobPartTransferMgr) BlobTier() (string) {
-	return jptm.jobPartMgr.BlobTier()
+func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.AccessTierType) {
+	return jptm.jobPartMgr.BlobTiers()
 }
 
 func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32){

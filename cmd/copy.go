@@ -109,12 +109,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// allowed blob-tier are Hot, Cold & Archive
 	blockBlobTier, err := common.BlockBlobTier("").Parse(raw.blockBlobTier)
 	if err != nil{
-		return cooked, nil
+		return cooked, err
 	}
 
 	pageBlobTier, err := common.PageBlobTier("").Parse(raw.pageBlobTier)
 	if err != nil{
-		return cooked, nil
+		return cooked, err
 	}
 	cooked.blockBlobTier = blockBlobTier
 	cooked.pageBlobTier = pageBlobTier
