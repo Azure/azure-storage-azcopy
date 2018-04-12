@@ -109,12 +109,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// verify the input blob-tier.
 	// allowed blob-tier are Hot, Cold & Archive
 	blockBlobTier, err := common.BlockBlobTier("").Parse(raw.blockBlobTier)
-	if err != nil{
+	if err != nil {
 		return cooked, err
 	}
 
 	pageBlobTier, err := common.PageBlobTier("").Parse(raw.pageBlobTier)
-	if err != nil{
+	if err != nil {
 		return cooked, err
 	}
 	cooked.blockBlobTier = blockBlobTier
@@ -148,7 +148,7 @@ type cookedCopyCmdArgs struct {
 	// options from flags
 	blockSize                uint32
 	blockBlobTier            common.BlockBlobTier
-	pageBlobTier			 common.PageBlobTier
+	pageBlobTier             common.PageBlobTier
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -161,7 +161,7 @@ type cookedCopyCmdArgs struct {
 }
 
 func (cca cookedCopyCmdArgs) isRedirection() bool {
-	switch cca.fromTo{
+	switch cca.fromTo {
 	case common.EFromTo.PipeFile():
 		fallthrough
 	case common.EFromTo.FilePipe():
@@ -373,8 +373,8 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
-			BlockBlobTier:			  cca.blockBlobTier,
-			PageBlobTier:			  cca.pageBlobTier,
+			BlockBlobTier:            cca.blockBlobTier,
+			PageBlobTier:             cca.pageBlobTier,
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
@@ -419,7 +419,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
-		if !cca.outputJson{
+		if !cca.outputJson {
 			fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
 		}
 		wg.Add(1)
