@@ -71,45 +71,17 @@ type rawCopyCmdArgs struct {
 
 	// options from flags
 	blockSize                uint32
-	blobTier                 string
 	metadata                 string
 	contentType              string
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	blockBlobTier            string
+	pageBlobTier             string
 	background               bool
-	outputJson				bool
+	outputJson               bool
 	acl                      string
 	logVerbosity             byte
-}
-
-func (raw rawCopyCmdArgs) ValidBlobTier() bool{
-	switch raw.blobTier{
-	case "Hot":
-		return true
-	case "Cool":
-		return true
-	case "Archive":
-		return true
-	case "":
-		return true
-	case "P10":
-		return true
-	case "P20":
-		return true
-	case "P30":
-		return true
-	case "P4":
-		return true
-	case "P40":
-		return true
-	case "P50":
-		return true
-	case "P6":
-		return true
-	default:
-		return false
-	}
 }
 
 // validates and transform raw input into cooked input
@@ -124,32 +96,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.dst = raw.dst
 
 	cooked.fromTo = fromTo
-	/*
-		if raw.blobUrlForRedirection != "" { // redirection
-			if (validator{}.determineLocationType(raw.blobUrlForRedirection)) != common.ELocation.Blob() {
-				return cookedCopyCmdArgs{}, errors.New("the provided blob URL for redirection is not valid")
-			}
 
-			cooked.blobUrlForRedirection = raw.blobUrlForRedirection
-		} else { // normal copy
-			cooked.srcLocation = validator{}.determineLocationType(raw.src)
-			if cooked.srcLocation == common.ELocation.Unknown() {
-				return cookedCopyCmdArgs{}, errors.New("the provided source is invalid")
-			}
-
-			cooked.dstLocation = validator{}.determineLocationType(raw.dst)
-			if cooked.dstLocation == common.ELocation.Unknown() {
-				return cookedCopyCmdArgs{}, errors.New("the provided destination is invalid")
-			}
-
-			if cooked.srcLocation == cooked.dstLocation { //TODO update to take file into account
-				return cookedCopyCmdArgs{}, errors.New("the provided source/destination pair is invalid")
-			}
-
-			cooked.src = raw.src
-			cooked.dst = raw.dst
-		}
-	*/
 	// copy&transform flags to type-safety
 	cooked.exclude = raw.exclude
 	cooked.recursive = raw.recursive
@@ -160,12 +107,17 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// verify the input blob-tier.
 	// allowed blob-tier are Hot, Cold & Archive
-	if !raw.ValidBlobTier(){
-			return cooked, fmt.Errorf("invalid blob-tier %s  passed in input. Please verify the blobtier", raw.blobTier)
-		}
+	blockBlobTier, err := common.BlockBlobTier("").Parse(raw.blockBlobTier)
+	if err != nil{
+		return cooked, nil
+	}
 
-
-	cooked.blobTier = raw.blobTier
+	pageBlobTier, err := common.PageBlobTier("").Parse(raw.pageBlobTier)
+	if err != nil{
+		return cooked, nil
+	}
+	cooked.blockBlobTier = blockBlobTier
+	cooked.pageBlobTier = pageBlobTier
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -194,14 +146,15 @@ type cookedCopyCmdArgs struct {
 
 	// options from flags
 	blockSize                uint32
-	blobTier                 string //TODO define enum
+	blockBlobTier            common.BlockBlobTier
+	pageBlobTier			 common.PageBlobTier
 	metadata                 string
 	contentType              string
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	background               bool
-	outputJson				 bool
+	outputJson               bool
 	acl                      string
 	logVerbosity             common.LogLevel
 }
@@ -419,7 +372,8 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
-			BlobTier:				  cca.blobTier,
+			BlockBlobTier:			  cca.blockBlobTier,
+			PageBlobTier:			  cca.pageBlobTier,
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
@@ -575,7 +529,8 @@ Usage:
 
 	// options
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 100*1024*1024, "Use this block size when uploading to Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&raw.blobTier, "blob-tier", "", "Upload to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "", "Upload block blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "", "Upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")

@@ -164,7 +164,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 				NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
 				ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
 				ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
-				BlobTierLength:        uint8(len(order.BlobAttributes.BlobTier)),
+				BlockBlobTierLength:   uint8(len(order.BlobAttributes.BlockBlobTier.String())),
+				PageBlobTierLength:	   uint8(len(order.BlobAttributes.PageBlobTier.String())),
 				MetadataLength:        uint16(len(order.BlobAttributes.Metadata)),
 				BlockSize:             blockSize,
 			},
@@ -176,7 +177,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// Copy any strings into their respective fields
 		copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 		copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
-		copy (jpph.DstBlobData.BlobTier[:], order.BlobAttributes.BlobTier)
+		copy (jpph.DstBlobData.BlockBlobTier[:], order.BlobAttributes.BlockBlobTier.String())
+		copy(jpph.DstBlobData.PageBlobTier[:], order.BlobAttributes.PageBlobTier.String())
 		copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 		fmt.Println("")
 		eof += writeValue(file, &jpph)

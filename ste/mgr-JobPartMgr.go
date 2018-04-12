@@ -87,7 +87,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
-	jpm.blobTier = string(dstData.BlobTier[:dstData.BlobTierLength])
+	jpm.blobTier = string(dstData.BlockBlobTier[:dstData.BlockBlobTierLength])
 
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])

@@ -119,11 +119,18 @@ type JobPartPlanDstBlob struct {
 	// Specifies which content encodings have been applied to the blob.
 	ContentEncoding [ContentEncodingMaxBytes]byte
 
-	// Specifies the length of BlobTier of the blob.
-	BlobTierLength       uint8
+	// Specifies the length of BlockBlobTier of the blob.
+	BlockBlobTierLength uint8
 
-	// Specifies the tier on the blob.
-	BlobTier		[BlobTierMaxBytes]byte
+	// Specifies the tier on the block blob.
+	BlockBlobTier  [BlobTierMaxBytes]byte
+
+	// Specifies the length of PageBlobTier of the blob.
+	PageBlobTierLength uint8
+
+	// Specifies the tier on the page blob.
+	PageBlobTier  [BlobTierMaxBytes]byte
+
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
 

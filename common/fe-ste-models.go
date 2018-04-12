@@ -26,6 +26,9 @@ import (
 	"math"
 	"reflect"
 	"time"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"strings"
+	"fmt"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -180,6 +183,9 @@ func (TransferStatus) Success() TransferStatus { return TransferStatus{2} }
 // Transfer failed due to some error. This status does represent the state when transfer is cancelled
 func (TransferStatus) Failed() TransferStatus { return TransferStatus{-1} }
 
+// Transfer failed due to failure while Setting blob tier.
+func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus{-2}}
+
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == TransferStatus{}.NotStarted() || ts == TransferStatus{}.Started()
 }
@@ -193,6 +199,90 @@ func (ts TransferStatus) String() string {
 func (ts TransferStatus) Parse(s string) (TransferStatus, error) {
 	e, err := EnumInt32{}.Parse(reflect.TypeOf(ts), s, false, true)
 	return TransferStatus(e), err
+}
+
+type BlockBlobTier azblob.AccessTierType
+func (bt BlockBlobTier)Parse(s string) (BlockBlobTier, error){
+	if strings.EqualFold(s, ""){
+		return BlockBlobTier(azblob.AccessTierNone), nil
+	}else if strings.EqualFold(s, "Hot"){
+		return BlockBlobTier(azblob.AccessTierHot), nil
+	}else if strings.EqualFold(s, "Cold"){
+		return BlockBlobTier(azblob.AccessTierCool), nil
+	}else if strings.EqualFold(s, "Archive"){
+		return BlockBlobTier(azblob.AccessTierArchive), nil
+	}else{
+		return "", fmt.Errorf("invalid block blob tier passed %s", s)
+	}
+}
+
+func (bt BlockBlobTier) String() (string){
+	return string(bt)
+}
+
+// Implementing MarshalJSON() method for type BlockBlobTier.
+func (bt BlockBlobTier) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(bt))
+}
+
+// Implementing UnmarshalJSON() method for type BlockBlobTier.
+func (bt *BlockBlobTier) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	blockBlobTier, err := BlockBlobTier("").Parse(s)
+	if err != nil{
+		return err
+	}
+	*bt = blockBlobTier
+	return nil
+}
+
+type PageBlobTier azblob.AccessTierType
+func (pbt PageBlobTier)Parse (s string) (PageBlobTier, error){
+	if strings.EqualFold(s, ""){
+		return PageBlobTier(azblob.AccessTierNone), nil
+	}else if strings.EqualFold(s, "P10"){
+		return PageBlobTier(azblob.AccessTierP10), nil
+	}else if strings.EqualFold(s, "P20"){
+		return PageBlobTier(azblob.AccessTierP20), nil
+	}else if strings.EqualFold(s, "P30"){
+		return PageBlobTier(azblob.AccessTierP30), nil
+	}else if strings.EqualFold(s, "P4"){
+		return PageBlobTier(azblob.AccessTierP4), nil
+	}else if strings.EqualFold(s, "P40"){
+		return PageBlobTier(azblob.AccessTierP40), nil
+	}else if strings.EqualFold(s, "P50"){
+		return PageBlobTier(azblob.AccessTierP50), nil
+	}else if strings.EqualFold(s, "P6"){
+		return PageBlobTier(azblob.AccessTierP6), nil
+	}else{
+		return " ", fmt.Errorf("failed to parse user given blob tier %s", s)
+	}
+}
+
+func (pbt PageBlobTier) String() (string){
+	return string(pbt)
+}
+
+// Implementing MarshalJSON() method for type PageBlobTier.
+func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(pbt))
+}
+
+// Implementing UnmarshalJSON() method for type PageBlobTier.
+func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	psgeBlobTier, err := PageBlobTier("").Parse(s)
+	if err != nil{
+		return err
+	}
+	*pbt = psgeBlobTier
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
