@@ -3,17 +3,20 @@ package ste
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
+	"time"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"sync/atomic"
-	"time"
+	"github.com/Azure/azure-storage-file-go/2017-04-17/azfile"
 )
 
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
+	FileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
 	BlobTiers() (azblob.AccessTierType, azblob.AccessTierType)
 	//ScheduleChunk(chunkFunc chunkFunc)
@@ -66,16 +69,16 @@ type jobPartTransferMgr struct {
 	atomicChunksDone uint32
 
 	/*
-	@Parteek removed 3/23 morning, as jeff ad equivalent
-	// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
-	chunkChannel chan<- ChunkMsg*/
+		@Parteek removed 3/23 morning, as jeff ad equivalent
+		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
+		chunkChannel chan<- ChunkMsg*/
 }
 
 func (jptm *jobPartTransferMgr) FromTo() common.FromTo {
 	return jptm.jobPartMgr.Plan().FromTo
 }
 
-func (jptm *jobPartTransferMgr) StartJobXfer(){
+func (jptm *jobPartTransferMgr) StartJobXfer() {
 	jptm.jobPartMgr.StartJobXfer(jptm)
 }
 
@@ -91,7 +94,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	}
 }
 
-func (jptm *jobPartTransferMgr) Context() context.Context{
+func (jptm *jobPartTransferMgr) Context() context.Context {
 	return jptm.ctx
 }
 
@@ -99,7 +102,7 @@ func (jptm *jobPartTransferMgr) RescheduleTransfer() {
 	jptm.jobPartMgr.RescheduleTransfer(jptm)
 }
 
-func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc){
+func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
@@ -107,11 +110,15 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer common.MMF) (headers 
 	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
 }
 
-func (jptm *jobPartTransferMgr) AddToBytesTransferred(value int64) int64{
+func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(dataFileToXfer)
+}
+
+func (jptm *jobPartTransferMgr) AddToBytesTransferred(value int64) int64 {
 	return jptm.jobPartMgr.AddToBytesTransferred(value)
 }
 
-func (jptm *jobPartTransferMgr) AddToBytesOverWire(value uint64){
+func (jptm *jobPartTransferMgr) AddToBytesOverWire(value uint64) {
 	JobsAdmin.AddToBytesOverWire(value)
 }
 
@@ -129,7 +136,7 @@ func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.
 	return jptm.jobPartMgr.BlobTiers()
 }
 
-func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32){
+func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32) {
 	jptm.numChunks = numChunks
 }
 
@@ -155,7 +162,7 @@ func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }
 
-func (jptm *jobPartTransferMgr) PipelineLogInfo() (pipeline.LogOptions) {
+func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
 	return jptm.jobPartMgr.(*jobPartMgr).jobMgr.(*jobMgr).PipelineLogInfo()
 }
 

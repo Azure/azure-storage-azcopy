@@ -22,9 +22,10 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"time"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // upload related
@@ -42,7 +43,6 @@ const DownloadMaxRetryDelay = time.Second * 3
 // pacer related
 const PacerTimeToWaitInMs = 50
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // These types are define the STE Coordinator
@@ -58,9 +58,9 @@ func computeJobXfer(fromTo common.FromTo) newJobXfer {
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
-		return nil // TODO
+		return FileToLocal
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-		return nil // TODO
+		return LocalToFile
 	}
 	panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
 }

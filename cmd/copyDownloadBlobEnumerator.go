@@ -4,32 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
 	"strings"
 	"sync"
-	"github.com/Azure/azure-storage-azcopy/ste"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
-type copyDownloadEnumerator common.CopyJobPartOrderRequest
+type copyDownloadBlobEnumerator common.CopyJobPartOrderRequest
 
 // this function accepts a url (with or without *) to blobs for download and processes them
-func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
-								wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
+	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
-
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-		})
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(sourceUrlString)
@@ -42,7 +31,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
 
 	// check if the given url is a container
-	if util.urlIsContainer(sourceUrl) {
+	if util.utlIsContainerOrShare(sourceUrl) {
 		return errors.New("cannot download an entire container, use prefix match with a * at the end of path instead")
 	}
 
@@ -101,7 +90,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 			}
 		}
 
-		err = e.dispatchPart(true)
+		err = e.dispatchFinalPart()
 		if err != nil {
 			return err
 		}
@@ -164,7 +153,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 				for _, blobInfo := range listBlob.Blobs.Blob {
 					e.addTransfer(common.CopyTransfer{
 						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name, "/")),
+						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name)),
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength},
 						wg,
@@ -179,7 +168,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 			}
 		}
 
-		err = e.dispatchPart(true)
+		err = e.dispatchFinalPart()
 		if err != nil {
 			return err
 		}
@@ -190,51 +179,64 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 	return nil
 }
 
-// accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
-func (e *copyDownloadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-								waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error){
-	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
-		resp := common.CopyJobPartOrderResponse{}
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
-
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-		}
-
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-		if e.PartNum == 0{
-			// adding go routine to the wait group.
-			wg.Add(1)
-			go waitUntilJobCompletion(e.JobID, wg)
-		}
-		e.Transfers = []common.CopyTransfer{}
-		e.PartNum++
-	}
-	e.Transfers = append(e.Transfers, transfer)
-	return nil
+func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
+	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
 }
 
-
-// send the current list of transfer to the STE
-func (e *copyDownloadEnumerator) dispatchPart(isFinalPart bool) error {
-	// if the job is empty, throw an error
-	if !isFinalPart && len(e.Transfers) == 0 {
-		return errors.New("cannot initiate empty job, please make sure source is not empty")
-	}
-
-	e.IsFinalPart = isFinalPart
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
-
-	if !resp.JobStarted {
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-	}
-
-	// empty the transfers and increment part number count
-	e.Transfers = []common.CopyTransfer{}
-	if !isFinalPart{
-		// part number needs to incremented only when the part is not the final part.
-		e.PartNum++
-	}
-	return nil
+func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
 }
+
+/////////////////////////////////////////////////////////////////////////////////////
+// TODO: Following are dup code during invovle file, please double check.
+/////////////////////////////////////////////////////////////////////////////////////
+
+// // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
+// func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
+// 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+// 	e.Transfers = append(e.Transfers, transfer)
+
+// 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
+// 		resp := common.CopyJobPartOrderResponse{}
+// 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+
+// 		if !resp.JobStarted {
+// 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+// 		}
+
+// 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+// 		if e.PartNum == 0 {
+// 			// adding go routine to the wait group.
+// 			wg.Add(1)
+// 			go waitUntilJobCompletion(e.JobID, wg)
+// 		}
+// 		e.Transfers = []common.CopyTransfer{}
+// 		e.PartNum++
+// 	}
+// 	return nil
+// }
+
+// // send the current list of transfer to the STE
+// func (e *copyDownloadBlobEnumerator) dispatchPart(isFinalPart bool) error {
+// 	// if the job is empty, throw an error
+// 	if !isFinalPart && len(e.Transfers) == 0 {
+// 		return errors.New("cannot initiate empty job, please make sure source is not empty")
+// 	}
+
+// 	e.IsFinalPart = isFinalPart
+// 	var resp common.CopyJobPartOrderResponse
+// 	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+
+// 	if !resp.JobStarted {
+// 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
+// 	}
+
+// 	// empty the transfers and increment part number count
+// 	e.Transfers = []common.CopyTransfer{}
+// 	if !isFinalPart {
+// 		// part number needs to incremented only when the part is not the final part.
+// 		e.PartNum++
+// 	}
+// 	return nil
+// }

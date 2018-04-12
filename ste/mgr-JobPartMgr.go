@@ -3,12 +3,14 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/http"
 	"strings"
 	"sync/atomic"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-04-17/azfile"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -59,27 +61,30 @@ type jobPartMgr struct {
 	filename JobPartPlanFileName
 
 	// When the part is schedule to run (inprogress), the below fields are used
-	planMMF   JobPartPlanMMF        // This Job part plan's MMF
+	planMMF JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blobHTTPHeaders          azblob.BlobHTTPHeaders
+	blobHTTPHeaders azblob.BlobHTTPHeaders
+	fileHTTPHeaders azfile.FileHTTPHeaders
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blockBlobTier 			string
+	blockBlobTier string
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	pageBlobTier            string
+	pageBlobTier string
 
-	blobMetadata             azblob.Metadata
+	blobMetadata azblob.Metadata
+	fileMetadata azfile.Metadata
+
 	preserveLastModifiedTime bool
 
-	newJobXfer  	newJobXfer // Method used to start the transfer
+	newJobXfer newJobXfer // Method used to start the transfer
 
-	priority   common.JobPriority
+	priority common.JobPriority
 
-	pacer      *pacer          // Pacer used by chunks when uploading data
+	pacer *pacer // Pacer used by chunks when uploading data
 
-	pipeline	pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
+	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
@@ -105,15 +110,18 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
+	// TODO: further refactor need be considered, not all the time both file and blob headers/metadata should be initialized.
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
 		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
 	jpm.blockBlobTier = string(dstData.BlockBlobTier[:dstData.BlockBlobTierLength])
-
 	jpm.pageBlobTier = string(dstData.PageBlobTier[:dstData.PageBlobTierLength])
-
+	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
+		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+	}
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
 	jpm.blobMetadata = azblob.Metadata{}
@@ -121,6 +129,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 			jpm.blobMetadata[kv[0]] = kv[1]
+		}
+	}
+
+	jpm.fileMetadata = azfile.Metadata{}
+	if len(metadataString) > 0 {
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			jpm.fileMetadata[kv[0]] = kv[1]
 		}
 	}
 
@@ -136,12 +152,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		jpm.AddToBytesToTransfer(jppt.SourceSize)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
+			jpm.ReportTransferDone()                   // Don't schedule an already-completed/failed transfer
 			jpm.AddToBytesTransferred(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
 			continue
 		}
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
-		if ts == common.ETransferStatus.Failed(){
+		if ts == common.ETransferStatus.Failed() {
 			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
 		}
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
@@ -166,40 +182,69 @@ func (jpm *jobPartMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	JobsAdmin.ScheduleChunk(jpm.priority, chunkFunc)
 }
 
-func (jpm *jobPartMgr)RescheduleTransfer(jptm IJobPartTransferMgr){
+func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
-	if jpm.pipeline == nil{
-		jpm.pipeline = newPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay,
-			},
-			Log: jpm.jobMgr.PipelineLogInfo(),
-			Telemetry:azblob.TelemetryOptions{Value:"azcopy-V2"},
-		}, jpm.pacer)
+func (jpm *jobPartMgr) createPipeline() {
+	if jpm.pipeline == nil {
+		fromTo := jpm.planMMF.Plan().FromTo
+
+		switch fromTo {
+		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
+			fallthrough
+		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
+			jpm.pipeline = azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+
+				Retry: azblob.RetryOptions{
+					Policy:        azblob.RetryPolicyExponential,
+					MaxTries:      UploadMaxTries,
+					TryTimeout:    UploadTryTimeout,
+					RetryDelay:    UploadRetryDelay,
+					MaxRetryDelay: UploadMaxRetryDelay,
+				},
+				Log:       jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
+			})
+		case common.EFromTo.FileLocal(): // download from Azure File to local file system
+			fallthrough
+		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
+			jpm.pipeline = azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
+
+				Retry: azfile.RetryOptions{
+					Policy:        azfile.RetryPolicyExponential,
+					MaxTries:      UploadMaxTries,
+					TryTimeout:    UploadTryTimeout,
+					RetryDelay:    UploadRetryDelay,
+					MaxRetryDelay: UploadMaxRetryDelay,
+				},
+				Log:       jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azfile.TelemetryOptions{Value: "azcopy-V2"},
+			})
+		default:
+			panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
+		}
 	}
+}
+
+func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
+	jpm.createPipeline()
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
-func (jpm *jobPartMgr) AddToBytesTransferred(value int64) (int64) {
+func (jpm *jobPartMgr) AddToBytesTransferred(value int64) int64 {
 	return atomic.AddInt64(&jpm.bytesTransferred, value)
 }
 
-func (jpm *jobPartMgr) AddToBytesToTransfer(value int64) (int64) {
+func (jpm *jobPartMgr) AddToBytesToTransfer(value int64) int64 {
 	return atomic.AddInt64(&jpm.totalBytesToTransfer, value)
 }
 
-func (jpm *jobPartMgr) BytesTransferred() int64{
+func (jpm *jobPartMgr) BytesTransferred() int64 {
 	return atomic.LoadInt64(&jpm.bytesTransferred)
 }
 
-func (jpm *jobPartMgr) BytesToTransfer() int64{
+func (jpm *jobPartMgr) BytesToTransfer() int64 {
 	return atomic.LoadInt64(&jpm.totalBytesToTransfer)
 }
 
@@ -210,7 +255,14 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.Bl
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.AccessTierType){
+func (jpm *jobPartMgr) fileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+		return jpm.fileHTTPHeaders, jpm.fileMetadata
+	}
+	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.fileMetadata
+}
+
+func (jpm *jobPartMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.AccessTierType) {
 	blockBlobTier = azblob.AccessTierType(jpm.blockBlobTier)
 	pageBlobTier = azblob.AccessTierType(jpm.pageBlobTier)
 	return
@@ -240,6 +292,8 @@ func (jpm *jobPartMgr) Close() {
 	// Clear other fields to all for GC
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{}
 	jpm.blobMetadata = azblob.Metadata{}
+	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{}
+	jpm.fileMetadata = azfile.Metadata{}
 	jpm.preserveLastModifiedTime = false
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {

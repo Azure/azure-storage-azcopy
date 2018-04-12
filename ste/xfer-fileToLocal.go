@@ -23,23 +23,23 @@ package ste
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-04-17/azfile"
 )
 
-func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+// todo: unify blobToLocal and fileToLocal
+func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	info := jptm.Info()
 	u, _ := url.Parse(info.Source)
-	srcBlobURL := azblob.NewBlobURL(*u, p)
+	srcFileURL := azfile.NewFileURL(*u, p)
 	// step 2: get size info for the download
-	blobSize := int64(info.SourceSize)
+	fileSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize)
 	numChunks := uint32(0)
 
@@ -51,7 +51,7 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 	}
 
 	// step 3: prep local file before download starts
-	if blobSize == 0 {
+	if fileSize == 0 {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
 			if strings.Contains(err.Error(), "too many open files") {
@@ -91,7 +91,7 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 		jptm.ReportTransferDone()
 
 	} else { // 3b: source has content
-		dstFile, err := createFileOfSize(info.Destination, blobSize)
+		dstFile, err := createFileOfSize(info.Destination, fileSize)
 		if err != nil {
 			if strings.Contains(err.Error(), "too many open files") {
 				// dst file could not be created because azcopy process
@@ -121,30 +121,30 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 			jptm.ReportTransferDone()
 			return
 		}
-		if rem := blobSize % downloadChunkSize; rem == 0 {
-			numChunks = uint32(blobSize / downloadChunkSize)
+		if rem := fileSize % downloadChunkSize; rem == 0 {
+			numChunks = uint32(fileSize / downloadChunkSize)
 		} else {
-			numChunks = uint32(blobSize/downloadChunkSize + 1)
+			numChunks = uint32(fileSize/downloadChunkSize + 1)
 		}
 		jptm.SetNumberOfChunks(numChunks)
-		blockIdCount := int32(0)
-		// step 4: go through the blob range and schedule download chunk jobs
-		for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
+		chunkIdCount := int32(0)
+		// step 4: go through the file range and schedule download chunk jobs
+		for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
 			adjustedChunkSize := downloadChunkSize
 
 			// compute exact size of the chunk
-			if startIndex+downloadChunkSize > blobSize {
-				adjustedChunkSize = blobSize - startIndex
+			if startIndex+downloadChunkSize > fileSize {
+				adjustedChunkSize = fileSize - startIndex
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, srcBlobURL, blockIdCount, dstFile, dstMMF, startIndex, adjustedChunkSize))
-			blockIdCount++
+			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, chunkIdCount, dstFile, dstMMF, startIndex, adjustedChunkSize))
+			chunkIdCount++
 		}
 	}
 }
 
-func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkId int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -169,7 +169,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 		} else {
 			// step 1: adding the chunks size to bytesOverWire and perform get
 			jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
-			get, err := transferBlobURL.Download(jptm.Context(), startIndex, adjustedChunkSize, azblob.BlobAccessConditions{}, false)
+			get, err := transferFileURL.Download(jptm.Context(), startIndex, adjustedChunkSize, false)
 			if err != nil {
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
@@ -181,16 +181,17 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				chunkDone()
 				return
 			}
+
 			// step 2: write the body into the memory mapped file directly
-			_, err = io.ReadFull(get.Body(), destinationMMF[startIndex:startIndex+adjustedChunkSize])
-			io.Copy(ioutil.Discard, get.Body())
-			get.Body().Close()
-			if err != nil {
+			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
+			bytesRead, err := io.ReadFull(retryReader, destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			retryReader.Close()
+			if int64(bytesRead) != adjustedChunkSize || err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because reading the downloaded chunk failed. Failed with error %s", workerId, chunkId, err.Error()))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
 					}
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -200,7 +201,8 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 
 			jptm.AddToBytesTransferred(adjustedChunkSize)
 
-			lastChunk, _ := jptm.ReportChunkDone()
+			lastChunk, nc := jptm.ReportChunkDone()
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("is last chunk %s and no of chunk %d", lastChunk, nc))
 			// step 3: check if this is the last chunk
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
@@ -223,6 +225,8 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 
 				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {
+					fmt.Println("last modified time ", lastModifiedTime)
+					fmt.Println("destination ", jptm.Info().Destination)
 					err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
 						if jptm.ShouldLog(pipeline.LogInfo) {
@@ -237,46 +241,4 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 			}
 		}
 	}
-}
-
-func createParentDirectoryIfNotExist(destinationPath string) error {
-	// check if parent directory exists
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, string(os.PathSeparator))]
-	_, err := os.Stat(parentDirectory)
-	// if the parent directory does not exist, create it and all its parents
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(parentDirectory, os.ModePerm)
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	return nil
-}
-
-// create an empty file and its parent directories, without any content
-func createEmptyFile(destinationPath string) error {
-	createParentDirectoryIfNotExist(destinationPath)
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	f.Close()
-	return nil
-}
-
-// create a file, given its path and length
-
-func createFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
-	createParentDirectoryIfNotExist(destinationPath)
-
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return nil, err
-	}
-	if truncateError := f.Truncate(fileSize); truncateError != nil {
-		return nil, err
-	}
-	return f, nil
 }

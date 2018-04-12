@@ -26,17 +26,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/spf13/cobra"
 	"io"
 	"net/url"
 	"os"
 	"os/signal"
+	"sync"
 	"sync/atomic"
 	"time"
-	"sync"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/spf13/cobra"
 )
 
 // upload related
@@ -364,7 +365,7 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		 JobID:    common.NewJobID(),
+		JobID:    common.NewJobID(),
 		FromTo:   cca.fromTo,
 		Priority: common.EJobPriority.Normal(),
 		LogLevel: cca.logVerbosity,
@@ -387,11 +388,17 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// depending on the source and destination type, we process the cp command differently
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
+		fallthrough
+	case common.EFromTo.LocalFile():
 		e := copyUploadEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobLocal():
-		e := copyDownloadEnumerator(jobPartOrder)
+		e := copyDownloadBlobEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.FileLocal():
+		e := copyDownloadFileEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():
@@ -493,7 +500,7 @@ Usage:
 				if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
 					raw.src = pipeLocation
 					raw.dst = args[0]
-				} else{
+				} else {
 					if err != nil {
 						return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 					} else {
