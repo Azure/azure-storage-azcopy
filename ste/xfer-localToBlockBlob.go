@@ -224,6 +224,12 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			if jptm.ShouldLog(pipeline.LogInfo){
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
 				jptm.AddToBytesTransferred(adjustedChunkSize)
+			}
+			if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
+				if jptm.ShouldLog(pipeline.LogInfo){
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
+				}
 				transferDone()
 			}
 		} else {
