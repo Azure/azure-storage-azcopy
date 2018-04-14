@@ -33,7 +33,6 @@ import (
 	"strings"
 	"io"
 	"io/ioutil"
-	"time"
 )
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
