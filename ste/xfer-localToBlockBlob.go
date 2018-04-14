@@ -33,6 +33,7 @@ import (
 	"strings"
 	"io"
 	"io/ioutil"
+	"time"
 )
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -232,7 +233,8 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				}
 				transferDone()
 			}
-		} else {
+			return
+		}
 			// step 1: generate block ID
 			blockId := common.NewUUID().String()
 			encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
@@ -328,6 +330,7 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				if jptm.ShouldLog(pipeline.LogInfo){
 					jptm.Log(pipeline.LogInfo, "completed successfully")
 				}
+				jptm.SetStatus(common.ETransferStatus.Success())
 				blockBlobTier, _ := jptm.BlobTiers()
 				if blockBlobTier != azblob.AccessTierNone {
 					setTierResp , err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
@@ -338,8 +341,6 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 									workerId, blockBlobTier, string(err.Error())))
 						}
 						jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-					}else{
-						jptm.SetStatus(common.ETransferStatus.Success())
 					}
 					if setTierResp != nil{
 						io.Copy(ioutil.Discard, setTierResp.Response().Body)
@@ -348,7 +349,6 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 				}
 				transferDone()
 			}
-		}
 	}
 }
 
