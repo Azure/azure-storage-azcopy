@@ -21,23 +21,23 @@
 package ste
 
 import (
-	"net/url"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"os"
-	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"encoding/base64"
 	"bytes"
-	"unsafe"
-	"strings"
+	"encoding/base64"
+	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
+	"net/url"
+	"os"
+	"strings"
+	"unsafe"
 )
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
-	EndsWith := func(s string, t string) bool{
+	EndsWith := func(s string, t string) bool {
 		return len(s) >= len(t) && strings.EqualFold(s[len(s)-len(t):], t)
 	}
 
@@ -52,8 +52,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 	// step 3: map in the file to upload before transferring chunks
 	srcFile, err := os.Open(info.Source)
-	if err != nil{
-		if jptm.ShouldLog(pipeline.LogInfo){
+	if err != nil {
+		if jptm.ShouldLog(pipeline.LogInfo) {
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %s", info.SourceSize))
 		}
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -62,8 +62,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		return
 	}
 	srcFileInfo, err := srcFile.Stat()
-	if err != nil{
-		if jptm.ShouldLog(pipeline.LogInfo){
+	if err != nil {
+		if jptm.ShouldLog(pipeline.LogInfo) {
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error getting the source file Info of file %s", info.SourceSize))
 		}
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -76,8 +76,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	if srcFileInfo.Size() > 0 {
 		// file needs to be memory mapped only when the file size is greater than 0.
 		srcMmf, err = common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
-		if err != nil{
-			if jptm.ShouldLog(pipeline.LogInfo){
+		if err != nil {
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("error memory mapping the source file %s. Failed with error %s", srcFile.Name(), err.Error()))
 			}
 			srcFile.Close()
@@ -88,10 +88,10 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 	}
 
-	if EndsWith(info.Source, ".vhd") && (blobSize % 512 == 0){
+	if EndsWith(info.Source, ".vhd") && (blobSize%512 == 0) {
 		pageBlobUrl := blobUrl.ToPageBlobURL()
 		// todo: remove the hard coded chunk size in case of pageblob
-		chunkSize = (4* 1024 * 1024)
+		chunkSize = (4 * 1024 * 1024)
 		// step 2: Get http headers and meta data of page.
 		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
@@ -100,7 +100,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
 			0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo){
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo,
 					fmt.Sprintf("failed since PageCreate failed due to %s", err.Error()))
 			}
@@ -110,7 +110,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			srcMmf.Unmap()
 			err = srcFile.Close()
 			if err != nil {
-				if jptm.ShouldLog(pipeline.LogInfo){
+				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
 						fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
 				}
@@ -123,25 +123,25 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		_, pageBlobTier := jptm.BlobTiers()
 		if pageBlobTier != azblob.AccessTierNone {
 			setTierResp, err := pageBlobUrl.SetTier(jptm.Context(), pageBlobTier)
-				if err != nil{
-					if jptm.ShouldLog(pipeline.LogInfo){
+			if err != nil {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
+				}
+				jptm.Cancel()
+				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				jptm.ReportTransferDone()
+				srcMmf.Unmap()
+				err = srcFile.Close()
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
+							fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
 					}
-					jptm.Cancel()
-					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-					jptm.ReportTransferDone()
-					srcMmf.Unmap()
-					err = srcFile.Close()
-					if err != nil {
-						if jptm.ShouldLog(pipeline.LogInfo){
-							jptm.Log(pipeline.LogInfo,
-								fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
-						}
-					}
+				}
 				return
 			}
-			if setTierResp != nil{
+			if setTierResp != nil {
 				io.Copy(ioutil.Discard, setTierResp.Response().Body)
 				setTierResp.Response().Body.Close()
 			}
@@ -150,8 +150,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		numPages := uint32(0)
 		if rem := blobSize % chunkSize; rem == 0 {
 			numPages = uint32(blobSize / chunkSize)
-		}else{
-			numPages = uint32(blobSize / chunkSize) + 1
+		} else {
+			numPages = uint32(blobSize/chunkSize) + 1
 		}
 
 		jptm.SetNumberOfChunks(numPages)
@@ -160,44 +160,44 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			adjustedPageSize := chunkSize
 
 			// compute actual size of the chunk
-			if startIndex+ chunkSize > blobSize {
+			if startIndex+chunkSize > blobSize {
 				adjustedPageSize = blobSize - startIndex
 			}
 
 			// schedule the chunk job/msg
 			jptm.ScheduleChunks(pageBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, startIndex, adjustedPageSize))
 		}
-	}	else if blobSize == 0 || blobSize <= chunkSize {
-			// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
-			PutBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer)
-			return
-	}	else{
-			// step 4.b: get the number of blocks and create a slice to hold the blockIDs of each chunk
-			numChunks := uint32(0)
-			if rem := info.SourceSize % int64(info.BlockSize); rem == 0{
-				numChunks = uint32(info.SourceSize / int64(info.BlockSize))
-			}else{
-				numChunks = uint32(info.SourceSize / int64(info.BlockSize)) + 1
+	} else if blobSize == 0 || blobSize <= chunkSize {
+		// step 4.a: if blob size is smaller than chunk size, we should do a put blob instead of chunk up the file
+		PutBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer)
+		return
+	} else {
+		// step 4.b: get the number of blocks and create a slice to hold the blockIDs of each chunk
+		numChunks := uint32(0)
+		if rem := info.SourceSize % int64(info.BlockSize); rem == 0 {
+			numChunks = uint32(info.SourceSize / int64(info.BlockSize))
+		} else {
+			numChunks = uint32(info.SourceSize/int64(info.BlockSize)) + 1
+		}
+		jptm.SetNumberOfChunks(numChunks)
+
+		blockIds := make([]string, numChunks)
+		blockIdCount := int32(0)
+
+		// step 5: go through the file and schedule chunk messages to upload each chunk
+		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
+			adjustedChunkSize := chunkSize
+
+			// compute actual size of the chunk
+			if startIndex+chunkSize > blobSize {
+				adjustedChunkSize = blobSize - startIndex
 			}
-			jptm.SetNumberOfChunks(numChunks)
 
-			blockIds := make([]string, numChunks)
-			blockIdCount := int32(0)
+			// schedule the chunk job/msg
+			jptm.ScheduleChunks(blockBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, blockIds, blockIdCount, startIndex, adjustedChunkSize))
 
-			// step 5: go through the file and schedule chunk messages to upload each chunk
-			for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
-				adjustedChunkSize := chunkSize
-
-				// compute actual size of the chunk
-				if startIndex+chunkSize > blobSize {
-					adjustedChunkSize = blobSize - startIndex
-				}
-
-				// schedule the chunk job/msg
-				jptm.ScheduleChunks(blockBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer, blockIds, blockIdCount, startIndex, adjustedChunkSize))
-
-				blockIdCount += 1
-			}
+			blockIdCount += 1
+		}
 	}
 }
 
@@ -213,7 +213,7 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			srcMmf.Unmap()
 			err := srcFile.Close()
 			if err != nil {
-				if jptm.ShouldLog(pipeline.LogInfo){
+				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
 						fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
 							workerId, err.Error()))
@@ -221,12 +221,12 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			}
 		}
 		if jptm.WasCanceled() {
-			if jptm.ShouldLog(pipeline.LogInfo){
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
 				jptm.AddToBytesTransferred(adjustedChunkSize)
 			}
-			if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
-				if jptm.ShouldLog(pipeline.LogInfo){
+			if lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
+				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
 						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
 				}
@@ -234,120 +234,120 @@ func blockBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf comm
 			}
 			return
 		}
-			// step 1: generate block ID
-			blockId := common.NewUUID().String()
-			encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
+		// step 1: generate block ID
+		blockId := common.NewUUID().String()
+		encodedBlockId := base64.StdEncoding.EncodeToString([]byte(blockId))
 
-			// step 2: save the block ID into the list of block IDs
-			blockIds[chunkId] = encodedBlockId
+		// step 2: save the block ID into the list of block IDs
+		blockIds[chunkId] = encodedBlockId
 
-			// step 3: perform put block
-			// adding the adjustedChunkSize to bytesOverWire for throughput.
-			jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
+		// step 3: perform put block
+		// adding the adjustedChunkSize to bytesOverWire for throughput.
+		jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
 
-			blockBlobUrl := blobURL.ToBlockBlobURL()
+		blockBlobUrl := blobURL.ToBlockBlobURL()
 
-			body := newRequestBodyPacer(bytes.NewReader(srcMmf[startIndex:startIndex+adjustedChunkSize]), pacer)
-			putBlockResponse, err := blockBlobUrl.StageBlock(jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{})
+		body := newRequestBodyPacer(bytes.NewReader(srcMmf[startIndex:startIndex+adjustedChunkSize]), pacer)
+		putBlockResponse, err := blockBlobUrl.StageBlock(jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{})
 
-			if err != nil {
-				if jptm.WasCanceled(){
-					if jptm.ShouldLog(pipeline.LogInfo){
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d which failed to upload chunkId %d because transfer was cancelled",
-								workerId, chunkId))
-					}
-				} else {
-					// cancel entire transfer because this chunk has failed
-					jptm.Cancel()
-					if jptm.ShouldLog(pipeline.LogInfo){
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
-								workerId, chunkId, startIndex))
-					}
-					//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
-					jptm.SetStatus(common.ETransferStatus.Failed())
+		if err != nil {
+			if jptm.WasCanceled() {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("has worker %d which failed to upload chunkId %d because transfer was cancelled",
+							workerId, chunkId))
 				}
-				//adding the chunk size to the bytes transferred to report the progress.
-				jptm.AddToBytesTransferred(adjustedChunkSize)
-
-				if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
-					if jptm.ShouldLog(pipeline.LogInfo){
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
-					}
-					transferDone()
+			} else {
+				// cancel entire transfer because this chunk has failed
+				jptm.Cancel()
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
+							workerId, chunkId, startIndex))
 				}
-				return
+				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
+				jptm.SetStatus(common.ETransferStatus.Failed())
 			}
-
-			if putBlockResponse != nil {
-				io.Copy(ioutil.Discard, putBlockResponse.Response().Body)
-				putBlockResponse.Response().Body.Close()
-			}
-
 			//adding the chunk size to the bytes transferred to report the progress.
 			jptm.AddToBytesTransferred(adjustedChunkSize)
 
-			// step 4: check if this is the last chunk
-			if  lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
-				// If the transfer gets cancelled before the putblock list
-				if jptm.WasCanceled() {
-					transferDone()
-					return
-				}
-				// step 5: this is the last block, perform EPILOGUE
+			if lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d which is concluding download transfer after processing chunkId %d with blocklist %s",
-							workerId, chunkId, blockIds))
-				}
-
-				// fetching the blob http headers with content-type, content-encoding attributes
-				// fetching the metadata passed with the JobPartOrder
-				blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
-
-				jptm.AddToBytesOverWire(uint64(len(blockId) * len(blockIds)))
-
-				putBlockListResponse, err := blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
-				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo){
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
-								workerId, chunkId, string(err.Error())))
-					}
-					jptm.SetStatus(common.ETransferStatus.Failed())
-					transferDone()
-					return
-				}
-
-				if putBlockListResponse != nil {
-					io.Copy(ioutil.Discard, putBlockListResponse.Response().Body)
-					putBlockListResponse.Response().Body.Close()
-				}
-
-				if jptm.ShouldLog(pipeline.LogInfo){
-					jptm.Log(pipeline.LogInfo, "completed successfully")
-				}
-				jptm.SetStatus(common.ETransferStatus.Success())
-				blockBlobTier, _ := jptm.BlobTiers()
-				if blockBlobTier != azblob.AccessTierNone {
-					setTierResp , err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
-					if err != nil{
-						if jptm.ShouldLog(pipeline.LogError){
-							jptm.Log(pipeline.LogError,
-								fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
-									workerId, blockBlobTier, string(err.Error())))
-						}
-						jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-					}
-					if setTierResp != nil{
-						io.Copy(ioutil.Discard, setTierResp.Response().Body)
-						setTierResp.Response().Body.Close()
-					}
+						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
 				}
 				transferDone()
 			}
+			return
+		}
+
+		if putBlockResponse != nil {
+			io.Copy(ioutil.Discard, putBlockResponse.Response().Body)
+			putBlockResponse.Response().Body.Close()
+		}
+
+		//adding the chunk size to the bytes transferred to report the progress.
+		jptm.AddToBytesTransferred(adjustedChunkSize)
+
+		// step 4: check if this is the last chunk
+		if lastChunk, _ := jptm.ReportChunkDone(); lastChunk {
+			// If the transfer gets cancelled before the putblock list
+			if jptm.WasCanceled() {
+				transferDone()
+				return
+			}
+			// step 5: this is the last block, perform EPILOGUE
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo,
+					fmt.Sprintf("has worker %d which is concluding download transfer after processing chunkId %d with blocklist %s",
+						workerId, chunkId, blockIds))
+			}
+
+			// fetching the blob http headers with content-type, content-encoding attributes
+			// fetching the metadata passed with the JobPartOrder
+			blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
+
+			jptm.AddToBytesOverWire(uint64(len(blockId) * len(blockIds)))
+
+			putBlockListResponse, err := blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+			if err != nil {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
+							workerId, chunkId, string(err.Error())))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				transferDone()
+				return
+			}
+
+			if putBlockListResponse != nil {
+				io.Copy(ioutil.Discard, putBlockListResponse.Response().Body)
+				putBlockListResponse.Response().Body.Close()
+			}
+
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, "completed successfully")
+			}
+			jptm.SetStatus(common.ETransferStatus.Success())
+			blockBlobTier, _ := jptm.BlobTiers()
+			if blockBlobTier != azblob.AccessTierNone {
+				setTierResp, err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogError) {
+						jptm.Log(pipeline.LogError,
+							fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
+								workerId, blockBlobTier, string(err.Error())))
+					}
+					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				}
+				if setTierResp != nil {
+					io.Copy(ioutil.Discard, setTierResp.Response().Body)
+					setTierResp.Response().Body.Close()
+				}
+			}
+			transferDone()
+		}
 	}
 }
 
@@ -373,38 +373,38 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 
 	// if the put blob is a failure, updating the transfer status to failed
 	if err != nil {
-		if jptm.WasCanceled(){
-			if jptm.ShouldLog(pipeline.LogInfo){
+		if jptm.WasCanceled() {
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, " put blob failed because transfer was cancelled ")
 			}
-		}else{
-			if jptm.ShouldLog(pipeline.LogInfo){
+		} else {
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" put blob failed and cancelling the transfer. Failed with error %s", err.Error()))
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
 	} else {
 		// if the put blob is a success, updating the transfer status to success
-		if jptm.ShouldLog(pipeline.LogInfo){
+		if jptm.ShouldLog(pipeline.LogInfo) {
 			jptm.Log(pipeline.LogInfo, "put blob successful")
 		}
 
 		jptm.SetStatus(common.ETransferStatus.Success())
-	}
 
-	blockBlobTier, _ := jptm.BlobTiers()
-	if blockBlobTier != azblob.AccessTierNone {
-		setTierResp, err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
-		if err != nil{
-			if jptm.ShouldLog(pipeline.LogError){
-				jptm.Log(pipeline.LogError,
-					fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
+		blockBlobTier, _ := jptm.BlobTiers()
+		if blockBlobTier != azblob.AccessTierNone {
+			setTierResp, err := blockBlobUrl.SetTier(jptm.Context(), blockBlobTier)
+			if err != nil {
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError,
+						fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
+				}
+				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 			}
-			jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-		}
-		if setTierResp != nil{
-			io.Copy(ioutil.Discard, setTierResp.Response().Body)
-			setTierResp.Response().Body.Close()
+			if setTierResp != nil {
+				io.Copy(ioutil.Discard, setTierResp.Response().Body)
+				setTierResp.Response().Body.Close()
+			}
 		}
 	}
 
@@ -420,7 +420,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 		srcMmf.Unmap()
 		err = srcFile.Close()
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo){
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo,
 					fmt.Sprintf("has worker which failed to close the file because of following error %s", err.Error()))
 			}
@@ -442,7 +442,7 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 			// adding the page size to the bytes transferred.
 			jptm.AddToBytesTransferred(pageSize)
 			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
-				if jptm.ShouldLog(pipeline.LogInfo){
+				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
 						fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
 				}
@@ -451,7 +451,7 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 				srcMmf.Unmap()
 				err := srcFile.Close()
 				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo){
+					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo,
 							fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
 					}
@@ -460,7 +460,7 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 		}
 
 		if jptm.WasCanceled() {
-			if jptm.ShouldLog(pipeline.LogInfo){
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo,
 					fmt.Sprintf("is cancelled. Hence not picking up page %d", startPage))
 			}
@@ -487,7 +487,7 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 			// If all the bytes in the pageBytes is 0, then we do not need to perform the PutPage
 			// Updating number of chunks done.
 			if allBytesZero {
-				if jptm.ShouldLog(pipeline.LogInfo){
+				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
 						fmt.Sprintf("has worker %d which is not performing PutPages for Page range from %d to %d since all the bytes are zero", workerId, startPage, startPage+pageSize))
 				}
@@ -502,12 +502,12 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 			resp, err := pageBlobUrl.UploadPages(jptm.Context(), startPage, body, azblob.BlobAccessConditions{})
 			if err != nil {
 				if jptm.WasCanceled() {
-					if jptm.ShouldLog(pipeline.LogInfo){
+					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo,
 							fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because transfer was cancelled", workerId, startPage, startPage+pageSize))
 					}
 				} else {
-					if jptm.ShouldLog(pipeline.LogInfo){
+					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo,
 							fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage+pageSize, err.Error()))
 					}
@@ -518,12 +518,12 @@ func pageBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf commo
 				pageDone()
 				return
 			}
-			if jptm.ShouldLog(pipeline.LogInfo){
+			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo,
 					fmt.Sprintf("has workedId %d which successfully complete PUT page request from range %d to %d", workerId, startPage, startPage+pageSize))
 			}
 			//closing the page upload response.
-			if resp != nil{
+			if resp != nil {
 				io.Copy(ioutil.Discard, resp.Response().Body)
 				resp.Response().Body.Close()
 			}
