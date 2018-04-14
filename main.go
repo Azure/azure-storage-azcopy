@@ -47,7 +47,7 @@ func mainWithExitCode() exitCode {
 		return exitCode{}.success()
 	}
 	azcopyAppPathFolder := GetAzCopyAppPath()
-	go ste.MainSTE(100, 5000, azcopyAppPathFolder)
+	go ste.MainSTE(100, 150, azcopyAppPathFolder)
 	cmd.Execute()
 	return exitCode{}.success()
 	//
