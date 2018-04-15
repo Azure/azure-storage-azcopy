@@ -25,6 +25,9 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+	"os"
+	"os/signal"
+	"time"
 )
 
 func init() {
@@ -54,6 +57,36 @@ func init() {
 	rootCmd.AddCommand(resumeCmd)
 }
 
+func waitUntilJobCompletion(jobID common.JobID) {
+	// created a signal channel to receive the Interrupt and Kill signal send to OS
+	cancelChannel := make(chan os.Signal, 1)
+	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
+
+	// waiting for signals from either cancelChannel or timeOut Channel.
+	// if no signal received, will fetch/display a job status update then sleep for a bit
+	startTime := time.Now()
+	for {
+		select {
+		case <-cancelChannel:
+			fmt.Println("Cancelling Job")
+			cookedCancelCmdArgs{jobID: jobID}.process()
+			os.Exit(1)
+		default:
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, startTime, false)
+
+			// happy ending to the front end
+			if jobStatus == common.EJobStatus.Completed() {
+				os.Exit(0)
+			}
+
+			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
+			//time.Sleep(2 * time.Second)
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+}
+
 // handles the resume command
 // dispatches the resume Job order to the storage engine
 func HandleResumeCommand(jobIdString string) {
@@ -67,5 +100,9 @@ func HandleResumeCommand(jobIdString string) {
 
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(), jobID, &resumeJobResponse)
-	fmt.Println(fmt.Sprintf("Job %s resume successfully", jobID))
+	if ! resumeJobResponse.CancelledPauseResumed {
+		fmt.Println(resumeJobResponse.ErrorMsg)
+		return
+	}
+	waitUntilJobCompletion(jobID)
 }

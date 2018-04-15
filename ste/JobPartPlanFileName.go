@@ -11,6 +11,7 @@ import (
 	"time"
 	"unsafe"
 	"path"
+	"strings"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,8 +55,22 @@ var planDir = ""	// TODO: Fix
 // TODO: This needs testing
 func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
 	var dataSchemaVersion common.Version
-	n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
-	if err != nil || n != 3 {
+	//n, err := fmt.Sscanf(string(jpfn), jobPartPlanFileNameFormat, &jobID, &partNumber, &dataSchemaVersion)
+	//if err != nil || n != 3 {
+	//	panic(err)
+	//}
+	//if dataSchemaVersion != DataSchemaVersion {
+	//	err = fmt.Errorf("job part Plan file's data schema version ('%d') doesn't match whatthis app requires ('%d')", dataSchemaVersion, DataSchemaVersion)
+	//}
+	//TODO: confirm the alternative approach. fmt.Sscanf not working for reading back string into struct JobId.
+	jpfnSplit := strings.Split(string(jpfn), "--")
+	jobId, err := common.ParseJobID(jpfnSplit[0])
+	if err != nil{
+		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %s", string(jpfn), err.Error())
+	}
+	jobID = jobId
+	n, err := fmt.Sscanf(jpfnSplit[1], "%05d.steV%d", &partNumber, &dataSchemaVersion)
+	if err != nil || n != 2 {
 		panic(err)
 	}
 	if dataSchemaVersion != DataSchemaVersion {

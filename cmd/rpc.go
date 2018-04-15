@@ -23,18 +23,19 @@ var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
 func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
 	// waiting for JobsAdmin to initialize before the request are send to transfer engine.
-	for {
-		if ste.JobsAdmin != nil{
-			break;
-		}
-		time.Sleep(500 * time.Millisecond)
+	select{
+	case <- ste.JobsAdminInitialized:
+		break
+	default:
+		time.Sleep(time.Millisecond * 500)
 	}
+
 	switch rpcCmd {
 	case common.ERpcCmd.CopyJobPartOrder():
 		*(responseData.(*common.CopyJobPartOrderResponse)) = ste.ExecuteNewCopyJobPartOrder(*requestData.(*common.CopyJobPartOrderRequest))
 
 	case common.ERpcCmd.ListJobs():
-		responseData = ste.ListJobs()
+		*(responseData.(*common.ListJobsResponse)) = ste.ListJobs()
 
 	case common.ERpcCmd.ListJobSummary():
 		*(responseData.(*common.ListJobSummaryResponse)) = ste.GetJobSummary(*requestData.(*common.JobID))
@@ -49,7 +50,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelled())
 
 	case common.ERpcCmd.ResumeJob():
-		responseData = ste.ResumeJobOrder(requestData.(common.JobID))
+		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(requestData.(common.JobID))
 
 	default:
 		panic(fmt.Errorf("Unrecognized RpcCmd: %q", rpcCmd.String()))

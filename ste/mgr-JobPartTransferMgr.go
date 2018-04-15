@@ -141,7 +141,7 @@ func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone ui
 
 // TransferStatus updates the status of given transfer for given jobId and partNumber
 func (jptm *jobPartTransferMgr) SetStatus(status common.TransferStatus) {
-	jptm.jobPartPlanTransfer.SetTransferStatus(status)
+	jptm.jobPartPlanTransfer.SetTransferStatus(status, false)
 }
 
 // TODO: Can we kill this method?

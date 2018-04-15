@@ -114,12 +114,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
 		jpm.AddToBytesToTransfer(jppt.SourceSize)
-		if ts := jppt.TransferStatus(); ts == common.ETransferStatus.Success() || ts == common.ETransferStatus.Failed() {
+		ts := jppt.TransferStatus()
+		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
 			jpm.AddToBytesTransferred(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
 			continue
 		}
-
+		// If the transfer was failed, then while rescheduling the transfer marking it Started.
+		if ts == common.ETransferStatus.Failed(){
+			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+		}
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		jptm := &jobPartTransferMgr{

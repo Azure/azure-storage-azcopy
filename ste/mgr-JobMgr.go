@@ -103,6 +103,9 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
 	if scheduleTransfers {
 		jpm.ScheduleTransfers(jm.ctx)
+	}else{
+		// If the transfer not scheduled, then Map the part file.
+		jpm.planMMF = jpm.filename.Map()
 	}
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
@@ -114,13 +117,16 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.reset(appCtx)
-	for p := common.PartNumber(0); true; p++ { // Schedule the transfer all of this job's parts
-		jpm, found := jm.JobPartMgr(p)
-		if !found {
-			break
-		}
+	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jpm.ScheduleTransfers(jm.ctx)
-	}
+	})
+	//for p := common.PartNumber(0); true; p++ { // Schedule the transfer all of this job's parts
+	//	jpm, found := jm.JobPartMgr(p)
+	//	if !found {
+	//		break
+	//	}
+	//	jpm.ScheduleTransfers(jm.ctx)
+	//}
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed

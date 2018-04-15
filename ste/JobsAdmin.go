@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 )
 
+var JobsAdminInitialized = make(chan bool, 1)
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
 var JobsAdmin interface {
 	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName
@@ -269,7 +270,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 			return nil
 		})
 		return files
-	}("TODO: JobPartPlanFileName.FileExtension()")
+	}(fmt.Sprintf(".steV%d", DataSchemaVersion))
 
 	// TODO : sort the file.
 	for f := 0; f < len(files); f++ {
@@ -279,13 +280,9 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 			continue
 		}
 		mmf := planFile.Map()
-		// TODO : skip part file for job which is cancelled.
-		if mmf.Plan().JobStatus() == common.EJobStatus.Cancelled() {
-			mmf.Unmap()
-		}
 		//todo : call the compute transfer function here for each job.
 		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel)
-		jm.AddJobPart(partNum, planFile, true)
+		jm.AddJobPart(partNum, planFile, false)
 	}
 }
 

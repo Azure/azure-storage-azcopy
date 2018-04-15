@@ -183,9 +183,17 @@ func (jppt *JobPartPlanTransfer) TransferStatus() common.TransferStatus {
 }
 
 // SetTransferStatus sets the transfer's status
-func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus) {
-	common.AtomicMorphInt32(&jppt.atomicTransferStatus.Value,
-		func(startVal int32) (val int32, morphResult interface{}) {
-			return common.Iffint32(startVal == (common.TransferStatus{}).Failed().Value, startVal, status.Value), nil
-		})
+// overWrite flags if set to true overWrites the failed status.
+// If overWrite flag is set to false, then status of transfer is set to failed won't be overWritten.
+// overWrite flag is used while resuming the failed transfers where the status of failed transfers are
+// marked to InProgress from failed.
+func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus, overWrite bool) {
+	if !overWrite {
+		common.AtomicMorphInt32(&jppt.atomicTransferStatus.Value,
+			func(startVal int32) (val int32, morphResult interface{}) {
+				return common.Iffint32(startVal == (common.TransferStatus{}).Failed().Value, startVal, status.Value), nil
+			})
+	}else{
+		atomic.StoreInt32(&jppt.atomicTransferStatus.Value, status.Value)
+	}
 }

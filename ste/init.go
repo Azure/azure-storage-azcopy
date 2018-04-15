@@ -49,7 +49,8 @@ func ToFixed(num float64, precision int) float64 {
 func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, 300, targetRateInMBps, azcopyAppPathFolder)
-	//JobsAdmin.ResurrectJobParts()
+	JobsAdmin.ResurrectJobParts()
+	JobsAdminInitialized <- true
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	deserialize := func(request *http.Request, v interface{}) {
@@ -116,10 +117,10 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		})
 
 	// Listen for front-end requests
-	if err := http.ListenAndServe("localhost:1337", nil); err != nil {
-		fmt.Print("Server already initialized")
-		return err
-	}
+	//if err := http.ListenAndServe("localhost:1337", nil); err != nil {
+	//	fmt.Print("Server already initialized")
+	//	return err
+	//}
 	return nil // TODO: don't return (like normal main)
 }
 
@@ -219,6 +220,50 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	* Iterate through each transfer of JobPart order and refresh the cancelled context of the transfer
     * Reschedule each transfer again into the transfer msg channel depending on the priority of the channel
 */
+//func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
+//	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
+//	if !found {
+//		return common.CancelPauseResumeResponse{
+//			CancelledPauseResumed: false,
+//			ErrorMsg:              fmt.Sprintf("no active job with JobId %v exists", jobID),
+//		}
+//	}
+//
+//	var jr common.CancelPauseResumeResponse
+//	jpm, found := jm.JobPartMgr(0)
+//	if !found {
+//		return common.CancelPauseResumeResponse{
+//			CancelledPauseResumed: false,
+//			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", jobID),
+//		}
+//	}
+//
+//	jpp0 := jpm.Plan()
+//	switch jpp0.JobStatus() { // Current status
+//	case common.EJobStatus.InProgress(): // Changing to Resumed is OK
+//		break // Nothing to do
+//
+//	case common.EJobStatus.Completed(): // You can't change state of a completed/canceled job
+//	case common.EJobStatus.Cancelled():
+//		jr = common.CancelPauseResumeResponse{
+//			CancelledPauseResumed: false,
+//			ErrorMsg:              fmt.Sprintf("Can't resume JobID=%v because it has already completed or been canceled", jobID),
+//		}
+//
+//	case common.EJobStatus.Paused(): // Resuming a paused job
+//		jpp0.SetJobStatus(common.EJobStatus.InProgress())
+//		msg := fmt.Sprintf("JobID=%v resumed", jobID)
+//		if jm.ShouldLog(pipeline.LogInfo) {
+//			jm.Log(pipeline.LogInfo, msg)
+//		}
+//		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
+//		jr = common.CancelPauseResumeResponse{
+//			CancelledPauseResumed: true,
+//			ErrorMsg:              msg,
+//		}
+//	}
+//	return jr
+//}
 func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
 	if !found {
@@ -242,23 +287,19 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 	case common.EJobStatus.InProgress(): // Changing to Resumed is OK
 		break // Nothing to do
 
-	case common.EJobStatus.Completed(): // You can't change state of a completed/canceled job
-	case common.EJobStatus.Cancelled():
-		jr = common.CancelPauseResumeResponse{
-			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("Can't resume JobID=%v because it has already completed or been canceled", jobID),
-		}
-
-	case common.EJobStatus.Paused(): // Resuming a paused job
+	// Resume all the failed / In Progress Transfers.
+	case common.EJobStatus.Completed(),
+		 common.EJobStatus.Cancelled(),
+		 common.EJobStatus.Paused():
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
-		msg := fmt.Sprintf("JobID=%v resumed", jobID)
+
 		if jm.ShouldLog(pipeline.LogInfo) {
-			jm.Log(pipeline.LogInfo, msg)
+			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", jobID))
 		}
 		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
-			ErrorMsg:              msg,
+			ErrorMsg:              "",
 		}
 	}
 	return jr
