@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 type copyDownloadEnumerator common.CopyJobPartOrderRequest
@@ -17,7 +18,18 @@ type copyDownloadEnumerator common.CopyJobPartOrderRequest
 func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
 								wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	p := azblob.NewPipeline(
+		azblob.NewAnonymousCredential(),
+		azblob.PipelineOptions{
+			Retry: azblob.RetryOptions{
+				Policy:        azblob.RetryPolicyExponential,
+				MaxTries:      ste.UploadMaxTries,
+				TryTimeout:    ste.UploadTryTimeout,
+				RetryDelay:    ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+		})
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(sourceUrlString)
