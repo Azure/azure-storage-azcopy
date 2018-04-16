@@ -25,17 +25,25 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
+	"bytes"
+	"fmt"
+	"context"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"net/http"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type pacer struct {
 	bytesAvailable int64
+	availableBytesPerPeriod int64
+	lastUpdatedTimestamp int64
 }
 
 // this function returns a pacer which limits the number bytes allowed to go out every second
 // it does so by issuing tickets (bytes allowed) periodically
 func newPacer(bytesPerSecond int64) (p *pacer) {
-	p = &pacer{bytesAvailable: 0}
-	availableBytesPerPeriod := bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000
+	p = &pacer{bytesAvailable: 0,
+		availableBytesPerPeriod:bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000}
 
 	// the pace runs in a separate goroutine for as long as the transfer engine is running
 	go func() {
@@ -45,14 +53,32 @@ func newPacer(bytesPerSecond int64) (p *pacer) {
 				runtime.Gosched()
 			}
 
+			atomic.StoreInt64(&p.bytesAvailable, p.availableBytesPerPeriod)
 			// if too many tickets were issued (2x the intended), we should scale back
-			if atomic.AddInt64(&p.bytesAvailable, availableBytesPerPeriod) > 2*availableBytesPerPeriod {
-				atomic.AddInt64(&p.bytesAvailable, -availableBytesPerPeriod)
-			}
+			//if atomic.AddInt64(&p.bytesAvailable, p.availableBytesPerPeriod) > 2*p.availableBytesPerPeriod {
+			//	atomic.AddInt64(&p.bytesAvailable, -p.availableBytesPerPeriod)
+			//}
 		}
 	}()
 
 	return
+}
+
+// NewPacerPolicyFactory creates a factory that can create telemetry policy objects
+// which add telemetry information to outgoing HTTP requests.
+func NewPacerPolicyFactory(p *pacer) pipeline.Factory {
+
+	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+			resp, err := next.Do(ctx, request)
+			if err == nil {
+				// Reducing the pacer's rate limit by 10 s for every 503 error.
+				p.updateTargetRate(resp.Response().StatusCode != http.StatusServiceUnavailable)
+
+			}
+			return resp, err
+		}
+	})
 }
 
 // this function is called by goroutines to request right to send a certain amount of bytes
@@ -64,6 +90,18 @@ func (p *pacer) requestRightToSend(bytesToSend int64) {
 		// put tickets back if attempt was unsuccessful
 		atomic.AddInt64(&p.bytesAvailable, bytesToSend)
 		time.Sleep(time.Millisecond * 1)
+	}
+}
+
+func (p *pacer) updateTargetRate(increase bool) {
+	lastCheckedTimestamp := atomic.LoadInt64(&p.lastUpdatedTimestamp)
+	//lastCheckedTime := time.Unix(0,lastCheckedTimestamp)
+
+	if time.Now().Sub(time.Unix(0,lastCheckedTimestamp)) < (time.Second * 3) {
+		return
+	}
+	if atomic.CompareAndSwapInt64(&p.lastUpdatedTimestamp, lastCheckedTimestamp, time.Now().UnixNano()) {
+		atomic.StoreInt64(&p.availableBytesPerPeriod, int64(common.Ifffloat64(increase, 1.1, 0.9) * float64(p.availableBytesPerPeriod)))
 	}
 }
 

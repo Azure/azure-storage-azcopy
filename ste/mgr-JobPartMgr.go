@@ -30,6 +30,26 @@ type IJobPartMgr interface {
 	common.ILogger
 }
 
+// NewPipeline creates a Pipeline using the specified credentials and options.
+func newPipeline(c azblob.Credential, o azblob.PipelineOptions) pipeline.Pipeline {
+	if c == nil {
+		panic("c can't be nil")
+	}
+
+	// Closest to API goes first; closest to the wire goes last
+	f := []pipeline.Factory{
+		azblob.NewTelemetryPolicyFactory(o.Telemetry),
+		azblob.NewUniqueRequestIDPolicyFactory(),
+		azblob.NewRetryPolicyFactory(o.Retry),
+		c,
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+		NewPacerPolicyFactory(nil), // Todo: add pacer
+		azblob.NewRequestLogPolicyFactory(o.RequestLog),
+	}
+
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // jobPartMgr represents the runtime information for a Job's Part
@@ -152,7 +172,7 @@ func (jpm *jobPartMgr)RescheduleTransfer(jptm IJobPartTransferMgr){
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
 	if jpm.pipeline == nil{
-		jpm.pipeline = azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		jpm.pipeline = newPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 
 			Retry: azblob.RetryOptions{
 				Policy:        azblob.RetryPolicyExponential,
