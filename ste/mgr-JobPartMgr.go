@@ -31,7 +31,7 @@ type IJobPartMgr interface {
 }
 
 // NewPipeline creates a Pipeline using the specified credentials and options.
-func newPipeline(c azblob.Credential, o azblob.PipelineOptions) pipeline.Pipeline {
+func newPipeline(c azblob.Credential, o azblob.PipelineOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -43,7 +43,7 @@ func newPipeline(c azblob.Credential, o azblob.PipelineOptions) pipeline.Pipelin
 		azblob.NewRetryPolicyFactory(o.Retry),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(nil), // Todo: add pacer
+		NewPacerPolicyFactory(p),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
 
@@ -173,7 +173,6 @@ func (jpm *jobPartMgr)RescheduleTransfer(jptm IJobPartTransferMgr){
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
 	if jpm.pipeline == nil{
 		jpm.pipeline = newPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-
 			Retry: azblob.RetryOptions{
 				Policy:        azblob.RetryPolicyExponential,
 				MaxTries:      UploadMaxTries,
@@ -183,7 +182,7 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr){
 			},
 			Log: jpm.jobMgr.PipelineLogInfo(),
 			Telemetry:azblob.TelemetryOptions{Value:"azcopy-V2"},
-		})
+		}, jpm.pacer)
 	}
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }

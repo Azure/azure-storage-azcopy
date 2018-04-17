@@ -25,8 +25,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
-	"bytes"
-	"fmt"
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"net/http"
@@ -43,7 +41,8 @@ type pacer struct {
 // it does so by issuing tickets (bytes allowed) periodically
 func newPacer(bytesPerSecond int64) (p *pacer) {
 	p = &pacer{bytesAvailable: 0,
-		availableBytesPerPeriod:bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000}
+		availableBytesPerPeriod:bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000,
+		lastUpdatedTimestamp:time.Now().UnixNano()}
 
 	// the pace runs in a separate goroutine for as long as the transfer engine is running
 	go func() {
@@ -74,7 +73,6 @@ func NewPacerPolicyFactory(p *pacer) pipeline.Factory {
 			if err == nil {
 				// Reducing the pacer's rate limit by 10 s for every 503 error.
 				p.updateTargetRate(resp.Response().StatusCode != http.StatusServiceUnavailable)
-
 			}
 			return resp, err
 		}
@@ -96,7 +94,6 @@ func (p *pacer) requestRightToSend(bytesToSend int64) {
 func (p *pacer) updateTargetRate(increase bool) {
 	lastCheckedTimestamp := atomic.LoadInt64(&p.lastUpdatedTimestamp)
 	//lastCheckedTime := time.Unix(0,lastCheckedTimestamp)
-
 	if time.Now().Sub(time.Unix(0,lastCheckedTimestamp)) < (time.Second * 3) {
 		return
 	}
