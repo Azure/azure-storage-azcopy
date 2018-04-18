@@ -155,6 +155,7 @@ func (FromTo) BlobPipe() FromTo  { return FromTo{5} }
 func (FromTo) PipeBlob() FromTo  { return FromTo{6} }
 func (FromTo) FilePipe() FromTo  { return FromTo{7} }
 func (FromTo) PipeFile() FromTo  { return FromTo{8} }
+func (FromTo) BlobTrash() FromTo { return FromTo{9}}
 
 func (ft FromTo) String() string {
 	return EnumUint8(ft).String(reflect.TypeOf(ft))

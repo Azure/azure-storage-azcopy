@@ -44,7 +44,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	if err != nil {
 		return common.EFromTo.Unknown(), fmt.Errorf("Invalid --FromTo value specified: %q", userSpecifiedFromTo)
 	}
-	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo {
+	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo || userFromTo == common.EFromTo.BlobTrash() {
 		// We couldn't infer the FromTo or what we inferred matches what the user specified
 		// We'll accept what the user specified
 		return userFromTo, nil
