@@ -66,7 +66,6 @@ func newPacer(bytesPerSecond int64) (p *pacer) {
 // NewPacerPolicyFactory creates a factory that can create telemetry policy objects
 // which add telemetry information to outgoing HTTP requests.
 func NewPacerPolicyFactory(p *pacer) pipeline.Factory {
-
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
 			resp, err := next.Do(ctx, request)

@@ -121,7 +121,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					} else { // upload the files
 						// the path in the blob name started at the given fileOrDirectoryPath
 						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
-						destinationUrl.Path = util.generateBlobPath(cleanContainerPath, util.getRelativePath(fileOrDirectoryPath, pathToFile))
+						destinationUrl.Path = util.generateBlobPath(cleanContainerPath, util.getRelativePath(fileOrDirectoryPath, pathToFile, string(os.PathSeparator)))
 						err = e.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      destinationUrl.String(),

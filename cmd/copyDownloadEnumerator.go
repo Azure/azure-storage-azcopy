@@ -164,7 +164,7 @@ func (e *copyDownloadEnumerator) enumerate(sourceUrlString string, isRecursiveOn
 				for _, blobInfo := range listBlob.Blobs.Blob {
 					e.addTransfer(common.CopyTransfer{
 						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name)),
+						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name, "/")),
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength},
 						wg,

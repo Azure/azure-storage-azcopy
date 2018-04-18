@@ -63,17 +63,17 @@ func (copyHandlerUtil) generateBlobPath(destinationPath, fileName string) string
 }
 
 // get relative path given a root path
-func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
+func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string) string {
 	// root path contains the entire absolute path to the root directory, so we need to take away everything except the root directory from filePath
 	// example: rootPath = "/dir1/dir2/dir3" filePath = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt" scrubAway="/dir1/dir2/"
 
 	var scrubAway string
 	// test if root path finishes with a /, if yes, ignore it
-	if rootPath[len(rootPath)-1:] == string(os.PathSeparator) {
-		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], string(os.PathSeparator))+1]
+	if rootPath[len(rootPath)-1:] == pathSep {
+		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
 	} else {
 		// +1 because we want to include the / at the end of the dir
-		scrubAway = rootPath[:strings.LastIndex(rootPath, string(os.PathSeparator))+1]
+		scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
 	}
 
 	result := strings.Replace(filePath, scrubAway, "", 1)
