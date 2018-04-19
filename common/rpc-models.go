@@ -44,6 +44,16 @@ type CopyJobPartOrderRequest struct {
 	BlobAttributes BlobTransferAttributes
 }
 
+type SyncJobPartOrderRequest struct {
+	JobID	JobID
+	FromTo  FromTo
+	PartNumber PartNumber
+	LogLevel LogLevel
+	BlockSizeInBytes uint32
+	CopyJobRequest   CopyJobPartOrderRequest
+	DeleteJobRequest CopyJobPartOrderRequest
+}
+
 type CopyJobPartOrderResponse struct {
 	ErrorMsg   string
 	JobStarted bool
