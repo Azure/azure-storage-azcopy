@@ -138,6 +138,17 @@ func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
 	return url
 }
 
+func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string){
+	s := strings.SplitAfterN(url.Path[1:], "/", 2)
+	containerUrl = "/" + s[0]
+	suffix = s[1]
+	if strings.LastIndex(suffix, "/") == len(suffix)-1{
+		// if there is a path separator at the end, then remove the path separator.
+		suffix = suffix[:len(suffix)-1]
+	}
+	return
+}
+
 func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) string {
 	containerUrl.Path = containerUrl.Path + blobName
 	return containerUrl.String()
