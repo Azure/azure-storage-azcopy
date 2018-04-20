@@ -83,25 +83,15 @@ func (cca cookedSyncCmdArgs) process() (err error) {
 	}
 	// wait group to monitor the go routines fetching the job progress summary
 	var wg sync.WaitGroup
-	// lastPartNumber determines the last part number order send for the Job.
-	var lastPartNumber common.PartNumber
-
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
 		e := syncUploadEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
-		lastPartNumber = e.PartNumber
 	default:
 		return fmt.Errorf("from to destination not supported")
 	}
 	if err != nil{
 		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.src, cca.dst, err.Error())
-	}
-	// If there is only one, part then start fetching the JobPart Order.
-	if lastPartNumber == 0 {
-		fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-		wg.Add(1)
-		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
 	}
 	wg.Wait()
 	return nil

@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 type syncUploadEnumerator common.SyncJobPartOrderRequest
@@ -74,7 +73,7 @@ func (e *syncUploadEnumerator) dispatchFinalPart() error {
 	numberOfDeleteTransfers := len(e.DeleteJobRequest.Transfers)
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
 		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
-			"The source and destination  and in sync")
+			"The source and destination are in sync")
 	} else if numberOfCopyTransfers > 0 && numberOfDeleteTransfers > 0 {
 		var resp common.CopyJobPartOrderResponse
 		e.CopyJobRequest.PartNum = e.PartNumber
@@ -84,12 +83,14 @@ func (e *syncUploadEnumerator) dispatchFinalPart() error {
 		}
 		e.PartNumber++
 		e.DeleteJobRequest.IsFinalPart = true
+		e.DeleteJobRequest.PartNum = e.PartNumber
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
 		if !resp.JobStarted {
 			return fmt.Errorf("delete job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
 	} else if numberOfCopyTransfers > 0 {
 		e.CopyJobRequest.IsFinalPart = true
+		e.CopyJobRequest.PartNum = e.PartNumber
 		var resp common.CopyJobPartOrderResponse
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.CopyJobRequest), &resp)
 		if !resp.JobStarted {
@@ -97,6 +98,7 @@ func (e *syncUploadEnumerator) dispatchFinalPart() error {
 		}
 	} else {
 		e.DeleteJobRequest.IsFinalPart = true
+		e.DeleteJobRequest.PartNum = e.PartNumber
 		var resp common.CopyJobPartOrderResponse
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
 		if !resp.JobStarted {
@@ -106,16 +108,85 @@ func (e *syncUploadEnumerator) dispatchFinalPart() error {
 	return nil
 }
 
-func (e *syncUploadEnumerator) compareRemoteFilesAgainstLocal(
+func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	sourcePath string, isRecursiveOn bool,
 	destinationUrlString string, p pipeline.Pipeline,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	//util := copyHandlerUtil{}
 
+	util := copyHandlerUtil{}
+
+	destinationUrl, err := url.Parse(destinationUrlString)
+	if err != nil{
+		return fmt.Errorf("error parsing the destinatio url")
+	}
+	var containerUrl url.URL
+	var searchPrefix string
+	if !util.urlIsContainer(destinationUrl){
+		containerUrl = util.getContainerURLFromString(*destinationUrl)
+		// get the search prefix to query the service
+		searchPrefix = util.getBlobNameFromURL(destinationUrl.Path)
+		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
+	}else{
+		containerUrl = *destinationUrl
+		searchPrefix = ""
+	}
+
+	// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
+	if strings.LastIndex(searchPrefix, "/") != len(searchPrefix)-1 {
+		searchPrefix += "/"
+	}
+
+	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
+
+	closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
+	// strip away the leading / in the closest virtual directory
+	if len(closestVirtualDirectory) > 0 && closestVirtualDirectory[0:1] == "/" {
+		closestVirtualDirectory = closestVirtualDirectory[1:]
+	}
+
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		// look for all blobs that start with the prefix
+		listBlob, err := containerBlobUrl.ListBlobsFlatSegment(context.TODO(), marker,
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+		if err != nil {
+			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
+		}
+
+		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
+		for _, blobInfo := range listBlob.Blobs.Blob {
+			blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
+			// If there is a "/" at the start of blobName, then strip "/" separator.
+			if len(blobNameAfterPrefix) > 0 && blobNameAfterPrefix[0:1] == "/"{
+				blobNameAfterPrefix = blobNameAfterPrefix[1:]
+			}
+			if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
+				continue
+			}
+			blobLocalPath := util.generateLocalPath(sourcePath, blobNameAfterPrefix)
+			_, err := os.Stat(blobLocalPath)
+			if err == nil {
+				continue
+			}
+			// if the blob doesn't exits locally, then we need to delete blob.
+			if err != nil && os.IsNotExist(err){
+				// delete the blob.
+				e.addTransferToDelete(common.CopyTransfer{
+					Source:util.generateBlobUrl(containerUrl, blobInfo.Name),
+					Destination:"", // no destination in case of Delete JobPartOrder
+					SourceSize:*blobInfo.Properties.ContentLength,
+				}, wg , waitUntilJobCompletion)
+			}
+		}
+		marker = listBlob.NextMarker
+		//err = e.dispatchPart(false)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (e *syncUploadEnumerator) checkLocalFilesOnContainer(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
+func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 
@@ -154,21 +225,22 @@ func (e *syncUploadEnumerator) checkLocalFilesOnContainer(src string, isRecursiv
 		}
 		return nil
 	}
-	// list the source files and directories
-	listOfFilesAndDirectories, err := filepath.Glob(src)
-	if err != nil || len(listOfFilesAndDirectories) == 0 {
+
+	// verify the source path provided is valid or not.
+	_, err = os.Stat(src)
+	if err != nil  {
 		return fmt.Errorf("cannot find source to sync")
 	}
 
 	var containerPath string
-	var destinationSufferAfterContainer string
+	var destinationSuffixAfterContainer string
 
 	// If destination url is not container, then get container Url from destination string.
 	if !util.urlIsContainer(destinationUrl) {
-		containerPath, destinationSufferAfterContainer = util.getConatinerUrlAndSuffix(*destinationUrl)
+		containerPath, destinationSuffixAfterContainer = util.getConatinerUrlAndSuffix(*destinationUrl)
 	} else {
 		containerPath = util.getContainerURLFromString(*destinationUrl).Path
-		destinationSufferAfterContainer = ""
+		destinationSuffixAfterContainer = ""
 	}
 
 	var dirIterateFunction func(dirPath string, currentDirString string) error
@@ -184,7 +256,7 @@ func (e *syncUploadEnumerator) checkLocalFilesOnContainer(src string, isRecursiv
 			} else {
 				// the path in the blob name started at the given fileOrDirectoryPath
 				// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
-				destinationUrl.Path = containerPath + destinationSufferAfterContainer + currentDirString + files[i].Name()
+				destinationUrl.Path = containerPath + destinationSuffixAfterContainer + currentDirString + files[i].Name()
 				localFilePath := dirPath + string(os.PathSeparator) + files[i].Name()
 				blobUrl := azblob.NewBlobURL(*destinationUrl, p)
 				blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
@@ -217,49 +289,51 @@ func (e *syncUploadEnumerator) checkLocalFilesOnContainer(src string, isRecursiv
 		}
 		return nil
 	}
+	return dirIterateFunction(src, "/")
 	// walk through every file and directory
 	// upload every file
 	// upload directory recursively if recursive option is on
-	for _, fileOrDirectoryPath := range listOfFilesAndDirectories {
-		f, err := os.Stat(fileOrDirectoryPath)
-		if err == nil {
-			// directories are uploaded only if recursive is on
-			if f.IsDir() && isRecursiveOn {
-				err = dirIterateFunction(fileOrDirectoryPath, "/")
-				if err != nil {
-					return err
-				}
-			} else if !f.IsDir() {
-				// files are uploaded using their file name as blob name
-				destinationUrl.Path = containerPath + "/" + destinationSufferAfterContainer + "/" + f.Name()
-				blobUrl := azblob.NewBlobURL(*destinationUrl, p)
-				blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
-
-				if err != nil {
-					if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
-						return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", f.Name(), err.Error())
-					}
-				}
-				if !f.ModTime().After(blobProperties.LastModified()) {
-					return fmt.Errorf("sync not required since the destination is same as source or was modified later than source")
-				}
-				// Closing the blob Properties response body if not nil.
-				if blobProperties != nil && blobProperties.Response() != nil {
-					io.Copy(ioutil.Discard, blobProperties.Response().Body)
-					blobProperties.Response().Body.Close()
-				}
-				err = e.addTransferToUpload(common.CopyTransfer{
-					Source:           fileOrDirectoryPath,
-					Destination:      destinationUrl.String(),
-					LastModifiedTime: f.ModTime(),
-					SourceSize:       f.Size(),
-				}, wg, waitUntilJobCompletion)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
+	//for _, fileOrDirectoryPath := range listOfFilesAndDirectories {
+	//	f, err := os.Stat(fileOrDirectoryPath)
+	//	if err == nil {
+	//		// directories are uploaded only if recursive is on
+	//		if f.IsDir() && isRecursiveOn {
+	//			err = dirIterateFunction(fileOrDirectoryPath, "/")
+	//			if err != nil {
+	//				return err
+	//			}
+	//		} else if !f.IsDir() {
+	//			// files are uploaded using their file name as blob name
+	//			destinationUrl.Path = containerPath + "/" + destinationSuffixAfterContainer + "/" + f.Name()
+	//			fmt.Println("destination path ", destinationUrl.Path)
+	//			blobUrl := azblob.NewBlobURL(*destinationUrl, p)
+	//			blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	//
+	//			if err != nil {
+	//				if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
+	//					return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", f.Name(), err.Error())
+	//				}
+	//			}
+	//			if !f.ModTime().After(blobProperties.LastModified()) {
+	//				return fmt.Errorf("sync not required since the destination is same as source or was modified later than source")
+	//			}
+	//			// Closing the blob Properties response body if not nil.
+	//			if blobProperties != nil && blobProperties.Response() != nil {
+	//				io.Copy(ioutil.Discard, blobProperties.Response().Body)
+	//				blobProperties.Response().Body.Close()
+	//			}
+	//			err = e.addTransferToUpload(common.CopyTransfer{
+	//				Source:           fileOrDirectoryPath,
+	//				Destination:      destinationUrl.String(),
+	//				LastModifiedTime: f.ModTime(),
+	//				SourceSize:       f.Size(),
+	//			}, wg, waitUntilJobCompletion)
+	//			if err != nil {
+	//				return err
+	//			}
+	//		}
+	//	}
+	//}
 	return nil
 }
 
@@ -271,10 +345,10 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 		azblob.PipelineOptions{
 			Retry: azblob.RetryOptions{
 				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
+				MaxTries:      5,
+				TryTimeout:    time.Minute * 1,
+				RetryDelay:    time.Second * 1,
+				MaxRetryDelay: time.Second * 3,
 			},
 		})
 	// Copying the JobId of sync job to individual copyJobRequest
@@ -286,9 +360,22 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	// FromTo of DeleteJobRequest will be BlobTrash.
 	e.DeleteJobRequest.FromTo = common.EFromTo.BlobTrash()
 
-	err := e.checkLocalFilesOnContainer(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
+	err := e.compareLocalAgainstRemote(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
 	if err != nil {
 		return nil
+	}
+	err = e.compareRemoteAgainstLocal(src, isRecursiveOn, dst, p, wg, waitUntilJobCompletion)
+	if err != nil{
+		return err
+	}
+	// No Job Part has been dispatched, then dispatch the JobPart.
+	if e.PartNumber == 0 {
+		err = e.dispatchFinalPart()
+		if err != nil{
+			return err
+		}
+		wg.Add(1)
+		waitUntilJobCompletion(e.JobID, wg)
 	}
 	return nil
 }
