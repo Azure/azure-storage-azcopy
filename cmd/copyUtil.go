@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	NumOfFilesPerUploadJobPart = 20
+	NumOfFilesPerUploadJobPart = 10000
 )
 
 type copyHandlerUtil struct{}
