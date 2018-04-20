@@ -87,6 +87,9 @@ func (cca cookedSyncCmdArgs) process() (err error) {
 	case common.EFromTo.LocalBlob():
 		e := syncUploadEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+	case common.EFromTo.BlobLocal():
+		e := syncDownloadEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 	default:
 		return fmt.Errorf("from to destination not supported")
 	}

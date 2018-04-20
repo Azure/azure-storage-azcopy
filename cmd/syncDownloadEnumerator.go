@@ -16,10 +16,10 @@ import (
 	"time"
 )
 
-type syncUploadEnumerator common.SyncJobPartOrderRequest
+type syncDownloadEnumerator common.SyncJobPartOrderRequest
 
 // accepts a new transfer which is to delete the blob on container.
-func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer, wg *sync.WaitGroup,
+func (e *syncDownloadEnumerator) addTransferToDelete(transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	// If the existing transfers in DeleteJobRequest is equal to NumOfFilesPerUploadJobPart,
 	// then send the JobPartOrder to transfer engine.
@@ -44,7 +44,7 @@ func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer,
 }
 
 // accept a new transfer, if the threshold is reached, dispatch a job part order
-func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer, wg *sync.WaitGroup,
+func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 
 	if len(e.CopyJobRequest.Transfers) == NumOfFilesPerUploadJobPart {
@@ -68,7 +68,7 @@ func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer,
 }
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
-func (e *syncUploadEnumerator) dispatchFinalPart() error {
+func (e *syncDownloadEnumerator) dispatchFinalPart() error {
 	numberOfCopyTransfers := len(e.CopyJobRequest.Transfers)
 	numberOfDeleteTransfers := len(e.DeleteJobRequest.Transfers)
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
@@ -108,7 +108,7 @@ func (e *syncUploadEnumerator) dispatchFinalPart() error {
 	return nil
 }
 
-func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
+func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 	sourcePath string, isRecursiveOn bool,
 	destinationUrlString string, p pipeline.Pipeline,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
@@ -163,17 +163,26 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 				continue
 			}
 			blobLocalPath := util.generateLocalPath(sourcePath, blobNameAfterPrefix)
-			_, err := os.Stat(blobLocalPath)
+			f, err := os.Stat(blobLocalPath)
 			if err == nil {
-				continue
-			}
-			// if the blob doesn't exits locally, then we need to delete blob.
-			if err != nil && os.IsNotExist(err){
-				// delete the blob.
-				e.addTransferToDelete(common.CopyTransfer{
+				// if the blob exists locally and the modified time of local file is before
+				// the last modified time of the blob, then download the file.
+				if blobInfo.Properties.LastModified.After(f.ModTime()){
+					e.addTransferToUpload(common.CopyTransfer{
+						Source:util.generateBlobUrl(containerUrl, blobInfo.Name),
+						Destination:blobLocalPath,
+						SourceSize:*blobInfo.Properties.ContentLength,
+						LastModifiedTime:blobInfo.Properties.LastModified,
+					}, wg , waitUntilJobCompletion)
+				}
+			}else if err != nil && os.IsNotExist(err){
+				// if the blob doesn't exits locally, then we need to download the blob.
+				// add transfer to download the blob.
+				e.addTransferToUpload(common.CopyTransfer{
 					Source:util.generateBlobUrl(containerUrl, blobInfo.Name),
-					Destination:"", // no destination in case of Delete JobPartOrder
+					Destination:blobLocalPath,
 					SourceSize:*blobInfo.Properties.ContentLength,
+					LastModifiedTime:blobInfo.Properties.LastModified,
 				}, wg , waitUntilJobCompletion)
 			}
 		}
@@ -186,7 +195,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	return nil
 }
 
-func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
+func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 
@@ -216,10 +225,10 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		if strings.Compare(blobName, f.Name()) != 0 {
 			return fmt.Errorf("sync cannot be done since blob %s and filename %s doesn't match", blobName, f.Name())
 		}
-		if f.ModTime().After(bProperties.LastModified()) {
+		if !f.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:      src,
-				Destination: destinationUrl.String(),
+				Source:      destinationUrl.String(),
+				Destination: src,
 				SourceSize:  f.Size(),
 			}, wg, waitUntilJobCompletion)
 		}
@@ -265,25 +274,37 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 					if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
 						return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", localFilePath, err.Error())
 					}
+					// If the file existing locally doesn't exist as a blob, then delete the file locally
+					if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode == http.StatusNotFound) {
+						err := os.Remove(localFilePath)
+						if err != nil{
+							return fmt.Errorf("error deleting the file %s. Failed with error %s", localFilePath, err.Error())
+						}
+						//If the delete is successful, then continue to next file.
+						continue
+					}
 				}
-				if err == nil && !files[i].ModTime().After(blobProperties.LastModified()) {
+				// If the modified time of file locally is greater than file in container
+				// do not update the file.
+				if err == nil && files[i].ModTime().After(blobProperties.LastModified()) {
 					continue
 				}
 
+				// If the local file exists as blob in container and modified time of file locally
+				// is less than the file on container, then download the file.
+				err = e.addTransferToUpload(common.CopyTransfer{
+					Source:           destinationUrl.String(),
+					Destination:      localFilePath,
+					LastModifiedTime: blobProperties.LastModified(),
+					SourceSize:       blobProperties.ContentLength(),
+				}, wg, waitUntilJobCompletion)
+				if err != nil {
+					return err
+				}
 				// Closing the blob Properties response body if not nil.
 				if blobProperties != nil && blobProperties.Response() != nil {
 					io.Copy(ioutil.Discard, blobProperties.Response().Body)
 					blobProperties.Response().Body.Close()
-				}
-
-				err = e.addTransferToUpload(common.CopyTransfer{
-					Source:           localFilePath,
-					Destination:      destinationUrl.String(),
-					LastModifiedTime: files[i].ModTime(),
-					SourceSize:       files[i].Size(),
-				}, wg, waitUntilJobCompletion)
-				if err != nil {
-					return err
 				}
 			}
 		}
@@ -293,7 +314,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 }
 
 // this function accepts the list of files/directories to transfer and processes them
-func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
+func (e *syncDownloadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	p := azblob.NewPipeline(
 		azblob.NewAnonymousCredential(),
@@ -310,23 +331,27 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	e.CopyJobRequest.JobID = e.JobID
 	// Copying the FromTo of sync job to individual copyJobRequest
 	e.CopyJobRequest.FromTo = e.FromTo
+
+	// Set the preserve-last-modified-time to true in CopyJobRequest
+	e.CopyJobRequest.BlobAttributes.PreserveLastModifiedTime = true
+
 	// Copying the JobId of sync job to individual deleteJobRequest.
 	e.DeleteJobRequest.JobID = e.JobID
 	// FromTo of DeleteJobRequest will be BlobTrash.
 	e.DeleteJobRequest.FromTo = common.EFromTo.BlobTrash()
 
-	err := e.compareLocalAgainstRemote(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
+	err := e.compareLocalAgainstRemote(dst, isRecursiveOn, src, wg, p, waitUntilJobCompletion)
 	if err != nil {
 		return nil
 	}
-	err = e.compareRemoteAgainstLocal(src, isRecursiveOn, dst, p, wg, waitUntilJobCompletion)
+	err = e.compareRemoteAgainstLocal(dst, isRecursiveOn, src, p, wg, waitUntilJobCompletion)
 	if err != nil{
 		return err
 	}
 	// No Job Part has been dispatched, then dispatch the JobPart.
 	if e.PartNumber == 0 ||
 		len(e.CopyJobRequest.Transfers) > 0 ||
-			len(e.DeleteJobRequest.Transfers) > 0{
+		len(e.DeleteJobRequest.Transfers) > 0{
 		err = e.dispatchFinalPart()
 		if err != nil{
 			return err
