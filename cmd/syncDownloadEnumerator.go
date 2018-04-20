@@ -225,7 +225,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		if strings.Compare(blobName, f.Name()) != 0 {
 			return fmt.Errorf("sync cannot be done since blob %s and filename %s doesn't match", blobName, f.Name())
 		}
-		if !f.ModTime().After(bProperties.LastModified()) {
+		if bProperties.LastModified().After(f.ModTime()) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:      destinationUrl.String(),
 				Destination: src,
@@ -286,7 +286,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 				}
 				// If the modified time of file locally is greater than file in container
 				// do not update the file.
-				if err == nil && files[i].ModTime().After(blobProperties.LastModified()) {
+				if err == nil && !blobProperties.LastModified().After(files[i].ModTime()) {
 					continue
 				}
 
