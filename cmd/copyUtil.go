@@ -59,6 +59,9 @@ func (copyHandlerUtil) urlIsContainer(url *url.URL) bool {
 
 // append a file name to the container path to generate a blob path
 func (copyHandlerUtil) generateBlobPath(destinationPath, fileName string) string {
+	if strings.LastIndex(destinationPath, "/") == len(destinationPath)-1{
+		return fmt.Sprintf("%s%s", destinationPath, fileName)
+	}
 	return fmt.Sprintf("%s/%s", destinationPath, fileName)
 }
 
@@ -99,7 +102,6 @@ func (util copyHandlerUtil) isPathDirectory(pathString string) bool {
 
 func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
 	var result string
-
 	// check if the directory path ends with the path separator
 	if strings.LastIndex(directoryPath, string(os.PathSeparator)) == len(directoryPath)-1 {
 		result = fmt.Sprintf("%s%s", directoryPath, fileName)
@@ -116,6 +118,18 @@ func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) st
 func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
 	// return everything after the second /
 	return strings.SplitAfterN(path[1:], "/", 2)[1]
+}
+
+func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithoutPrefix, searchPrefix string) {
+	if path[len(path)-1:] == string(os.PathSeparator) {
+		sourcePathWithoutPrefix = path[:strings.LastIndex(path[:len(path)-1], string(os.PathSeparator))+1]
+		searchPrefix = path[strings.LastIndex(path[:len(path)-1], string(os.PathSeparator))+1:]
+	} else {
+		// +1 because we want to include the / at the end of the dir
+		sourcePathWithoutPrefix = path[:strings.LastIndex(path, string(os.PathSeparator))+1]
+		searchPrefix = path[strings.LastIndex(path, string(os.PathSeparator))+1:]
+	}
+	return
 }
 
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
