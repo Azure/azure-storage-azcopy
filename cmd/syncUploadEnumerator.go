@@ -369,7 +369,9 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 		return err
 	}
 	// No Job Part has been dispatched, then dispatch the JobPart.
-	if e.PartNumber == 0 {
+	if e.PartNumber == 0 ||
+		len(e.CopyJobRequest.Transfers) > 0 ||
+			len(e.DeleteJobRequest.Transfers) > 0{
 		err = e.dispatchFinalPart()
 		if err != nil{
 			return err
