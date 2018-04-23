@@ -21,28 +21,29 @@
 package ste
 
 import (
+	"context"
 	"io"
+	"net/http"
 	"runtime"
 	"sync/atomic"
 	"time"
-	"context"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"net/http"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type pacer struct {
-	bytesAvailable int64
+	bytesAvailable          int64
 	availableBytesPerPeriod int64
-	lastUpdatedTimestamp int64
+	lastUpdatedTimestamp    int64
 }
 
 // this function returns a pacer which limits the number bytes allowed to go out every second
 // it does so by issuing tickets (bytes allowed) periodically
 func newPacer(bytesPerSecond int64) (p *pacer) {
 	p = &pacer{bytesAvailable: 0,
-		availableBytesPerPeriod:bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000,
-		lastUpdatedTimestamp:time.Now().UnixNano()}
+		availableBytesPerPeriod: bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000,
+		lastUpdatedTimestamp:    time.Now().UnixNano()}
 
 	// the pace runs in a separate goroutine for as long as the transfer engine is running
 	go func() {
@@ -71,7 +72,9 @@ func NewPacerPolicyFactory(p *pacer) pipeline.Factory {
 			resp, err := next.Do(ctx, request)
 			if err == nil {
 				// Reducing the pacer's rate limit by 10 s for every 503 error.
-				p.updateTargetRate(resp.Response().StatusCode != http.StatusServiceUnavailable)
+				p.updateTargetRate(
+					(resp.Response().StatusCode != http.StatusServiceUnavailable) &&
+						(resp.Response().StatusCode != http.StatusInternalServerError))
 			}
 			return resp, err
 		}
@@ -93,11 +96,11 @@ func (p *pacer) requestRightToSend(bytesToSend int64) {
 func (p *pacer) updateTargetRate(increase bool) {
 	lastCheckedTimestamp := atomic.LoadInt64(&p.lastUpdatedTimestamp)
 	//lastCheckedTime := time.Unix(0,lastCheckedTimestamp)
-	if time.Now().Sub(time.Unix(0,lastCheckedTimestamp)) < (time.Second * 3) {
+	if time.Now().Sub(time.Unix(0, lastCheckedTimestamp)) < (time.Second * 3) {
 		return
 	}
 	if atomic.CompareAndSwapInt64(&p.lastUpdatedTimestamp, lastCheckedTimestamp, time.Now().UnixNano()) {
-		atomic.StoreInt64(&p.availableBytesPerPeriod, int64(common.Ifffloat64(increase, 1.1, 0.9) * float64(p.availableBytesPerPeriod)))
+		atomic.StoreInt64(&p.availableBytesPerPeriod, int64(common.Ifffloat64(increase, 1.1, 0.9)*float64(p.availableBytesPerPeriod)))
 	}
 }
 
