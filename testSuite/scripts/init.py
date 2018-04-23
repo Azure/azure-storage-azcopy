@@ -28,8 +28,8 @@ def execute_user_scenario_1() :
 def temp_adhoc_scenario() :
     #test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
     #test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
-    test_upload_download_1kb_file_wildcard_all_files()
-    test_upload_download_1kb_file_wildcard_several_files()
+    test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
+    #test_upload_download_1kb_file_wildcard_several_files()
 
 def execute_user_scenario_file_1() :
     ###

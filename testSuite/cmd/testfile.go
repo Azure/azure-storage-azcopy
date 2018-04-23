@@ -102,7 +102,7 @@ func verifyFileDirUpload(testFileCmd TestFileCommand) {
 	// parse the subject url.
 	sasURL, err := url.Parse(testFileCmd.Subject)
 	if err != nil {
-		fmt.Println("error parsing the container sas ", testFileCmd.Subject)
+		fmt.Println("fail to parse the container sas ", testFileCmd.Subject)
 		os.Exit(1)
 	}
 
@@ -123,7 +123,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 		// look for all files that in current directory
 		listFile, err := curAzureDirURL.ListFilesAndDirectoriesSegment(context.Background(), marker, azfile.ListFilesAndDirectoriesOptions{})
 		if err != nil {
-			fmt.Println("error listing files and directories inside the directory. Please check the directory sas")
+			fmt.Println("fail to list files and directories inside the directory. Please check the directory sas")
 			os.Exit(1)
 		}
 
@@ -140,7 +140,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			get, err := curFileURL.Download(context.Background(), 0, azfile.CountToEnd, false)
 
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error downloading the file %s", fileInfo.Name))
+				fmt.Println(fmt.Sprintf("fail to download the file %s", fileInfo.Name))
 				os.Exit(1)
 			}
 
@@ -149,14 +149,14 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			// read all bytes.
 			fileBytesDownloaded, err := ioutil.ReadAll(retryReader)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error reading the body of file %s downloaded and failed with error %s", fileInfo.Name, err.Error()))
+				fmt.Println(fmt.Sprintf("fail to read the body of file %s downloaded and failed with error %s", fileInfo.Name, err.Error()))
 				os.Exit(1)
 			}
 			retryReader.Close()
 
 			tokens := strings.SplitAfterN(curFileURL.URL().Path, baseAzureDirPath, 2)
 			if len(tokens) < 2 {
-				fmt.Println(fmt.Sprintf("error getting sub directory and file name, file URL '%s', original dir path '%s'", curFileURL.String(), baseAzureDirPath))
+				fmt.Println(fmt.Sprintf("fail to get sub directory and file name, file URL '%s', original dir path '%s'", curFileURL.String(), baseAzureDirPath))
 				os.Exit(1)
 			}
 
@@ -171,18 +171,18 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
 			if err != nil {
-				fmt.Println("error geting the subject file file info on local disk ")
+				fmt.Println("fail to get the subject file info on local disk ")
 				os.Exit(1)
 			}
 
 			sFile, err := os.Open(objectLocalPath)
 			if err != nil {
-				fmt.Println("error opening file ", sFile)
+				fmt.Println("fail to open file ", sFile)
 				os.Exit(1)
 			}
 			sMap, err := Map(sFile, false, 0, int(sFileInfo.Size()))
 			if err != nil {
-				fmt.Println("error memory mapping the file ", sFileInfo.Name())
+				fmt.Println("fail to memory mapping the file ", sFileInfo.Name())
 			}
 
 			// calculating the md5 of file on container.
