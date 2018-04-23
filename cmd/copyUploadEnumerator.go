@@ -77,7 +77,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 
 		if !f.IsDir() {
 			// append file name as blob name in case the given URL is a container
-			if (e.FromTo == common.EFromTo.LocalBlob() && util.utlIsContainerOrShare(destinationUrl)) ||
+			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationUrl)) ||
 				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(context.TODO(), destinationUrl)) {
 				destinationUrl.Path = util.generateObjectPath(destinationUrl.Path, f.Name())
 			}
@@ -97,13 +97,12 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	}
 
 	// in any other case, the destination url must point to a container
-	if e.FromTo == common.EFromTo.LocalBlob() && !util.utlIsContainerOrShare(destinationUrl) {
-		return errors.New("please provide an existing container URL as destination")
+	if e.FromTo == common.EFromTo.LocalBlob() && !util.urlIsContainerOrShare(destinationUrl) {
+		logURL := util.reactURLQuery(*destinationUrl)
+		return fmt.Errorf("please provide an existing container URL as destination, current URL: %v", logURL)
 	}
 	if e.FromTo == common.EFromTo.LocalFile() && !util.urlIsAzureFileDirectory(context.TODO(), destinationUrl) {
-		// TODO: generic logic for react SAS
-		logURL := destinationUrl
-		logURL.RawQuery = "<Reacted Query>"
+		logURL := util.reactURLQuery(*destinationUrl)
 		return fmt.Errorf("please provide an existing share or directory URL as destination, current URL: %v", logURL)
 	}
 
@@ -130,7 +129,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					} else { // upload the files
 						// the path in the blob name started at the given fileOrDirectoryPath
 						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
-						destinationUrl.Path = util.generateObjectPath(cleanContainerPath, util.getRelativePath(fileOrDirectoryPath, pathToFile))
+						destinationUrl.Path = util.generateObjectPath(cleanContainerPath, util.getRelativePath(fileOrDirectoryPath, pathToFile, string(os.PathSeparator)))
 						err = e.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      destinationUrl.String(),

@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/url"
 	"strings"
 	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 type removeEnumerator common.CopyJobPartOrderRequest
@@ -42,7 +43,7 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
 
 	// check if the given url is a container
-	if util.urlIsContainer(sourceUrl) {
+	if util.urlIsContainerOrShare(sourceUrl) {
 		return errors.New("cannot remove an entire container, use prefix match with a * at the end of path instead")
 	}
 
@@ -82,9 +83,9 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 				}
 
 				e.addTransfer(common.CopyTransfer{
-					Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-					SourceSize:		  *blobInfo.Properties.ContentLength,
-					},
+					Source:     util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
+					SourceSize: *blobInfo.Properties.ContentLength,
+				},
 					wg, waitUntilJobCompletion)
 			}
 
@@ -107,9 +108,9 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 		// if the single blob exists, download it
 		if err == nil {
 			e.addTransfer(common.CopyTransfer{
-				Source: sourceUrl.String(),
-				SourceSize:	blobProperties.ContentLength()},
-						 wg, waitUntilJobCompletion)
+				Source:     sourceUrl.String(),
+				SourceSize: blobProperties.ContentLength()},
+				wg, waitUntilJobCompletion)
 
 			//err = e.dispatchPart(false)
 			if err != nil {
@@ -141,7 +142,7 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 				for _, blobInfo := range listBlob.Blobs.Blob {
 					e.addTransfer(common.CopyTransfer{
-						Source: util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
+						Source:     util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
 						SourceSize: *blobInfo.Properties.ContentLength},
 						wg,
 						waitUntilJobCompletion)
@@ -168,7 +169,7 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
 func (e *removeEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error){
+	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
 		resp := common.CopyJobPartOrderResponse{}
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
@@ -178,7 +179,7 @@ func (e *removeEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.Wa
 		}
 
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-		if e.PartNum == 0{
+		if e.PartNum == 0 {
 			// adding go routine to the wait group.
 			wg.Add(1)
 			go waitUntilJobCompletion(e.JobID, wg)
@@ -189,7 +190,6 @@ func (e *removeEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.Wa
 	e.Transfers = append(e.Transfers, transfer)
 	return nil
 }
-
 
 // send the current list of transfer to the STE
 func (e *removeEnumerator) dispatchPart(isFinalPart bool) error {
@@ -208,7 +208,7 @@ func (e *removeEnumerator) dispatchPart(isFinalPart bool) error {
 
 	// empty the transfers and increment part number count
 	e.Transfers = []common.CopyTransfer{}
-	if !isFinalPart{
+	if !isFinalPart {
 		// part number needs to incremented only when the part is not the final part.
 		e.PartNum++
 	}

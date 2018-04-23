@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
@@ -26,7 +27,17 @@ type copyDownloadFileEnumerator common.CopyJobPartOrderRequest
 func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	p := azfile.NewPipeline(
+		azfile.NewAnonymousCredential(),
+		azfile.PipelineOptions{
+			Retry: azfile.RetryOptions{
+				Policy:        azfile.RetryPolicyExponential,
+				MaxTries:      ste.UploadMaxTries,
+				TryTimeout:    ste.UploadTryTimeout,
+				RetryDelay:    ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+		})
 
 	// attempt to parse the source url
 	sourceURL, err := url.Parse(sourceURLString)
@@ -157,7 +168,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 						e.addTransfer(
 							common.CopyTransfer{
 								Source:           f.String(),
-								Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(rootDirPath, currentFilePath)),
+								Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(rootDirPath, currentFilePath, "/")),
 								LastModifiedTime: gResp.LastModified(),
 								SourceSize:       fileInfo.Properties.ContentLength},
 							wg,

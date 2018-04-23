@@ -50,7 +50,7 @@ func (copyHandlerUtil) numOfStarInUrl(url string) int {
 }
 
 // checks if a given url points to a container, as opposed to a blob or prefix match
-func (copyHandlerUtil) utlIsContainerOrShare(url *url.URL) bool {
+func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	// if the path contains more than one "/", then it means it points to a blob, and not a container
 	numOfSlashes := strings.Count(url.Path[1:], "/")
 
@@ -64,7 +64,7 @@ func (copyHandlerUtil) utlIsContainerOrShare(url *url.URL) bool {
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
 	// Azure file share case
-	if util.utlIsContainerOrShare(url) {
+	if util.urlIsContainerOrShare(url) {
 		return true
 	}
 
@@ -81,21 +81,24 @@ func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *ur
 
 // append a file name to the container path to generate a blob path
 func (copyHandlerUtil) generateObjectPath(destinationPath, fileName string) string {
+	if strings.LastIndex(destinationPath, "/") == len(destinationPath)-1 {
+		return fmt.Sprintf("%s%s", destinationPath, fileName)
+	}
 	return fmt.Sprintf("%s/%s", destinationPath, fileName)
 }
 
 // get relative path given a root path
-func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
+func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string) string {
 	// root path contains the entire absolute path to the root directory, so we need to take away everything except the root directory from filePath
 	// example: rootPath = "/dir1/dir2/dir3" filePath = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt" scrubAway="/dir1/dir2/"
 
 	var scrubAway string
 	// test if root path finishes with a /, if yes, ignore it
-	if rootPath[len(rootPath)-1:] == string(os.PathSeparator) {
-		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], string(os.PathSeparator))+1]
+	if rootPath[len(rootPath)-1:] == pathSep {
+		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
 	} else {
 		// +1 because we want to include the / at the end of the dir
-		scrubAway = rootPath[:strings.LastIndex(rootPath, string(os.PathSeparator))+1]
+		scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
 	}
 
 	result := strings.Replace(filePath, scrubAway, "", 1)
@@ -140,10 +143,33 @@ func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
 	return strings.SplitAfterN(path[1:], "/", 2)[1]
 }
 
+func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithoutPrefix, searchPrefix string) {
+	if path[len(path)-1:] == string(os.PathSeparator) {
+		sourcePathWithoutPrefix = path[:strings.LastIndex(path[:len(path)-1], string(os.PathSeparator))+1]
+		searchPrefix = path[strings.LastIndex(path[:len(path)-1], string(os.PathSeparator))+1:]
+	} else {
+		// +1 because we want to include the / at the end of the dir
+		sourcePathWithoutPrefix = path[:strings.LastIndex(path, string(os.PathSeparator))+1]
+		searchPrefix = path[strings.LastIndex(path, string(os.PathSeparator))+1:]
+	}
+	return
+}
+
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
 	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
 	url.Path = "/" + containerName
 	return url
+}
+
+func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string) {
+	s := strings.SplitAfterN(url.Path[1:], "/", 2)
+	containerUrl = "/" + s[0]
+	suffix = s[1]
+	if strings.LastIndex(suffix, "/") == len(suffix)-1 {
+		// if there is a path separator at the end, then remove the path separator.
+		suffix = suffix[:len(suffix)-1]
+	}
+	return
 }
 
 func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) string {
@@ -265,4 +291,11 @@ func (util copyHandlerUtil) hasEquivalentDirectoryURL(url url.URL) (isDirectoryS
 	}
 	equivalentURL = url
 	return
+}
+
+// reactURLQuery reacts the query part of URL.
+func (util copyHandlerUtil) reactURLQuery(url url.URL) url.URL {
+	// Note: this is copy by value
+	url.RawQuery = "<Reacted Query>"
+	return url
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
@@ -18,7 +19,18 @@ type copyDownloadBlobEnumerator common.CopyJobPartOrderRequest
 func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	p := azblob.NewPipeline(
+		azblob.NewAnonymousCredential(),
+		azblob.PipelineOptions{
+			Retry: azblob.RetryOptions{
+				Policy:        azblob.RetryPolicyExponential,
+				MaxTries:      ste.UploadMaxTries,
+				TryTimeout:    ste.UploadTryTimeout,
+				RetryDelay:    ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+		})
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(sourceUrlString)
@@ -31,7 +43,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
 
 	// check if the given url is a container
-	if util.utlIsContainerOrShare(sourceUrl) {
+	if util.urlIsContainerOrShare(sourceUrl) {
 		return errors.New("cannot download an entire container, use prefix match with a * at the end of path instead")
 	}
 
@@ -153,7 +165,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 				for _, blobInfo := range listBlob.Blobs.Blob {
 					e.addTransfer(common.CopyTransfer{
 						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name)),
+						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name, "/")),
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength},
 						wg,
@@ -189,7 +201,7 @@ func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
 }
 
 /////////////////////////////////////////////////////////////////////////////////////
-// TODO: Following are dup code during invovle file, please double check.
+// TODO: Following are dup code during involve file, please double check.
 /////////////////////////////////////////////////////////////////////////////////////
 
 // // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order

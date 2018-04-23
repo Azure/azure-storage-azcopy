@@ -214,7 +214,7 @@ def test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive():
 
 # test_n_1kb_file_in_dir_upload_download_azure_directory verifies the upload of n 1kb file to the share.
 def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recursive):
-   # create dir dir_n_files and 1 kb files inside the dir.
+    # create dir dir_n_files and 1 kb files inside the dir.
     dir_name = "test_n_1kb_file_in_dir_upload_download_azure_directory_"+recursive+"_"+str(number_of_files)+"_files"
     sub_dir_name = "dir subdir_"+str(number_of_files)+"_files"
 
@@ -261,9 +261,6 @@ def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recu
         os.makedirs(download_local_dest_dir)
 
     # downloading the directory created from azure file directory through azcopy with recursive flag to true.
-    # todo: discuss download Azure file directory and Azure blob directory scenarioes with Redmond team.
-    # currently will recursively create parent dirs to container/share, and this could be an issue!
-    
     result = util.Command("copy").add_arguments(download_azure_src_dir).add_arguments(download_local_dest_dir).add_flags("Logging", "5").\
         add_flags("recursive", recursive).execute_azcopy_copy_command()
     if not result:
@@ -272,9 +269,7 @@ def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recu
 
     # verify downloaded file.
     # todo: ensure the comparing here
-    #result = util.Command("testFile").add_arguments(os.path.join(download_local_dest_dir, dir_name)).add_arguments(download_azure_src_dir).\
-    #    add_flags("is-object-dir","true").add_flags("is-recursive", recursive).execute_azcopy_verify()
-    result = util.Command("testFile").add_arguments(os.path.join(download_local_dest_dir, dest_azure_dir_name, dir_name)).add_arguments(download_azure_src_dir).\
+    result = util.Command("testFile").add_arguments(os.path.join(download_local_dest_dir, dir_name)).add_arguments(download_azure_src_dir).\
         add_flags("is-object-dir","true").add_flags("is-recursive", recursive).execute_azcopy_verify()
     if not result:
         print("error verifying the recursive download ")

@@ -3,9 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -14,6 +11,10 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 type syncUploadEnumerator common.SyncJobPartOrderRequest
@@ -116,17 +117,17 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	util := copyHandlerUtil{}
 
 	destinationUrl, err := url.Parse(destinationUrlString)
-	if err != nil{
+	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
 	}
 	var containerUrl url.URL
 	var searchPrefix string
-	if !util.urlIsContainer(destinationUrl){
+	if !util.urlIsContainerOrShare(destinationUrl) {
 		containerUrl = util.getContainerURLFromString(*destinationUrl)
 		// get the search prefix to query the service
 		searchPrefix = util.getBlobNameFromURL(destinationUrl.Path)
 		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
-	}else{
+	} else {
 		containerUrl = *destinationUrl
 		searchPrefix = ""
 	}
@@ -156,7 +157,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 		for _, blobInfo := range listBlob.Blobs.Blob {
 			blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
 			// If there is a "/" at the start of blobName, then strip "/" separator.
-			if len(blobNameAfterPrefix) > 0 && blobNameAfterPrefix[0:1] == "/"{
+			if len(blobNameAfterPrefix) > 0 && blobNameAfterPrefix[0:1] == "/" {
 				blobNameAfterPrefix = blobNameAfterPrefix[1:]
 			}
 			if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
@@ -168,13 +169,13 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 				continue
 			}
 			// if the blob doesn't exits locally, then we need to delete blob.
-			if err != nil && os.IsNotExist(err){
+			if err != nil && os.IsNotExist(err) {
 				// delete the blob.
 				e.addTransferToDelete(common.CopyTransfer{
-					Source:util.generateBlobUrl(containerUrl, blobInfo.Name),
-					Destination:"", // no destination in case of Delete JobPartOrder
-					SourceSize:*blobInfo.Properties.ContentLength,
-				}, wg , waitUntilJobCompletion)
+					Source:      util.generateBlobUrl(containerUrl, blobInfo.Name),
+					Destination: "", // no destination in case of Delete JobPartOrder
+					SourceSize:  *blobInfo.Properties.ContentLength,
+				}, wg, waitUntilJobCompletion)
 			}
 		}
 		marker = listBlob.NextMarker
@@ -228,7 +229,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 
 	// verify the source path provided is valid or not.
 	_, err = os.Stat(src)
-	if err != nil  {
+	if err != nil {
 		return fmt.Errorf("cannot find source to sync")
 	}
 
@@ -236,7 +237,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 	var destinationSuffixAfterContainer string
 
 	// If destination url is not container, then get container Url from destination string.
-	if !util.urlIsContainer(destinationUrl) {
+	if !util.urlIsContainerOrShare(destinationUrl) {
 		containerPath, destinationSuffixAfterContainer = util.getConatinerUrlAndSuffix(*destinationUrl)
 	} else {
 		containerPath = util.getContainerURLFromString(*destinationUrl).Path
@@ -320,15 +321,15 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 		return nil
 	}
 	err = e.compareRemoteAgainstLocal(src, isRecursiveOn, dst, p, wg, waitUntilJobCompletion)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	// No Job Part has been dispatched, then dispatch the JobPart.
 	if e.PartNumber == 0 ||
 		len(e.CopyJobRequest.Transfers) > 0 ||
-			len(e.DeleteJobRequest.Transfers) > 0{
+		len(e.DeleteJobRequest.Transfers) > 0 {
 		err = e.dispatchFinalPart()
-		if err != nil{
+		if err != nil {
 			return err
 		}
 		wg.Add(1)
