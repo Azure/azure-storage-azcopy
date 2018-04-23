@@ -86,8 +86,8 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 	}
 
-	// todo: remove the hard coded chunk size in case of pageblob and file
-	chunkSize = (4 * 1024 * 1024)
+	// todo: remove the hard coded chunk size in case of pageblob or Azure file
+	chunkSize = common.DefaultAzureFileChunkSize
 	// step 2: Get http headers and meta data of file.
 	fileHTTPHeaders, metaData := jptm.FileDstData(srcMmf)
 

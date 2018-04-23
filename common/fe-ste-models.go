@@ -311,6 +311,7 @@ const (
 	DefaultBlockBlobBlockSize  = 100 * 1024 * 1024
 	DefaultAppendBlobBlockSize = 4 * 1024 * 1024
 	DefaultPageBlobChunkSize   = 4 * 1024 * 1024
+	DefaultAzureFileChunkSize  = 4 * 1024 * 1024
 )
 
 ////////////////////////////////////////////////
