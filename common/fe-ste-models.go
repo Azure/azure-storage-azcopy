@@ -22,13 +22,14 @@ package common
 
 import (
 	"encoding/json"
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"fmt"
 	"math"
 	"reflect"
-	"time"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"strings"
-	"fmt"
+	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -124,7 +125,7 @@ func (j *JobStatus) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	jobStatus, err := EJobStatus.Parse(s)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	*j = jobStatus
@@ -185,7 +186,7 @@ func (TransferStatus) Success() TransferStatus { return TransferStatus{2} }
 func (TransferStatus) Failed() TransferStatus { return TransferStatus{-1} }
 
 // Transfer failed due to failure while Setting blob tier.
-func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus{-2}}
+func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus{-2} }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == TransferStatus{}.NotStarted() || ts == TransferStatus{}.Started()
@@ -203,21 +204,22 @@ func (ts TransferStatus) Parse(s string) (TransferStatus, error) {
 }
 
 type BlockBlobTier azblob.AccessTierType
-func (bt BlockBlobTier)Parse(s string) (BlockBlobTier, error){
-	if strings.EqualFold(s, ""){
+
+func (bt BlockBlobTier) Parse(s string) (BlockBlobTier, error) {
+	if strings.EqualFold(s, "") {
 		return BlockBlobTier(azblob.AccessTierNone), nil
-	}else if strings.EqualFold(s, "Hot"){
+	} else if strings.EqualFold(s, "Hot") {
 		return BlockBlobTier(azblob.AccessTierHot), nil
-	}else if strings.EqualFold(s, "Cold"){
+	} else if strings.EqualFold(s, "Cold") {
 		return BlockBlobTier(azblob.AccessTierCool), nil
-	}else if strings.EqualFold(s, "Archive"){
+	} else if strings.EqualFold(s, "Archive") {
 		return BlockBlobTier(azblob.AccessTierArchive), nil
-	}else{
+	} else {
 		return "", fmt.Errorf("invalid block blob tier passed %s", s)
 	}
 }
 
-func (bt BlockBlobTier) String() (string){
+func (bt BlockBlobTier) String() string {
 	return string(bt)
 }
 
@@ -233,7 +235,7 @@ func (bt *BlockBlobTier) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	blockBlobTier, err := BlockBlobTier("").Parse(s)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	*bt = blockBlobTier
@@ -241,29 +243,30 @@ func (bt *BlockBlobTier) UnmarshalJSON(b []byte) error {
 }
 
 type PageBlobTier azblob.AccessTierType
-func (pbt PageBlobTier)Parse (s string) (PageBlobTier, error){
-	if strings.EqualFold(s, ""){
+
+func (pbt PageBlobTier) Parse(s string) (PageBlobTier, error) {
+	if strings.EqualFold(s, "") {
 		return PageBlobTier(azblob.AccessTierNone), nil
-	}else if strings.EqualFold(s, "P10"){
+	} else if strings.EqualFold(s, "P10") {
 		return PageBlobTier(azblob.AccessTierP10), nil
-	}else if strings.EqualFold(s, "P20"){
+	} else if strings.EqualFold(s, "P20") {
 		return PageBlobTier(azblob.AccessTierP20), nil
-	}else if strings.EqualFold(s, "P30"){
+	} else if strings.EqualFold(s, "P30") {
 		return PageBlobTier(azblob.AccessTierP30), nil
-	}else if strings.EqualFold(s, "P4"){
+	} else if strings.EqualFold(s, "P4") {
 		return PageBlobTier(azblob.AccessTierP4), nil
-	}else if strings.EqualFold(s, "P40"){
+	} else if strings.EqualFold(s, "P40") {
 		return PageBlobTier(azblob.AccessTierP40), nil
-	}else if strings.EqualFold(s, "P50"){
+	} else if strings.EqualFold(s, "P50") {
 		return PageBlobTier(azblob.AccessTierP50), nil
-	}else if strings.EqualFold(s, "P6"){
+	} else if strings.EqualFold(s, "P6") {
 		return PageBlobTier(azblob.AccessTierP6), nil
-	}else{
+	} else {
 		return " ", fmt.Errorf("failed to parse user given blob tier %s", s)
 	}
 }
 
-func (pbt PageBlobTier) String() (string){
+func (pbt PageBlobTier) String() string {
 	return string(pbt)
 }
 
@@ -279,7 +282,7 @@ func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	psgeBlobTier, err := PageBlobTier("").Parse(s)
-	if err != nil{
+	if err != nil {
 		return err
 	}
 	*pbt = psgeBlobTier

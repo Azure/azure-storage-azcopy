@@ -519,12 +519,12 @@ Usage:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cooked, err := raw.cook()
 			if err != nil {
-				return fmt.Errorf("failed to parse user input due to error %s", err)
+				return fmt.Errorf("failed to parse user input due to error: %s", err)
 			}
 
 			err = cooked.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform copy command due to error %s", err)
+				return fmt.Errorf("failed to perform copy command due to error: %s", err)
 			}
 			return nil
 		},

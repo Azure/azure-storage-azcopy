@@ -98,10 +98,13 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 
 	// in any other case, the destination url must point to a container
 	if e.FromTo == common.EFromTo.LocalBlob() && !util.utlIsContainerOrShare(destinationUrl) {
-		return errors.New("please provide a valid container URL as destination")
+		return errors.New("please provide an existing container URL as destination")
 	}
 	if e.FromTo == common.EFromTo.LocalFile() && !util.urlIsAzureFileDirectory(context.TODO(), destinationUrl) {
-		return errors.New("please provide a valid share or directory URL as destination")
+		// TODO: generic logic for react SAS
+		logURL := destinationUrl
+		logURL.RawQuery = "<Reacted Query>"
+		return fmt.Errorf("please provide an existing share or directory URL as destination, current URL: %v", logURL)
 	}
 
 	// temporarily save the path of the container

@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-04-17/azfile"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
 type copyDownloadFileEnumerator common.CopyJobPartOrderRequest
@@ -33,6 +33,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 	if err != nil {
 		return fmt.Errorf("cannot parse source URL")
 	}
+
 	// validate the source url
 	numOfStartInURLPath := util.numOfStarInUrl(sourceURL.Path)
 	if numOfStartInURLPath > 1 || (numOfStartInURLPath == 1 && !strings.HasSuffix(sourceURL.Path, "*")) {
@@ -134,10 +135,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 			dirStack.Push(*dirURL)
 			rootDirPath := "/" + azfile.NewFileURLParts(dirURL.URL()).DirectoryOrFilePath // TODO: finialize after DirectoryOrFilePath possible change
 
-			// TODO: Create directory in destination folder even if there is no file in the specified directory?
 			for currentDirURL, ok := dirStack.Pop(); ok; currentDirURL, ok = dirStack.Pop() {
-				fmt.Println("Stack loop" + currentDirURL.String())
-
 				// perform a list files and directories
 				for marker := (azfile.Marker{}); marker.NotDone(); {
 					lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
@@ -206,14 +204,11 @@ func (s *directoryStack) Push(d azfile.DirectoryURL) {
 func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
 	l := len(*s)
 
-	fmt.Println(l)
-
 	if l == 0 {
 		return nil, false
 	} else {
 		e := (*s)[l-1]
 		*s = (*s)[:l-1]
-		fmt.Println(e.String())
 		return &e, true
 	}
 }

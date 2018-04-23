@@ -29,7 +29,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-04-17/azfile"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
 // todo: unify blobToLocal and fileToLocal
