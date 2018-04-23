@@ -24,12 +24,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"math"
+	"net/http"
+	"time"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"io/ioutil"
-	"net/http"
-	"math"
-	"time"
 )
 
 var steCtx = context.Background()
@@ -42,13 +43,13 @@ func round(num float64) int {
 // ToFixed api returns the float number precised upto given decimal places.
 func ToFixed(num float64, precision int) float64 {
 	output := math.Pow(10, float64(precision))
-	return float64(round(num * output)) / output
+	return float64(round(num*output)) / output
 }
 
 // MainSTE initializes the Storage Transfer Engine
 func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, 300, targetRateInMBps, azcopyAppPathFolder)
+	initJobsAdmin(steCtx, concurrentConnections, targetRateInMBps, azcopyAppPathFolder)
 	JobsAdmin.ResurrectJobParts()
 	JobsAdminInitialized <- true
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
@@ -130,9 +131,9 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                      // Convert the order to a plan file
+	jppfn.Create(order)                                              // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
-	jpm.AddJobPart(order.PartNum, jppfn, true)               // Add this part to the Job and schedule its transfers
+	jpm.AddJobPart(order.PartNum, jppfn, true)                       // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -289,8 +290,8 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 
 	// Resume all the failed / In Progress Transfers.
 	case common.EJobStatus.Completed(),
-		 common.EJobStatus.Cancelled(),
-		 common.EJobStatus.Paused():
+		common.EJobStatus.Cancelled(),
+		common.EJobStatus.Paused():
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
 		if jm.ShouldLog(pipeline.LogInfo) {
@@ -327,7 +328,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 
 	js := common.ListJobSummaryResponse{
-		Timestamp:time.Now().UTC(),
+		Timestamp:          time.Now().UTC(),
 		JobID:              jobID,
 		ErrorMsg:           "",
 		JobStatus:          common.JobStatus{}.InProgress(), // Default
@@ -338,7 +339,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	totalBytesToTransfer := int64(0)
 	totalBytesTransferred := int64(0)
 
-	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr){
+	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
 		totalBytesToTransfer += jpm.BytesToTransfer()
 		totalBytesTransferred += jpm.BytesTransferred()
 		jpp := jpm.Plan()
@@ -354,7 +355,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
 			case common.TransferStatus{}.Failed(),
-				 common.TransferStatus{}.BlobTierFailure():
+				common.TransferStatus{}.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
@@ -369,7 +370,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	})
 
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
-	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred * 100)  / float64(totalBytesToTransfer), 4)
+	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred*100)/float64(totalBytesToTransfer), 4)
 	js.BytesOverWire = JobsAdmin.BytesOverWire()
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
