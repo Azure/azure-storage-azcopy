@@ -331,7 +331,6 @@ func createParentDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pi
 			// fileParentDirURL doesn't exist, try to create the directory and share to the root.
 			// try to create the share
 			serviceURL := getServiceBaseAddress(dirURL.URL(), p)
-			fmt.Println(serviceURL)
 			shareURL := serviceURL.NewShareURL(segment[0])
 			_, err := shareURL.Create(ctx, azfile.Metadata{}, 0)
 			if verifiedErr := verifyAndHandleCreateErrors(err); verifiedErr != nil {
@@ -342,7 +341,6 @@ func createParentDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pi
 			// try to create the directories
 			for i := 1; i < len(segment); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segment[i])
-				fmt.Println(curDirURL)
 				_, err := curDirURL.Create(ctx, azfile.Metadata{})
 				if verifiedErr := verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr

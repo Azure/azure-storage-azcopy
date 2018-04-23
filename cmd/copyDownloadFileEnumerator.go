@@ -59,8 +59,6 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 	// directory/dir
 	// directory/file
 
-	fmt.Println(*sourceURL)
-
 	if hasEquivalentDirectoryURL, equivalentURL := util.hasEquivalentDirectoryURL(*sourceURL); hasEquivalentDirectoryURL {
 		*sourceURL = equivalentURL
 		doPrefixSearch = false
