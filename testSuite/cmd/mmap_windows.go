@@ -1,7 +1,5 @@
 package cmd
 
-
-
 import (
 	"os"
 	"reflect"

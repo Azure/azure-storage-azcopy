@@ -1,14 +1,14 @@
 package ste
 
 import (
-	"net/url"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 )
 
 func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -19,7 +19,7 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
-	if jptm.WasCanceled(){
+	if jptm.WasCanceled() {
 		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
@@ -29,11 +29,11 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	// Sets the transfer status and Report Transfer as Done.
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
-		if jptm.ShouldLog(pipeline.LogInfo){
+		if jptm.ShouldLog(pipeline.LogInfo) {
 			var msg = ""
-			if status == common.ETransferStatus.Failed(){
+			if status == common.ETransferStatus.Failed() {
 				msg = fmt.Sprintf("delete blob failed. Failed with error %s", err.Error())
-			}else{
+			} else {
 				msg = "blob delete successful"
 			}
 			jptm.Log(pipeline.LogInfo, msg)
@@ -45,16 +45,16 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 
 	deleteResp, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 	if err != nil {
-		if err.(azblob.StorageError) != nil{
+		if err.(azblob.StorageError) != nil {
 			if err.(azblob.StorageError).Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
 			}
-		}else {
+		} else {
 			transferDone(common.ETransferStatus.Failed(), err)
 		}
-	}else{
+	} else {
 		transferDone(common.ETransferStatus.Success(), nil)
-		if deleteResp.Response() != nil{
+		if deleteResp.Response() != nil {
 			io.Copy(ioutil.Discard, deleteResp.Response().Body)
 			deleteResp.Response().Body.Close()
 		}

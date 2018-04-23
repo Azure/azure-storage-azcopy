@@ -34,7 +34,6 @@ func (EnumHelper) String(enumType reflect.Type, underlyingType reflect.Type, val
 	return ""
 }
 
-
 func (EnumHelper) Parse(enumType reflect.Type, underlyingType reflect.Type, s string, caseInsensitive bool) (interface{}, error) {
 	// Look for a method name that matches the string we're trying to parse (case-sensitive)
 	if m, found := (EnumHelper{}).findMethod(enumType, s, caseInsensitive); found {
@@ -50,10 +49,10 @@ func (EnumHelper) Parse(enumType reflect.Type, underlyingType reflect.Type, s st
 
 func (EnumHelper) findMethod(enumType reflect.Type, methodName string, caseInsensitive bool) (reflect.Method, bool) {
 	if !caseInsensitive {
-		return enumType.MethodByName(methodName)	// Look up the method by exact name and case
+		return enumType.MethodByName(methodName) // Look up the method by exact name and case
 	}
-	methodName = strings.ToLower(methodName)	// lowercase the passed method name
-	for m := 0; m < enumType.NumMethod(); m++ {	// Iterate through all the methods matching their lowercase equivalents
+	methodName = strings.ToLower(methodName)    // lowercase the passed method name
+	for m := 0; m < enumType.NumMethod(); m++ { // Iterate through all the methods matching their lowercase equivalents
 		method := enumType.Method(m)
 		if strings.ToLower(method.Name) == methodName {
 			return method, true
@@ -284,7 +283,7 @@ func (c Color) String() string {
 }
 
 func (c Color) Parse(s string) (Color, error) {
-	e, err := EnumInt32{}.Parse(reflect.TypeOf(c), s,true, false)
+	e, err := EnumInt32{}.Parse(reflect.TypeOf(c), s, true, false)
 	return Color(e), err
 }
 

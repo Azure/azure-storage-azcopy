@@ -7,50 +7,20 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"os"
+	"path"
 	"reflect"
+	"strings"
 	"time"
 	"unsafe"
-	"path"
-	"strings"
 )
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-// checkCancelledJobsInJobMap api checks the JobPartPlan header of part 0 of each job
-// JobPartPlan header of part 0 of each job determines the actual status of each job
-// if the job status is cancelled, then it cleans up the job
-func checkCancelledJobsInJobMap() {
-	for jobID := range JobsAdmin.JobIDs() {
-		// getting the jobInfo for part 0 of current jobId
-		// since the status of Job is determined by the job status in JobPartPlan header of part 0
-		jm, found := JobsAdmin.JobMgr(jobID)//.JobInfo(jobIds[index])
-		if !found { continue }
-		jpm, found := jm.JobPartMgr(0)
-		if !found { continue }
-		if jpm.Plan().atomicJobStatus == common.EJobStatus.Cancelled() {	// TODO: fix atomic to make thread safe
-			jobsInfoMap.cleanUpJob(jobIds[index])
-		}
-		// if the jobstatus in JobPartPlan header of part 0 is cancelled and cleanup wasn't successful
-		// if the part 0 was deleted successfully but other parts deletion wasn't successful
-		// cleaning up the job now
-		if jobInfo == nil || jobInfo.JobPartPlanInfo(0).getJobPartPlanPointer().Status() == JobCancelled {
-		}
-	}
-}
-*/
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type JobPartPlanFileName string
 
-func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string{
-	return path.Join(JobsAdmin.AppPathFolder(), "/" + string(*jppfn))
+func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
+	return path.Join(JobsAdmin.AppPathFolder(), "/"+string(*jppfn))
 }
 
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"
-
-var planDir = ""	// TODO: Fix
 
 // TODO: This needs testing
 func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.PartNumber, err error) {
@@ -65,7 +35,7 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 	//TODO: confirm the alternative approach. fmt.Sscanf not working for reading back string into struct JobId.
 	jpfnSplit := strings.Split(string(jpfn), "--")
 	jobId, err := common.ParseJobID(jpfnSplit[0])
-	if err != nil{
+	if err != nil {
 		err = fmt.Errorf("failed to parse the JobId from JobPartFileName %s. Failed with error %s", string(jpfn), err.Error())
 	}
 	jobID = jobId
@@ -163,87 +133,87 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			panic(errors.New("unrecognized blob type"))
 		}*/
 	}
-		// Initialize the Job Part's Plan header
-		jpph := JobPartPlanHeader{
-			Version:            DataSchemaVersion,
-			JobID:              order.JobID,
-			PartNum:            order.PartNum,
-			IsFinalPart:        order.IsFinalPart,
-			Priority:           order.Priority,
-			TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
-			FromTo:        order.FromTo,
-			NumTransfers:       uint32(len(order.Transfers)),
-			LogLevel:           order.LogLevel,
-			DstBlobData: JobPartPlanDstBlob{
-				//BlobType:              order.OptionalAttributes.BlobType,
-				NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
-				ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
-				ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
-				BlockBlobTierLength:   uint8(len(order.BlobAttributes.BlockBlobTier.String())),
-				PageBlobTierLength:	   uint8(len(order.BlobAttributes.PageBlobTier.String())),
-				MetadataLength:        uint16(len(order.BlobAttributes.Metadata)),
-				BlockSize:             blockSize,
-			},
-			DstLocalData: JobPartPlanDstLocal{
-				PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
-			},
-			atomicJobStatus: common.JobStatus{}.InProgress(), // We default to InProgress
+	// Initialize the Job Part's Plan header
+	jpph := JobPartPlanHeader{
+		Version:            DataSchemaVersion,
+		JobID:              order.JobID,
+		PartNum:            order.PartNum,
+		IsFinalPart:        order.IsFinalPart,
+		Priority:           order.Priority,
+		TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
+		FromTo:             order.FromTo,
+		NumTransfers:       uint32(len(order.Transfers)),
+		LogLevel:           order.LogLevel,
+		DstBlobData: JobPartPlanDstBlob{
+			//BlobType:              order.OptionalAttributes.BlobType,
+			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
+			ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
+			ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
+			BlockBlobTierLength:   uint8(len(order.BlobAttributes.BlockBlobTier.String())),
+			PageBlobTierLength:    uint8(len(order.BlobAttributes.PageBlobTier.String())),
+			MetadataLength:        uint16(len(order.BlobAttributes.Metadata)),
+			BlockSize:             blockSize,
+		},
+		DstLocalData: JobPartPlanDstLocal{
+			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
+		},
+		atomicJobStatus: common.JobStatus{}.InProgress(), // We default to InProgress
+	}
+	// Copy any strings into their respective fields
+	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
+	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
+	copy(jpph.DstBlobData.BlockBlobTier[:], order.BlobAttributes.BlockBlobTier.String())
+	copy(jpph.DstBlobData.PageBlobTier[:], order.BlobAttributes.PageBlobTier.String())
+	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
+	fmt.Println("")
+	eof += writeValue(file, &jpph)
+
+	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
+	srcDstStringsOffset := make([]int64, jpph.NumTransfers)
+
+	// Initialize the offset for the 1st transfer's src/dst strings
+	currentSrcStringOffset := eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
+
+	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
+	for t := range order.Transfers {
+		// Create & initialize this transfer's Job Part Plan Transfer
+		jppt := JobPartPlanTransfer{
+			SrcOffset:            currentSrcStringOffset, // SrcOffset of the src string
+			SrcLength:            int16(len(order.Transfers[t].Source)),
+			DstLength:            int16(len(order.Transfers[t].Destination)),
+			ModifiedTime:         order.Transfers[t].LastModifiedTime.UnixNano(),
+			SourceSize:           order.Transfers[t].SourceSize,
+			CompletionTime:       0,
+			atomicTransferStatus: common.ETransferStatus.NotStarted(), // Default
+			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
 		}
-		// Copy any strings into their respective fields
-		copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
-		copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
-		copy (jpph.DstBlobData.BlockBlobTier[:], order.BlobAttributes.BlockBlobTier.String())
-		copy(jpph.DstBlobData.PageBlobTier[:], order.BlobAttributes.PageBlobTier.String())
-		copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
-		fmt.Println("")
-		eof += writeValue(file, &jpph)
+		eof += writeValue(file, &jppt) // Write the transfer entry
 
-		// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
-		srcDstStringsOffset := make([]int64, jpph.NumTransfers)
+		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
+		srcDstStringsOffset[t] = currentSrcStringOffset
 
-		// Initialize the offset for the 1st transfer's src/dst strings
-		currentSrcStringOffset := eof + int64(unsafe.Sizeof(JobPartPlanTransfer{}))*int64(jpph.NumTransfers)
+		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength)
+	}
 
-		// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
-		for t := range order.Transfers {
-			// Create & initialize this transfer's Job Part Plan Transfer
-			jppt := JobPartPlanTransfer{
-				SrcOffset:            currentSrcStringOffset, // SrcOffset of the src string
-				SrcLength:            int16(len(order.Transfers[t].Source)),
-				DstLength:            int16(len(order.Transfers[t].Destination)),
-				ModifiedTime:         order.Transfers[t].LastModifiedTime.UnixNano(),
-				SourceSize:           order.Transfers[t].SourceSize,
-				CompletionTime:       0,
-				atomicTransferStatus: common.ETransferStatus.NotStarted(), // Default
-				//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
-			}
-			eof += writeValue(file, &jppt) // Write the transfer entry
-
-			// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
-			srcDstStringsOffset[t] = currentSrcStringOffset
-
-			currentSrcStringOffset += int64(jppt.SrcLength+jppt.DstLength)
+	// All the transfers were written; now write each each transfer's src/dst strings
+	for t := range order.Transfers {
+		// Sanity check: Verify that we are were we think we are and that no bug has occurred
+		if eof != srcDstStringsOffset[t] {
+			panic(errors.New("error writing src/dst strings to job part plan file"))
 		}
 
-		// All the transfers were written; now write each each transfer's src/dst strings
-		for t := range order.Transfers {
-			// Sanity check: Verify that we are were we think we are and that no bug has occurred
-			if eof != srcDstStringsOffset[t] {
-				panic(errors.New("error writing src/dst strings to job part plan file"))
-			}
-
-			// Write the src & dst strings to the job part plan file
-			bytesWritten, err := file.WriteString(order.Transfers[t].Source)
-			if err != nil {
-				panic(err)
-			}
-			// write the destination string in memory map file
-			eof += int64(bytesWritten)
-			bytesWritten, err = file.WriteString(order.Transfers[t].Destination)
-			if err != nil {
-				panic(err)
-			}
-			eof += int64(bytesWritten)
+		// Write the src & dst strings to the job part plan file
+		bytesWritten, err := file.WriteString(order.Transfers[t].Source)
+		if err != nil {
+			panic(err)
 		}
-		// the file is closed to due to defer above
+		// write the destination string in memory map file
+		eof += int64(bytesWritten)
+		bytesWritten, err = file.WriteString(order.Transfers[t].Destination)
+		if err != nil {
+			panic(err)
+		}
+		eof += int64(bytesWritten)
+	}
+	// the file is closed to due to defer above
 }

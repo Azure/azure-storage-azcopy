@@ -100,7 +100,7 @@ func HandleResumeCommand(jobIdString string) {
 
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(), jobID, &resumeJobResponse)
-	if ! resumeJobResponse.CancelledPauseResumed {
+	if !resumeJobResponse.CancelledPauseResumed {
 		fmt.Println(resumeJobResponse.ErrorMsg)
 		return
 	}

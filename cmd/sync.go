@@ -22,12 +22,12 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"sync"
+	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 )
 
@@ -36,7 +36,7 @@ type syncCommandArguments struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize   uint32
+	blockSize    uint32
 	logVerbosity byte
 }
 
@@ -46,8 +46,8 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 
 	fromTo := inferFromTo(raw.src, raw.dst)
 	if fromTo != common.EFromTo.LocalBlob() &&
-		fromTo != common.EFromTo.BlobLocal(){
-			return cooked, fmt.Errorf("invalid type of source and destination passed for this passed")
+		fromTo != common.EFromTo.BlobLocal() {
+		return cooked, fmt.Errorf("invalid type of source and destination passed for this passed")
 	}
 	cooked.src = raw.src
 	cooked.dst = raw.dst
@@ -64,21 +64,21 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 }
 
 type cookedSyncCmdArgs struct {
-	src                   string
-	dst                   string
-	fromTo                common.FromTo
-	recursive      bool
+	src       string
+	dst       string
+	fromTo    common.FromTo
+	recursive bool
 	// options from flags
-	blockSize                uint32
-	logVerbosity             common.LogLevel
+	blockSize    uint32
+	logVerbosity common.LogLevel
 }
 
 func (cca cookedSyncCmdArgs) process() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.SyncJobPartOrderRequest{
-		JobID:    common.NewJobID(),
-		FromTo:   cca.fromTo,
-		LogLevel: cca.logVerbosity,
+		JobID:            common.NewJobID(),
+		FromTo:           cca.fromTo,
+		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
 	}
 	// wait group to monitor the go routines fetching the job progress summary
@@ -93,7 +93,7 @@ func (cca cookedSyncCmdArgs) process() (err error) {
 	default:
 		return fmt.Errorf("from to destination not supported")
 	}
-	if err != nil{
+	if err != nil {
 		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.src, cca.dst, err.Error())
 	}
 	wg.Wait()
@@ -147,7 +147,7 @@ func init() {
 			raw.dst = args[1]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error{
+		RunE: func(cmd *cobra.Command, args []string) error {
 			cooked, err := raw.cook()
 			if err != nil {
 				return fmt.Errorf("failed to parse user input due to error %s", err)

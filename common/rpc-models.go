@@ -45,10 +45,10 @@ type CopyJobPartOrderRequest struct {
 }
 
 type SyncJobPartOrderRequest struct {
-	JobID	JobID
-	FromTo  FromTo
-	PartNumber PartNumber
-	LogLevel LogLevel
+	JobID            JobID
+	FromTo           FromTo
+	PartNumber       PartNumber
+	LogLevel         LogLevel
 	BlockSizeInBytes uint32
 	CopyJobRequest   CopyJobPartOrderRequest
 	DeleteJobRequest CopyJobPartOrderRequest
@@ -68,13 +68,13 @@ type ListRequest struct {
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
 	//BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
-	ContentType              string //The content type specified for the blob.
-	ContentEncoding          string //Specifies which content encodings have been applied to the blob.
+	ContentType              string        //The content type specified for the blob.
+	ContentEncoding          string        //Specifies which content encodings have been applied to the blob.
 	BlockBlobTier            BlockBlobTier // Specifies the tier to set on the block blobs.
-	PageBlobTier			 PageBlobTier  // Specifies the tier to set on the page blobs.
-	Metadata                 string //User-defined name-value pairs associated with the blob
-	NoGuessMimeType          bool   // represents user decision to interpret the content-encoding from source file
-	PreserveLastModifiedTime bool   // when downloading, tell engine to set file's timestamp to timestamp of blob
+	PageBlobTier             PageBlobTier  // Specifies the tier to set on the page blobs.
+	Metadata                 string        //User-defined name-value pairs associated with the blob
+	NoGuessMimeType          bool          // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime bool          // when downloading, tell engine to set file's timestamp to timestamp of blob
 	BlockSizeInBytes         uint32
 }
 
@@ -86,9 +86,9 @@ type ListJobsResponse struct {
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListJobSummaryResponse struct {
-	ErrorMsg string
+	ErrorMsg  string
 	Timestamp time.Time
-	JobID    JobID
+	JobID     JobID
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered          bool
 	JobStatus                   JobStatus

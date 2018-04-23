@@ -23,8 +23,8 @@ var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
 func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
 	// waiting for JobsAdmin to initialize before the request are send to transfer engine.
-	select{
-	case <- ste.JobsAdminInitialized:
+	select {
+	case <-ste.JobsAdminInitialized:
 		break
 	default:
 		time.Sleep(time.Millisecond * 500)

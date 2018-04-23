@@ -42,6 +42,7 @@ type ILoggerResetable interface {
 	MinimumLogLevel() pipeline.LogLevel
 	ILoggerCloser
 }
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewAppLogger(minimumLevelToLog pipeline.LogLevel) ILoggerCloser {
@@ -95,7 +96,7 @@ func (al *appLogger) Panic(err error) {
 type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.
 	// any message with severity higher than this will be ignored.
-	jobID 	JobID
+	jobID             JobID
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
 	file              *os.File          // The job's log file
 	logger            *log.Logger       // The Job's logger
@@ -108,7 +109,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) IL
 	}
 
 	return &jobLogger{
-		jobID:jobID,
+		jobID:             jobID,
 		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
 		//file:              jobLogFile,
@@ -116,7 +117,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) IL
 	}
 }
 
-func (jl *jobLogger) OpenLog(){
+func (jl *jobLogger) OpenLog() {
 	file, err := os.OpenFile(jl.jobID.String()+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
 	if err != nil {
 		panic(err)
