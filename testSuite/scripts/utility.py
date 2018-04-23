@@ -71,21 +71,35 @@ class Command(object):
     def execute_azcopy_verify(self):
         return verify_operation(self.string())
 
-    # api executes the clean command to delete the blob or container contents.
+    # api executes the clean command to delete the blob/container/file/share contents.
     def execute_azcopy_clean(self):
+        return verify_operation(self.string())
+
+    # api executes the create command to create the blob/container/file/share/directory contents.
+    def execute_azcopy_create(self):
         return verify_operation(self.string())
 
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container():
     # execute the clean command.
-    result = Command("clean").add_arguments(test_container_url).execute_azcopy_clean()
+    result = Command("clean").add_arguments(test_container_url).add_flags("resourceType", "blob").execute_azcopy_clean()
     if not result:
         print("error cleaning the container. please check the container sas provided")
         return False
     return True
 
+# api executes the clean command on validator which deletes all the contents of the container.
+def clean_test_share():
+    # execute the clean command.
+    result = Command("clean").add_arguments(test_share_url).add_flags("resourceType", "file").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the share. please check the share sas provided")
+        return False
+    return True
+
+
 # initialize_test_suite initializes the setup for executing test cases.
-def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, test_suite_exec_location):
+def initialize_test_suite(test_dir_path, container_sas, share_sas_url, azcopy_exec_location, test_suite_exec_location):
 
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
@@ -94,6 +108,10 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
     # test_container_url is a global variable used in the entire testSuite holding the user given container shared access signature.
     # all files / directory are uploaded and downloaded to and from this container.
     global test_container_url
+
+    # test_share_url is a global variable used in the entire testSuite holding the user given share URL with shared access signature.
+    # all files / directory are uploaded and downloaded to and from this share.
+    global test_share_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -130,6 +148,12 @@ def initialize_test_suite(test_dir_path, container_sas, azcopy_exec_location, te
     # all blob inside the container will be deleted.
     test_container_url = container_sas
     if not clean_test_container():
+        return False
+
+    # cleaning the test share provided
+    # all files and directories inside the share will be deleted.
+    test_share_url = share_sas_url
+    if not clean_test_share():
         return False
 
     return True
@@ -313,5 +337,11 @@ def get_resource_sas(resource_name):
     resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
     return resource_sas
 
-
-
+# get_resource_sas_from_share return the shared access signature for the given resource
+# based on the share url.
+def get_resource_sas_from_share(resource_name):
+    # Splitting the share URL to add the file or directory name to the SAS
+    url_parts = test_share_url.split("?")
+    # adding the file or directory name after the share name
+    resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
+    return resource_sas

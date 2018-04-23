@@ -1,17 +1,18 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
-	"fmt"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"net/url"
-	"os"
 	"context"
 	"crypto/md5"
-	"strings"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/spf13/cobra"
 )
 
 // TestBlobCommand represents the struct to get command
@@ -19,28 +20,28 @@ import (
 
 // todo check the number of contents uploaded while verifying.
 
-type TestBlobCommand struct{
+type TestBlobCommand struct {
 	// object is the resource which needs to be validated against a resource on container.
-	Object                string
+	Object string
 	//Subject is the remote resource against which object needs to be validated.
-	Subject 			 string
+	Subject string
 	// IsObjectDirectory defines if the object is a directory or not.
 	// If the object is directory, then validation goes through another path.
-	IsObjectDirectory     bool
+	IsObjectDirectory bool
 	// Metadata of the blob to be validated.
-	MetaData              string
+	MetaData string
 	// NoGuessMimeType represent the azcopy NoGuessMimeType flag set while uploading the blob.
-	NoGuessMimeType       bool
+	NoGuessMimeType bool
 	// Content Type of the blob to be validated.
-	ContentType           string
+	ContentType string
 	// Content Encoding of the blob to be validated.
-	ContentEncoding       string
+	ContentEncoding string
 	// Represents the flag to determine whether number of blocks or pages needs
 	// to be verified or not.
 	// todo always set this to true
 	VerifyBlockOrPageSize bool
 	// BlobType of the resource to be validated.
-	BlobType              string
+	BlobType string
 	// Number of Blocks or Pages Expected from the blob.
 	NumberOfBlocksOrPages uint64
 	// todo : numberofblockorpages can be an array with offset : end url.
@@ -51,11 +52,11 @@ type TestBlobCommand struct{
 
 // initializes the testblob command, its aliases and description.
 // also adds the possible flags that can be supplied with testBlob command.
-func init(){
+func init() {
 	cmdInput := TestBlobCommand{}
 	testBlobCmd := &cobra.Command{
-		Use:    "testBlob",
-		Aliases: []string{"tBlob",},
+		Use:     "testBlob",
+		Aliases: []string{"tBlob"},
 		Short:   "tests the blob created using AZCopy v2",
 
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -88,23 +89,23 @@ func init(){
 }
 
 // verify the blob downloaded or uploaded.
-func verifyBlob(testBlobCmd TestBlobCommand){
-	if testBlobCmd.BlobType == "PageBlob"{
+func verifyBlob(testBlobCmd TestBlobCommand) {
+	if testBlobCmd.BlobType == "PageBlob" {
 		verifySinglePageBlobUpload(testBlobCmd)
-	}else {
-		if testBlobCmd.IsObjectDirectory{
+	} else {
+		if testBlobCmd.IsObjectDirectory {
 			verifyBlockBlobDirUpload(testBlobCmd)
-		}else{
+		} else {
 			verifySingleBlockBlob(testBlobCmd)
 		}
 	}
 }
 
 // verifyBlockBlobDirUpload verifies the directory recursively uploaded to the container.
-func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
+func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 	// parse the subject url.
 	sasUrl, err := url.Parse(testBlobCmd.Subject)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error parsing the container sas ", testBlobCmd.Subject)
 		os.Exit(1)
 	}
@@ -120,7 +121,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 	searchPrefix := dirName[len(dirName)-1] + "/"
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix:searchPrefix})
+		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix: searchPrefix})
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas")
 			os.Exit(1)
@@ -133,7 +134,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 			get, err := containerUrl.NewBlobURL(blobInfo.Name).GetBlob(context.Background(),
 				azblob.BlobRange{0, *size}, azblob.BlobAccessConditions{}, false)
 
-			if err != nil{
+			if err != nil {
 				fmt.Println(fmt.Sprintf("error downloading the blob %s", blobInfo.Name))
 				os.Exit(1)
 			}
@@ -150,18 +151,18 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 
 			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
-			if err != nil{
+			if err != nil {
 				fmt.Println("error geting the subject blob file info on local disk ")
 				os.Exit(1)
 			}
 
 			sFile, err := os.Open(objectLocalPath)
-			if err != nil{
+			if err != nil {
 				fmt.Println("error opening file ", sFile)
 				os.Exit(1)
 			}
 			sMap, err := Map(sFile, false, 0, int(sFileInfo.Size()))
-			if err != nil{
+			if err != nil {
 				fmt.Println("error memory mapping the file ", sFileInfo.Name())
 			}
 
@@ -182,90 +183,82 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand)  {
 
 // validateMetadata compares the meta data provided while
 // uploading and metadata with blob in the container.
-func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metadata) (bool){
-	if len(expectedMetaDataString) > 0{
+func validateMetadata(expectedMetaDataString string, actualMetaData azblob.Metadata) bool {
+	if len(expectedMetaDataString) > 0 {
 		// split the meta data string to get the map of key value pair
 		// metadata string is in format key1=value1;key2=value2;key3=value3
 		expectedMetaData := azblob.Metadata{}
 		// split the metadata to get individual keyvalue pair in format key1=value1
 		keyValuePair := strings.Split(expectedMetaDataString, ";")
-		for index := 0; index < len(keyValuePair); index++{
+		for index := 0; index < len(keyValuePair); index++ {
 			// split the individual key value pair to get key and value
 			keyValue := strings.Split(keyValuePair[index], "=")
 			expectedMetaData[keyValue[0]] = keyValue[1]
 		}
 		// if number of metadata provided while uploading
 		// doesn't match the metadata with blob on the container
-		if len(expectedMetaData) != len(actualMetaData){
+		if len(expectedMetaData) != len(actualMetaData) {
 			fmt.Println("number of user given key value pair of the actual metadata differs from key value pair of expected metaData")
 			return false
 		}
 		// iterating through each key value pair of actual metaData and comparing the key value pair in expected metadata
-		for key, value := range actualMetaData{
+		for key, value := range actualMetaData {
 			if expectedMetaData[key] != value {
 				fmt.Println(fmt.Sprintf("value of user given key %s is %s in actual data while it is %s in expected metadata", key, value, expectedMetaData[key]))
 				return false
 			}
 		}
-	}else{
-		if len(actualMetaData) > 0{
+	} else {
+		if len(actualMetaData) > 0 {
 			return false
 		}
-	}
-	return true
-}
-
-// validateString compares the two strings.
-func validateString(expected string, actual string) (bool){
-	if strings.Compare(expected, actual) != 0{
-		return false
 	}
 	return true
 }
 
 // verifySinglePageBlobUpload verifies the pageblob uploaded or downloaded
 // against the blob locally.
-func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
+func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 
 	fileInfo, err := os.Stat(testBlobCmd.Object)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error opening the destination blob on local disk ")
 		os.Exit(1)
 	}
 	file, err := os.Open(testBlobCmd.Object)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error opening the file ", testBlobCmd.Object)
 	}
 
 	// getting the shared access signature of the resource.
 	sourceURL, err := url.Parse(testBlobCmd.Subject)
-	if err != nil{
+	if err != nil {
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
 		os.Exit(1)
 	}
 
 	// creating the page blob url of the resource on container.
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry:azblob.RetryOptions{TryTimeout:time.Minute*10,}})
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry: azblob.RetryOptions{TryTimeout: time.Minute * 10}})
 	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
-	get, err := pageBlobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset:0, Count:fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
-	if err != nil{
+	get, err := pageBlobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset: 0, Count: fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
+	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
 
 	// reading all the bytes downloaded.
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
-	if get.Response().Body != nil{
+	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
-	if err != nil{
+	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
 		os.Exit(1)
 	}
 
 	// memory mapping the resource on local path.
 	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
-	if err != nil{
+	if err != nil {
 		fmt.Println("error mapping the destination blob file ", err.Error())
 		os.Exit(1)
 	}
@@ -289,7 +282,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 	expectedContentType := ""
 	if testBlobCmd.NoGuessMimeType {
 		expectedContentType = testBlobCmd.ContentType
-	}else{
+	} else {
 		expectedContentType = http.DetectContentType(mmap)
 	}
 	if !validateString(expectedContentType, get.ContentType()) {
@@ -310,12 +303,12 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 	// this verifies the page-size and azcopy pageblob implementation.
 	if testBlobCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
-		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset:0, Count:0}, azblob.BlobAccessConditions{})
-		if err != nil{
+		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset: 0, Count: 0}, azblob.BlobAccessConditions{})
+		if err != nil {
 			fmt.Println("error getting the block blob list ", err.Error())
 			os.Exit(1)
 		}
-		if numberOfPages != (len(resp.PageRange)){
+		if numberOfPages != (len(resp.PageRange)) {
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}
@@ -326,16 +319,16 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand){
 // against the blob locally.
 
 // todo close the file as soon as possible.
-func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
+func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	// opening the resource on local path in test directory.
 	objectLocalPath := testBlobCmd.Object
 	fileInfo, err := os.Stat(objectLocalPath)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error opening the destination blob on local disk ")
 		os.Exit(1)
 	}
 	file, err := os.Open(objectLocalPath)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error opening the file ", objectLocalPath)
 	}
 
@@ -343,32 +336,32 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 	sourceSas := testBlobCmd.Subject
 	fmt.Println("source sas ", sourceSas)
 	sourceURL, err := url.Parse(sourceSas)
-	if err != nil{
+	if err != nil {
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
 		os.Exit(1)
 	}
 
 	// creating the blockblob url of the resource on container.
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry:azblob.RetryOptions{TryTimeout:time.Minute*10,}})
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry: azblob.RetryOptions{TryTimeout: time.Minute * 10}})
 	blobUrl := azblob.NewBlobURL(*sourceURL, p)
-	get, err := blobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset:0, Count:fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
-	if err != nil{
+	get, err := blobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset: 0, Count: fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
+	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
 	// reading all the blob bytes.
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
-	if get.Response().Body != nil{
+	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
-	if err != nil{
+	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
 		os.Exit(1)
 	}
 
 	// memory mapping the resource on local path.
 	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
-	if err != nil{
+	if err != nil {
 		fmt.Println("error mapping the destination blob file ", err.Error())
 		os.Exit(1)
 	}
@@ -392,7 +385,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 	expectedContentType := ""
 	if testBlobCmd.NoGuessMimeType {
 		expectedContentType = testBlobCmd.ContentType
-	}else{
+	} else {
 		expectedContentType = http.DetectContentType(mmap)
 	}
 	if !validateString(expectedContentType, get.ContentType()) {
@@ -406,7 +399,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 		os.Exit(1)
 	}
 
-	if testBlobCmd.PreserveLastModifiedTime{
+	if testBlobCmd.PreserveLastModifiedTime {
 		if fileInfo.ModTime().Unix() != get.LastModified().Unix() {
 			fmt.Println("modified time of downloaded and actual blob does not match")
 			os.Exit(1)
@@ -416,7 +409,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 	// unmap and closing the memory map file.
 	mmap.Unmap()
 	err = file.Close()
-	if err != nil{
+	if err != nil {
 		fmt.Println(fmt.Sprintf("error closing the file %s and failed with error %s. Error could be while validating the blob.", file.Name(), err.Error()))
 		os.Exit(1)
 	}
@@ -426,12 +419,12 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand){
 		blockBlobUrl := azblob.NewBlockBlobURL(*sourceURL, p)
 		numberOfBlocks := int(testBlobCmd.NumberOfBlocksOrPages)
 		resp, err := blockBlobUrl.GetBlockList(context.Background(), azblob.BlockListNone, azblob.LeaseAccessConditions{})
-		if err != nil{
+		if err != nil {
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)
 		}
 		// todo only commited blocks
-		if numberOfBlocks != (len(resp.CommittedBlocks)){
+		if numberOfBlocks != (len(resp.CommittedBlocks)) {
 			fmt.Println("number of blocks to be uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}
