@@ -258,7 +258,7 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 
 // isDirectoryStartExpression verifies if an url is like directory/* or share/* which equals to a directory or share.
 // If it could be transferred to a directory, return the URL which directly express directory.
-func (util copyHandlerUtil) isDirectoryStarExpression(url url.URL) (isDirectoryStartExpression bool, equivalentURL url.URL) {
+func (util copyHandlerUtil) hasEquivalentDirectoryURL(url url.URL) (isDirectoryStartExpression bool, equivalentURL url.URL) {
 	if strings.HasSuffix(url.Path, "/*") {
 		url.Path = url.Path[:len(url.Path)-1]
 		isDirectoryStartExpression = true

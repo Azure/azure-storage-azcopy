@@ -54,13 +54,16 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 	// 1. End with star, means download a file with specified prefix, if directory\*, means download the files under the directory.
 	// directory/fprefix*
 	// directory/dirprefix*
-	// directory/* (--recursive)
+	// directory/* transfer this expression to download from directory
 	// 2. Not end with star, means download a single file or a directory.
 	// directory/dir
 	// directory/file
-	if isDirectoryStarExpress, equivalentURL := util.isDirectoryStarExpression(*sourceURL); isDirectoryStarExpress {
+
+	fmt.Println(*sourceURL)
+
+	if hasEquivalentDirectoryURL, equivalentURL := util.hasEquivalentDirectoryURL(*sourceURL); hasEquivalentDirectoryURL {
 		*sourceURL = equivalentURL
-		doPrefixSearch = true
+		doPrefixSearch = false
 	}
 
 	if doPrefixSearch { // Do prefix search, the file pattern would be [AnyLetter]+\*
