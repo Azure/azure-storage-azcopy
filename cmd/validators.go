@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"os"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -105,7 +106,7 @@ func inferArgumentLocation(arg string) Location {
 	if arg == pipeLocation {
 		return Location{}.Pipe()
 	}
-	if startsWith(arg, "http") {
+	if startsWith(arg, "https") {
 		// Let's try to parse the argument as a URL
 		u, err := url.Parse(arg)
 		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
@@ -120,6 +121,10 @@ func inferArgumentLocation(arg string) Location {
 		}
 	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
+		_, err := os.Stat(arg)
+		if err != nil{
+			return Location{}.Unknown()
+		}
 		return Location{}.Local()
 	}
 
