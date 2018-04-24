@@ -39,16 +39,19 @@ import (
 
 func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
+	// step 1: Get info from transfer.
 	info := jptm.Info()
 
 	u, _ := url.Parse(info.Destination)
 	fileURL := azfile.NewFileURL(*u, p)
 
-	// step 2: get size info from transfer
 	fileSize := int64(info.SourceSize)
 	chunkSize := int64(info.BlockSize)
 
-	// step 3: map in the file to upload before transferring chunks
+	// TODO: remove the hard coded chunk size in case of pageblob or Azure file
+	chunkSize = common.DefaultAzureFileChunkSize
+
+	// step 2: Map file upload before transferring chunks and get info from map file.
 	srcFile, err := os.Open(info.Source)
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogInfo) {
@@ -86,13 +89,12 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 	}
 
-	// todo: remove the hard coded chunk size in case of pageblob or Azure file
-	chunkSize = common.DefaultAzureFileChunkSize
-	// step 2: Get http headers and meta data of file.
+	// Get http headers and meta data of file.
 	fileHTTPHeaders, metaData := jptm.FileDstData(srcMmf)
 
-	// step 3a: Create the parent directories or share for the file
-	err = createParentDirToRoot(jptm.Context(), getParentDir(fileURL, p), p)
+	// step 3: Create parent directories and file.
+	// 3a: Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
+	err = createParentDirToRoot(jptm.Context(), fileURL, p)
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogInfo) {
 			jptm.Log(pipeline.LogInfo,
@@ -112,7 +114,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		return
 	}
 
-	// step 3b: Create File of the source size
+	// 3b: Create Azure file with the source size.
 	jptm.AddToBytesOverWire(uint64(fileSize))
 
 	_, err = fileURL.Create(jptm.Context(), fileSize, fileHTTPHeaders, metaData)
@@ -250,6 +252,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 	}
 }
 
+// isUserEndpointStyle verfies if a given URL is pointing to Azure storage dev fabric's or emulator's resource.
 func isUserEndpointStyle(url url.URL) bool {
 	pathStylePorts := map[int16]struct{}{10000: struct{}{}, 10001: struct{}{}, 10002: struct{}{}, 10003: struct{}{}, 10004: struct{}{}, 10100: struct{}{}, 10101: struct{}{}, 10102: struct{}{}, 10103: struct{}{}, 10104: struct{}{}, 11000: struct{}{}, 11001: struct{}{}, 11002: struct{}{}, 11003: struct{}{}, 11004: struct{}{}, 11100: struct{}{}, 11101: struct{}{}, 11102: struct{}{}, 11103: struct{}{}, 11104: struct{}{}}
 
@@ -271,7 +274,8 @@ func isUserEndpointStyle(url url.URL) bool {
 	return false
 }
 
-func getServiceBaseAddress(u url.URL, p pipeline.Pipeline) azfile.ServiceURL {
+// getServiceURL gets service URL from an Azure file resource URL.
+func getServiceURL(u url.URL, p pipeline.Pipeline) azfile.ServiceURL {
 	path := u.Path
 
 	if path != "" {
@@ -288,19 +292,21 @@ func getServiceBaseAddress(u url.URL, p pipeline.Pipeline) azfile.ServiceURL {
 	return azfile.NewServiceURL(u, p)
 }
 
-func getParentDir(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
+// getParentDirectoryURL gets parent directory URL of an Azure FileURL.
+func getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
 	u := fileURL.URL()
 	u.Path = u.Path[:strings.LastIndex(u.Path, "/")]
 	return azfile.NewDirectoryURL(u, p)
 }
 
+// verifyAndHandleCreateErrors handles create errors, StatusConflict is ignored, as specific level directory could be existing.
+// Report http.StatusForbidden, as user should at least have read and write permission of the destination,
+// and there is no permission on directory level, i.e. create directory is a general permission for each level diretories for Azure file.
 func verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
 		sErr := err.(azfile.StorageError)
 		if sErr != nil &&
-			(sErr.Response().StatusCode == http.StatusNotFound ||
-				sErr.Response().StatusCode == http.StatusForbidden ||
-				sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created.
+			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
 		}
 		return err
@@ -309,38 +315,33 @@ func verifyAndHandleCreateErrors(err error) error {
 	return nil
 }
 
+// splitWithoutToken splits string with a given token, and returns splitted results without token.
 func splitWithoutToken(str string, token rune) []string {
 	return strings.FieldsFunc(str, func(c rune) bool {
 		return c == token
 	})
 }
 
-// createParentDirToRoot creates parent directories of the file, if file's parent directory doesn't exist.
-func createParentDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pipeline.Pipeline) error {
-	segment := splitWithoutToken(dirURL.URL().Path, '/')
-	// if it's user endpoint style, ignore the first segment, which would be the account name.
+// createParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
+func createParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
+	dirURL := getParentDirectoryURL(fileURL, p)
+
+	segments := splitWithoutToken(dirURL.URL().Path, '/')
+
 	if isUserEndpointStyle(dirURL.URL()) {
-		segment = segment[1:]
+		panic(fmt.Errorf("doesn't support user endpoint style currently"))
 	}
 
 	_, err := dirURL.GetProperties(ctx)
 	if err != nil {
 		if err.(azfile.StorageError) != nil &&
-			(err.(azfile.StorageError).Response().StatusCode == http.StatusNotFound ||
-				err.(azfile.StorageError).Response().StatusCode == http.StatusForbidden) { // Might be lack of read permission
-			// fileParentDirURL doesn't exist, try to create the directory and share to the root.
-			// try to create the share
-			serviceURL := getServiceBaseAddress(dirURL.URL(), p)
-			shareURL := serviceURL.NewShareURL(segment[0])
-			_, err := shareURL.Create(ctx, azfile.Metadata{}, 0)
-			if verifiedErr := verifyAndHandleCreateErrors(err); verifiedErr != nil {
-				return verifiedErr
-			}
-
-			curDirURL := shareURL.NewRootDirectoryURL()
+			(err.(azfile.StorageError).Response().StatusCode == http.StatusNotFound) { // At least need read and write permisson for destination
+			// fileParentDirURL doesn't exist, try to create the directories to the root.
+			serviceURL := getServiceURL(dirURL.URL(), p)
+			curDirURL := serviceURL.NewShareURL(segments[0]).NewRootDirectoryURL() // Share directory should already exist, otherwise invalid state
 			// try to create the directories
-			for i := 1; i < len(segment); i++ {
-				curDirURL = curDirURL.NewDirectoryURL(segment[i])
+			for i := 1; i < len(segments); i++ {
+				curDirURL = curDirURL.NewDirectoryURL(segments[i])
 				_, err := curDirURL.Create(ctx, azfile.Metadata{})
 				if verifiedErr := verifyAndHandleCreateErrors(err); verifiedErr != nil {
 					return verifiedErr
@@ -351,5 +352,6 @@ func createParentDirToRoot(ctx context.Context, dirURL azfile.DirectoryURL, p pi
 		}
 	}
 
+	// Directly return if parent directory exists.
 	return nil
 }

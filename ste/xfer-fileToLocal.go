@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
-// todo: unify blobToLocal and fileToLocal
+// TODO: Unify blobToLocal and fileToLocal after code review and logic is finalized.
 func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	info := jptm.Info()
@@ -127,7 +127,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			numChunks = uint32(fileSize/downloadChunkSize + 1)
 		}
 		jptm.SetNumberOfChunks(numChunks)
-		chunkIdCount := int32(0)
+		chunkIDCount := int32(0)
 		// step 4: go through the file range and schedule download chunk jobs
 		for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
 			adjustedChunkSize := downloadChunkSize
@@ -138,13 +138,13 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, chunkIdCount, dstFile, dstMMF, startIndex, adjustedChunkSize))
-			chunkIdCount++
+			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, chunkIDCount, dstFile, dstMMF, startIndex, adjustedChunkSize))
+			chunkIDCount++
 		}
 	}
 }
 
-func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkId int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkID int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -174,7 +174,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkID %d because writing to file for startIndex of %d has failed", workerId, chunkID, startIndex))
 					}
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -184,14 +184,14 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 
 			// step 2: write the body into the memory mapped file directly
 			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
-			bytesRead, err := io.ReadFull(retryReader, destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(retryReader, destinationMMF[startIndex:startIndex+adjustedChunkSize])
 			retryReader.Close()
-			if int64(bytesRead) != adjustedChunkSize || err != nil {
+			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkID %d because reading the downloaded chunk failed. Failed with error %s", workerId, chunkID, err.Error()))
 					}
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -201,13 +201,12 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 
 			jptm.AddToBytesTransferred(adjustedChunkSize)
 
-			lastChunk, nc := jptm.ReportChunkDone()
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("is last chunk %s and no of chunk %d", lastChunk, nc))
+			lastChunk, _ := jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
 				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkID %d", workerId, chunkID))
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
 				if jptm.ShouldLog(pipeline.LogInfo) {

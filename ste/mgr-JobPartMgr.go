@@ -110,18 +110,18 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
-	// TODO: further refactor need be considered, not all the time both file and blob headers/metadata should be initialized.
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
+		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+	}
+	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
 		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
 	jpm.blockBlobTier = string(dstData.BlockBlobTier[:dstData.BlockBlobTierLength])
 	jpm.pageBlobTier = string(dstData.PageBlobTier[:dstData.PageBlobTierLength])
-	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
-		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
-	}
+
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
 	jpm.blobMetadata = azblob.Metadata{}

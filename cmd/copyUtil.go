@@ -237,25 +237,29 @@ func endWithSlashOrBackSlash(path string) bool {
 
 // getPossibleFileNameFromURL return the possible file name get from URL.
 func (util copyHandlerUtil) getPossibleFileNameFromURL(path string) string {
+	if path == "" {
+		panic("can not get file name from an empty path")
+	}
+
 	if endWithSlashOrBackSlash(path) {
 		return ""
 	}
 
-	return path[strings.LastIndex(path, "/")+1:] //TODO: jiac what about empty file name?
+	return path[strings.LastIndex(path, "/")+1:]
 }
 
-// getDeepestDirOrFileURLFromString returns the deepest DirectoryURL specified by the provided url.
-// When provided url is endwith *, get parent directory of file whose name is with *.
-// When provided url without *, the url could be a file or a directory, in this case make request to get the deepest dir.
+// getDeepestDirOrFileURLFromString returns the deepest valid DirectoryURL or FileURL can be picked out from the provided URL.
+// When provided URL is endwith *, get parent directory of file whose name is with *.
+// When provided URL without *, the url could be a file or a directory, in this case make request to get valid DirectoryURL or FileURL.
 func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context, givenURL url.URL, p pipeline.Pipeline) (*azfile.DirectoryURL, *azfile.FileURL, *azfile.FileGetPropertiesResponse, bool) {
 	url := givenURL
 	path := url.Path
 
 	buffer := bytes.Buffer{}
-	defer buffer.Reset() // Free the buffer.
+	defer buffer.Reset() // Ensure to free the buffer.
 
 	if strings.HasSuffix(path, "*") {
-		lastSlashIndex := strings.LastIndex(path, "/") //TODO: ensure the case of \
+		lastSlashIndex := strings.LastIndex(path, "/")
 		url.Path = url.Path[:lastSlashIndex]
 	} else {
 		if !strings.HasSuffix(path, "/") {
@@ -298,4 +302,11 @@ func (util copyHandlerUtil) reactURLQuery(url url.URL) url.URL {
 	// Note: this is copy by value
 	url.RawQuery = "<Reacted Query>"
 	return url
+}
+
+// replaceBackSlashWithSlash replaces all backslash '\' with slash '/' in a given URL string.
+func (util copyHandlerUtil) replaceBackSlashWithSlash(urlStr string) string {
+	str := strings.Replace(urlStr, "\\", "/", -1)
+
+	return str
 }
