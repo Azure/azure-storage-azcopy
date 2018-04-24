@@ -305,7 +305,7 @@ func getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.D
 func verifyAndHandleCreateErrors(err error) error {
 	if err != nil {
 		sErr := err.(azfile.StorageError)
-		if sErr != nil &&
+		if sErr != nil && sErr.Response() != nil &&
 			(sErr.Response().StatusCode == http.StatusConflict) { // Note the ServiceCode actually be AuthenticationFailure when share failed to be created, if want to create share as well.
 			return nil
 		}
@@ -334,7 +334,7 @@ func createParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeli
 
 	_, err := dirURL.GetProperties(ctx)
 	if err != nil {
-		if err.(azfile.StorageError) != nil &&
+		if err.(azfile.StorageError) != nil && (err.(azfile.StorageError)).Response() != nil &&
 			(err.(azfile.StorageError).Response().StatusCode == http.StatusNotFound) { // At least need read and write permisson for destination
 			// fileParentDirURL doesn't exist, try to create the directories to the root.
 			serviceURL := getServiceURL(dirURL.URL(), p)

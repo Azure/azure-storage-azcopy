@@ -23,6 +23,7 @@ package ste
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
@@ -185,6 +186,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 			// step 2: write the body into the memory mapped file directly
 			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
 			_, err = io.ReadFull(retryReader, destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			io.Copy(ioutil.Discard, retryReader)
 			retryReader.Close()
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
