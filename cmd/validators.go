@@ -122,7 +122,7 @@ func inferArgumentLocation(arg string) Location {
 	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
 		_, err := os.Stat(arg)
-		if err != nil{
+		if err != nil && !os.IsNotExist(err){
 			return Location{}.Unknown()
 		}
 		return Location{}.Local()
