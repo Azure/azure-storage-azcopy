@@ -7,20 +7,23 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-type copyEnumerator interface {
-	enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
+// copyEnumerator is the interface for copy enumerators.
+type CopyEnumerator interface {
+	// enumerate enumerates entities
+	enumerate(sourceURLString string, isRecursiveOn bool, destinationPath string,
 		wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error
+
+	// partNum gets part number
+	partNum() common.PartNumber
 }
 
-// accept a new transfer, if the threshold is reached, dispatch a job part order
+// addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	e.Transfers = append(e.Transfers, transfer)
-
-	// dispatch the transfers once the number reaches NumOfFilesPerUploadJobPart
-	// we do this so that in the case of large uploads, the transfer engine can get started
+	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
+	// we do this so that in the case of large transfer, the transfer engine can get started
 	// while the frontend is still gathering more transfers
-	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
+	if len(e.Transfers) == NumOfFilesPerDispatchJobPart {
 		resp := common.CopyJobPartOrderResponse{}
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
@@ -36,10 +39,12 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		e.PartNum++
 	}
 
+	e.Transfers = append(e.Transfers, transfer)
+
 	return nil
 }
 
-// we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
+// dispatchFinalPart sends a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent.
 func dispatchFinalPart(e *common.CopyJobPartOrderRequest) error {
 	e.IsFinalPart = true
 	var resp common.CopyJobPartOrderResponse

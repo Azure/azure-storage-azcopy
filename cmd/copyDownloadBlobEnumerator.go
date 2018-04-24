@@ -200,6 +200,10 @@ func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
 	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
 }
 
+func (e *copyDownloadBlobEnumerator) partNum() common.PartNumber {
+	return e.PartNum
+}
+
 /////////////////////////////////////////////////////////////////////////////////////
 // TODO: Following are dup code during involve file, please double check.
 /////////////////////////////////////////////////////////////////////////////////////
@@ -209,7 +213,7 @@ func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
 // 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 // 	e.Transfers = append(e.Transfers, transfer)
 
-// 	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
+// 	if len(e.Transfers) == NumOfFilesPerDispatchJobPart {
 // 		resp := common.CopyJobPartOrderResponse{}
 // 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 

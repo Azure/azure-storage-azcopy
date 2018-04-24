@@ -208,6 +208,10 @@ func (e *copyDownloadFileEnumerator) dispatchFinalPart() error {
 	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
 }
 
+func (e *copyDownloadFileEnumerator) partNum() common.PartNumber {
+	return e.PartNum
+}
+
 // TODO: Optimize for resource consumption cases. Can change to DFS with recursive method simply.
 // Temporarily keep this implementation as discussion.
 type directoryStack []azfile.DirectoryURL

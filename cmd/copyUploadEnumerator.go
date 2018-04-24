@@ -129,38 +129,15 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	return e.dispatchFinalPart()
 }
 
-// accept a new transfer, if the threshold is reached, dispatch a job part order
 func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-
-	if len(e.Transfers) == NumOfFilesPerUploadJobPart {
-		resp := common.CopyJobPartOrderResponse{}
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
-
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-		}
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-		if e.PartNum == 0 {
-			wg.Add(1)
-			go waitUntilJobCompletion(e.JobID, wg)
-		}
-		e.Transfers = []common.CopyTransfer{}
-		e.PartNum++
-	}
-	e.Transfers = append(e.Transfers, transfer)
-	return nil
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
 }
 
-// we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 func (e *copyUploadEnumerator) dispatchFinalPart() error {
-	e.IsFinalPart = true
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
+}
 
-	if !resp.JobStarted {
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-	}
-
-	return nil
+func (e *copyUploadEnumerator) partNum() common.PartNumber {
+	return e.PartNum
 }
