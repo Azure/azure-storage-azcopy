@@ -34,8 +34,8 @@
   branch = "master"
 
 [[constraint]]
+  name = "github.com/Azure/azure-storage-file-go"
   branch = "master"
-  name = "github.com/buger/goterm"
 
 [[constraint]]
   branch = "master"

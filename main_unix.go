@@ -36,8 +36,8 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 // Azcopy folder in local appdata contains all the files created by azcopy locally.
 func GetAzCopyAppPath() string {
 	localAppData := os.Getenv("HOME")
-	azcopyAppDataFolder := path.Join(localAppData, "/.cache/Azcopy")
-	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err) {
+	azcopyAppDataFolder := path.Join(localAppData, "/.azcopy")
+	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir | os.ModePerm); err != nil && !os.IsExist(err) {
 		return ""
 	}
 	return azcopyAppDataFolder
