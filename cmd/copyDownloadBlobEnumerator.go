@@ -87,6 +87,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 					continue
 				}
 
+				// check for special characters and get the blob without special characters.
+				blobNameAfterPrefix = util.blobPathWOSpecialCharacters(blobNameAfterPrefix)
+
 				e.addTransfer(common.CopyTransfer{
 					Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
 					Destination:      util.generateLocalPath(destinationPath, blobNameAfterPrefix),
@@ -115,7 +118,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		// for a single blob, the destination can either be a file or a directory
 		var singleBlobDestinationPath string
 		if util.isPathDirectory(destinationPath) {
-			singleBlobDestinationPath = util.generateLocalPath(destinationPath, util.getBlobNameFromURL(sourceUrl.Path))
+			blobNameFromUrl := util.getBlobNameFromURL(sourceUrl.Path)
+			// check for special characters and get blobName without special character.
+			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
+			singleBlobDestinationPath = util.generateLocalPath(destinationPath, blobNameFromUrl)
 		} else {
 			singleBlobDestinationPath = destinationPath
 		}
@@ -163,9 +169,12 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 
 				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 				for _, blobInfo := range listBlob.Blobs.Blob {
-					e.addTransfer(common.CopyTransfer{
+					blobRelativePath := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+					// check for the special character in blob relative path and get path without special character.
+					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
+						e.addTransfer(common.CopyTransfer{
 						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name, "/")),
+						Destination:      util.generateLocalPath(destinationPath, blobRelativePath),
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength},
 						wg,

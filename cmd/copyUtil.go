@@ -199,6 +199,52 @@ func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
 	return blockIDBinaryToBase64(binaryBlockID)
 }
 
+// containsSpecialChars checks for the special characters in the given name.
+// " \\ < > * | ? : are not allowed while creating file / dir by the OS.
+// space is also included as a special character since space at the end of name of file / dir
+// is not considered.
+// For example "abcd " is same as "abcd"
+func (util copyHandlerUtil) containsSpecialChars(name string) bool {
+	for _, r := range name {
+		if r == '"' || r == '\\' || r == '<' ||
+			r == '>' || r == '|' || r == '*' ||
+			r == '?' || r == ':' || r == ' '{
+					return true
+		}
+	}
+	return false
+}
+
+// blobPathWOSpecialCharacters checks the special character in the given blob path.
+// If the special characters exists, then it encodes the path so that blob can created
+// locally.
+// Some special characters are not allowed while creating file / dir by OS
+// returns the path without special characters.
+func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string {
+	// split the path by separator "/"
+	parts := strings.Split(blobPath, "/")
+	bnwc := ""
+	// iterates through each part of the path.
+	// for example if given path is /a/b/c/d/e.txt,
+	// then check for special character in each part a,b,c,d and e.txt
+	for i := range parts{
+		if len(parts[i]) == 0 {
+			// If the part length is 0, then encode the "/" char and add to the new path.
+			// This is for scenarios when there exists "/" at the end of blob or start of the blobName.
+			bnwc += url.QueryEscape("/") + "/"
+		} else if util.containsSpecialChars(parts[i]){
+			// if the special character exists, then perform the encoding.
+			bnwc += url.QueryEscape(parts[i]) + "/"
+		}else{
+			// If there is no special character, then add the part as it is.
+			bnwc += parts[i] + "/"
+		}
+	}
+	// remove "/" at the end of blob path.
+	bnwc = bnwc[:len(bnwc)-1]
+	return bnwc
+}
+
 func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, outputJson bool) common.JobStatus {
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
