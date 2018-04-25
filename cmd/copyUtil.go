@@ -188,7 +188,7 @@ func (util copyHandlerUtil) getLastVirtualDirectoryFromPath(path string) string 
 		return ""
 	}
 
-	return path[0:lastSlashIndex]
+	return path[0:lastSlashIndex+1]
 }
 
 func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
