@@ -3,7 +3,7 @@ from test_upload_block_blob import *
 from test_upload_page_blob import *
 from test_file_download import *
 from test_file_upload import *
-import sys
+import glob, os
 import configparser
 import platform
 
@@ -87,7 +87,8 @@ def execute_user_scenario_file_1() :
     test_9mb_file_upload()
     test_1GB_file_upload()
     
-
+def execute_user_scenario_2():
+    test_download_file_with_special_characters()
 
 def init():
     # initializing config parser to read the testsuite_config file.
@@ -124,18 +125,36 @@ def init():
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
     share_sas_url = config['CREDENTIALS']['SHARE_SAS_URL']
 
+    # deleting the log files.
+    for f in glob.glob('*.log'):
+        try:
+            os.remove(f)
+        except OSError as e:
+            if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
+                raise
+
     if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
         test_dir_path += "\\test_data"
 
+def cleanup():
+    # deleting the log files.
+    for f in glob.glob('*.log'):
+        try:
+            os.remove(f)
+        except OSError as e:
+            if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
+                raise
 
 def main():
     init()
-    execute_user_scenario_1()
+    #execute_user_scenario_1()
+    execute_user_scenario_2()
     #execute_user_scenario_file_1()
     #temp_adhoc_scenario()
+    cleanup()
 
 main()
     

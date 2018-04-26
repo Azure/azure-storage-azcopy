@@ -14,6 +14,7 @@ import (
 	"io"
 	"math/rand"
 	"strings"
+	"net/http"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyz" +
@@ -48,7 +49,6 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("create get resourceType", resourceType)
 			if resourceType != blobType && resourceType != fileType {
 				panic(fmt.Errorf("illegal resourceType '%s'", resourceType))
 			}
@@ -91,8 +91,8 @@ func createBlob(blobUri string) {
 	blobUrl := azblob.NewBlockBlobURL(*url, p)
 
 	randomString := createStringWithRandomChars(1024)
-
-	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	contentType := http.DetectContentType([]byte(randomString))
+	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{ContentType:contentType,}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 	if err != nil{
 		fmt.Println(fmt.Sprintf("error uploading the blob %s", blobUrl))
 		os.Exit(1)
