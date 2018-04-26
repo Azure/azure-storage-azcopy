@@ -75,7 +75,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			// look for all blobs that start with the prefix
 			listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
-				azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+				azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata:true},Prefix: searchPrefix})
 			if err != nil {
 				return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 			}
