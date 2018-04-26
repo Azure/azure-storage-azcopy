@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 const (
@@ -243,6 +244,19 @@ func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string 
 	// remove "/" at the end of blob path.
 	bnwc = bnwc[:len(bnwc)-1]
 	return bnwc
+}
+
+// isBlobValid verifies whether blob is valid or not.
+// Used to handle special scenarios or conditions.
+func (util copyHandlerUtil) isBlobValid(bInfo azblob.Blob) bool{
+	// this condition is to handle the WASB V1 directory structure.
+	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
+	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
+	// The empty directory has meta-data 'hdi_isfolder = true'
+	if bInfo.Metadata["hdi_isfolder"] == "true"{
+		return false
+	}
+	return true
 }
 
 func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, outputJson bool) common.JobStatus {

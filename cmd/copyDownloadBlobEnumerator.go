@@ -82,6 +82,11 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
+				// If the blob is not valid as per the conditions mentioned in the
+				// api isBlobValid, then skip the blob.
+				if !util.isBlobValid(blobInfo){
+					continue
+				}
 				blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
 				if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
 					continue
@@ -89,7 +94,6 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 
 				// check for special characters and get the blob without special characters.
 				blobNameAfterPrefix = util.blobPathWOSpecialCharacters(blobNameAfterPrefix)
-
 				e.addTransfer(common.CopyTransfer{
 					Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
 					Destination:      util.generateLocalPath(destinationPath, blobNameAfterPrefix),
@@ -169,6 +173,11 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 
 				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 				for _, blobInfo := range listBlob.Blobs.Blob {
+					// If the blob is not valid as per the conditions mentioned in the
+					// api isBlobValid, then skip the blob.
+					if !util.isBlobValid(blobInfo){
+						continue
+					}
 					blobRelativePath := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
 					// check for the special character in blob relative path and get path without special character.
 					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
