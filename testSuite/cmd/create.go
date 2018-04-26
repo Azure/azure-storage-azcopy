@@ -9,7 +9,23 @@ import (
 
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"io/ioutil"
+	"io"
+	"math/rand"
+	"strings"
 )
+
+const charset = "abcdefghijklmnopqrstuvwxyz" +
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func createStringWithRandomChars(length int) string{
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Int() % len(charset)]
+	}
+	return string(b)
+}
 
 // initializes the create command, its aliases and description.
 func init() {
@@ -64,8 +80,27 @@ func init() {
 func createContainer(container string) {
 	panic("todo")
 }
-func createBlob(blob string) {
-	panic("todo")
+
+func createBlob(blobUri string) {
+	url, err := url.Parse(blobUri)
+	if err != nil{
+		fmt.Println("error parsing the blob sas ", blobUri)
+		os.Exit(1)
+	}
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+	blobUrl := azblob.NewBlockBlobURL(*url, p)
+
+	randomString := createStringWithRandomChars(1024)
+
+	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	if err != nil{
+		fmt.Println(fmt.Sprintf("error uploading the blob %s", blobUrl))
+		os.Exit(1)
+	}
+	if putBlobResp.Response() != nil{
+		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
+		putBlobResp.Response().Body.Close()
+	}
 }
 
 func createShareOrDirectory(shareOrDirectoryURLStr string) {

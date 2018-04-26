@@ -1,5 +1,6 @@
 import utility as util
 import time
+import urllib
 import shutil
 
 # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
@@ -154,3 +155,25 @@ def test_recursive_download_blob():
         print("error verifying the recursive download ")
         return
     print("test_recursive_download_blob successfully passed")
+
+def test_download_file_with_special_characters():
+    filename_special_characters = 'abc"|>rd*'
+    resource_url = util.get_resource_sas(filename_special_characters)
+    # creating the file with random characters and with file name having special characters.
+    result = util.Command("create").add_arguments(resource_url).add_flags("resourceType", "blob").execute_azcopy_verify()
+    if not result:
+        print("error creating the file name ", filename_special_characters, " special characters")
+        return
+    result = util.Command("copy").add_arguments(resource_url).add_arguments(util.test_directory_path).add_flags("Logging", "5").execute_azcopy_copy_command()
+    if not result:
+        print("error downloading the file with special characters ", filename_special_characters)
+        return
+    expected_filename = urllib.parse.quote_plus(filename_special_characters)
+    filepath = util.test_directory_path + "/" + expected_filename
+    if not os.path.isfile(filepath):
+        print("file not downloaded with expected file name")
+        return
+    result = util.Command("testBlob").add_arguments(filepath).add_arguments(resource_url).execute_azcopy_verify()
+    if not result:
+        print("error verifying the download of file ", filepath)
+        return
