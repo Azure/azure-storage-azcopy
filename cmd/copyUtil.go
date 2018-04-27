@@ -209,9 +209,15 @@ func (util copyHandlerUtil) containsSpecialChars(name string) bool {
 	for _, r := range name {
 		if r == '"' || r == '\\' || r == '<' ||
 			r == '>' || r == '|' || r == '*' ||
-			r == '?' || r == ':' || r == ' '{
+			r == '?' || r == ':'{
 					return true
 		}
+	}
+	// if the last character in the file / dir name is ' '
+	// then it not accepted by OS.
+	// 'test1 ' is created as 'test1'
+	if len(name) > 0 && name[len(name)-1] == ' '{
+		return true
 	}
 	return false
 }
@@ -279,7 +285,7 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, o
 		if timeElapsed == 0 {
 			throughPut = 0
 		}
-		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
+		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
 			summary.JobProgressPercentage, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
 		fmt.Println(message)

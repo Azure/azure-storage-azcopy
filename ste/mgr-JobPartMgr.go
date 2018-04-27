@@ -194,8 +194,7 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-			jpm.pipeline = azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-
+			jpm.pipeline = newPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 				Retry: azblob.RetryOptions{
 					Policy:        azblob.RetryPolicyExponential,
 					MaxTries:      UploadMaxTries,
@@ -205,7 +204,7 @@ func (jpm *jobPartMgr) createPipeline() {
 				},
 				Log:       jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
-			})
+			}, jpm.pacer)
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system
 			fallthrough
 		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
