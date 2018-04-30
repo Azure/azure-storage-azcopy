@@ -2,6 +2,7 @@ import os
 import subprocess
 import shutil
 from pathlib import Path
+import platform
 
 # Command Class is used to create azcopy commands and validator commands.
 class Command(object):
@@ -279,7 +280,8 @@ def create_partial_sparse_file(filename, filesize):
 # returns true / false on success / failure of command.
 def execute_azcopy_command(command):
     # azcopy executable path location.
-    azspath = os.path.join(test_directory_path, "azs.exe")
+    azs_exec_name = get_azcopy_executable_name()
+    azspath = os.path.join(test_directory_path, azs_exec_name)
     cmnd = azspath + " " + command
     try:
         # executing the command with timeout to set 3 minutes / 180 sec.
@@ -296,8 +298,9 @@ def execute_azcopy_command(command):
 # execute_azcopy_command_get_output executes the given azcopy command in "inproc" mode.
 # returns azcopy console output or none on success / failure of command.
 def execute_azcopy_command_get_output(command):
+    azs_exec_name = get_azcopy_executable_name()
     # azcopy executable path location concatenated with inproc keyword.
-    azspath = os.path.join(test_directory_path, "azs.exe inproc")
+    azspath = os.path.join(test_directory_path, azs_exec_name)
     cmnd = azspath + " " + command
     output = ""
     try:
@@ -314,8 +317,9 @@ def execute_azcopy_command_get_output(command):
 # verify_operation executes the validator command to verify the azcopy operations.
 # return true / false on success / failure of command.
 def verify_operation(command):
+    testSuite_exec_name = get_suite_executable_name()
     # testSuite executable local path inside the test directory.
-    test_suite_path = os.path.join(test_directory_path, "testSuite.exe")
+    test_suite_path = os.path.join(test_directory_path, testSuite_exec_name)
     command = test_suite_path + " " + command
     try:
         # executing the command with timeout set to 3 minutes / 180 sec.
@@ -345,3 +349,29 @@ def get_resource_sas_from_share(resource_name):
     # adding the file or directory name after the share name
     resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
     return resource_sas
+
+# get_azcopy_executable_name returns the executable name specific to platform.
+# for example, executable for windows will be "azs.exe"
+# for example, executable for linux will "azs"
+def get_azcopy_executable_name():
+    # get the platform type since executable is different for different platforms.
+    osType = platform.system()
+    osType = osType.upper()
+    if osType == "WINDOWS":
+        return "azs.exe"
+    if osType == "LINUX":
+        return "azs"
+    return ""
+
+# get_suite_executable_name returns the executable specific to platform.
+# for example, executable for windows will be in "testSuite.exe".
+# for example, executable for linux will be "testSuite"
+def get_suite_executable_name():
+    # get the platform type since executable is different for different platforms.
+    osType = platform.system()
+    osType = osType.upper()
+    if osType == "WINDOWS":
+        return "testSuite.exe"
+    if osType == "LINUX":
+        return "testSuite"
+    return ""
