@@ -33,7 +33,7 @@ type IJobPartMgr interface {
 }
 
 // NewPipeline creates a Pipeline using the specified credentials and options.
-func newPipeline(c azblob.Credential, o azblob.PipelineOptions, p *pacer) pipeline.Pipeline {
+func newPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -41,7 +41,7 @@ func newPipeline(c azblob.Credential, o azblob.PipelineOptions, p *pacer) pipeli
 	f := []pipeline.Factory{
 		azblob.NewTelemetryPolicyFactory(o.Telemetry),
 		azblob.NewUniqueRequestIDPolicyFactory(),
-		azblob.NewRetryPolicyFactory(o.Retry),
+		NewXferRetryPolicyFactory(r),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewPacerPolicyFactory(p),
@@ -194,16 +194,16 @@ func (jpm *jobPartMgr) createPipeline() {
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 			jpm.pipeline = newPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-				Retry: azblob.RetryOptions{
-					Policy:        azblob.RetryPolicyExponential,
-					MaxTries:      UploadMaxTries,
-					TryTimeout:    UploadTryTimeout,
-					RetryDelay:    UploadRetryDelay,
-					MaxRetryDelay: UploadMaxRetryDelay,
-				},
 				Log:       jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
-			}, jpm.pacer)
+			},
+			XferRetryOptions{
+				Policy:        0,
+				MaxTries:      UploadMaxTries,
+				TryTimeout:    UploadTryTimeout,
+				RetryDelay:    UploadRetryDelay,
+				MaxRetryDelay: UploadMaxRetryDelay},
+				jpm.pacer)
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system
 			fallthrough
 		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
