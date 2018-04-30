@@ -48,7 +48,7 @@ def test_download_1kb_blob() :
 
 # test_download_perserve_last_modified_time verifies the azcopy downloaded file
 # and its modified time preserved locally on disk
-def test_download_perserve_last_modified_time() :
+def test_blob_download_preserve_last_modified_time() :
     # create a file of 2KB
     filename = "test_upload_preserve_last_mtime.txt"
     file_path = util.create_test_file(filename, 2048)
@@ -156,7 +156,7 @@ def test_recursive_download_blob():
         return
     print("test_recursive_download_blob successfully passed")
 
-def test_download_file_with_special_characters():
+def test_blob_download_with_special_characters():
     filename_special_characters = "abc|>rd*"
     resource_url = util.get_resource_sas(filename_special_characters)
     # creating the file with random characters and with file name having special characters.

@@ -71,7 +71,7 @@ def test_n_1kb_blob_upload(number_of_files):
 
 # test_metaData_content_encoding_content_type verifies the meta data, content type,
 # content encoding of 2kb upload to container through azcopy.
-def test_metaData_content_encoding_content_type():
+def test_blob_metaData_content_encoding_content_type():
     # create 2kb file test_mcect.txt
     filename = "test_mcect.txt"
     file_path = util.create_test_file(filename, 2048)

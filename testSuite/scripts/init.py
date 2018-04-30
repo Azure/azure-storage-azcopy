@@ -12,11 +12,11 @@ def execute_user_scenario_1() :
     test_63mb_blob_upload()
     test_n_1kb_blob_upload(5)
     test_1GB_blob_upload()
-    test_metaData_content_encoding_content_type()
+    test_blob_metaData_content_encoding_content_type()
     test_block_size(4 * 1024 * 1024)
     test_guess_mime_type()
     test_download_1kb_blob()
-    test_download_perserve_last_modified_time()
+    test_blob_download_preserve_last_modified_time()
     test_blob_download_63mb_in_4mb()
     test_recursive_download_blob()
     # test_cancel_job()
@@ -88,7 +88,7 @@ def execute_user_scenario_file_1() :
     test_1GB_file_upload()
     
 def execute_user_scenario_2():
-    test_download_file_with_special_characters()
+    test_blob_download_with_special_characters()
 
 def init():
     # initializing config parser to read the testsuite_config file.
@@ -150,7 +150,7 @@ def cleanup():
 
 def main():
     init()
-    #execute_user_scenario_1()
+    execute_user_scenario_1()
     execute_user_scenario_2()
     #execute_user_scenario_file_1()
     #temp_adhoc_scenario()
