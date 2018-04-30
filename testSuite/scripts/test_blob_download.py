@@ -160,7 +160,7 @@ def test_download_file_with_special_characters():
     filename_special_characters = "abc|>rd*"
     resource_url = util.get_resource_sas(filename_special_characters)
     # creating the file with random characters and with file name having special characters.
-    result = util.Command("create").add_arguments(resource_url).add_flags("resourceType", "blob").add_flags("isResourceABucket", "false").execute_azcopy_verify()
+    result = util.Command("create").add_arguments(resource_url).add_flags("resourceType", "blob").add_flags("isResourceABucket", "false").add_flags("blob-size", "1024").execute_azcopy_verify()
     if not result:
         print("error creating blob ", filename_special_characters, " with special characters")
         return

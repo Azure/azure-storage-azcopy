@@ -35,7 +35,7 @@ func init() {
 	blobType := "blob"
 	fileType := "file"
 	isResourceABucket := true
-
+	blobSize  := uint32(0)
 	createCmd := &cobra.Command{
 		Use:     "create",
 		Aliases: []string{"create"},
@@ -58,7 +58,7 @@ func init() {
 				if isResourceABucket {
 					createContainer(resourceURL)
 				} else {
-					createBlob(resourceURL)
+					createBlob(resourceURL, blobSize)
 				}
 			case fileType:
 				if isResourceABucket {
@@ -74,6 +74,7 @@ func init() {
 
 	createCmd.PersistentFlags().StringVar(&resourceType, "resourceType", "blob", "Resource type, could be blob or file currently.")
 	createCmd.PersistentFlags().BoolVar(&isResourceABucket, "isResourceABucket", true, "Whether resource is a bucket, if it's bucket, for blob it's container, and for file it's share or directory.")
+	createCmd.PersistentFlags().Uint32Var(&blobSize, "blob-size", 0, "")
 }
 
 // Can be used for overwrite scenarios.
@@ -81,7 +82,7 @@ func createContainer(container string) {
 	panic("todo")
 }
 
-func createBlob(blobUri string) {
+func createBlob(blobUri string, blobSize uint32) {
 	url, err := url.Parse(blobUri)
 	if err != nil{
 		fmt.Println("error parsing the blob sas ", blobUri)
@@ -90,7 +91,7 @@ func createBlob(blobUri string) {
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	blobUrl := azblob.NewBlockBlobURL(*url, p)
 
-	randomString := createStringWithRandomChars(1024)
+	randomString := createStringWithRandomChars(int(blobSize))
 	contentType := http.DetectContentType([]byte(randomString))
 	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{ContentType:contentType,}, azblob.Metadata{}, azblob.BlobAccessConditions{})
 	if err != nil{

@@ -157,5 +157,3 @@ def main():
     cleanup()
 
 main()
-    
-

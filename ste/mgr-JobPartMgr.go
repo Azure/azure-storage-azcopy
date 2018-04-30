@@ -37,7 +37,6 @@ func newPipeline(c azblob.Credential, o azblob.PipelineOptions, p *pacer) pipeli
 	if c == nil {
 		panic("c can't be nil")
 	}
-
 	// Closest to API goes first; closest to the wire goes last
 	f := []pipeline.Factory{
 		azblob.NewTelemetryPolicyFactory(o.Telemetry),
