@@ -7,9 +7,9 @@ import (
 	"unsafe"
 )
 
-type MMap []byte
+type MMF []byte
 
-func Map(file *os.File, writable bool, offset int64, length int) (MMap, error) {
+func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, error) {
 	prot, access := uint32(syscall.PAGE_READONLY), uint32(syscall.FILE_MAP_READ) // Assume read-only
 	if writable {
 		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
@@ -20,17 +20,17 @@ func Map(file *os.File, writable bool, offset int64, length int) (MMap, error) {
 	}
 	defer syscall.CloseHandle(hMMF)
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
-	m := MMap{}
+	m := MMF{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr
-	h.Len = length
+	h.Len = int(length)
 	h.Cap = h.Len
 	return m, nil
 }
 
-func (m *MMap) Unmap() {
+func (m *MMF) Unmap() {
 	addr := uintptr(unsafe.Pointer(&(([]byte)(*m)[0])))
-	*m = MMap{}
+	*m = MMF{}
 	err := syscall.UnmapViewOfFile(addr)
 	if err != nil {
 		panic(err)
