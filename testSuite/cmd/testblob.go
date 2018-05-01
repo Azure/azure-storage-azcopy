@@ -144,10 +144,10 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 				fmt.Println(fmt.Sprintf("error reading the body of blob %s downloaded and failed with error %s", blobInfo.Name, err.Error()))
 				os.Exit(1)
 			}
-
+			// remove the search prefix from the blob name
+			blobName := strings.Replace(blobInfo.Name, searchPrefix, "", 1)
 			// blob path on local disk.
-			objectLocalPath := testBlobCmd.Object + "/" + blobInfo.Name
-
+			objectLocalPath := testBlobCmd.Object + string(os.PathSeparator) + blobName
 			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
 			if err != nil {
