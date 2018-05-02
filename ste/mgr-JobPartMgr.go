@@ -32,6 +32,22 @@ type IJobPartMgr interface {
 	common.ILogger
 }
 
+// NewVersionPolicy creates a factory that can override the service version
+// set in the request header.
+// If the context has key overwrite-current-version set to false, then x-ms-version in
+// request is not overwritten else it will set x-ms-version to 207-04-17
+func NewVersionPolicyFactory() pipeline.Factory {
+	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+			if value := ctx.Value("overwrite-current-service-version"); value != "false"{
+				request.Header.Set("x-ms-version", "2017-04-17")
+			}
+			resp, err := next.Do(ctx, request)
+			return resp, err
+		}
+	})
+}
+
 // NewPipeline creates a Pipeline using the specified credentials and options.
 func newPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
@@ -45,6 +61,7 @@ func newPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptio
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewPacerPolicyFactory(p),
+		NewVersionPolicyFactory(),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
 
