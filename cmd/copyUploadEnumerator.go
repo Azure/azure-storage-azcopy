@@ -96,16 +96,8 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 		}
 	}
 
-	// in any other case, the destination url must point to a container
-	if e.FromTo == common.EFromTo.LocalBlob() && !util.urlIsContainerOrShare(destinationUrl) {
-		logURL := util.reactURLQuery(*destinationUrl)
-		return fmt.Errorf("please provide an existing container URL as destination, current URL: %v", logURL)
-	}
-	if e.FromTo == common.EFromTo.LocalFile() && !util.urlIsAzureFileDirectory(context.TODO(), destinationUrl) {
-		logURL := util.reactURLQuery(*destinationUrl)
-		return fmt.Errorf("please provide an existing share or directory URL as destination, current URL: %v", logURL)
-	}
-
+	// if the user specifies a virtual directory ex: /container_name/extra_path
+	// then we should extra_path as a prefix while uploading
 	// temporarily save the path of the container
 	cleanContainerPath := destinationUrl.Path
 
@@ -129,7 +121,8 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					} else { // upload the files
 						// the path in the blob name started at the given fileOrDirectoryPath
 						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
-						destinationUrl.Path = util.generateObjectPath(cleanContainerPath, util.getRelativePath(fileOrDirectoryPath, pathToFile, string(os.PathSeparator)))
+						destinationUrl.Path = util.generateObjectPath(cleanContainerPath,
+							util.getRelativePath(fileOrDirectoryPath, pathToFile, string(os.PathSeparator)))
 						err = e.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      destinationUrl.String(),
