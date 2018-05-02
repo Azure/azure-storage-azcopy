@@ -38,14 +38,19 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		return errors.New("cannot parse source URL")
 	}
 
+	// check if the given url is a container
+	if util.urlIsContainerOrShare(sourceUrl) {
+		// if path ends with a /, then append *
+		if strings.HasSuffix(sourceUrl.Path, "/") {
+			sourceUrl.Path += "*"
+		} else { // if path is just /container_name, '/*' needs to be appended
+			sourceUrl.Path += "/*"
+		}
+	}
+
 	// get the container url to be used later for listing
 	literalContainerUrl := util.getContainerURLFromString(*sourceUrl)
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
-
-	// check if the given url is a container
-	if util.urlIsContainerOrShare(sourceUrl) {
-		return errors.New("cannot download an entire container, use prefix match with a * at the end of path instead")
-	}
 
 	numOfStarInUrlPath := util.numOfStarInUrl(sourceUrl.Path)
 	if numOfStarInUrlPath == 1 { // prefix search
@@ -96,7 +101,6 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			}
 
 			marker = listBlob.NextMarker
-			//err = e.dispatchPart(false)
 			if err != nil {
 				return err
 			}

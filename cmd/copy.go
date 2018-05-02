@@ -411,7 +411,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return nil
 	}
 
-	// If there is only one, part then start fetching the JobPart Order.
+	// If there is only one part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
 		if !cca.outputJson {
 			fmt.Println("Job with id", jobPartOrder.JobID, "has started.")

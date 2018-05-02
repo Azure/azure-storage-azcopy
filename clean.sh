@@ -6,4 +6,4 @@ kill $(ps aux | grep '[a]zcopy' | awk '{print $2}')
 
 # remove logs and memory mapped files
 rm *.log
-rm *.steV*
+rm ~/.azcopy/*.steV*
