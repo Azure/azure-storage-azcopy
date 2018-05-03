@@ -8,7 +8,7 @@ func GetBlocksRoundedUp(size uint64, blockSize uint64) uint16 {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // inline if functions
-func IffError(test bool, trueVal, falseVal error) error{
+func IffError(test bool, trueVal, falseVal error) error {
 	if test {
 		return trueVal
 	}
@@ -77,7 +77,6 @@ func Iffint64(test bool, trueVal, falseVal int64) int64 {
 	}
 	return falseVal
 }
-
 
 func Ifffloat64(test bool, trueVal, falseVal float64) float64 {
 	if test {

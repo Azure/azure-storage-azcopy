@@ -9,7 +9,24 @@ import (
 
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"io/ioutil"
+	"io"
+	"math/rand"
+	"strings"
+	"net/http"
 )
+
+const charset = "abcdefghijklmnopqrstuvwxyz" +
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func createStringWithRandomChars(length int) string{
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Int() % len(charset)]
+	}
+	return string(b)
+}
 
 // initializes the create command, its aliases and description.
 func init() {
@@ -18,7 +35,7 @@ func init() {
 	blobType := "blob"
 	fileType := "file"
 	isResourceABucket := true
-
+	blobSize  := uint32(0)
 	createCmd := &cobra.Command{
 		Use:     "create",
 		Aliases: []string{"create"},
@@ -32,7 +49,6 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("create get resourceType", resourceType)
 			if resourceType != blobType && resourceType != fileType {
 				panic(fmt.Errorf("illegal resourceType '%s'", resourceType))
 			}
@@ -42,7 +58,7 @@ func init() {
 				if isResourceABucket {
 					createContainer(resourceURL)
 				} else {
-					createBlob(resourceURL)
+					createBlob(resourceURL, blobSize)
 				}
 			case fileType:
 				if isResourceABucket {
@@ -58,14 +74,34 @@ func init() {
 
 	createCmd.PersistentFlags().StringVar(&resourceType, "resourceType", "blob", "Resource type, could be blob or file currently.")
 	createCmd.PersistentFlags().BoolVar(&isResourceABucket, "isResourceABucket", true, "Whether resource is a bucket, if it's bucket, for blob it's container, and for file it's share or directory.")
+	createCmd.PersistentFlags().Uint32Var(&blobSize, "blob-size", 0, "")
 }
 
 // Can be used for overwrite scenarios.
 func createContainer(container string) {
 	panic("todo")
 }
-func createBlob(blob string) {
-	panic("todo")
+
+func createBlob(blobUri string, blobSize uint32) {
+	url, err := url.Parse(blobUri)
+	if err != nil{
+		fmt.Println("error parsing the blob sas ", blobUri)
+		os.Exit(1)
+	}
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+	blobUrl := azblob.NewBlockBlobURL(*url, p)
+
+	randomString := createStringWithRandomChars(int(blobSize))
+	contentType := http.DetectContentType([]byte(randomString))
+	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{ContentType:contentType,}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	if err != nil{
+		fmt.Println(fmt.Sprintf("error uploading the blob %s", blobUrl))
+		os.Exit(1)
+	}
+	if putBlobResp.Response() != nil{
+		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
+		putBlobResp.Response().Body.Close()
+	}
 }
 
 func createShareOrDirectory(shareOrDirectoryURLStr string) {

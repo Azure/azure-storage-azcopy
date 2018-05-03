@@ -29,11 +29,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 	"sync/atomic"
+	"time"
 )
 
 var JobsAdminInitialized = make(chan bool, 1)
+
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
 var JobsAdmin interface {
 	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName
@@ -79,11 +80,11 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	suicideCh := make(chan SuicideJob, concurrentConnections)
 
 	ja := &jobsAdmin{
-		logger:  common.NewAppLogger(pipeline.LogInfo),
-		jobIDToJobMgr:newJobIDToJobMgr(),
-		planDir: azcopyAppPathFolder,
-		pacer:   newPacer(targetRateInMBps * 1024 * 1024),
-		appCtx:appCtx,
+		logger:        common.NewAppLogger(pipeline.LogInfo),
+		jobIDToJobMgr: newJobIDToJobMgr(),
+		planDir:       azcopyAppPathFolder,
+		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
+		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			normalTransferCh: normalTransferCh,
 			lowTransferCh:    lowTransferCh,
@@ -223,10 +224,10 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	level common.LogLevel) IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
-		func () IJobMgr {return newJobMgr(ja.logger, jobID, ja.appCtx, level) }) // Return existing or new IJobMgr to caller
+		func() IJobMgr { return newJobMgr(ja.logger, jobID, ja.appCtx, level) }) // Return existing or new IJobMgr to caller
 }
 
-func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority , jptm IJobPartTransferMgr) {
+func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
 	switch priority { // priority determines which channel handles the job part's transfers
 	case common.EJobPriority.Normal():
 		//jptm.SetChunkChannel(ja.xferChannels.normalChunckCh)
@@ -250,11 +251,11 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 	}
 }
 
-func(ja *jobsAdmin) AddToBytesOverWire(value uint64){
+func (ja *jobsAdmin) AddToBytesOverWire(value uint64) {
 	atomic.AddUint64(&ja.bytesOverWire, value)
 }
 
-func(ja *jobsAdmin) BytesOverWire() uint64{
+func (ja *jobsAdmin) BytesOverWire() uint64 {
 	return atomic.LoadUint64(&ja.bytesOverWire)
 }
 
@@ -339,8 +340,8 @@ type jobIDToJobMgr struct {
 	m      map[common.JobID]IJobMgr
 }
 
-func newJobIDToJobMgr() jobIDToJobMgr{
-	return jobIDToJobMgr{m : make(map[common.JobID]IJobMgr)}
+func newJobIDToJobMgr() jobIDToJobMgr {
+	return jobIDToJobMgr{m: make(map[common.JobID]IJobMgr)}
 }
 
 func (j *jobIDToJobMgr) Set(key common.JobID, value IJobMgr) {

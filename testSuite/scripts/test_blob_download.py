@@ -1,7 +1,8 @@
 import utility as util
 import time
+import urllib
 import shutil
-
+import os
 # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
 def test_download_1kb_blob() :
     # create file of size 1KB.
@@ -47,7 +48,7 @@ def test_download_1kb_blob() :
 
 # test_download_perserve_last_modified_time verifies the azcopy downloaded file
 # and its modified time preserved locally on disk
-def test_download_perserve_last_modified_time() :
+def test_blob_download_preserve_last_modified_time() :
     # create a file of 2KB
     filename = "test_upload_preserve_last_mtime.txt"
     file_path = util.create_test_file(filename, 2048)
@@ -154,3 +155,29 @@ def test_recursive_download_blob():
         print("error verifying the recursive download ")
         return
     print("test_recursive_download_blob successfully passed")
+
+def test_blob_download_with_special_characters():
+    filename_special_characters = "abc|>rd*"
+    resource_url = util.get_resource_sas(filename_special_characters)
+    # creating the file with random characters and with file name having special characters.
+    result = util.Command("create").add_arguments(resource_url).add_flags("resourceType", "blob").add_flags("isResourceABucket", "false").add_flags("blob-size", "1024").execute_azcopy_verify()
+    if not result:
+        print("error creating blob ", filename_special_characters, " with special characters")
+        return
+    # downloading the blob created above.
+    result = util.Command("copy").add_arguments(resource_url).add_arguments(util.test_directory_path).add_flags("Logging", "5").execute_azcopy_copy_command()
+    if not result:
+        print("error downloading the file with special characters ", filename_special_characters)
+        return
+    expected_filename = urllib.parse.quote_plus(filename_special_characters)
+    # verify if the downloaded file exists or not.
+    filepath = util.test_directory_path + "/" + expected_filename
+    if not os.path.isfile(filepath):
+        print("file not downloaded with expected file name")
+        return
+    # verify the downloaded blob.
+    result = util.Command("testBlob").add_arguments(filepath).add_arguments(resource_url).execute_azcopy_verify()
+    if not result:
+        print("error verifying the download of file ", filepath)
+        return
+    print("test_download_file_with_special_characters successfully passed")

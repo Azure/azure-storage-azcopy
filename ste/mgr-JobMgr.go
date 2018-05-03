@@ -22,11 +22,11 @@ package ste
 
 import (
 	"context"
+	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
 	"sync/atomic"
-	"fmt"
 )
 
 var _ IJobMgr = &jobMgr{}
@@ -49,7 +49,7 @@ type IJobMgr interface {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel) IJobMgr {
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), logger:common.NewJobLogger(jobID, level, appLogger)/*Other fields remain zero-value until this job is scheduled */}
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), logger: common.NewJobLogger(jobID, level, appLogger) /*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx)
 	return &jm
 }
@@ -72,7 +72,7 @@ type jobMgr struct {
 
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 	// partsDone keep the count of completed part of the Job.
-	partsDone   uint32
+	partsDone uint32
 	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
 	finalPartOrdered           bool
@@ -97,13 +97,12 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 	return jm.jobPartMgrs.Get(partNumber)
 }
 
-
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
 	if scheduleTransfers {
 		jpm.ScheduleTransfers(jm.ctx)
-	}else{
+	} else {
 		// If the transfer not scheduled, then Map the part file.
 		jpm.planMMF = jpm.filename.Map()
 	}
@@ -111,8 +110,6 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
 	return jpm
 }
-
-
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
@@ -135,7 +132,7 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	partsDone := atomic.AddUint32(&jm.partsDone, 1)
 	// If the last part is still awaited for other parts all still not complete,
 	// JobPart 0 status is not changed.
-	if partsDone != jm.jobPartMgrs.Count() && !jm.finalPartOrdered{
+	if partsDone != jm.jobPartMgrs.Count() && !jm.finalPartOrdered {
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}
@@ -162,18 +159,17 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	return partsDone
 }
 
-
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }
-func (jm *jobMgr) PipelineLogInfo() (pipeline.LogOptions) {
+func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
 	return pipeline.LogOptions{
-		Log: jm.Log,
+		Log:               jm.Log,
 		MinimumLevelToLog: func() pipeline.LogLevel { return jm.logger.MinimumLogLevel() },
 	}
 }
-func (jm *jobMgr) Panic(err error)                         { jm.logger.Panic(err) }
-func (jm *jobMgr) CloseLog()                               { jm.logger.CloseLog() }
+func (jm *jobMgr) Panic(err error) { jm.logger.Panic(err) }
+func (jm *jobMgr) CloseLog()       { jm.logger.CloseLog() }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed
 //func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }
@@ -189,8 +185,8 @@ type jobPartToJobPartMgr struct {
 	m      map[PartNumber]IJobPartMgr
 }
 
-func newJobPartToJobPartMgr() jobPartToJobPartMgr{
-	return jobPartToJobPartMgr{m : make(map[PartNumber]IJobPartMgr)}
+func newJobPartToJobPartMgr() jobPartToJobPartMgr {
+	return jobPartToJobPartMgr{m: make(map[PartNumber]IJobPartMgr)}
 }
 
 func (m *jobPartToJobPartMgr) Count() uint32 {

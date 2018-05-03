@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/spf13/cobra"
 )
@@ -145,10 +144,10 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 				fmt.Println(fmt.Sprintf("error reading the body of blob %s downloaded and failed with error %s", blobInfo.Name, err.Error()))
 				os.Exit(1)
 			}
-
+			// remove the search prefix from the blob name
+			blobName := strings.Replace(blobInfo.Name, searchPrefix, "", 1)
 			// blob path on local disk.
-			objectLocalPath := testBlobCmd.Object + "/" + blobInfo.Name
-
+			objectLocalPath := testBlobCmd.Object + string(os.PathSeparator) + blobName
 			// opening the file locally and memory mapping it.
 			sFileInfo, err := os.Stat(objectLocalPath)
 			if err != nil {
@@ -161,7 +160,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 				fmt.Println("error opening file ", sFile)
 				os.Exit(1)
 			}
-			sMap, err := Map(sFile, false, 0, int(sFileInfo.Size()))
+			sMap, err := NewMMF(sFile, false, 0, int64(sFileInfo.Size()))
 			if err != nil {
 				fmt.Println("error memory mapping the file ", sFileInfo.Name())
 			}
@@ -257,7 +256,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	}
 
 	// memory mapping the resource on local path.
-	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
+	mmap, err := NewMMF(file, false, 0, fileInfo.Size())
 	if err != nil {
 		fmt.Println("error mapping the destination blob file ", err.Error())
 		os.Exit(1)
@@ -360,7 +359,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	}
 
 	// memory mapping the resource on local path.
-	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
+	mmap, err := NewMMF(file, false, 0, fileInfo.Size())
 	if err != nil {
 		fmt.Println("error mapping the destination blob file ", err.Error())
 		os.Exit(1)

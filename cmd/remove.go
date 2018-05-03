@@ -22,12 +22,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/spf13/cobra"
 )
-
-
 
 func init() {
 	raw := rawCopyCmdArgs{}

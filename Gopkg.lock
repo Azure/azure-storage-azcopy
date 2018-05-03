@@ -10,14 +10,17 @@
 [[projects]]
   branch = "master"
   name = "github.com/Azure/azure-storage-blob-go"
-  packages = ["2016-05-31/azblob"]
+  packages = [
+    "2016-05-31/azblob",
+    "2017-07-29/azblob"
+  ]
   revision = "70edea0000eaac722aa45821797ffdedba6b53b8"
 
 [[projects]]
   branch = "master"
-  name = "github.com/buger/goterm"
-  packages = ["."]
-  revision = "c9def0117b24a53e86f6c4c942e4042090a4fe8c"
+  name = "github.com/Azure/azure-storage-file-go"
+  packages = ["2017-07-29/azfile"]
+  revision = "c20816931e5060a0a90cf14bab96bf6ec46f4079"
 
 [[projects]]
   name = "github.com/fsnotify/fsnotify"
@@ -138,6 +141,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "e65f89a808df86504eeadf6121ff4aab0c9bf04bffb06797b14133d1b12c065a"
+  inputs-digest = "ab77416ec6a4c665ef9b59249df711922e359264b7e13fbbe152762c5a925887"
   solver-name = "gps-cdcl"
   solver-version = 1

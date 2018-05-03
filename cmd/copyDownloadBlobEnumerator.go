@@ -75,18 +75,25 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		for marker := (azblob.Marker{}); marker.NotDone(); {
 			// look for all blobs that start with the prefix
 			listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
-				azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+				azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata:true},Prefix: searchPrefix})
 			if err != nil {
 				return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 			}
 
 			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 			for _, blobInfo := range listBlob.Blobs.Blob {
+				// If the blob is not valid as per the conditions mentioned in the
+				// api isBlobValid, then skip the blob.
+				if !util.isBlobValid(blobInfo){
+					continue
+				}
 				blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
 				if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
 					continue
 				}
 
+				// check for special characters and get the blob without special characters.
+				blobNameAfterPrefix = util.blobPathWOSpecialCharacters(blobNameAfterPrefix)
 				e.addTransfer(common.CopyTransfer{
 					Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
 					Destination:      util.generateLocalPath(destinationPath, blobNameAfterPrefix),
@@ -115,7 +122,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		// for a single blob, the destination can either be a file or a directory
 		var singleBlobDestinationPath string
 		if util.isPathDirectory(destinationPath) {
-			singleBlobDestinationPath = util.generateLocalPath(destinationPath, util.getBlobNameFromURL(sourceUrl.Path))
+			blobNameFromUrl := util.getBlobNameFromURL(sourceUrl.Path)
+			// check for special characters and get blobName without special character.
+			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
+			singleBlobDestinationPath = util.generateLocalPath(destinationPath, blobNameFromUrl)
 		} else {
 			singleBlobDestinationPath = destinationPath
 		}
@@ -156,16 +166,24 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			for marker := (azblob.Marker{}); marker.NotDone(); {
 				// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 				listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
-					azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+					azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata:true}, Prefix: searchPrefix})
 				if err != nil {
 					return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 				}
 
 				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 				for _, blobInfo := range listBlob.Blobs.Blob {
-					e.addTransfer(common.CopyTransfer{
+					// If the blob is not valid as per the conditions mentioned in the
+					// api isBlobValid, then skip the blob.
+					if !util.isBlobValid(blobInfo){
+						continue
+					}
+					blobRelativePath := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+					// check for the special character in blob relative path and get path without special character.
+					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
+						e.addTransfer(common.CopyTransfer{
 						Source:           util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-						Destination:      util.generateLocalPath(destinationPath, util.getRelativePath(searchPrefix, blobInfo.Name, "/")),
+						Destination:      util.generateLocalPath(destinationPath, blobRelativePath),
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength},
 						wg,
@@ -203,56 +221,3 @@ func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
 func (e *copyDownloadBlobEnumerator) partNum() common.PartNumber {
 	return e.PartNum
 }
-
-/////////////////////////////////////////////////////////////////////////////////////
-// TODO: Following are dup code during involve file, please double check.
-/////////////////////////////////////////////////////////////////////////////////////
-
-// // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
-// func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-// 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-// 	e.Transfers = append(e.Transfers, transfer)
-
-// 	if len(e.Transfers) == NumOfFilesPerDispatchJobPart {
-// 		resp := common.CopyJobPartOrderResponse{}
-// 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
-
-// 		if !resp.JobStarted {
-// 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-// 		}
-
-// 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-// 		if e.PartNum == 0 {
-// 			// adding go routine to the wait group.
-// 			wg.Add(1)
-// 			go waitUntilJobCompletion(e.JobID, wg)
-// 		}
-// 		e.Transfers = []common.CopyTransfer{}
-// 		e.PartNum++
-// 	}
-// 	return nil
-// }
-
-// // send the current list of transfer to the STE
-// func (e *copyDownloadBlobEnumerator) dispatchPart(isFinalPart bool) error {
-// 	// if the job is empty, throw an error
-// 	if !isFinalPart && len(e.Transfers) == 0 {
-// 		return errors.New("cannot initiate empty job, please make sure source is not empty")
-// 	}
-
-// 	e.IsFinalPart = isFinalPart
-// 	var resp common.CopyJobPartOrderResponse
-// 	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
-
-// 	if !resp.JobStarted {
-// 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-// 	}
-
-// 	// empty the transfers and increment part number count
-// 	e.Transfers = []common.CopyTransfer{}
-// 	if !isFinalPart {
-// 		// part number needs to incremented only when the part is not the final part.
-// 		e.PartNum++
-// 	}
-// 	return nil
-// }

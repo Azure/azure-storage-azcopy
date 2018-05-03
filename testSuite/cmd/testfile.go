@@ -180,7 +180,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 				fmt.Println("fail to open file ", sFile)
 				os.Exit(1)
 			}
-			sMap, err := Map(sFile, false, 0, int(sFileInfo.Size()))
+			sMap, err := NewMMF(sFile, false, 0, sFileInfo.Size())
 			if err != nil {
 				fmt.Println("fail to memory mapping the file ", sFileInfo.Name())
 			}
@@ -275,7 +275,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	}
 
 	// memory mapping the resource on local path.
-	mmap, err := Map(file, false, 0, int(fileInfo.Size()))
+	mmap, err := NewMMF(file, false, 0, fileInfo.Size())
 	if err != nil {
 		fmt.Println("error mapping the destination file: ", file, " file size: ", fileInfo.Size(), " Error: ", err.Error())
 		os.Exit(1)

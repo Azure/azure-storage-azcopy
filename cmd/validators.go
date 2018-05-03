@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"os"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -105,7 +106,7 @@ func inferArgumentLocation(arg string) Location {
 	if arg == pipeLocation {
 		return Location{}.Pipe()
 	}
-	if startsWith(arg, "http") {
+	if startsWith(arg, "https") {
 		// Let's try to parse the argument as a URL
 		u, err := url.Parse(arg)
 		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
@@ -120,6 +121,28 @@ func inferArgumentLocation(arg string) Location {
 		}
 	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
+		_, err := os.Stat(arg)
+		if err != nil {
+			// if the source path does not exists, then it could be the case of download
+			if os.IsNotExist(err){
+				return Location{}.Local()
+			}
+			// if the wild cards are used in the source path
+			// then check the source path without the last part.
+			// strip the path separator at the end of the path if it exists.
+			if arg[len(arg)-1:] == string(os.PathSeparator){
+				arg = arg[:len(arg)-1]
+			}
+			// strip the last part of the path after the last path separator
+			// For Ex: /a/b/c/d1?.txt --> /a/b/c
+			// /a/b/c/file* --> /a/b/c
+			arg = arg[:strings.LastIndex(arg, string(os.PathSeparator))]
+			_,err = os.Stat(arg)
+			if err == nil {
+				return Location{}.Local()
+			}
+			return Location{}.Unknown()
+		}
 		return Location{}.Local()
 	}
 

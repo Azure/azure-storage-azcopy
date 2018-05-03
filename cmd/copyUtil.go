@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 const (
@@ -188,7 +189,7 @@ func (util copyHandlerUtil) getLastVirtualDirectoryFromPath(path string) string 
 		return ""
 	}
 
-	return path[0:lastSlashIndex]
+	return path[0:lastSlashIndex+1]
 }
 
 func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
@@ -197,6 +198,71 @@ func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
 	binaryBlockID := (&[4]byte{})[:] // All block IDs are 4 bytes long
 	binary.LittleEndian.PutUint32(binaryBlockID, uint32(blockID))
 	return blockIDBinaryToBase64(binaryBlockID)
+}
+
+// containsSpecialChars checks for the special characters in the given name.
+// " \\ < > * | ? : are not allowed while creating file / dir by the OS.
+// space is also included as a special character since space at the end of name of file / dir
+// is not considered.
+// For example "abcd " is same as "abcd"
+func (util copyHandlerUtil) containsSpecialChars(name string) bool {
+	for _, r := range name {
+		if r == '"' || r == '\\' || r == '<' ||
+			r == '>' || r == '|' || r == '*' ||
+			r == '?' || r == ':'{
+					return true
+		}
+	}
+	// if the last character in the file / dir name is ' '
+	// then it not accepted by OS.
+	// 'test1 ' is created as 'test1'
+	if len(name) > 0 && name[len(name)-1] == ' '{
+		return true
+	}
+	return false
+}
+
+// blobPathWOSpecialCharacters checks the special character in the given blob path.
+// If the special characters exists, then it encodes the path so that blob can created
+// locally.
+// Some special characters are not allowed while creating file / dir by OS
+// returns the path without special characters.
+func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string {
+	// split the path by separator "/"
+	parts := strings.Split(blobPath, "/")
+	bnwc := ""
+	// iterates through each part of the path.
+	// for example if given path is /a/b/c/d/e.txt,
+	// then check for special character in each part a,b,c,d and e.txt
+	for i := range parts{
+		if len(parts[i]) == 0 {
+			// If the part length is 0, then encode the "/" char and add to the new path.
+			// This is for scenarios when there exists "/" at the end of blob or start of the blobName.
+			bnwc += url.QueryEscape("/") + "/"
+		} else if util.containsSpecialChars(parts[i]){
+			// if the special character exists, then perform the encoding.
+			bnwc += url.QueryEscape(parts[i]) + "/"
+		}else{
+			// If there is no special character, then add the part as it is.
+			bnwc += parts[i] + "/"
+		}
+	}
+	// remove "/" at the end of blob path.
+	bnwc = bnwc[:len(bnwc)-1]
+	return bnwc
+}
+
+// isBlobValid verifies whether blob is valid or not.
+// Used to handle special scenarios or conditions.
+func (util copyHandlerUtil) isBlobValid(bInfo azblob.Blob) bool{
+	// this condition is to handle the WASB V1 directory structure.
+	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
+	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
+	// The empty directory has meta-data 'hdi_isfolder = true'
+	if bInfo.Metadata["hdi_isfolder"] == "true"{
+		return false
+	}
+	return true
 }
 
 func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, outputJson bool) common.JobStatus {
@@ -219,7 +285,7 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, o
 		if timeElapsed == 0 {
 			throughPut = 0
 		}
-		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v",
+		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
 			summary.JobProgressPercentage, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
 		fmt.Println(message)

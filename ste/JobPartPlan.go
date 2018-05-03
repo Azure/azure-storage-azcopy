@@ -36,7 +36,7 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version            common.Version               // The version of data schema format of header; see the dataSchemaVersion constant
+	Version            common.Version      // The version of data schema format of header; see the dataSchemaVersion constant
 	JobID              common.JobID        // Job Part's JobID
 	PartNum            common.PartNumber   // Job Part's part number (0+)
 	IsFinalPart        bool                // True if this is the Job's last part; else false
@@ -123,13 +123,13 @@ type JobPartPlanDstBlob struct {
 	BlockBlobTierLength uint8
 
 	// Specifies the tier on the block blob.
-	BlockBlobTier  [BlobTierMaxBytes]byte
+	BlockBlobTier [BlobTierMaxBytes]byte
 
 	// Specifies the length of PageBlobTier of the blob.
 	PageBlobTierLength uint8
 
 	// Specifies the tier on the page blob.
-	PageBlobTier  [BlobTierMaxBytes]byte
+	PageBlobTier [BlobTierMaxBytes]byte
 
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
@@ -193,7 +193,7 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 			func(startVal int32) (val int32, morphResult interface{}) {
 				return common.Iffint32(startVal == (common.TransferStatus{}).Failed().Value, startVal, status.Value), nil
 			})
-	}else{
+	} else {
 		atomic.StoreInt32(&jppt.atomicTransferStatus.Value, status.Value)
 	}
 }

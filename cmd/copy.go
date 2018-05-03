@@ -138,7 +138,7 @@ type cookedCopyCmdArgs struct {
 	src                   string
 	dst                   string
 	fromTo                common.FromTo
-	blobUrlForRedirection string
+
 	// filters from flags
 	exclude        string
 	recursive      bool
@@ -184,19 +184,13 @@ func (cca cookedCopyCmdArgs) process() error {
 
 // TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
 func (cca cookedCopyCmdArgs) processRedirectionCopy() error {
-	// check the Stdin to see if we are uploading or downloading
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
+	if cca.fromTo == common.EFromTo.PipeBlob() {
+		return cca.processRedirectionUpload(cca.dst, cca.blockSize)
+	} else if cca.fromTo == common.EFromTo.BlobPipe() {
+		return cca.processRedirectionDownload(cca.src)
 	}
 
-	if info.Mode()&os.ModeNamedPipe == 0 {
-		// if there's no Stdin pipe, this is a download case
-		return cca.processRedirectionDownload(cca.blobUrlForRedirection)
-	} else {
-		// something is on Stdin, this is the upload case
-		return cca.processRedirectionUpload(cca.blobUrlForRedirection, cca.blockSize)
-	}
+	return fmt.Errorf("unsupported redirection type: %s", cca.fromTo)
 }
 
 func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
@@ -470,7 +464,7 @@ func isStdinPipeIn() (bool, error) {
 		return false, fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 	}
 
-	return info.Mode()&os.ModeNamedPipe == 0, nil
+	return info.Mode()&os.ModeNamedPipe != 0, nil
 }
 
 // TODO check file size, max is 4.75TB
@@ -542,7 +536,7 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
 
 	// options
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 100*1024*1024, "Use this block size when uploading to Azure Storage.")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when uploading to Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "", "Upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "", "Upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
