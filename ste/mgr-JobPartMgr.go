@@ -14,6 +14,7 @@ import (
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
+
 const overwriteServiceVersionString = "overwrite-current-service-version"
 
 type IJobPartMgr interface {
@@ -40,7 +41,7 @@ type IJobPartMgr interface {
 func NewVersionPolicyFactory() pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			if value := ctx.Value(overwriteServiceVersionString); value != "false"{
+			if value := ctx.Value(overwriteServiceVersionString); value != "false" {
 				request.Header.Set("x-ms-version", "2017-04-17")
 			}
 			resp, err := next.Do(ctx, request)
@@ -49,8 +50,8 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-// NewPipeline creates a Pipeline using the specified credentials and options.
-func newPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+// newBlobPipeline creates a Pipeline using the specified credentials and options.
+func newBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -64,6 +65,26 @@ func newPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptio
 		NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
+	}
+
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+}
+
+// newFilePipeline creates a Pipeline using the specified credentials and options.
+func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer) pipeline.Pipeline {
+	if c == nil {
+		panic("c can't be nil")
+	}
+	// Closest to API goes first; closest to the wire goes last
+	f := []pipeline.Factory{
+		azfile.NewTelemetryPolicyFactory(o.Telemetry),
+		azfile.NewUniqueRequestIDPolicyFactory(),
+		azfile.NewRetryPolicyFactory(r),
+		c,
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+		NewPacerPolicyFactory(p),
+		NewVersionPolicyFactory(),
+		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
@@ -127,18 +148,18 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
-	// TODO: further refactor need be considered, not all the time both file and blob headers/metadata should be initialized.
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
+		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+	}
+	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
 		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
 	jpm.blockBlobTier = string(dstData.BlockBlobTier[:dstData.BlockBlobTierLength])
 	jpm.pageBlobTier = string(dstData.PageBlobTier[:dstData.PageBlobTierLength])
-	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
-		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
-	}
+
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
 	jpm.blobMetadata = azblob.Metadata{}
@@ -213,32 +234,34 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-			jpm.pipeline = newPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+			jpm.pipeline = newBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 				Log:       jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
 			},
-			XferRetryOptions{
-				Policy:        0,
-				MaxTries:      UploadMaxTries,
-				TryTimeout:    UploadTryTimeout,
-				RetryDelay:    UploadRetryDelay,
-				MaxRetryDelay: UploadMaxRetryDelay},
+				XferRetryOptions{
+					Policy:        0,
+					MaxTries:      UploadMaxTries,
+					TryTimeout:    UploadTryTimeout,
+					RetryDelay:    UploadRetryDelay,
+					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system
 			fallthrough
 		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-			jpm.pipeline = azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{
-
-				Retry: azfile.RetryOptions{
+			jpm.pipeline = newFilePipeline(
+				azfile.NewAnonymousCredential(),
+				azfile.PipelineOptions{
+					Log:       jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azfile.TelemetryOptions{Value: "azcopy-V2"},
+				},
+				azfile.RetryOptions{
 					Policy:        azfile.RetryPolicyExponential,
 					MaxTries:      UploadMaxTries,
 					TryTimeout:    UploadTryTimeout,
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay,
 				},
-				Log:       jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azfile.TelemetryOptions{Value: "azcopy-V2"},
-			})
+				jpm.pacer)
 		default:
 			panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
 		}

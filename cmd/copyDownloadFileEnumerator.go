@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -15,17 +14,18 @@ import (
 
 type copyDownloadFileEnumerator common.CopyJobPartOrderRequest
 
-// Support two general cases:
-// 1. End with star, means download a file with specified prefix, if directory\*, means download the files under the directory.
+// enumerate accepts an URL (with or without *) pointing to file/directory for enumerate, processe and download.
+// The method supports two general cases:
+// Case 1: End with star, means download files with specified prefix.
 // directory/fprefix*
-// directory/dirprefix*
-// directory/* (--recursive)
-// 2. Not end with star, means download a single file or a directory.
+// directory/* (this expression is transferred to download from directory, means download all files in a directory.)
+// Case 2: Not end with star, means download a single file or a directory.
 // directory/dir
 // directory/file
-// this function accepts a url (with or without *) to files for download and processes them
 func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+
+	// Init params.
 	util := copyHandlerUtil{}
 	p := azfile.NewPipeline(
 		azfile.NewAnonymousCredential(),
@@ -38,45 +38,42 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
 		})
+	ctx := context.TODO()                                                    // Ensure correct context is used
+	cookedSourceURLString := util.replaceBackSlashWithSlash(sourceURLString) // Replace back slash with slash, otherwise url.Parse would encode the back slash.
 
-	// attempt to parse the source url
-	sourceURL, err := url.Parse(sourceURLString)
+	// Attempt to parse the source url.
+	sourceURL, err := url.Parse(cookedSourceURLString)
 	if err != nil {
 		return fmt.Errorf("cannot parse source URL")
 	}
 
-	// validate the source url
+	// Validate the source url.
 	numOfStartInURLPath := util.numOfStarInUrl(sourceURL.Path)
 	if numOfStartInURLPath > 1 || (numOfStartInURLPath == 1 && !strings.HasSuffix(sourceURL.Path, "*")) {
 		return fmt.Errorf("only support prefix matching (e.g: fileprefix*), or exact matching")
 	}
 	doPrefixSearch := numOfStartInURLPath == 1
 
-	ctx := context.Background() // use default background context
+	// For prefix search, only support file name matching in file prefix's parent dir level.
+	if isRecursiveOn && doPrefixSearch {
+		return fmt.Errorf("only support file name matching in file prefix's parent dir level, prefix matching with recursive mode is not supported currently for Azure file download")
+	}
 
-	// get the DirectoryURL or FileURL to be used later for listing
+	// Get the DirectoryURL or FileURL to be later used for listing.
 	dirURL, fileURL, fileProperties, ok := util.getDeepestDirOrFileURLFromString(ctx, *sourceURL, p)
 
 	if !ok {
 		return fmt.Errorf("cannot find accessible file or base directory with specified sourceURLString")
 	}
 
-	// Support two general cases:
-	// 1. End with star, means download a file with specified prefix, if directory\*, means download the files under the directory.
-	// directory/fprefix*
-	// directory/dirprefix*
-	// directory/* transfer this expression to download from directory
-	// 2. Not end with star, means download a single file or a directory.
-	// directory/dir
-	// directory/file
-
+	// Check if source URL is in directory/* expression, and transfer it to download from directory if the express is directory/*.
 	if hasEquivalentDirectoryURL, equivalentURL := util.hasEquivalentDirectoryURL(*sourceURL); hasEquivalentDirectoryURL {
 		*sourceURL = equivalentURL
 		doPrefixSearch = false
 	}
 
-	if doPrefixSearch { // Do prefix search, the file pattern would be [AnyLetter]+\*
-		// the destination must be a directory, otherwise we don't know where to put the files
+	if doPrefixSearch { // Case 1: Do prefix search, the file pattern would be [AnyLetter]+\*
+		// The destination must be a directory, otherwise we don't know where to put the files.
 		if !util.isPathDirectory(destinationPath) {
 			return fmt.Errorf("the destination must be an existing directory in this download scenario")
 		}
@@ -84,20 +81,23 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 		// If there is * it's matching a file (like pattern matching)
 		// get the search prefix to query the service
 		searchPrefix := util.getPossibleFileNameFromURL(sourceURL.Path)
+		if searchPrefix == "" {
+			panic("invalid state, searchPrefix should not be emtpy in do prefix search.")
+		}
 		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
 
-		// perform a list dir
+		// Perform list files and directories, note only files would be matched and transferred in prefix search.
 		for marker := (azfile.Marker{}); marker.NotDone(); {
-			// look for all files that start with the prefix
+			// Look for all files that start with the prefix.
 			lResp, err := dirURL.ListFilesAndDirectoriesSegment(ctx, marker, azfile.ListFilesAndDirectoriesOptions{Prefix: searchPrefix})
 			if err != nil {
 				return err
 			}
 
-			// Process the files returned in this result segment (if the segment is empty, the loop body won't execute)
+			// Process the files returned in this result segment.
 			for _, fileInfo := range lResp.Files {
 				f := dirURL.NewFileURL(fileInfo.Name)
-				gResp, err := f.GetProperties(ctx) // TODO: the cost is high wile otherwise we cannot get the last modified time...
+				gResp, err := f.GetProperties(ctx) // TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
 				if err != nil {
 					return err
 				}
@@ -105,7 +105,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 				e.addTransfer(common.CopyTransfer{
 					Source:           f.String(),
 					Destination:      util.generateLocalPath(destinationPath, fileInfo.Name),
-					LastModifiedTime: gResp.LastModified(), // TODO: As Azure file's PM description, list might get more valuable file properties, currently we need fetch again...
+					LastModifiedTime: gResp.LastModified(),
 					SourceSize:       fileInfo.Properties.ContentLength},
 					wg,
 					waitUntilJobCompletion)
@@ -119,8 +119,9 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 			return err
 		}
 
-	} else {
-		if fileURL != nil { // single file case
+	} else { // Case 2: Download a single file or a directory.
+
+		if fileURL != nil { // Single file.
 			var singleFileDestinationPath string
 			if util.isPathDirectory(destinationPath) {
 				singleFileDestinationPath = util.generateLocalPath(destinationPath, util.getPossibleFileNameFromURL(sourceURL.Path))
@@ -137,33 +138,34 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 				},
 				wg,
 				waitUntilJobCompletion)
-		} else { // directory case
-			// the destination must be a directory, otherwise we don't know where to put the files
+
+		} else { // Directory.
+			// The destination must be a directory, otherwise we don't know where to put the files.
 			if !util.isPathDirectory(destinationPath) {
-				return errors.New("the destination must be an existing directory in this download scenario")
+				return fmt.Errorf("the destination must be an existing directory in this download scenario")
 			}
 
 			dirStack := &directoryStack{}
 			dirStack.Push(*dirURL)
-			rootDirPath := "/" + azfile.NewFileURLParts(dirURL.URL()).DirectoryOrFilePath // TODO: finialize after DirectoryOrFilePath possible change
+			rootDirPath := "/" + azfile.NewFileURLParts(dirURL.URL()).DirectoryOrFilePath
 
 			for currentDirURL, ok := dirStack.Pop(); ok; currentDirURL, ok = dirStack.Pop() {
-				// perform a list files and directories
+				// Perform list files and directories.
 				for marker := (azfile.Marker{}); marker.NotDone(); {
-					lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(context.TODO(), marker, azfile.ListFilesAndDirectoriesOptions{})
+					lResp, err := currentDirURL.ListFilesAndDirectoriesSegment(ctx, marker, azfile.ListFilesAndDirectoriesOptions{})
 					if err != nil {
-						return errors.New("cannot list files for download")
+						return fmt.Errorf("cannot list files for download")
 					}
 
-					// process the files returned in this result segment (if the segment is empty, the loop body won't execute)
+					// Process the files returned in this segment.
 					for _, fileInfo := range lResp.Files {
 						f := currentDirURL.NewFileURL(fileInfo.Name)
-						gResp, err := f.GetProperties(ctx) // TODO: the cost is high wile otherwise we cannot get the last modified time...
+						gResp, err := f.GetProperties(ctx) // TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
 						if err != nil {
 							return err
 						}
 
-						currentFilePath := "/" + azfile.NewFileURLParts(f.URL()).DirectoryOrFilePath // TODO: finialize after DirectoryOrFilePath possible change
+						currentFilePath := "/" + azfile.NewFileURLParts(f.URL()).DirectoryOrFilePath
 
 						e.addTransfer(
 							common.CopyTransfer{
@@ -206,7 +208,12 @@ func (e *copyDownloadFileEnumerator) dispatchFinalPart() error {
 	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
 }
 
-// TODO: consider about resource consumption cases, would better refactor with space control manner
+func (e *copyDownloadFileEnumerator) partNum() common.PartNumber {
+	return e.PartNum
+}
+
+// TODO: Optimize for resource consumption cases. Can change to DFS with recursive method simply.
+// Temporarily keep this implementation as discussion.
 type directoryStack []azfile.DirectoryURL
 
 func (s *directoryStack) Push(d azfile.DirectoryURL) {

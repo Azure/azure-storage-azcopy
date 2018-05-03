@@ -217,3 +217,7 @@ func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, w
 func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
 	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
 }
+
+func (e *copyDownloadBlobEnumerator) partNum() common.PartNumber {
+	return e.PartNum
+}

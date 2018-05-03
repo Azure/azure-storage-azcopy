@@ -150,9 +150,9 @@ def cleanup():
 
 def main():
     init()
-    execute_user_scenario_1()
-    execute_user_scenario_2()
-    #execute_user_scenario_file_1()
+    #execute_user_scenario_1()
+    #execute_user_scenario_2()
+    execute_user_scenario_file_1()
     #temp_adhoc_scenario()
     cleanup()
 

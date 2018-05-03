@@ -22,9 +22,9 @@ type syncUploadEnumerator common.SyncJobPartOrderRequest
 // accepts a new transfer which is to delete the blob on container.
 func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	// If the existing transfers in DeleteJobRequest is equal to NumOfFilesPerUploadJobPart,
+	// If the existing transfers in DeleteJobRequest is equal to NumOfFilesPerDispatchJobPart,
 	// then send the JobPartOrder to transfer engine.
-	if len(e.DeleteJobRequest.Transfers) == NumOfFilesPerUploadJobPart {
+	if len(e.DeleteJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
 		resp := common.CopyJobPartOrderResponse{}
 		e.DeleteJobRequest.PartNum = e.PartNumber
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
@@ -48,7 +48,7 @@ func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer,
 func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 
-	if len(e.CopyJobRequest.Transfers) == NumOfFilesPerUploadJobPart {
+	if len(e.CopyJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
 		resp := common.CopyJobPartOrderResponse{}
 		e.CopyJobRequest.PartNum = e.PartNumber
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.CopyJobRequest), &resp)

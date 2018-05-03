@@ -354,7 +354,27 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 	}
 }
 
-// handles the copy command
+// createEnumerator creates enumerator depending on the source and destination type.
+func (cca cookedCopyCmdArgs) createEnumerator(jobPartOrder common.CopyJobPartOrderRequest) (e CopyEnumerator) {
+	switch cca.fromTo {
+	case common.EFromTo.LocalBlob():
+		fallthrough
+	case common.EFromTo.LocalFile():
+		e = (*copyUploadEnumerator)(&jobPartOrder)
+	case common.EFromTo.BlobLocal():
+		e = (*copyDownloadBlobEnumerator)(&jobPartOrder)
+	case common.EFromTo.FileLocal():
+		e = (*copyDownloadFileEnumerator)(&jobPartOrder)
+	case common.EFromTo.BlobTrash():
+		e = (*removeEnumerator)(&jobPartOrder)
+	default:
+		panic(fmt.Errorf("cannot create enumerator for illegal fromTo: %v", cca.fromTo))
+	}
+
+	return
+}
+
+// processCopyJobPartOrders handles the copy command,
 // dispatches the job order (in parts) to the storage engine
 func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
@@ -379,30 +399,13 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	var wg sync.WaitGroup
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
-	// depending on the source and destination type, we process the cp command differently
-	switch cca.fromTo {
-	case common.EFromTo.LocalBlob():
-		fallthrough
-	case common.EFromTo.LocalFile():
-		e := copyUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
-		lastPartNumber = e.PartNum
-	case common.EFromTo.BlobLocal():
-		e := copyDownloadBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
-		lastPartNumber = e.PartNum
-	case common.EFromTo.FileLocal():
-		e := copyDownloadFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
-		lastPartNumber = e.PartNum
-	case common.EFromTo.BlobTrash():
-		e := removeEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
-		lastPartNumber = e.PartNum
-	}
+
+	e := cca.createEnumerator(jobPartOrder)
+	err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+	lastPartNumber = e.partNum()
 
 	if err != nil {
-		return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		return fmt.Errorf("cannot start job due to error: %s", err)
 	}
 
 	// in background mode we would spit out the job id and quit
