@@ -208,6 +208,8 @@ func (jpm *jobPartMgr) createPipeline() {
 		fromTo := jpm.planMMF.Plan().FromTo
 
 		switch fromTo {
+		case common.EFromTo.BlobTrash():
+			fallthrough
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob

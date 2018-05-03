@@ -84,6 +84,13 @@ type ListJobsResponse struct {
 	JobIDs       []JobID
 }
 
+// ListContainerResponse represents the Container Response
+// that contains list of blobs and next marker.
+type ListContainerResponse struct {
+	Blobs []string
+	ListingComplete bool
+}
+
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListJobSummaryResponse struct {
 	ErrorMsg  string

@@ -34,7 +34,6 @@ import (
 	"strings"
 	"unsafe"
 	"context"
-	"net/http"
 )
 
 type blockBlobUpload struct {
@@ -146,10 +145,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
 			setTierResp, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier)
 			if err != nil  {
-				// If the set blob tier is not supported by the service version, then it will fail with 400
-				// The value for one of the HTTP headers is not in the correct format.
-				// So if the request fails with 400, then transfer is not marked as failed.
-				if stError, ok := err.(azblob.StorageError); !ok || stError.Response().StatusCode != http.StatusBadRequest{
 					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo,
 							fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
@@ -166,7 +161,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 						}
 					}
 					return
-				}
 			}
 			if setTierResp != nil {
 				io.Copy(ioutil.Discard, setTierResp.Response().Body)
@@ -383,17 +377,12 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				ctxWithValue := context.WithValue(bbu.jptm.Context(), overwriteServiceVersionString, "false")
 				setTierResp, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier)
 				if err != nil  {
-					// If the set blob tier is not supported by the service version, then it will fail with 400
-					// The value for one of the HTTP headers is not in the correct format.
-					// So if the request fails with 400, then transfer is not marked as failed.
-					if stError, ok := err.(azblob.StorageError); !ok || stError.Response().StatusCode != http.StatusBadRequest{
 						if bbu.jptm.ShouldLog(pipeline.LogError) {
 							bbu.jptm.Log(pipeline.LogError,
 								fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
 									workerId, blockBlobTier, string(err.Error())))
 						}
 						bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-					}
 				}
 				if setTierResp != nil {
 					io.Copy(ioutil.Discard, setTierResp.Response().Body)
@@ -450,16 +439,11 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
 			setTierResp, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier)
 			if err != nil {
-				// If the set blob tier is not supported by the service version, then it will fail with 400
-				// The value for one of the HTTP headers is not in the correct format.
-				// So if the request fails with 400, then transfer is not marked as failed.
-				if stError, ok := err.(azblob.StorageError); !ok || stError.Response().StatusCode != http.StatusBadRequest {
 					if jptm.ShouldLog(pipeline.LogError) {
 						jptm.Log(pipeline.LogError,
 							fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
 					}
 					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-				}
 			}
 			if setTierResp != nil {
 				io.Copy(ioutil.Discard, setTierResp.Response().Body)
