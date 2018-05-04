@@ -1,4 +1,4 @@
-from ..scripts.utility import *
+import utility as util
 
 import time
 
@@ -122,4 +122,29 @@ def test_pause_resume_job_200Mb_file():
             break
     print("test_pause_resume_job passed successfully")
 
+# test_remove_virtual_directory  creates a virtual directory, removes the virtual directory created
+# and then verifies the contents of virtual directory.
+def test_remove_virtual_directory():
+    # create dir dir_10_files and 1 kb files inside the dir.
+    dir_name = "dir_"+str(10)+"_files_rm"
+    dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
+
+    # execute azcopy command
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "5").execute_azcopy_copy_command()
+    if not result:
+        print("test_remove_virtual_directory failed while uploading ", dir_n_files_path, " files to the container")
+        return
+
+    destination = util.get_resource_sas(dir_name)
+    result = util.Command("rm").add_arguments(destination).add_flags("recursive", "true").execute_azcopy_copy_command()
+    if not result:
+        print("test_remove_virtual_directory failed while removing ", dir_n_files_path, " files to the container")
+        return
+
+    result = util.Command("list").add_arguments(destination).add_flags("resource-num", "0").execute_azcopy_verify()
+    if not result:
+        print("test_remove_virtual_directory failed while listing ", destination)
+        return
+    print("test_remove_virtual_directory successfully removed the virtual directory")
 

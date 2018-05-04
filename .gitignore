@@ -307,6 +307,7 @@ testSuite/testSuite.exe
 *.exe
 
 #Python Dependancies
+testSuite/test_suite_config.ini
 testSuite/venv/*
 testSuite/venv1/*
 testSuite/scripts/__pycache__/utility.cpython-36.pyc

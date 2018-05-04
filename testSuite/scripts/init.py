@@ -3,6 +3,7 @@ from test_upload_block_blob import *
 from test_upload_page_blob import *
 from test_file_download import *
 from test_file_upload import *
+from test_azcopy_operations import *
 import glob, os
 import configparser
 import platform
@@ -32,6 +33,9 @@ def temp_adhoc_scenario() :
     #test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
     test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
     #test_upload_download_1kb_file_wildcard_several_files()
+
+def execute_user_scenario_azcopy_op():
+    test_remove_virtual_directory()
 
 def execute_user_scenario_file_1() :
     ###
@@ -150,9 +154,10 @@ def cleanup():
 
 def main():
     init()
+    execute_user_scenario_azcopy_op()
     #execute_user_scenario_1()
     #execute_user_scenario_2()
-    execute_user_scenario_file_1()
+    #execute_user_scenario_file_1()
     #temp_adhoc_scenario()
     cleanup()
 
