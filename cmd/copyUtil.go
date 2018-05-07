@@ -35,8 +35,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
 const (
@@ -189,7 +189,7 @@ func (util copyHandlerUtil) getLastVirtualDirectoryFromPath(path string) string 
 		return ""
 	}
 
-	return path[0:lastSlashIndex+1]
+	return path[0 : lastSlashIndex+1]
 }
 
 func (util copyHandlerUtil) blockIDIntToBase64(blockID int) string {
@@ -209,14 +209,14 @@ func (util copyHandlerUtil) containsSpecialChars(name string) bool {
 	for _, r := range name {
 		if r == '"' || r == '\\' || r == '<' ||
 			r == '>' || r == '|' || r == '*' ||
-			r == '?' || r == ':'{
-					return true
+			r == '?' || r == ':' {
+			return true
 		}
 	}
 	// if the last character in the file / dir name is ' '
 	// then it not accepted by OS.
 	// 'test1 ' is created as 'test1'
-	if len(name) > 0 && name[len(name)-1] == ' '{
+	if len(name) > 0 && name[len(name)-1] == ' ' {
 		return true
 	}
 	return false
@@ -234,15 +234,15 @@ func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string 
 	// iterates through each part of the path.
 	// for example if given path is /a/b/c/d/e.txt,
 	// then check for special character in each part a,b,c,d and e.txt
-	for i := range parts{
+	for i := range parts {
 		if len(parts[i]) == 0 {
 			// If the part length is 0, then encode the "/" char and add to the new path.
 			// This is for scenarios when there exists "/" at the end of blob or start of the blobName.
 			bnwc += url.QueryEscape("/") + "/"
-		} else if util.containsSpecialChars(parts[i]){
+		} else if util.containsSpecialChars(parts[i]) {
 			// if the special character exists, then perform the encoding.
 			bnwc += url.QueryEscape(parts[i]) + "/"
-		}else{
+		} else {
 			// If there is no special character, then add the part as it is.
 			bnwc += parts[i] + "/"
 		}
@@ -254,12 +254,12 @@ func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string 
 
 // isBlobValid verifies whether blob is valid or not.
 // Used to handle special scenarios or conditions.
-func (util copyHandlerUtil) isBlobValid(bInfo azblob.Blob) bool{
+func (util copyHandlerUtil) isBlobValid(bInfo azblob.Blob) bool {
 	// this condition is to handle the WASB V1 directory structure.
 	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
 	// The empty directory has meta-data 'hdi_isfolder = true'
-	if bInfo.Metadata["hdi_isfolder"] == "true"{
+	if bInfo.Metadata["hdi_isfolder"] == "true" {
 		return false
 	}
 	return true

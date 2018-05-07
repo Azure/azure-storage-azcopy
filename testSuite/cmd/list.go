@@ -3,12 +3,12 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"os"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/spf13/cobra"
+	"net/url"
+	"os"
 	"strings"
-	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // initializes the clean command, its aliases and description.
@@ -89,7 +89,7 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 	// get the search prefix to query the service
 	searchPrefix := ""
 	// if the source is container url, then searchPrefix is empty
-	if !urlIsContainerOrShare(sourceUrl){
+	if !urlIsContainerOrShare(sourceUrl) {
 		searchPrefix = getBlobNameFromURL(sourceUrl.Path)
 	}
 	if len(searchPrefix) > 0 {
@@ -127,4 +127,3 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 		os.Exit(1)
 	}
 }
-

@@ -21,16 +21,16 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/spf13/cobra"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"net/url"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/spf13/cobra"
+	"net/url"
 	"strings"
-	"context"
-	"encoding/json"
 )
 
 func init() {
@@ -40,7 +40,7 @@ func init() {
 	// listContainer list the blobs inside the container or virtual directory inside the container
 	listContainerCmd := &cobra.Command{
 		Use:        "listcontainer",
-		Aliases:	[]string{"lsc"},
+		Aliases:    []string{"lsc"},
 		SuggestFor: []string{"lstcontainer", "listcntainer", "licontaier"},
 		Short:      "resume resumes the existing job for given JobId.",
 		Long:       `resume resumes the existing job for given JobId.`,
@@ -55,11 +55,11 @@ func init() {
 			sourcePath = args[0]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error{
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// the expected argument in input is the container sas / or path of virtual directory in the container.
 			// verifying the location type
 			location := inferArgumentLocation(sourcePath)
-			if location != location.Blob(){
+			if location != location.Blob() {
 				return fmt.Errorf("invalid path passed for listing. given source is of type %s while expect is container / container path ", location.String())
 			}
 			return HandleListContainerCommand(sourcePath, jsonOutput)
@@ -70,7 +70,7 @@ func init() {
 }
 
 // handles the list container command
-func HandleListContainerCommand(source string, jsonOutput bool) error{
+func HandleListContainerCommand(source string, jsonOutput bool) error {
 
 	util := copyHandlerUtil{}
 	p := azblob.NewPipeline(
@@ -98,7 +98,7 @@ func HandleListContainerCommand(source string, jsonOutput bool) error{
 	// get the search prefix to query the service
 	searchPrefix := ""
 	// if the source is container url, then searchPrefix is empty
-	if !util.urlIsContainerOrShare(sourceUrl){
+	if !util.urlIsContainerOrShare(sourceUrl) {
 		searchPrefix = util.getBlobNameFromURL(sourceUrl.Path)
 	}
 	if len(searchPrefix) > 0 {
@@ -137,21 +137,21 @@ func HandleListContainerCommand(source string, jsonOutput bool) error{
 
 // printListContainerResponse prints the list container response
 // If the output-json flag is set to true, it prints the output in json format.
-func printListContainerResponse(lsResponse *common.ListContainerResponse, jsonOutput bool){
-	if len(lsResponse.Blobs) == 0{
+func printListContainerResponse(lsResponse *common.ListContainerResponse, jsonOutput bool) {
+	if len(lsResponse.Blobs) == 0 {
 		return
 	}
 	if jsonOutput {
 		marshalledData, err := json.MarshalIndent(lsResponse, "", " ")
-		if err != nil{
+		if err != nil {
 			panic(fmt.Errorf("error listing the source. Failed with error %s", err))
 		}
 		fmt.Println(string(marshalledData))
-	}else{
+	} else {
 		for index := 0; index < len(lsResponse.Blobs); index++ {
 			fmt.Println(lsResponse.Blobs[index])
 		}
-		fmt.Println("Listing Complete: ",lsResponse.ListingComplete)
+		fmt.Println("Listing Complete: ", lsResponse.ListingComplete)
 	}
 	lsResponse.Blobs = nil
 }

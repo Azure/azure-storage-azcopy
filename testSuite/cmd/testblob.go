@@ -4,14 +4,14 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/spf13/cobra"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/spf13/cobra"
 )
 
 // TestBlobCommand represents the struct to get command

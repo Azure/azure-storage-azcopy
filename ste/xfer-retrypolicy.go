@@ -2,14 +2,14 @@ package ste
 
 import (
 	"context"
-	"time"
-	"net/http"
-	"net"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"io/ioutil"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"math/rand"
+	"net"
+	"net/http"
 	"strconv"
+	"time"
 )
 
 // XferRetryPolicy tells the pipeline what kind of retry policy to use. See the XferRetryPolicy* constants.
@@ -56,11 +56,11 @@ type XferRetryOptions struct {
 	// If RetryReadsFromSecondaryHost is "" (the default) then operations are not retried against another host.
 	// NOTE: Before setting this field, make sure you understand the issues around reading stale & potentially-inconsistent
 	// data at this webpage: https://docs.microsoft.com/en-us/azure/storage/common/storage-designing-ha-apps-with-ragrs
-	RetryReadsFromSecondaryHost string	// Comment this our for non-Blob SDKs
+	RetryReadsFromSecondaryHost string // Comment this our for non-Blob SDKs
 }
 
 func (o XferRetryOptions) retryReadsFromSecondaryHost() string {
-	return o.RetryReadsFromSecondaryHost	// This is for the Blob SDK only
+	return o.RetryReadsFromSecondaryHost // This is for the Blob SDK only
 	//return "" // This is for non-blob SDKs
 }
 
@@ -248,7 +248,7 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					}
 					break // Don't retry
 				}
-				if response.Response() != nil{
+				if response.Response() != nil {
 					// If we're going to retry and we got a previous response, then flush its body to avoid leaking its TCP connection
 					io.Copy(ioutil.Discard, response.Response().Body)
 					response.Response().Body.Close()

@@ -135,9 +135,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 // represents the processed copy command input from the user
 type cookedCopyCmdArgs struct {
 	// from arguments
-	src                   string
-	dst                   string
-	fromTo                common.FromTo
+	src    string
+	dst    string
+	fromTo common.FromTo
 
 	// filters from flags
 	exclude        string

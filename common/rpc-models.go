@@ -87,7 +87,7 @@ type ListJobsResponse struct {
 // ListContainerResponse represents the Container Response
 // that contains list of blobs and next marker.
 type ListContainerResponse struct {
-	Blobs []string
+	Blobs           []string
 	ListingComplete bool
 }
 

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -33,7 +34,6 @@ import (
 	"os"
 	"strings"
 	"unsafe"
-	"context"
 )
 
 type blockBlobUpload struct {
@@ -144,23 +144,23 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		if pageBlobTier != azblob.AccessTierNone {
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
 			setTierResp, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier)
-			if err != nil  {
+			if err != nil {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo,
+						fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
+				}
+				jptm.Cancel()
+				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				jptm.ReportTransferDone()
+				srcMmf.Unmap()
+				err = srcFile.Close()
+				if err != nil {
 					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
+							fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
 					}
-					jptm.Cancel()
-					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-					jptm.ReportTransferDone()
-					srcMmf.Unmap()
-					err = srcFile.Close()
-					if err != nil {
-						if jptm.ShouldLog(pipeline.LogInfo) {
-							jptm.Log(pipeline.LogInfo,
-								fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
-						}
-					}
-					return
+				}
+				return
 			}
 			if setTierResp != nil {
 				io.Copy(ioutil.Discard, setTierResp.Response().Body)
@@ -376,13 +376,13 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if blockBlobTier != azblob.AccessTierNone {
 				ctxWithValue := context.WithValue(bbu.jptm.Context(), overwriteServiceVersionString, "false")
 				setTierResp, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier)
-				if err != nil  {
-						if bbu.jptm.ShouldLog(pipeline.LogError) {
-							bbu.jptm.Log(pipeline.LogError,
-								fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
-									workerId, blockBlobTier, string(err.Error())))
-						}
-						bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				if err != nil {
+					if bbu.jptm.ShouldLog(pipeline.LogError) {
+						bbu.jptm.Log(pipeline.LogError,
+							fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
+								workerId, blockBlobTier, string(err.Error())))
+					}
+					bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				}
 				if setTierResp != nil {
 					io.Copy(ioutil.Discard, setTierResp.Response().Body)
@@ -439,11 +439,11 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
 			setTierResp, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier)
 			if err != nil {
-					if jptm.ShouldLog(pipeline.LogError) {
-						jptm.Log(pipeline.LogError,
-							fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
-					}
-					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError,
+						fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
+				}
+				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 			}
 			if setTierResp != nil {
 				io.Copy(ioutil.Discard, setTierResp.Response().Body)

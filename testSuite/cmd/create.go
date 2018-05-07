@@ -7,23 +7,23 @@ import (
 	"os"
 	"time"
 
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"io/ioutil"
 	"io"
+	"io/ioutil"
 	"math/rand"
-	"strings"
 	"net/http"
+	"strings"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyz" +
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-func createStringWithRandomChars(length int) string{
+func createStringWithRandomChars(length int) string {
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.Int() % len(charset)]
+		b[i] = charset[rand.Int()%len(charset)]
 	}
 	return string(b)
 }
@@ -35,7 +35,7 @@ func init() {
 	blobType := "blob"
 	fileType := "file"
 	isResourceABucket := true
-	blobSize  := uint32(0)
+	blobSize := uint32(0)
 	createCmd := &cobra.Command{
 		Use:     "create",
 		Aliases: []string{"create"},
@@ -84,7 +84,7 @@ func createContainer(container string) {
 
 func createBlob(blobUri string, blobSize uint32) {
 	url, err := url.Parse(blobUri)
-	if err != nil{
+	if err != nil {
 		fmt.Println("error parsing the blob sas ", blobUri)
 		os.Exit(1)
 	}
@@ -93,12 +93,12 @@ func createBlob(blobUri string, blobSize uint32) {
 
 	randomString := createStringWithRandomChars(int(blobSize))
 	contentType := http.DetectContentType([]byte(randomString))
-	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{ContentType:contentType,}, azblob.Metadata{}, azblob.BlobAccessConditions{})
-	if err != nil{
+	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{ContentType: contentType}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the blob %s", blobUrl))
 		os.Exit(1)
 	}
-	if putBlobResp.Response() != nil{
+	if putBlobResp.Response() != nil {
 		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
 		putBlobResp.Response().Body.Close()
 	}
