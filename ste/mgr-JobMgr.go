@@ -164,8 +164,8 @@ func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.Sh
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }
 func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
 	return pipeline.LogOptions{
-		Log:               jm.Log,
-		MinimumLevelToLog: func() pipeline.LogLevel { return jm.logger.MinimumLogLevel() },
+		Log:       jm.Log,
+		ShouldLog: func(level pipeline.LogLevel) bool { return level >= jm.logger.MinimumLogLevel() },
 	}
 }
 func (jm *jobMgr) Panic(err error) { jm.logger.Panic(err) }

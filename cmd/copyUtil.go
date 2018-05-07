@@ -57,7 +57,7 @@ func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 
 	if numOfSlashes == 0 {
 		return true
-	} else if numOfSlashes == 1 && url.Path[len(url.Path)-1:] == "/" { // this checks if container_name/ was given
+	} else if numOfSlashes == 1 && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
 		return true
 	}
 	return false

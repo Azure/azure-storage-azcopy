@@ -26,12 +26,8 @@
 
 
 [[constraint]]
-  name = "github.com/Azure/azure-pipeline-go"
-  version = "0.1.5"
-
-[[constraint]]
   name = "github.com/Azure/azure-storage-blob-go"
-  branch = "master"
+  version = "0.1.4"
 
 [[constraint]]
   name = "github.com/Azure/azure-storage-file-go"

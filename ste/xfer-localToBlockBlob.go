@@ -401,7 +401,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	blockBlobUrl := blobURL.ToBlockBlobURL()
 	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
-	var putBlobResp *azblob.BlobsPutResponse
+	var putBlobResp *azblob.BlockBlobsUploadResponse
 	var err error
 
 	// add blobSize to bytesOverWire.
