@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/spf13/cobra"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+	"github.com/spf13/cobra"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"io"
 )
 
 // TestBlobCommand represents the struct to get command
@@ -41,6 +42,9 @@ type TestBlobCommand struct {
 	VerifyBlockOrPageSize bool
 	// BlobType of the resource to be validated.
 	BlobType string
+
+	// access tier for block blobs
+	BlobTier string
 	// Number of Blocks or Pages Expected from the blob.
 	NumberOfBlocksOrPages uint64
 	// todo : numberofblockorpages can be an array with offset : end url.
@@ -84,6 +88,7 @@ func init() {
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.VerifyBlockOrPageSize, "verify-block-size", false, "this flag verify the block size by determining the number of blocks")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.NoGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobType, "blob-type", "BlockBlob", "Upload to Azure Storage using this blob type.")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobTier, "blob-tier", string(azblob.AccessTierNone), "access tier type for the block blob")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 }
 
@@ -120,7 +125,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 	searchPrefix := dirName[len(dirName)-1] + "/"
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{Prefix: searchPrefix})
+		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas")
 			os.Exit(1)
@@ -130,8 +135,8 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 		for _, blobInfo := range listBlob.Blobs.Blob {
 			// get the blob
 			size := blobInfo.Properties.ContentLength
-			get, err := containerUrl.NewBlobURL(blobInfo.Name).GetBlob(context.Background(),
-				azblob.BlobRange{0, *size}, azblob.BlobAccessConditions{}, false)
+			get, err := containerUrl.NewBlobURL(blobInfo.Name).Download(context.Background(),
+				0, *size, azblob.BlobAccessConditions{}, false)
 
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error downloading the blob %s", blobInfo.Name))
@@ -239,12 +244,31 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	// creating the page blob url of the resource on container.
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry: azblob.RetryOptions{TryTimeout: time.Minute * 10}})
 	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
-	get, err := pageBlobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset: 0, Count: fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
+
+	// get the blob properties and check the blob tier.
+	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
+		blobProperties, err := pageBlobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		if err != nil {
+			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
+			os.Exit(1)
+		}
+		// If the blob tier does not match the expected blob tier.
+		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier){
+			fmt.Println(fmt.Sprintf("Access blob tier type %s does not match the expected %s tier type", blobProperties.AccessTier(), testBlobCmd.BlobTier))
+			os.Exit(1)
+		}
+		// Closing the blobProperties response body.
+		if blobProperties.Response() != nil{
+			io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			blobProperties.Response().Body.Close()
+		}
+	}
+
+	get, err := pageBlobUrl.Download(context.Background(), 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
 	}
-
 	// reading all the bytes downloaded.
 	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
 	if get.Response().Body != nil {
@@ -302,7 +326,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	// this verifies the page-size and azcopy pageblob implementation.
 	if testBlobCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
-		resp, err := pageBlobUrl.GetPageRanges(context.Background(), azblob.BlobRange{Offset: 0, Count: 0}, azblob.BlobAccessConditions{})
+		resp, err := pageBlobUrl.GetPageRanges(context.Background(), 0,  0, azblob.BlobAccessConditions{})
 		if err != nil {
 			fmt.Println("error getting the block blob list ", err.Error())
 			os.Exit(1)
@@ -343,7 +367,33 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	// creating the blockblob url of the resource on container.
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry: azblob.RetryOptions{TryTimeout: time.Minute * 10}})
 	blobUrl := azblob.NewBlobURL(*sourceURL, p)
-	get, err := blobUrl.GetBlob(context.Background(), azblob.BlobRange{Offset: 0, Count: fileInfo.Size()}, azblob.BlobAccessConditions{}, false)
+
+	// check for access tier type
+	// get the blob properties and get the Access Tier Type.
+	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone{
+		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		if err != nil{
+			fmt.Println(fmt.Sprintf("error getting the blob properties. Failed with error %s", err.Error()))
+			os.Exit(1)
+		}
+		// Match the Access Tier Type with Expected Tier Type.
+		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier){
+			fmt.Println(fmt.Sprintf("block blob access tier %s does not matches the expected tier %s", blobProperties.AccessTier(), testBlobCmd.BlobTier))
+			os.Exit(1)
+		}
+		// Closing the blobProperties response.
+		if blobProperties.Response() != nil{
+			io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			blobProperties.Response().Body.Close()
+		}
+		// If the access tier type of blob is set to Archive, then the blob is offline and reading the blob is not allowed,
+		// so exit the test.
+		if azblob.AccessTierType(testBlobCmd.BlobTier) == azblob.AccessTierArchive{
+			os.Exit(0)
+		}
+	}
+
+	get, err := blobUrl.Download(context.Background(), 0,  fileInfo.Size(), azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
@@ -404,6 +454,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			os.Exit(1)
 		}
 	}
+
 
 	// unmap and closing the memory map file.
 	mmap.Unmap()

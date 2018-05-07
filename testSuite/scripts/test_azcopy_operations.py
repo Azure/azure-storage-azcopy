@@ -146,5 +146,11 @@ def test_remove_virtual_directory():
     if not result:
         print("test_remove_virtual_directory failed while listing ", destination)
         return
-    print("test_remove_virtual_directory successfully removed the virtual directory")
+    print("test_remove_virtual_directory passed")
+
+
+
+
+
+
 

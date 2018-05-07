@@ -70,3 +70,125 @@ def test_page_blob_upload_partial_sparse_file():
         print("test_page_blob_upload_partial_sparse_file test case failed")
         return
     print("test_page_blob_upload_partial_sparse_file test case passed successfully")
+
+def test_set_page_blob_tier():
+    # test for P10 Page Blob Access Tier
+    filename = "test_page_P10_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P10").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P10 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P10"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-type", "PageBlob"). \
+        add_flags("blob-tier", "P10").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P10 access Tier Type")
+        return
+
+    # test for P20 Page Blob Access Tier
+    filename = "test_page_P20_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P20").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P20 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P20"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-type", "PageBlob") \
+        .add_flags("blob-tier", "P20").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P20 access Tier Type")
+        return
+
+    # test for P30 Page Blob Access Tier
+    filename = "test_page_P30_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P30").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P30 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P30"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("blob-type", "PageBlob").add_flags("blob-tier", "P30").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P30 access Tier Type")
+        return
+
+    # test for P4 Page Blob Access Tier
+    filename = "test_page_P4_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P4").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P4 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P4"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("blob-type", "PageBlob").add_flags("blob-tier", "P4").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P4 access Tier Type")
+        return
+
+    # test for P40 Page Blob Access Tier
+    filename = "test_page_P40_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P40").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P40 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P40"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("blob-type", "PageBlob").add_flags("blob-tier", "P40").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P40 access Tier Type")
+        return
+
+    # test for P50 Page Blob Access Tier
+    filename = "test_page_P50_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P50").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P50 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P50"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("blob-type", "PageBlob").add_flags("blob-tier", "P50").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P50 access Tier Type")
+        return
+
+    # test for P6 Page Blob Access Tier
+    filename = "test_page_P6_blob_tier.vhd"
+    file_path = util.create_test_file(filename, 100 * 1024)
+    destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("page-blob-tier", "P6").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with page-blob-tier set to P6 failed.")
+        return
+    # execute azcopy validate order.
+    # added the expected blob-tier "P50"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("blob-type", "PageBlob").add_flags("blob-tier", "P6").execute_azcopy_verify()
+    if not result:
+        print("test_set_page_blob_tier failed for P6 access Tier Type")
+        return
+    print("test_set_page_blob_tier successfully passed")

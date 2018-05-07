@@ -169,3 +169,67 @@ def test_guess_mime_type():
         print("test_guess_mime_type test failed")
     else:
         print("test_guess_mime_type successfully passed")
+
+def test_set_block_blob_tier():
+    #create a file file_hot_block_blob_tier
+    filename = "test_hot_block_blob_tier.txt"
+    file_path = util.create_test_file(filename, 10*1024)
+
+    # uploading the file file_hot_block_blob_tier using azcopy and setting the block-blob-tier to Hot
+    destination_sas = util.get_resource_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("block-blob-tier", "Hot").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with block-blob-tier set to Hot failed. ")
+        return
+
+    # execute azcopy validate order.
+    # added the source in validator as first argument.
+    # added the destination in validator as second argument.
+    # added the expected blob-tier "Hot"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-tier", "Hot").execute_azcopy_verify()
+    if not result:
+        print("test_set_block_blob_tier failed for Hot access Tier Type")
+        return
+
+    # create file to upload with block blob tier set to "Cool".
+    filename = "test_cool_block_blob_tier.txt"
+    file_path = util.create_test_file(filename, 10*1024)
+
+    # uploading the file file_cool_block_blob_tier using azcopy and setting the block-blob-tier to Cool.
+    destination_sas = util.get_resource_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("block-blob-tier", "Cool").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with block-blob-tier set to Cool failed.")
+        return
+    # execute azcopy validate order.
+    # added the source in validator as first argument.
+    # added the destination in validator as second argument.
+    # added the expected blob-tier "Cool"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-tier", "Cool").execute_azcopy_verify()
+    if not result:
+        print("test_set_block_blob_tier failed for Cool access Tier Type")
+        return
+
+    # create file to upload with block blob tier set to "Archive".
+    filename = "test_archive_block_blob_tier.txt"
+    file_path = util.create_test_file(filename, 10*1024)
+
+    # uploading the file file_archive_block_blob_tier using azcopy and setting the block-blob-tier to Archive.
+    destination_sas = util.get_resource_sas(filename)
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
+        add_flags("Logging", "5").add_flags("block-blob-tier", "archive").execute_azcopy_copy_command()
+    if not result:
+        print("uploading file with block-blob-tier set to Cool failed.")
+        return
+
+    # execute azcopy validate order.
+    # added the source in validator as first argument.
+    # added the destination in validator as second argument.
+    # added the expected blob-tier "Archive"
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-tier", "Archive").execute_azcopy_verify()
+    if not result:
+        print("test_set_block_blob_tier failed for Archive access Tier Type")
+        return
+    print("test_set_block_blob_tier successfully passed")

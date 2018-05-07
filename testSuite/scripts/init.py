@@ -36,6 +36,8 @@ def temp_adhoc_scenario() :
 
 def execute_user_scenario_azcopy_op():
     test_remove_virtual_directory()
+    test_set_block_blob_tier()
+    test_set_page_blob_tier()
 
 def execute_user_scenario_file_1() :
     ###
@@ -129,6 +131,9 @@ def init():
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
     share_sas_url = config['CREDENTIALS']['SHARE_SAS_URL']
 
+    # container sas of the premium storage account.
+    premium_container_sas = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
+
     # deleting the log files.
     for f in glob.glob('*.log'):
         try:
@@ -137,7 +142,7 @@ def init():
             if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
                 raise
 
-    if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, azcopy_exec_location, test_suite_exec_location):
+    if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
@@ -155,7 +160,7 @@ def cleanup():
 def main():
     init()
     execute_user_scenario_azcopy_op()
-    #execute_user_scenario_1()
+    execute_user_scenario_1()
     #execute_user_scenario_2()
     #execute_user_scenario_file_1()
     #temp_adhoc_scenario()
