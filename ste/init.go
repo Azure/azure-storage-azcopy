@@ -331,7 +331,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		Timestamp:          time.Now().UTC(),
 		JobID:              jobID,
 		ErrorMsg:           "",
-		JobStatus:          common.JobStatus{}.InProgress(), // Default
+		JobStatus:          common.EJobStatus.InProgress(), // Default
 		CompleteJobOrdered: false,                           // default to false; returns true if ALL job parts have been ordered
 		FailedTransfers:    []common.TransferDetail{},
 	}
@@ -354,8 +354,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
-			case common.TransferStatus{}.Failed(),
-				common.TransferStatus{}.BlobTierFailure():
+			case common.ETransferStatus.Failed(),
+				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
@@ -375,7 +375,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
 	if (js.CompleteJobOrdered) && (js.TotalTransfers == js.TransfersFailed+js.TransfersCompleted) {
-		js.JobStatus = common.JobStatus{}.Completed()
+		js.JobStatus = common.EJobStatus.Completed()
 	}
 
 	return js

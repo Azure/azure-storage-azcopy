@@ -5,28 +5,31 @@ import (
 	"time"
 )
 
-var ERpcCmd = RpcCmd{}
+var ERpcCmd = RpcCmd("")
 
 // JobStatus indicates the status of a Job; the default is InProgress.
-type RpcCmd EnumString
+type RpcCmd string
 
-func (RpcCmd) None() RpcCmd             { return RpcCmd{"--none--"} }
-func (RpcCmd) CopyJobPartOrder() RpcCmd { return RpcCmd{"CopyJobPartOrder"} }
-func (RpcCmd) ListJobs() RpcCmd         { return RpcCmd{"ListJobs"} }
-func (RpcCmd) ListJobSummary() RpcCmd   { return RpcCmd{"ListJobSummary"} }
-func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd{"ListJobTransfers"} }
-func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd{"CancelJob"} }
-func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd{"PauseJob"} }
-func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd{"ResumeJob"} }
+func (RpcCmd) None() RpcCmd             { return RpcCmd("--none--") }
+func (RpcCmd) CopyJobPartOrder() RpcCmd { return RpcCmd("CopyJobPartOrder") }
+func (RpcCmd) ListJobs() RpcCmd         { return RpcCmd("ListJobs") }
+func (RpcCmd) ListJobSummary() RpcCmd   { return RpcCmd("ListJobSummary") }
+func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd("ListJobTransfers") }
+func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("CancelJob") }
+func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
+func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
 
 func (c RpcCmd) String() string {
-	return EnumString(c).String(reflect.TypeOf(c))
+	return EnumHelper{}.String(string(c), reflect.TypeOf(c))
 }
 func (c RpcCmd) Pattern() string { return "/" + c.String() }
 
-func (c RpcCmd) Parse(s string) (RpcCmd, error) {
-	e, err := EnumString{}.Parse(reflect.TypeOf(c), s, false, true)
-	return RpcCmd(e), err
+func (c *RpcCmd) Parse(s string) error {
+	val, err := EnumHelper{}.Parse(reflect.TypeOf(c), s, false)
+	if err == nil {
+		*c = val.(RpcCmd)
+	}
+	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -84,11 +87,9 @@ type ListJobsResponse struct {
 	JobIDs       []JobID
 }
 
-// ListContainerResponse represents the Container Response
-// that contains list of blobs and next marker.
+// ListContainerResponse represents the list of blobs within the container.
 type ListContainerResponse struct {
-	Blobs           []string
-	ListingComplete bool
+	Blobs []string
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId

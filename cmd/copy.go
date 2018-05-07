@@ -106,19 +106,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	cooked.blockSize = raw.blockSize
 
-	// verify the input blob-tier.
-	// allowed blob-tier are Hot, Cold & Archive
-	blockBlobTier, err := common.BlockBlobTier("").Parse(raw.blockBlobTier)
+	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
 	if err != nil {
 		return cooked, err
 	}
-
-	pageBlobTier, err := common.PageBlobTier("").Parse(raw.pageBlobTier)
+	err = cooked.pageBlobTier.Parse(raw.pageBlobTier)
 	if err != nil {
 		return cooked, err
 	}
-	cooked.blockBlobTier = blockBlobTier
-	cooked.pageBlobTier = pageBlobTier
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -221,7 +216,7 @@ func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 	blobURL := azblob.NewBlobURL(*u, p)
 	blobStream, err := blobURL.Download(context.Background(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
 	if err != nil {
-		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
+		// todo:???
 	}
 
 	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
@@ -358,27 +353,7 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 	}
 }
 
-// createEnumerator creates enumerator depending on the source and destination type.
-func (cca cookedCopyCmdArgs) createEnumerator(jobPartOrder common.CopyJobPartOrderRequest) (e CopyEnumerator) {
-	switch cca.fromTo {
-	case common.EFromTo.LocalBlob():
-		fallthrough
-	case common.EFromTo.LocalFile():
-		e = (*copyUploadEnumerator)(&jobPartOrder)
-	case common.EFromTo.BlobLocal():
-		e = (*copyDownloadBlobEnumerator)(&jobPartOrder)
-	case common.EFromTo.FileLocal():
-		e = (*copyDownloadFileEnumerator)(&jobPartOrder)
-	case common.EFromTo.BlobTrash():
-		e = (*removeEnumerator)(&jobPartOrder)
-	default:
-		panic(fmt.Errorf("cannot create enumerator for illegal fromTo: %v", cca.fromTo))
-	}
-
-	return
-}
-
-// processCopyJobPartOrders handles the copy command,
+// handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
@@ -403,13 +378,30 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	var wg sync.WaitGroup
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
-
-	e := cca.createEnumerator(jobPartOrder)
-	err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
-	lastPartNumber = e.partNum()
+	// depending on the source and destination type, we process the cp command differently
+	switch cca.fromTo {
+	case common.EFromTo.LocalBlob():
+		fallthrough
+	case common.EFromTo.LocalFile():
+		e := copyUploadEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.BlobLocal():
+		e := copyDownloadBlobEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.FileLocal():
+		e := copyDownloadFileEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.BlobTrash():
+		e := removeEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	}
 
 	if err != nil {
-		return fmt.Errorf("cannot start job due to error: %s", err)
+		return fmt.Errorf("cannot start job due to error: %s.\n", err)
 	}
 
 	// in background mode we would spit out the job id and quit
@@ -418,7 +410,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return nil
 	}
 
-	// If there is only one part then start fetching the JobPart Order.
+	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
 		if !cca.outputJson {
 			fmt.Println("Job with id", jobPartOrder.JobID, "has started.")

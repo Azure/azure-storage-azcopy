@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"reflect"
-	"sync/atomic"
 	"unsafe"
 )
 
@@ -59,12 +58,12 @@ type JobPartPlanHeader struct {
 
 // Status returns the job status stored in JobPartPlanHeader in thread-safe manner
 func (jpph *JobPartPlanHeader) JobStatus() common.JobStatus {
-	return common.JobStatus{Value: atomic.LoadUint32(&jpph.atomicJobStatus.Value)}
+	return jpph.atomicJobStatus.AtomicLoad()
 }
 
 // SetJobStatus sets the job status in JobPartPlanHeader in thread-safe manner
-func (jpph *JobPartPlanHeader) SetJobStatus(status common.JobStatus) {
-	atomic.StoreUint32(&jpph.atomicJobStatus.Value, status.Value)
+func (jpph *JobPartPlanHeader) SetJobStatus(newJobStatus common.JobStatus) {
+	jpph.atomicJobStatus.AtomicStore(newJobStatus)
 }
 
 // Transfer api gives memory map JobPartPlanTransfer header for given index
@@ -119,17 +118,9 @@ type JobPartPlanDstBlob struct {
 	// Specifies which content encodings have been applied to the blob.
 	ContentEncoding [ContentEncodingMaxBytes]byte
 
-	// Specifies the length of BlockBlobTier of the blob.
-	BlockBlobTierLength uint8
-
-	// Specifies the tier on the block blob.
-	BlockBlobTier [BlobTierMaxBytes]byte
-
-	// Specifies the length of PageBlobTier of the blob.
-	PageBlobTierLength uint8
-
-	// Specifies the tier on the page blob.
-	PageBlobTier [BlobTierMaxBytes]byte
+	// Specifies the tier if this is a block or page blob
+	BlockBlobTier common.BlockBlobTier
+	PageBlobTier  common.PageBlobTier
 
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
@@ -179,7 +170,7 @@ type JobPartPlanTransfer struct {
 
 // TransferStatus returns the transfer's status
 func (jppt *JobPartPlanTransfer) TransferStatus() common.TransferStatus {
-	return common.TransferStatus{Value: atomic.LoadInt32(&jppt.atomicTransferStatus.Value)}
+	return jppt.atomicTransferStatus.AtomicLoad()
 }
 
 // SetTransferStatus sets the transfer's status
@@ -189,11 +180,11 @@ func (jppt *JobPartPlanTransfer) TransferStatus() common.TransferStatus {
 // marked to InProgress from failed.
 func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus, overWrite bool) {
 	if !overWrite {
-		common.AtomicMorphInt32(&jppt.atomicTransferStatus.Value,
+		common.AtomicMorphInt32((*int32)(&jppt.atomicTransferStatus),
 			func(startVal int32) (val int32, morphResult interface{}) {
-				return common.Iffint32(startVal == (common.TransferStatus{}).Failed().Value, startVal, status.Value), nil
+				return common.Iffint32(startVal == int32(common.ETransferStatus.Failed()), startVal, int32(status)), nil
 			})
 	} else {
-		atomic.StoreInt32(&jppt.atomicTransferStatus.Value, status.Value)
+		(&jppt.atomicTransferStatus).AtomicStore(status)
 	}
 }

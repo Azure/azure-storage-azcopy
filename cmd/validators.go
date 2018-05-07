@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
-	"os"
 	"reflect"
 	"strings"
+	"os"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -41,7 +41,8 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	}
 
 	// User explicitly specified FromTo, make sure it matches what we infer or accept it if we can't infer
-	userFromTo, err := common.EFromTo.Parse(userSpecifiedFromTo)
+	var userFromTo common.FromTo
+	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
 		return common.EFromTo.Unknown(), fmt.Errorf("Invalid --FromTo value specified: %q", userSpecifiedFromTo)
 	}
@@ -69,42 +70,43 @@ func inferFromTo(src, dst string) common.FromTo {
 	}
 
 	switch {
-	case srcLocation == Location{}.Local() && dstLocation == Location{}.Blob():
+	case srcLocation == ELocation.Local() && dstLocation == ELocation.Blob():
 		return common.EFromTo.LocalBlob()
-	case srcLocation == Location{}.Blob() && dstLocation == Location{}.Local():
+	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Local():
 		return common.EFromTo.BlobLocal()
-	case srcLocation == Location{}.Local() && dstLocation == Location{}.File():
+	case srcLocation == ELocation.Local() && dstLocation == ELocation.File():
 		return common.EFromTo.LocalFile()
-	case srcLocation == Location{}.File() && dstLocation == Location{}.Local():
+	case srcLocation == ELocation.File() && dstLocation == ELocation.Local():
 		return common.EFromTo.FileLocal()
-	case srcLocation == Location{}.Pipe() && dstLocation == Location{}.Blob():
+	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.Blob():
 		return common.EFromTo.PipeBlob()
-	case srcLocation == Location{}.Blob() && dstLocation == Location{}.Pipe():
+	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Pipe():
 		return common.EFromTo.BlobPipe()
 
-	case srcLocation == Location{}.Pipe() && dstLocation == Location{}.File():
+	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.File():
 		return common.EFromTo.PipeFile()
-	case srcLocation == Location{}.File() && dstLocation == Location{}.Pipe():
+	case srcLocation == ELocation.File() && dstLocation == ELocation.Pipe():
 		return common.EFromTo.FilePipe()
 	}
 	return common.EFromTo.Unknown()
 }
 
+var ELocation = Location(0)
 // JobStatus indicates the status of a Job; the default is InProgress.
-type Location common.EnumUint32 // Must be 32-bit for atomic operations
+type Location uint32 // Must be 32-bit for atomic operations
 
-func (Location) Unknown() Location { return Location{0} }
-func (Location) Local() Location   { return Location{1} }
-func (Location) Pipe() Location    { return Location{2} }
-func (Location) Blob() Location    { return Location{3} }
-func (Location) File() Location    { return Location{4} }
+func (Location) Unknown() Location { return Location(0) }
+func (Location) Local() Location   { return Location(1) }
+func (Location) Pipe() Location    { return Location(2) }
+func (Location) Blob() Location    { return Location(3) }
+func (Location) File() Location    { return Location(4) }
 func (l Location) String() string {
-	return common.EnumUint32(l).String(reflect.TypeOf(l))
+	return common.EnumHelper{}.StringInteger(uint32(l), reflect.TypeOf(l))
 }
 
 func inferArgumentLocation(arg string) Location {
 	if arg == pipeLocation {
-		return Location{}.Pipe()
+		return ELocation.Pipe()
 	}
 	if startsWith(arg, "https") {
 		// Let's try to parse the argument as a URL
@@ -114,37 +116,19 @@ func inferArgumentLocation(arg string) Location {
 			// Is the argument a URL to blob storage?
 			switch host := strings.ToLower(u.Host); true {
 			case strings.Contains(host, ".blob.core.windows.net"):
-				return Location{}.Blob()
+				return ELocation.Blob()
 			case strings.Contains(host, ".file.core.windows.net"):
-				return Location{}.File()
+				return ELocation.File()
 			}
 		}
 	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
 		_, err := os.Stat(arg)
-		if err != nil {
-			// if the source path does not exists, then it could be the case of download
-			if os.IsNotExist(err) {
-				return Location{}.Local()
-			}
-			// if the wild cards are used in the source path
-			// then check the source path without the last part.
-			// strip the path separator at the end of the path if it exists.
-			if arg[len(arg)-1:] == string(os.PathSeparator) {
-				arg = arg[:len(arg)-1]
-			}
-			// strip the last part of the path after the last path separator
-			// For Ex: /a/b/c/d1?.txt --> /a/b/c
-			// /a/b/c/file* --> /a/b/c
-			arg = arg[:strings.LastIndex(arg, string(os.PathSeparator))]
-			_, err = os.Stat(arg)
-			if err == nil {
-				return Location{}.Local()
-			}
-			return Location{}.Unknown()
+		if err != nil && !os.IsNotExist(err){
+			return ELocation.Unknown()
 		}
-		return Location{}.Local()
+		return ELocation.Local()
 	}
 
-	return Location{}.Unknown()
+	return ELocation.Unknown()
 }

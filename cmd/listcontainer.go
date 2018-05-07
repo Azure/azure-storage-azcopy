@@ -129,7 +129,6 @@ func HandleListContainerCommand(source string, jsonOutput bool) error {
 			summary.Blobs = append(summary.Blobs, blobName)
 		}
 		marker = listBlob.NextMarker
-		summary.ListingComplete = !marker.NotDone()
 		printListContainerResponse(&summary, jsonOutput)
 	}
 	return nil
@@ -151,7 +150,6 @@ func printListContainerResponse(lsResponse *common.ListContainerResponse, jsonOu
 		for index := 0; index < len(lsResponse.Blobs); index++ {
 			fmt.Println(lsResponse.Blobs[index])
 		}
-		fmt.Println("Listing Complete: ", lsResponse.ListingComplete)
 	}
 	lsResponse.Blobs = nil
 }

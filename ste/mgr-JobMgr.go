@@ -148,13 +148,13 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	}
 
 	switch part0Plan := jobPart0Mgr.Plan(); part0Plan.JobStatus() {
-	case (common.JobStatus{}).Cancelled():
+	case common.EJobStatus.Cancelled():
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("all parts of Job %v successfully cancelled; cleaning up the Job", jm.jobID))
 		}
 		//jm.jobsInfo.cleanUpJob(jm.jobID)
-	case (common.JobStatus{}).InProgress():
-		part0Plan.SetJobStatus((common.JobStatus{}).Completed())
+	case common.EJobStatus.InProgress():
+		part0Plan.SetJobStatus((common.EJobStatus).Completed())
 	}
 	return partsDone
 }
@@ -165,7 +165,7 @@ func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level
 func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
 	return pipeline.LogOptions{
 		Log:       jm.Log,
-		ShouldLog: func(level pipeline.LogLevel) bool { return level >= jm.logger.MinimumLogLevel() },
+		ShouldLog: func(level pipeline.LogLevel) bool { return level <= jm.logger.MinimumLogLevel() },
 	}
 }
 func (jm *jobMgr) Panic(err error) { jm.logger.Panic(err) }

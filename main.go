@@ -22,7 +22,6 @@ package main
 
 import (
 	"github.com/Azure/azure-storage-azcopy/cmd"
-	"github.com/Azure/azure-storage-azcopy/common"
 	//"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
 	//"os/exec"
@@ -31,62 +30,24 @@ import (
 	//"os/exec"
 )
 
-type exitCode common.EnumInt32
+var eexitCode = exitCode(0)
+type exitCode int32
 
-func (exitCode) success() exitCode { return exitCode{Value: 0} }
-func (exitCode) error() exitCode   { return exitCode{Value: -1} }
+func (exitCode) success() exitCode { return exitCode(0) }
+func (exitCode) error() exitCode   { return exitCode(-1) }
 
 func main() {
-	os.Exit(int(mainWithExitCode().Value))
+	os.Exit(int(mainWithExitCode()))
 }
 
 func mainWithExitCode() exitCode {
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
 		cmd.Execute()
-		return exitCode{}.success()
+		return eexitCode.success()
 	}
 	azcopyAppPathFolder := GetAzCopyAppPath()
 	go ste.MainSTE(300, 500, azcopyAppPathFolder)
 	cmd.Execute()
-	return exitCode{}.success()
-	//
-	//common.Rpc = common.NewHttpClient("http://localhost:1337").Send
-	//switch os.Args[1] {
-	//case "inproc": // STE is launched in process
-	//	go ste.InitializeSTE(100, 500)
-	//	cmd.Execute()
-	//case "ste": // the program is being launched as the STE, the init function runs on main go-routine
-	//	if len(os.Args) == 4 {
-	//		numOfEngineWorker, err := strconv.Atoi(os.Args[2])
-	//		if err != nil {
-	//			panic("Cannot parse number of engine workers, please give a positive integer.")
-	//		}
-	//
-	//		targetRateInMBps, err := strconv.Atoi(os.Args[3])
-	//		if err != nil {
-	//			panic("Cannot parse target rate in MB/s, please give a positive integer.")
-	//		}
-	//
-	//		ste.InitializeSTE(numOfEngineWorker, targetRateInMBps)
-	//	} else if len(os.Args) == 2 {
-	//		// use default number of engine worker and target rate to initialize ste
-	//		ste.InitializeSTE(100, 500)
-	//	} else {
-	//		panic("Wrong number of arguments for STE mode! Please contact your developer.")
-	//	}
-	//default:
-	//	//STE is launched as an independent process
-	//	//args := append(os.Args, "ste")
-	//	//args = append(os.Args, "--detached")
-	//	newProcessCommand := exec.Command(os.Args[0], "ste")
-	//	// On Windows, osModifyProcessCommand add syscall.CREATE_NEW_PROCESS_GROUP; on other OSes, it's a no-op
-	//	err := osModifyProcessCommand(newProcessCommand).Start()
-	//	if err != nil {
-	//		panic(err)
-	//		os.Exit(1)
-	//	}
-	//	cmd.Execute()
-	//}
-	////ste.InitializeSTE()
+	return eexitCode.success()
 }

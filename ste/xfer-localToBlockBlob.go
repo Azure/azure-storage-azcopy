@@ -401,17 +401,17 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	blockBlobUrl := blobURL.ToBlockBlobURL()
 	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
-	var putBlobResp *azblob.BlockBlobsUploadResponse
+	var uploadBlobResp *azblob.BlockBlobsUploadResponse
 	var err error
 
 	// add blobSize to bytesOverWire.
 	jptm.AddToBytesOverWire(uint64(jptm.Info().SourceSize))
 	// take care of empty blobs
 	if jptm.Info().SourceSize == 0 {
-		putBlobResp, err = blockBlobUrl.Upload(jptm.Context(), nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		uploadBlobResp, err = blockBlobUrl.Upload(jptm.Context(), nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	} else {
 		body := newRequestBodyPacer(bytes.NewReader(srcMmf), pacer)
-		putBlobResp, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		uploadBlobResp, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	}
 
 	// if the put blob is a failure, updating the transfer status to failed
@@ -471,9 +471,9 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 		}
 	}
 	// closing the put blob response body
-	if putBlobResp != nil {
-		io.Copy(ioutil.Discard, putBlobResp.Response().Body)
-		putBlobResp.Response().Body.Close()
+	if uploadBlobResp != nil {
+		io.Copy(ioutil.Discard, uploadBlobResp.Response().Body)
+		uploadBlobResp.Response().Body.Close()
 	}
 }
 
