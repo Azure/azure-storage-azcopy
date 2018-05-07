@@ -144,7 +144,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			}
 
 			// read all bytes.
-			blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
+			blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error reading the body of blob %s downloaded and failed with error %s", blobInfo.Name, err.Error()))
 				os.Exit(1)
@@ -270,7 +270,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 	// reading all the bytes downloaded.
-	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
+	blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
@@ -399,7 +399,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 	// reading all the blob bytes.
-	blobBytesDownloaded, err := ioutil.ReadAll(get.Body())
+	blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
 	if get.Response().Body != nil {
 		get.Response().Body.Close()
 	}
