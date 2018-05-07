@@ -33,6 +33,9 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
+//TODO does this belong here? should it be configurable
+const maxRetryPerDownloadBody = 5
+
 func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	info := jptm.Info()
@@ -182,9 +185,10 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				return
 			}
 			// step 2: write the body into the memory mapped file directly
-			_, err = io.ReadFull(get.Body(), destinationMMF[startIndex:startIndex+adjustedChunkSize])
-			io.Copy(ioutil.Discard, get.Body())
-			get.Body().Close()
+			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: maxRetryPerDownloadBody})
+			_, err = io.ReadFull(body, destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			io.Copy(ioutil.Discard, body)
+			body.Close()
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {

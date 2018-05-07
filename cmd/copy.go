@@ -219,12 +219,16 @@ func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	// TODO: use the resilient reader of blob
-	blobStream := azblob.NewDownloadStream(context.Background(), blobURL.Download, azblob.DownloadStreamOptions{})
-	defer blobStream.Close()
+	blobStream, err := blobURL.Download(context.Background(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	if err != nil {
+		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
+	}
+
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
+	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
-	_, err = io.Copy(os.Stdout, blobStream)
+	_, err = io.Copy(os.Stdout, blobBody)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob to Stdout due to error: %s", err.Error())
 	}
