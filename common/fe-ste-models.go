@@ -210,7 +210,7 @@ func (bt BlockBlobTier) Parse(s string) (BlockBlobTier, error) {
 		return BlockBlobTier(azblob.AccessTierNone), nil
 	} else if strings.EqualFold(s, "Hot") {
 		return BlockBlobTier(azblob.AccessTierHot), nil
-	} else if strings.EqualFold(s, "Cold") {
+	} else if strings.EqualFold(s, "Cool") {
 		return BlockBlobTier(azblob.AccessTierCool), nil
 	} else if strings.EqualFold(s, "Archive") {
 		return BlockBlobTier(azblob.AccessTierArchive), nil
