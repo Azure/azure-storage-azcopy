@@ -141,7 +141,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		//set tier on pageBlob.
 		//If set tier fails, then cancelling the job.
 		_, pageBlobTier := jptm.BlobTiers()
-		if pageBlobTier != azblob.AccessTierNone {
+		if string(pageBlobTier) != common.EPageBlobTier.None().String() {
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
 			setTierResp, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier)
 			if err != nil {
@@ -197,7 +197,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	} else {
 		// step 3.c: If the source is not a vhd and size is greater than chunk Size,
 		// then uploading the source as block Blob.
-
 		// calculating num of chunks using the source size and chunkSize.
 		numChunks := uint32(0)
 		if rem := info.SourceSize % int64(info.BlockSize); rem == 0 {
@@ -372,7 +371,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				bbu.jptm.Log(pipeline.LogInfo, "completed successfully")
 			}
 			blockBlobTier, _ := bbu.jptm.BlobTiers()
-			if blockBlobTier != azblob.AccessTierNone {
+			if string(blockBlobTier) != common.EBlockBlobTier.None().String() {
 				ctxWithValue := context.WithValue(bbu.jptm.Context(), overwriteServiceVersionString, "false")
 				setTierResp, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier)
 				if err != nil {
@@ -433,7 +432,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 		}
 
 		blockBlobTier, _ := jptm.BlobTiers()
-		if blockBlobTier != azblob.AccessTierNone {
+		if string(blockBlobTier) != common.EBlockBlobTier.None().String() {
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
 			setTierResp, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier)
 			if err != nil {

@@ -233,7 +233,7 @@ func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
 
 func (bbt BlockBlobTier) String() string {
-	return EnumHelper{}.StringInteger(uint8(bbt), reflect.TypeOf(bbt))
+	return EnumHelper{}.String(bbt, reflect.TypeOf(bbt))
 }
 
 func (bbt *BlockBlobTier) Parse(s string) error {
@@ -277,7 +277,7 @@ func (PageBlobTier) P50() PageBlobTier  { return PageBlobTier(50) }
 func (PageBlobTier) P6() PageBlobTier   { return PageBlobTier(6) }
 
 func (pbt PageBlobTier) String() string {
-	return EnumHelper{}.StringInteger(uint8(pbt), reflect.TypeOf(pbt))
+	return EnumHelper{}.String(pbt, reflect.TypeOf(pbt))
 }
 
 func (pbt *PageBlobTier) Parse(s string) error {
