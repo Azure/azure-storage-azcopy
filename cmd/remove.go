@@ -23,12 +23,14 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	//"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-	raw := rawCopyCmdArgs{}
+	// set the block-blob-tier and page-blob-tier to None since Parse fails for "" string
+	// while parsing block-blob and page-blob tier.
+	raw := rawCopyCmdArgs{blockBlobTier:"None", pageBlobTier:"None",}
 	// deleteCmd represents the delete command
 	var deleteCmd = &cobra.Command{
 		Use:        "remove",
@@ -45,7 +47,7 @@ func init() {
 				return fmt.Errorf("remove command supports delete of blob only. Passed %v as an argument", argsLocation)
 			}
 			raw.src = args[0]
-			raw.fromTo = common.EFromTo.BlobTrash().String()
+			raw.fromTo = "BlobTrash"
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

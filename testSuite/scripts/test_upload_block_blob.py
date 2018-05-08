@@ -1,5 +1,5 @@
 import utility as util
-
+import time
 # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
 def test_1kb_blob_upload():
     # Creating a single File Of size 1 KB
@@ -182,10 +182,7 @@ def test_set_block_blob_tier():
     if not result:
         print("uploading file with block-blob-tier set to Hot failed. ")
         return
-
     # execute azcopy validate order.
-    # added the source in validator as first argument.
-    # added the destination in validator as second argument.
     # added the expected blob-tier "Hot"
     result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-tier", "Hot").execute_azcopy_verify()
     if not result:
@@ -204,8 +201,6 @@ def test_set_block_blob_tier():
         print("uploading file with block-blob-tier set to Cool failed.")
         return
     # execute azcopy validate order.
-    # added the source in validator as first argument.
-    # added the destination in validator as second argument.
     # added the expected blob-tier "Cool"
     result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-tier", "Cool").execute_azcopy_verify()
     if not result:
@@ -223,10 +218,7 @@ def test_set_block_blob_tier():
     if not result:
         print("uploading file with block-blob-tier set to Cool failed.")
         return
-
     # execute azcopy validate order.
-    # added the source in validator as first argument.
-    # added the destination in validator as second argument.
     # added the expected blob-tier "Archive"
     result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("blob-tier", "Archive").execute_azcopy_verify()
     if not result:

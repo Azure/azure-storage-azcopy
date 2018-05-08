@@ -130,9 +130,9 @@ func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 func (jm *jobMgr) ReportJobPartDone() uint32 {
 	shouldLog := jm.ShouldLog(pipeline.LogInfo)
 	partsDone := atomic.AddUint32(&jm.partsDone, 1)
-	// If the last part is still awaited for other parts all still not complete,
+	// If the last part is still awaited or other parts all still not complete,
 	// JobPart 0 status is not changed.
-	if partsDone != jm.jobPartMgrs.Count() && !jm.finalPartOrdered {
+	if partsDone != jm.jobPartMgrs.Count() || !jm.finalPartOrdered {
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("is part of Job which %d total number of parts done ", partsDone))
 		}

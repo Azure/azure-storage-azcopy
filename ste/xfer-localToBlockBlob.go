@@ -371,7 +371,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if bbu.jptm.ShouldLog(pipeline.LogInfo) {
 				bbu.jptm.Log(pipeline.LogInfo, "completed successfully")
 			}
-			bbu.jptm.SetStatus(common.ETransferStatus.Success())
 			blockBlobTier, _ := bbu.jptm.BlobTiers()
 			if blockBlobTier != azblob.AccessTierNone {
 				ctxWithValue := context.WithValue(bbu.jptm.Context(), overwriteServiceVersionString, "false")
@@ -389,6 +388,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 					setTierResp.Response().Body.Close()
 				}
 			}
+			bbu.jptm.SetStatus(common.ETransferStatus.Success())
 			transferDone()
 		}
 	}
@@ -432,8 +432,6 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 			jptm.Log(pipeline.LogInfo, "put blob successful")
 		}
 
-		jptm.SetStatus(common.ETransferStatus.Success())
-
 		blockBlobTier, _ := jptm.BlobTiers()
 		if blockBlobTier != azblob.AccessTierNone {
 			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
@@ -450,6 +448,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 				setTierResp.Response().Body.Close()
 			}
 		}
+		jptm.SetStatus(common.ETransferStatus.Success())
 	}
 
 	// adding the bytes transferred to report the progress of transfer.

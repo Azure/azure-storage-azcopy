@@ -88,15 +88,10 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 				},
 					wg, waitUntilJobCompletion)
 			}
-
 			marker = listBlob.NextMarker
-			//err = e.dispatchPart(false)
-			if err != nil {
-				return err
-			}
 		}
 
-		err = e.dispatchPart(true)
+		err = e.dispatchFinalPart()
 		if err != nil {
 			return err
 		}
@@ -105,19 +100,15 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
 		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
 
-		// if the single blob exists, download it
+		// if the single blob exists, remove it
 		if err == nil {
 			e.addTransfer(common.CopyTransfer{
 				Source:     sourceUrl.String(),
 				SourceSize: blobProperties.ContentLength()},
 				wg, waitUntilJobCompletion)
 
-			//err = e.dispatchPart(false)
-			if err != nil {
-				return err
-			}
 		} else if err != nil && !isRecursiveOn {
-			return errors.New("cannot get source blob properties, make sure it exists, for virtual directory download please use --recursive")
+			return errors.New("cannot get source blob properties, make sure it exists, for virtual directory remove please use --recursive")
 		}
 
 		// if recursive happens to be turned on, then we will attempt to download a virtual directory
@@ -149,14 +140,9 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 				}
 
 				marker = listBlob.NextMarker
-				//err = e.dispatchPart(false)
-				if err != nil {
-					return err
-				}
 			}
 		}
-
-		err = e.dispatchPart(true)
+		err = e.dispatchFinalPart()
 		if err != nil {
 			return err
 		}
@@ -174,26 +160,18 @@ func (e *removeEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.Wa
 }
 
 // send the current list of transfer to the STE
-// todo: please check and use dispatchFinalPart if applicable
-func (e *removeEnumerator) dispatchPart(isFinalPart bool) error {
+func (e *removeEnumerator) dispatchFinalPart() error {
 	// if the job is empty, throw an error
-	if !isFinalPart && len(e.Transfers) == 0 {
-		return errors.New("cannot initiate empty job, please make sure source is not empty")
+	if len(e.Transfers) == 0 {
+		return errors.New("cannot initiate empty job, please make sure source is not empty or is a valid source")
 	}
 
-	e.IsFinalPart = isFinalPart
+	e.IsFinalPart = true
 	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
 	if !resp.JobStarted {
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
-	}
-
-	// empty the transfers and increment part number count
-	e.Transfers = []common.CopyTransfer{}
-	if !isFinalPart {
-		// part number needs to incremented only when the part is not the final part.
-		e.PartNum++
 	}
 	return nil
 }

@@ -115,7 +115,7 @@ func inferArgumentLocation(arg string) Location {
 		if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
 			// Is the argument a URL to blob storage?
 			switch host := strings.ToLower(u.Host); true {
-			case strings.Contains(host, ".blob.core.windows.net"):
+			case strings.Contains(host, ".blob"):
 				return ELocation.Blob()
 			case strings.Contains(host, ".file.core.windows.net"):
 				return ELocation.File()

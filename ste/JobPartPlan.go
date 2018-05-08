@@ -182,7 +182,7 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 	if !overWrite {
 		common.AtomicMorphInt32((*int32)(&jppt.atomicTransferStatus),
 			func(startVal int32) (val int32, morphResult interface{}) {
-				return common.Iffint32(startVal == int32(common.ETransferStatus.Failed()), startVal, int32(status)), nil
+				return common.Iffint32(startVal < 0, startVal, int32(status)), nil
 			})
 	} else {
 		(&jppt.atomicTransferStatus).AtomicStore(status)

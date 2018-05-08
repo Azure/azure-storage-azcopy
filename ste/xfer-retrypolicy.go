@@ -219,6 +219,10 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					// case, we'll never try the secondary again for this operation.
 					considerSecondary = false
 					action = "Retry: Secondary URL returned 404"
+				case response != nil && response.Response().StatusCode == http.StatusBadRequest:
+					// If the request failed with Bad Request, then there is no need to retry since
+					// the request will fail on the future retries as well.
+					action = "NoRetry: bad request error"
 				case err != nil:
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
 					// retry on all the network errors.

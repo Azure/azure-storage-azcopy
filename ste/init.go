@@ -368,12 +368,18 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		}
 	})
 
+	// get zero'th part of the job part plan.
+	jp0, ok := jm.JobPartMgr(0)
+	if !ok {
+		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
+	}
+
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
 	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred*100)/float64(totalBytesToTransfer), 4)
 	js.BytesOverWire = JobsAdmin.BytesOverWire()
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (js.TotalTransfers == js.TransfersFailed+js.TransfersCompleted) {
+	if (js.CompleteJobOrdered) && (jp0.Plan().JobStatus() == common.EJobStatus.Completed()) {
 		js.JobStatus = common.EJobStatus.Completed()
 	}
 
