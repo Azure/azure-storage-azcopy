@@ -20,7 +20,7 @@ func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
 
 func (c RpcCmd) String() string {
-	return EnumHelper{}.String(string(c), reflect.TypeOf(c))
+	return EnumHelper{}.String(c, reflect.TypeOf(c))
 }
 func (c RpcCmd) Pattern() string { return "/" + c.String() }
 

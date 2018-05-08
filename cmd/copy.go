@@ -533,8 +533,8 @@ Usage:
 
 	// options
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when uploading to Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "", "Upload block blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "", "Upload page blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")

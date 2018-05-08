@@ -73,7 +73,6 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		response.WriteHeader(http.StatusAccepted)
 		response.Write(payload)
 	}
-
 	http.HandleFunc(common.ERpcCmd.CopyJobPartOrder().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.CopyJobPartOrderRequest
