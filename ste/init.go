@@ -354,7 +354,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
 			case common.ETransferStatus.Failed(),
-				common.ETransferStatus.BlobTierFailure():
+				common.ETransferStatus.BlobTierFailure(),
+				common.ETransferStatus.BlobAlreadyExistsFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)

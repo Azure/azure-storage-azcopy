@@ -39,6 +39,7 @@ type JobPartPlanHeader struct {
 	JobID              common.JobID        // Job Part's JobID
 	PartNum            common.PartNumber   // Job Part's part number (0+)
 	IsFinalPart        bool                // True if this is the Job's last part; else false
+	ForceWrite         bool                // True if the existing blobs needs to be overwritten.
 	Priority           common.JobPriority  // The Job Part's priority
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
 	FromTo             common.FromTo       // The location of the transfer's source & destination

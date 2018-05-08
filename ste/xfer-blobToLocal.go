@@ -38,6 +38,7 @@ const maxRetryPerDownloadBody = 5
 
 func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
+	// step 1: get the source, destination info for the transfer.
 	info := jptm.Info()
 	u, _ := url.Parse(info.Source)
 	srcBlobURL := azblob.NewBlobURL(*u, p)
@@ -51,6 +52,24 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
+	}
+
+	// If the force Write flags is set to false
+	// then check the blob exists locally or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := os.Stat(info.Destination)
+		if err == nil{
+			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
+			}
+			// Mark the transfer as failed with BlobAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
+			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.ReportTransferDone()
+			return
+		}
 	}
 
 	// step 3: prep local file before download starts

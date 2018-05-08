@@ -139,6 +139,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		JobID:              order.JobID,
 		PartNum:            order.PartNum,
 		IsFinalPart:        order.IsFinalPart,
+		ForceWrite:         order.ForceWrite,
 		Priority:           order.Priority,
 		TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
 		FromTo:             order.FromTo,

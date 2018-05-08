@@ -40,6 +40,7 @@ type CopyJobPartOrderRequest struct {
 	JobID          JobID       // Guid - job identifier
 	PartNum        PartNumber  // part number of the job
 	IsFinalPart    bool        // to determine the final part for a specific job
+	ForceWrite     bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
 	Priority       JobPriority // priority of the task
 	FromTo         FromTo
 	Transfers      []CopyTransfer

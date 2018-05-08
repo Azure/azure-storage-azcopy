@@ -67,6 +67,37 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	u, _ := url.Parse(info.Destination)
 	blobUrl := azblob.NewBlobURL(*u, p)
 
+	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
+	if jptm.WasCanceled() {
+		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.ReportTransferDone()
+		return
+	}
+
+	// If the force Write flags is set to false
+	// then check the blob exists or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		blobProperties, err := blobUrl.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
+		if err == nil{
+			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
+			}
+			// Mark the transfer as failed with BlobAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
+			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.ReportTransferDone()
+
+			//closing the blobProperties response
+			if blobProperties.Response() != nil{
+				io.Copy(ioutil.Discard, blobProperties.Response().Body)
+				blobProperties.Response().Body.Close()
+			}
+			return
+		}
+	}
+
 	// step 2a: Open the Source File.
 	srcFile, err := os.Open(info.Source)
 	if err != nil {

@@ -69,6 +69,9 @@ type rawCopyCmdArgs struct {
 	recursive      bool
 	followSymlinks bool
 	withSnapshots  bool
+	// forceWrite flag is used to define the User behavior
+	// to overwrite the existing blobs or not.
+	forceWrite				 bool
 
 	// options from flags
 	blockSize                uint32
@@ -103,7 +106,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
-
+	cooked.forceWrite = raw.forceWrite
 	cooked.blockSize = raw.blockSize
 
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
@@ -139,6 +142,7 @@ type cookedCopyCmdArgs struct {
 	recursive      bool
 	followSymlinks bool
 	withSnapshots  bool
+	forceWrite     bool
 
 	// options from flags
 	blockSize                uint32
@@ -360,6 +364,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	jobPartOrder := common.CopyJobPartOrderRequest{
 		JobID:    common.NewJobID(),
 		FromTo:   cca.fromTo,
+		ForceWrite: cca.forceWrite,
 		Priority: common.EJobPriority.Normal(),
 		LogLevel: cca.logVerbosity,
 		BlobAttributes: common.BlobTransferAttributes{
@@ -530,6 +535,7 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "force", true, "Filter: Overwrite the existing blobs with flag is set to true")
 
 	// options
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when uploading to Azure Storage.")

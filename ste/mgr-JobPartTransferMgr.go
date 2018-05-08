@@ -22,6 +22,7 @@ type IJobPartTransferMgr interface {
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	StartJobXfer()
+	IsForceWriteTrue() bool
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
 	SetStatus(status common.TransferStatus)
 	SetNumberOfChunks(numChunks uint32)
@@ -80,6 +81,10 @@ func (jptm *jobPartTransferMgr) FromTo() common.FromTo {
 
 func (jptm *jobPartTransferMgr) StartJobXfer() {
 	jptm.jobPartMgr.StartJobXfer(jptm)
+}
+
+func (jptm *jobPartTransferMgr)IsForceWriteTrue() bool{
+	return jptm.jobPartMgr.IsForceWriteTrue()
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {

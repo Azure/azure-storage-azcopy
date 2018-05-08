@@ -22,6 +22,7 @@ type IJobPartMgr interface {
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
+	IsForceWriteTrue() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	AddToBytesTransferred(value int64) int64
 	AddToBytesToTransfer(value int64) int64
@@ -286,6 +287,10 @@ func (jpm *jobPartMgr) BytesTransferred() int64 {
 
 func (jpm *jobPartMgr) BytesToTransfer() int64 {
 	return atomic.LoadInt64(&jpm.totalBytesToTransfer)
+}
+
+func (jpm *jobPartMgr) IsForceWriteTrue() bool {
+	return jpm.Plan().ForceWrite
 }
 
 func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {

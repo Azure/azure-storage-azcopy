@@ -195,6 +195,8 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
+func (TransferStatus) BlobAlreadyExistsFailure() TransferStatus { return TransferStatus(-3) }
+
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
 }
