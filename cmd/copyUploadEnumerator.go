@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 

@@ -47,21 +47,7 @@ class Command(object):
     # this api is used to execute a azcopy copy command.
     # by default, command execute a upload command.
     # return azcopy console output on successful execution.
-    def execute_azcopy_copy_command_get_output(self, download=None):
-        if download is None:
-            # adding test_container url as a second argument.
-            self.add_arguments(test_container_url)
-        else:
-            # if the copy is to download from container, then container url needs to be added first.
-            # resource_sas is the sas of resource to be downloaded.
-            resource_sas = get_resource_sas(self.args[0])
-
-            # local_path is the location where resouce needs to be downloaded.
-            local_path = test_directory_path
-
-            # since reosource is added first, changing the position of resource_sas and local_path in args list.
-            self.args[0] = resource_sas
-            self.add_arguments(local_path)
+    def execute_azcopy_copy_command_get_output(self):
         return execute_azcopy_command_get_output(self.string())
 
     # api execute other azcopy commands like cancel, pause, resume or list.
