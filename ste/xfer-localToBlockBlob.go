@@ -161,8 +161,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		//If set tier fails, then cancelling the job.
 		_, pageBlobTier := jptm.BlobTiers()
 		if pageBlobTier != common.EPageBlobTier.None() {
-			//TODO: FOLLOW THE CONTEXT WITH VALUE PATTERN
-			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
+			// for blob tier, set the latest service version from sdk as service version in the context.
+			ctxWithValue := context.WithValue(jptm.Context(), serviceVersionKey, azblob.ServiceVersion)
 			_, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType())
 			if err != nil {
 				if jptm.ShouldLog(pipeline.LogInfo) {
@@ -372,7 +372,8 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 			blockBlobTier, _ := bbu.jptm.BlobTiers()
 			if blockBlobTier != common.EBlockBlobTier.None() {
-				ctxWithValue := context.WithValue(bbu.jptm.Context(), overwriteServiceVersionString, "false")
+				// for blob tier, set the latest service version from sdk as service version in the context.
+				ctxWithValue := context.WithValue(bbu.jptm.Context(), serviceVersionKey, azblob.ServiceVersion)
 				_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType())
 				if err != nil {
 					if bbu.jptm.ShouldLog(pipeline.LogError) {
@@ -425,8 +426,8 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 
 		blockBlobTier, _ := jptm.BlobTiers()
 		if blockBlobTier != common.EBlockBlobTier.None() {
-			//TODO: FOLLOW CONTEXT WITH VALUE PATTERN
-			ctxWithValue := context.WithValue(jptm.Context(), overwriteServiceVersionString, "false")
+			// for blob tier, set the latest service version from sdk as service version in the context.
+			ctxWithValue := context.WithValue(jptm.Context(), serviceVersionKey, azblob.ServiceVersion)
 			_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType())
 			if err != nil {
 				if jptm.ShouldLog(pipeline.LogError) {

@@ -15,7 +15,6 @@ import (
 
 var _ IJobPartMgr = &jobPartMgr{}
 
-const overwriteServiceVersionString = "overwrite-current-service-version"
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
@@ -42,8 +41,10 @@ type IJobPartMgr interface {
 func NewVersionPolicyFactory() pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			if value := ctx.Value(overwriteServiceVersionString); value != "false" {
-				request.Header.Set("x-ms-version", "2017-04-17")
+			// get the service api version value using the serviceVersionKey set in the context.
+			if value := ctx.Value(serviceVersionKey); value != nil {
+				serviceApiVersion := value.(string)
+				request.Header.Set("x-ms-version", serviceApiVersion)
 			}
 			resp, err := next.Do(ctx, request)
 			return resp, err
