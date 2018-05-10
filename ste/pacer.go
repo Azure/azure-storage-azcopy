@@ -35,6 +35,7 @@ import (
 type pacer struct {
 	bytesAvailable          int64
 	availableBytesPerPeriod int64
+	bytesTransferred		int64
 	lastUpdatedTimestamp    int64
 }
 
@@ -105,34 +106,51 @@ func (p *pacer) updateTargetRate(increase bool) {
 }
 
 // this struct wraps the ReadSeeker which contains the data to be sent over the network
-type requestBodyPacer struct {
-	requestBody io.ReadSeeker // Seeking is required to support retries
-	p           *pacer
+type bodyPacer struct {
+	body io.Reader // Seeking is required to support retries
+	p    *pacer
 }
 
-// get a ReadSeeker wrapper for the given request body, bound to the given pacer
+// newRequestBodyPacer wraps a response body to the given pacer to control the upload speed and
+// records the bytes transferred.
 func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &requestBodyPacer{requestBody: requestBody, p: p}
+	return &bodyPacer{body: requestBody, p: p}
+}
+
+// newResponseBodyPacer wraps a response body to the given pacer to control the download speed and
+// records the bytes transferred.
+func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer) io.ReadCloser {
+	if p == nil {
+		panic("pr must not be nil")
+	}
+	return &bodyPacer{body: responseBody, p: p}
 }
 
 // read blocks until tickets are obtained
-func (rbp *requestBodyPacer) Read(p []byte) (int, error) {
+func (rbp *bodyPacer) Read(p []byte) (int, error) {
 	rbp.p.requestRightToSend(int64(len(p)))
-	return rbp.requestBody.Read(p)
+	n , err := rbp.body.Read(p)
+	atomic.AddInt64(&rbp.p.bytesTransferred, int64(n))
+	return n,err
 }
 
-// no behavior change for seek
-func (rbp *requestBodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
-	return rbp.requestBody.Seek(offset, whence)
+// Seeking is required to support retries
+func (rbp *bodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
+	return rbp.body.(io.ReadSeeker).Seek(offset, whence)
 }
 
-// requestBodyPacer supports Close but the underlying stream may not; if it does, Close will close it.
-func (rbp *requestBodyPacer) Close() error {
-	if c, ok := rbp.requestBody.(io.Closer); ok {
+// bytesOverTheWire supports Close but the underlying stream may not; if it does, Close will close it.
+func (rbp *bodyPacer) Close() error {
+	if c, ok := rbp.body.(io.Closer); ok {
 		return c.Close()
 	}
 	return nil
+}
+
+// returns the total bytes transferred over the wire
+func (rbp *bodyPacer) BytesTransferred() int64 {
+	return atomic.LoadInt64(&rbp.p.bytesTransferred)
 }

@@ -29,7 +29,7 @@ type IJobPartMgr interface {
 	BytesTransferred() int64
 	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
-	BlobTiers() (azblob.AccessTierType, azblob.AccessTierType)
+	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//CancelJob()
 	Close()
 	common.ILogger
@@ -307,8 +307,8 @@ func (jpm *jobPartMgr) fileDstData(dataFileToXfer common.MMF) (headers azfile.Fi
 	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.fileMetadata
 }
 
-func (jpm *jobPartMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.AccessTierType) {
-	return jpm.blockBlobTier.ToAccessTierType(), jpm.pageBlobTier.ToAccessTierType()
+func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
+	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
 func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {

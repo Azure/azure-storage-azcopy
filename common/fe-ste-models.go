@@ -205,7 +205,7 @@ func (ts TransferStatus) DidFail() bool { return ts < 0 }
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }
 func (ts TransferStatus) String() string {
-	return EnumHelper{}.StringInteger(int32(ts), reflect.TypeOf(ts))
+	return EnumHelper{}.StringInteger(ts, reflect.TypeOf(ts))
 }
 func (ts *TransferStatus) Parse(s string) error {
 	val, err := EnumHelper{}.Parse(reflect.TypeOf(ts), s, false)
@@ -235,7 +235,7 @@ func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
 
 func (bbt BlockBlobTier) String() string {
-	return EnumHelper{}.String(bbt, reflect.TypeOf(bbt))
+	return EnumHelper{}.StringInteger(bbt, reflect.TypeOf(bbt))
 }
 
 func (bbt *BlockBlobTier) Parse(s string) error {

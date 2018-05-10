@@ -157,9 +157,12 @@ func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithout
 }
 
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
-	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
-	url.Path = "/" + containerName
-	return url
+	blobParts :=	azblob.NewBlobURLParts(url)
+	blobParts.BlobName = ""
+	return blobParts.URL()
+	//containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
+	//url.Path = "/" + containerName
+	//return url
 }
 
 func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string) {

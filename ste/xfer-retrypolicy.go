@@ -171,7 +171,7 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// Clone the original request to ensure that each try starts with the original (unmutated) request.
 				requestCopy := request.Copy()
 
-				// For each try, seek to the beginning of the Body stream. We do this even for the 1st try because
+				// For each try, seek to the beginning of the body stream. We do this even for the 1st try because
 				// the stream may not be at offset 0 when we first get it and we want the same behavior for the
 				// 1st try as for additional tries.
 				if err = requestCopy.RewindBody(); err != nil {
@@ -201,30 +201,30 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 
 				// Set the time for this particular retry operation and then Do the operation.
 				tryCtx, tryCancel := context.WithTimeout(ctx, time.Second*time.Duration(timeout))
-				//requestCopy.Body = &deadlineExceededReadCloser{r: requestCopy.Request.Body}
+				//requestCopy.body = &deadlineExceededReadCloser{r: requestCopy.Request.body}
 				response, err = next.Do(tryCtx, requestCopy) // Make the request
 				/*err = improveDeadlineExceeded(err)
 				if err == nil {
-					response.Response().Body = &deadlineExceededReadCloser{r: response.Response().Body}
+					response.Response().body = &deadlineExceededReadCloser{r: response.Response().body}
 				}*/
 				logf("Err=%v, response=%v\n", err, response)
 
 				action := "" // This MUST get changed within the switch code below
 				switch {
-				case ctx.Err() != nil:
-					action = "NoRetry: Op timeout"
+				case err == nil:
+					action = "NoRetry: successful HTTP request" // no error
+
 				case !tryingPrimary && response != nil && response.Response().StatusCode == http.StatusNotFound:
 					// If attempt was against the secondary & it returned a StatusNotFound (404), then
 					// the resource was not found. This may be due to replication delay. So, in this
 					// case, we'll never try the secondary again for this operation.
 					considerSecondary = false
 					action = "Retry: Secondary URL returned 404"
-				case response != nil && (response.Response().StatusCode == http.StatusBadRequest ||
-										response.Response().StatusCode == http.StatusNotFound):
-					// If the request failed with Bad Request, then there is no need to retry since
-					// the request will fail on the future retries as well.
-					action = "NoRetry: expected error"
-				case err != nil:
+
+				case ctx.Err() != nil:
+					action = "NoRetry: Op timeout"
+
+				case err != nil && response == nil:
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
 					// retry on all the network errors.
 					// zc_policy_retry perform the retries on Temporary and Timeout Errors only.
@@ -235,6 +235,14 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					} else {
 						action = "NoRetry: unrecognized error"
 					}
+
+				case err != nil && response != nil: // This case if for scenarios when there is error and valid http response.
+					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
+						action = "Retry: net.Error and Temporary() or Timeout()"
+					} else {
+						action = "NoRetry: unrecognized error"
+					}
+
 				default:
 					action = "NoRetry: successful HTTP request" // no error
 				}
@@ -246,8 +254,8 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						tryCancel() // If we're returning an error, cancel this current/last per-retry timeout context
 					} else {
 						// TODO: Right now, we've decided to leak the per-try Context until the user's Context is canceled.
-						// Another option is that we wrap the last per-try context in a body and overwrite the Response's Body field with our wrapper.
-						// So, when the user closes the Body, the our per-try context gets closed too.
+						// Another option is that we wrap the last per-try context in a body and overwrite the Response's body field with our wrapper.
+						// So, when the user closes the body, the our per-try context gets closed too.
 						// Another option, is that the Last Policy do this wrapping for a per-retry context (not for the user's context)
 						_ = tryCancel // So, for now, we don't call cancel: cancel()
 					}

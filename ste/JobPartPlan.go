@@ -183,6 +183,8 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 	if !overWrite {
 		common.AtomicMorphInt32((*int32)(&jppt.atomicTransferStatus),
 			func(startVal int32) (val int32, morphResult interface{}) {
+				// start value < 0 means that transfer status is already a failed value.
+				// If current transfer status has already failed value, then it will not be changed.
 				return common.Iffint32(startVal < 0, startVal, int32(status)), nil
 			})
 	} else {

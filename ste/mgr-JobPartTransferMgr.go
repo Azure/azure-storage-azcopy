@@ -18,7 +18,7 @@ type IJobPartTransferMgr interface {
 	BlobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
-	BlobTiers() (azblob.AccessTierType, azblob.AccessTierType)
+	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	StartJobXfer()
@@ -137,7 +137,7 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier, pageBlobTier azblob.AccessTierType) {
+func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jptm.jobPartMgr.BlobTiers()
 }
 

@@ -14,12 +14,13 @@ import (
 func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	info := jptm.Info()
-	// Get the source blob url of blob to dele
+	// Get the source blob url of blob to delete
 	u, _ := url.Parse(info.Source)
 	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
+		//TODO: BDW
 		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
@@ -39,11 +40,12 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 			jptm.Log(pipeline.LogInfo, msg)
 		}
 		jptm.SetStatus(status)
+		//TODO: BDW
 		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 	}
 
-	deleteResp, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 	if err != nil {
 		if err.(azblob.StorageError) != nil {
 			if err.(azblob.StorageError).Response().StatusCode == http.StatusNotFound {
@@ -54,9 +56,5 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 		}
 	} else {
 		transferDone(common.ETransferStatus.Success(), nil)
-		if deleteResp.Response() != nil {
-			io.Copy(ioutil.Discard, deleteResp.Response().Body)
-			deleteResp.Response().Body.Close()
-		}
 	}
 }
