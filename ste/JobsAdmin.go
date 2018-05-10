@@ -35,14 +35,6 @@ import (
 
 var JobsAdminInitialized = make(chan bool, 1)
 
-type ServiceVersionKey string
-
-// serviceVersionKey is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
-var serviceVersionKey = ServiceVersionKey("serviceApiVersionString")
-
-// defaultServiceApiVersion is the default value of service api version that is set as value to the serviceVersionKey in every Job's context.
-const defaultServiceApiVersion = "2017-04-17"
-
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
 var JobsAdmin interface {
 	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName
@@ -102,8 +94,8 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 			suicideCh:        suicideCh,
 		},
 	}
-	// create new context with the defaultService api version set as value to ServiceVersionKey in the app context.
-	ja.appCtx = context.WithValue(ja.appCtx, serviceVersionKey, defaultServiceApiVersion)
+	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
+	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, defaultServiceApiVersion)
 
 	JobsAdmin = ja
 	// Spin up the desired number of executionEngine workers to process transfers/chunks

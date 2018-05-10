@@ -34,6 +34,14 @@ type IJobPartMgr interface {
 	common.ILogger
 }
 
+type serviceAPIVersionOverride struct {}
+
+// ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
+var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
+
+// defaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
+const defaultServiceApiVersion = "2017-04-17"
+
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
 // If the context has key overwrite-current-version set to false, then x-ms-version in
@@ -41,10 +49,9 @@ type IJobPartMgr interface {
 func NewVersionPolicyFactory() pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
-			// get the service api version value using the serviceVersionKey set in the context.
-			if value := ctx.Value(serviceVersionKey); value != nil {
-				serviceApiVersion := value.(string)
-				request.Header.Set("x-ms-version", serviceApiVersion)
+			// get the service api version value using the ServiceAPIVersionOverride set in the context.
+			if value := ctx.Value(ServiceAPIVersionOverride); value != nil {
+				request.Header.Set("x-ms-version", value.(string))
 			}
 			resp, err := next.Do(ctx, request)
 			return resp, err
