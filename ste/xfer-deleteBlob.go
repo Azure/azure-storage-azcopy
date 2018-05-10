@@ -5,8 +5,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 )
@@ -20,8 +18,7 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		//TODO: BDW
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -40,8 +37,7 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 			jptm.Log(pipeline.LogInfo, msg)
 		}
 		jptm.SetStatus(status)
-		//TODO: BDW
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 	}
 

@@ -29,8 +29,7 @@ type IJobPartTransferMgr interface {
 	ReportTransferDone() uint32
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
-	AddToBytesTransferred(value int64) int64
-	AddToBytesOverWire(value uint64)
+	AddToBytesDone(value int64) int64
 	Cancel()
 	WasCanceled() bool
 	common.ILogger
@@ -119,12 +118,8 @@ func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer common.MMF) (headers 
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(dataFileToXfer)
 }
 
-func (jptm *jobPartTransferMgr) AddToBytesTransferred(value int64) int64 {
-	return jptm.jobPartMgr.AddToBytesTransferred(value)
-}
-
-func (jptm *jobPartTransferMgr) AddToBytesOverWire(value uint64) {
-	JobsAdmin.AddToBytesOverWire(value)
+func (jptm *jobPartTransferMgr) AddToBytesDone(value int64) int64 {
+	return jptm.jobPartMgr.AddToBytesDone(value)
 }
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.

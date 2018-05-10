@@ -52,15 +52,12 @@ var JobsAdmin interface {
 	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
 	ResurrectJobParts()
 
-	// adds given value to the bytesOverWire.
-	AddToBytesOverWire(value uint64)
-
 	// AppPathFolder returns the Azcopy application path folder.
 	// JobPartPlanFile will be created inside this folder.
 	AppPathFolder() string
 
 	// returns the current value of bytesOverWire.
-	BytesOverWire() uint64
+	BytesOverWire() int64
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -251,12 +248,8 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 	}
 }
 
-func (ja *jobsAdmin) AddToBytesOverWire(value uint64) {
-	atomic.AddUint64(&ja.bytesOverWire, value)
-}
-
-func (ja *jobsAdmin) BytesOverWire() uint64 {
-	return atomic.LoadUint64(&ja.bytesOverWire)
+func (ja *jobsAdmin) BytesOverWire() int64 {
+	return atomic.LoadInt64(&ja.pacer.bytesTransferred)
 }
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile

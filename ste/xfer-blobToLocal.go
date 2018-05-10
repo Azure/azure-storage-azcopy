@@ -31,11 +31,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"bytes"
 )
-
-//TODO does this belong here? should it be configurable
-const maxRetryPerDownloadBody = 5
 
 func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
@@ -50,7 +46,7 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -67,7 +63,7 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 			}
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
-			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -171,7 +167,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
-			jptm.AddToBytesTransferred(adjustedChunkSize)
+			jptm.AddToBytesDone(adjustedChunkSize)
 			lastChunk, _ := jptm.ReportChunkDone()
 			if lastChunk {
 				if jptm.ShouldLog(pipeline.LogInfo) {
@@ -190,8 +186,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 		if jptm.WasCanceled() {
 			chunkDone()
 		} else {
-			// step 1: adding the chunks size to bytesOverWire and perform get
-			jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
+			// Step 1: Download blob from start Index till startIndex + adjustedChunkSize
 			get, err := transferBlobURL.Download(jptm.Context(), startIndex, adjustedChunkSize, azblob.BlobAccessConditions{}, false)
 			if err != nil {
 				if !jptm.WasCanceled() {
@@ -205,7 +200,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				return
 			}
 			// step 2: write the body into the memory mapped file directly
-			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: maxRetryPerDownloadBody})
+			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body = newResponseBodyPacer(body, p)
 			_, err = io.ReadFull(body, destinationMMF[startIndex:startIndex+adjustedChunkSize])
 			io.Copy(ioutil.Discard, body)
@@ -223,7 +218,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				return
 			}
 
-			jptm.AddToBytesTransferred(adjustedChunkSize)
+			jptm.AddToBytesDone(adjustedChunkSize)
 
 			lastChunk, _ := jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk

@@ -109,6 +109,7 @@ func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 	// waiting for signals from either cancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
+	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
 		case <-cancelChannel:
@@ -116,7 +117,7 @@ func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			cookedCancelCmdArgs{jobID: jobID}.process()
 			os.Exit(1)
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, startTime, false)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
 
 			// happy ending to the front end
 			if jobStatus == common.EJobStatus.Completed() {

@@ -28,8 +28,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
@@ -69,7 +67,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -78,7 +76,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	// then check the blob exists or not.
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
-		blobProperties, err := blobUrl.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
+		_, err := blobUrl.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
 		if err == nil{
 			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -86,15 +84,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			}
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
-			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
-
-			//TODO: REMOVE AND RUN TEST BEFORE CHECKING IN.
-			//closing the blobProperties response
-			if blobProperties.Response() != nil{
-				io.Copy(ioutil.Discard, blobProperties.Response().Body)
-				blobProperties.Response().Body.Close()
-			}
 			return
 		}
 	}
@@ -105,9 +96,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		if jptm.ShouldLog(pipeline.LogInfo) {
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %s", info.SourceSize))
 		}
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		//TODO: REMOVE THIS ASAP
-		jptm.AddToBytesTransferred(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -122,21 +112,14 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("error memory mapping the source file %s. Failed with error %s", srcFile.Name(), err.Error()))
 			}
-			srcFile.Close()
 			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
 	}
 
-	// step 3.a: if blob size is smaller than chunk size and it is not a vhd file
-	// we should do a put blob instead of chunk up the file
-	//TODO: shuffle condition to use endswith just once.
-	if !EndsWith(info.Source, ".vhd") && (blobSize == 0 || blobSize <= chunkSize) {
-		PutBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl, pacer)
-		return
-	} else if EndsWith(info.Source, ".vhd") && (blobSize % azblob.PageBlobPageBytes == 0) {
+	if EndsWith(info.Source, ".vhd") && (blobSize % azblob.PageBlobPageBytes == 0) {
 		// step 3.b: If the Source is vhd file and its size is multiple of 512,
 		// then upload the blob as a pageBlob.
 		pageBlobUrl := blobUrl.ToPageBlobURL()
@@ -152,9 +135,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
 		// Create Page Blob of the source size
-		//TODO: BDW
-		jptm.AddToBytesOverWire(uint64(blobSize))
-
 		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
 			0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
@@ -228,6 +208,11 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			// schedule the chunk job/msg
 			jptm.ScheduleChunks(pbu.pageBlobUploadFunc(startIndex, adjustedPageSize))
 		}
+	} else if blobSize == 0 || blobSize <= chunkSize {
+		// step 3.b: if blob size is smaller than chunk size and it is not a vhd file
+		// we should do a put blob instead of chunk up the file
+		PutBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
+		return
 	} else {
 		// step 3.c: If the source is not a vhd and size is greater than chunk Size,
 		// then uploading the source as block Blob.
@@ -292,7 +277,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		if bbu.jptm.WasCanceled() {
 			if bbu.jptm.ShouldLog(pipeline.LogInfo) {
 				bbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
-				bbu.jptm.AddToBytesTransferred(adjustedChunkSize)
+				bbu.jptm.AddToBytesDone(adjustedChunkSize)
 			}
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
@@ -309,10 +294,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 		// step 2: save the block ID into the list of block IDs
 		(bbu.blockIds)[chunkId] = encodedBlockId
-
-		// adding the adjustedChunkSize to bytesOverWire for throughput.
-		//todo: bdw
-		bbu.jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
 
 		// step 3: perform put block
 		blockBlobUrl := bbu.blobURL.ToBlockBlobURL()
@@ -337,9 +318,9 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
+
 			//adding the chunk size to the bytes transferred to report the progress.
-			//TODO: BDW
-			bbu.jptm.AddToBytesTransferred(adjustedChunkSize)
+			bbu.jptm.AddToBytesDone(adjustedChunkSize)
 
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
@@ -352,8 +333,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		}
 
 		//adding the chunk size to the bytes transferred to report the progress.
-		//TODO: BDW
-		bbu.jptm.AddToBytesTransferred(adjustedChunkSize)
+		bbu.jptm.AddToBytesDone(adjustedChunkSize)
 
 		// step 4: check if this is the last chunk
 		if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
@@ -372,8 +352,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			// fetching the blob http headers with content-type, content-encoding attributes
 			// fetching the metadata passed with the JobPartOrder
 			blobHttpHeader, metaData := bbu.jptm.BlobDstData(bbu.srcMmf)
-			//TODO: BDW
-			bbu.jptm.AddToBytesOverWire(uint64(len(blockId) * len(bbu.blockIds)))
 
 			// commit the blocks.
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
@@ -417,18 +395,14 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	// Get blob http headers and metadata.
 	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
-	var uploadBlobResp *azblob.BlockBlobsUploadResponse
 	var err error
 
-	// add blobSize to bytesOverWire.
-	//TODO: BDW
-	jptm.AddToBytesOverWire(uint64(jptm.Info().SourceSize))
 	// take care of empty blobs
 	if jptm.Info().SourceSize == 0 {
-		uploadBlobResp, err = blockBlobUrl.Upload(jptm.Context(), nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		_, err = blockBlobUrl.Upload(jptm.Context(), nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	} else {
 		body := newRequestBodyPacer(bytes.NewReader(srcMmf), pacer)
-		uploadBlobResp, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		_, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	}
 
 	// if the put blob is a failure, updating the transfer status to failed
@@ -466,7 +440,8 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	}
 
 	// adding the bytes transferred to report the progress of transfer.
-	jptm.AddToBytesTransferred(jptm.Info().SourceSize)
+	jptm.AddToBytesDone(jptm.Info().SourceSize)
+
 	// updating number of transfers done for job part order
 	jptm.ReportTransferDone()
 
@@ -492,8 +467,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		pageDone := func() {
 			// adding the page size to the bytes transferred.
-			//TODO: BDW
-			pbu.jptm.AddToBytesTransferred(calculatedPageSize)
+			pbu.jptm.AddToBytesDone(calculatedPageSize)
 			if lastPage, _ := pbu.jptm.ReportChunkDone(); lastPage {
 				if pbu.jptm.ShouldLog(pipeline.LogInfo) {
 					pbu.jptm.Log(pipeline.LogInfo,
@@ -548,9 +522,6 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 				return
 			}
 
-			//adding calculatedPageSize to bytesOverWire for throughput.
-			//TODO: BDW
-			pbu.jptm.AddToBytesOverWire(uint64(calculatedPageSize))
 			body := newRequestBodyPacer(bytes.NewReader(pageBytes), pbu.pacer)
 			pageBlobUrl := pbu.blobUrl.ToPageBlobURL()
 			_, err := pageBlobUrl.UploadPages(pbu.jptm.Context(), startPage, body, azblob.BlobAccessConditions{})

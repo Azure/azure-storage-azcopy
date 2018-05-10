@@ -340,7 +340,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 
 	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
 		totalBytesToTransfer += jpm.BytesToTransfer()
-		totalBytesTransferred += jpm.BytesTransferred()
+		totalBytesTransferred += jpm.BytesDone()
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalTransfers += jpp.NumTransfers
@@ -377,13 +377,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
 	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred*100)/float64(totalBytesToTransfer), 4)
-	js.BytesOverWire = JobsAdmin.BytesOverWire()
+	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
 	if (js.CompleteJobOrdered) && (jp0.Plan().JobStatus() == common.EJobStatus.Completed()) {
 		js.JobStatus = common.EJobStatus.Completed()
 	}
-
 	return js
 }
 

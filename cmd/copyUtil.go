@@ -157,12 +157,12 @@ func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithout
 }
 
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
-	blobParts :=	azblob.NewBlobURLParts(url)
-	blobParts.BlobName = ""
-	return blobParts.URL()
-	//containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
-	//url.Path = "/" + containerName
-	//return url
+	//blobParts :=	azblob.NewBlobURLParts(url)
+	//blobParts.BlobName = ""
+	//return blobParts.URL()
+	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
+	url.Path = "/" + containerName
+	return url
 }
 
 func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string) {
@@ -268,7 +268,7 @@ func (util copyHandlerUtil) isBlobValid(bInfo azblob.Blob) bool {
 	return true
 }
 
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, outputJson bool) common.JobStatus {
+func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.JobStatus {
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
@@ -281,13 +281,11 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime time.Time, o
 		fmt.Println(string(jsonOutput))
 	} else {
 		fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
-		bytesInMb := float64(float64(summary.BytesOverWire) / float64(1024*1024))
-		timeElapsed := time.Since(startTime).Seconds()
-		throughPut := bytesInMb / timeElapsed
-		// If the time elapsed is 0, then throughput is set to 0.
-		if timeElapsed == 0 {
-			throughPut = 0
-		}
+		bytesInMb := float64(float64(summary.BytesOverWire - *bytesTransferredInLastInterval) / float64(1024*1024))
+		timeElapsed := time.Since(*startTime).Seconds()
+		*startTime = time.Now()
+		*bytesTransferredInLastInterval = summary.BytesOverWire
+		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb / timeElapsed, 0)
 		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
 			summary.JobProgressPercentage, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)

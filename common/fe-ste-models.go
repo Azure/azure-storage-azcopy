@@ -163,7 +163,7 @@ func (FromTo) PipeFile() FromTo  { return FromTo(8) }
 func (FromTo) BlobTrash() FromTo { return FromTo(9) }
 
 func (ft FromTo) String() string {
-	return EnumHelper{}.StringInteger(uint8(ft), reflect.TypeOf(ft))
+	return EnumHelper{}.StringInteger(ft, reflect.TypeOf(ft))
 }
 func (ft *FromTo) Parse(s string) error {
 	val, err := EnumHelper{}.Parse(reflect.TypeOf(ft), s, true)

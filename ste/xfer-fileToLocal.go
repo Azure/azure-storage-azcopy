@@ -46,7 +46,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -149,7 +149,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
-			jptm.AddToBytesTransferred(adjustedChunkSize)
+			jptm.AddToBytesDone(adjustedChunkSize)
 			lastChunk, _ := jptm.ReportChunkDone()
 			if lastChunk {
 				if jptm.ShouldLog(pipeline.LogInfo) {
@@ -168,8 +168,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 		if jptm.WasCanceled() {
 			chunkDone()
 		} else {
-			// step 1: adding the chunks size to bytesOverWire and perform get
-			jptm.AddToBytesOverWire(uint64(adjustedChunkSize))
+			// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 			get, err := transferFileURL.Download(jptm.Context(), startIndex, adjustedChunkSize, false)
 			if err != nil {
 				if !jptm.WasCanceled() {
@@ -201,7 +200,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				return
 			}
 
-			jptm.AddToBytesTransferred(adjustedChunkSize)
+			jptm.AddToBytesDone(adjustedChunkSize)
 
 			lastChunk, _ := jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk

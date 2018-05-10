@@ -24,9 +24,9 @@ type IJobPartMgr interface {
 	ReportTransferDone() uint32
 	IsForceWriteTrue() bool
 	ScheduleChunks(chunkFunc chunkFunc)
-	AddToBytesTransferred(value int64) int64
+	AddToBytesDone(value int64) int64
 	AddToBytesToTransfer(value int64) int64
-	BytesTransferred() int64
+	BytesDone() int64
 	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
@@ -130,8 +130,9 @@ type jobPartMgr struct {
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
 
-	// bytes transferred defines the number of bytes of a job part that are uploaded or downloaded successfully.
-	bytesTransferred int64
+	// bytes transferred defines the number of bytes of a job part that are uploaded / downloaded successfully or failed.
+	// bytesDone is used to represent the progress of Job more precisely.
+	bytesDone int64
 
 	// totalBytesToTransfer defines the total number of bytes of JobPart that needs to uploaded or downloaded.
 	// It is the sum of size of all the transfer of a job part.
@@ -191,7 +192,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone()                   // Don't schedule an already-completed/failed transfer
-			jpm.AddToBytesTransferred(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
+			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
 			continue
 		}
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
@@ -273,16 +274,16 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
-func (jpm *jobPartMgr) AddToBytesTransferred(value int64) int64 {
-	return atomic.AddInt64(&jpm.bytesTransferred, value)
+func (jpm *jobPartMgr) AddToBytesDone(value int64) int64 {
+	return atomic.AddInt64(&jpm.bytesDone, value)
 }
 
 func (jpm *jobPartMgr) AddToBytesToTransfer(value int64) int64 {
 	return atomic.AddInt64(&jpm.totalBytesToTransfer, value)
 }
 
-func (jpm *jobPartMgr) BytesTransferred() int64 {
-	return atomic.LoadInt64(&jpm.bytesTransferred)
+func (jpm *jobPartMgr) BytesDone() int64 {
+	return atomic.LoadInt64(&jpm.bytesDone)
 }
 
 func (jpm *jobPartMgr) BytesToTransfer() int64 {

@@ -58,7 +58,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %d", info.SourceSize))
 		}
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -68,7 +68,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error getting the source file Info of file %d", info.SourceSize))
 		}
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesTransferred(info.SourceSize)
+		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -83,7 +83,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 			srcFile.Close()
 			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.AddToBytesTransferred(info.SourceSize)
+			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -115,8 +115,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 
 	// 3b: Create Azure file with the source size.
-	jptm.AddToBytesOverWire(uint64(fileSize))
-
 	_, err = fileURL.Create(jptm.Context(), fileSize, fileHTTPHeaders, metaData)
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogInfo) {
@@ -166,7 +164,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		rangeDone := func() {
 			// adding the range size to the bytes transferred.
-			jptm.AddToBytesTransferred(pageSize)
+			jptm.AddToBytesDone(pageSize)
 			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
@@ -221,8 +219,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 				return
 			}
 
-			//adding pageSize to bytesOverWire for throughput.
-			jptm.AddToBytesOverWire(uint64(pageSize))
 			body := newRequestBodyPacer(bytes.NewReader(rangeBytes), pacer)
 			_, err := fileURL.UploadRange(jptm.Context(), startRange, body)
 			if err != nil {
