@@ -103,7 +103,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	defer srcFile.Close()
 
 	// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
-	// TODO: CHECK FOR ERROR WHEN MEMORY MAPPING 0 size FILE.
 	var srcMmf common.MMF
 	if blobSize > 0 {
 		// file needs to be memory mapped only when the file size is greater than 0.
@@ -146,14 +145,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			srcMmf.Unmap()
-			//TODO: CHECK IF WE CAN CLOSE THE HANDLE JUST AFTER MEMORY MAPPING IT.
-			err = srcFile.Close()
-			if err != nil {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
-				}
-			}
 			return
 		}
 
@@ -173,13 +164,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				jptm.ReportTransferDone()
 				srcMmf.Unmap()
-				err = srcFile.Close()
-				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("got an error while closing file % because of %s", srcFile.Name(), err.Error()))
-					}
-				}
 				return
 			}
 		}
