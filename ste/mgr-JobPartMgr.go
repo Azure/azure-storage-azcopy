@@ -254,6 +254,8 @@ func (jpm *jobPartMgr) createPipeline() {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
+		case common.EFromTo.FileTrash():
+			fallthrough
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system
 			fallthrough
 		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
