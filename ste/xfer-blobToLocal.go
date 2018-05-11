@@ -130,6 +130,8 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 			return
 		}
 
+		defer dstFile.Close()
+
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
 			dstFile.Close()
@@ -157,13 +159,13 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, srcBlobURL, blockIdCount, dstFile, dstMMF, startIndex, adjustedChunkSize, pacer))
+			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, srcBlobURL, blockIdCount, dstMMF, startIndex, adjustedChunkSize, pacer))
 			blockIdCount++
 		}
 	}
 }
 
-func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
+func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -175,12 +177,6 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				}
 				jptm.ReportTransferDone()
 				destinationMMF.Unmap()
-				err := destinationFile.Close()
-				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
-					}
-				}
 			}
 		}
 		if jptm.WasCanceled() {
@@ -234,24 +230,18 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				jptm.ReportTransferDone()
 
 				destinationMMF.Unmap()
-				err := destinationFile.Close()
-				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
-					}
-				}
 
 				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {
 					err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
 						if jptm.ShouldLog(pipeline.LogInfo) {
-							jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, destinationFile.Name()))
+							jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, jptm.Info().Destination))
 						}
 						return
 					}
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which successfully preserve the last modified time for destinaton %s", workerId, destinationFile.Name()))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which successfully preserve the last modified time for destinaton %s", workerId, jptm.Info().Destination))
 					}
 				}
 			}

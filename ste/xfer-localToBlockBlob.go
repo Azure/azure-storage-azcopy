@@ -36,7 +36,6 @@ import (
 
 type blockBlobUpload struct {
 	jptm     IJobPartTransferMgr
-	srcFile  *os.File
 	srcMmf   common.MMF
 	blobURL  azblob.BlobURL
 	pacer    *pacer
@@ -45,7 +44,6 @@ type blockBlobUpload struct {
 
 type pageBlobUpload struct {
 	jptm    IJobPartTransferMgr
-	srcFile *os.File
 	srcMmf  common.MMF
 	blobUrl azblob.BlobURL
 	pacer   *pacer
@@ -101,6 +99,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		jptm.ReportTransferDone()
 		return
 	}
+
+	defer srcFile.Close()
 
 	// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
 	// TODO: CHECK FOR ERROR WHEN MEMORY MAPPING 0 size FILE.
@@ -193,7 +193,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 		pbu := &pageBlobUpload{
 			jptm:    jptm,
-			srcFile: srcFile,
 			srcMmf:  srcMmf,
 			blobUrl: blobUrl,
 			pacer:   pacer}
@@ -211,7 +210,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	} else if blobSize == 0 || blobSize <= chunkSize {
 		// step 3.b: if blob size is smaller than chunk size and it is not a vhd file
 		// we should do a put blob instead of chunk up the file
-		PutBlobUploadFunc(jptm, srcFile, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
+		PutBlobUploadFunc(jptm, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
 		return
 	} else {
 		// step 3.c: If the source is not a vhd and size is greater than chunk Size,
@@ -233,7 +232,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// Each chunk uses these details which uploading the block.
 		bbu := &blockBlobUpload{
 			jptm:     jptm,
-			srcFile:  srcFile,
 			srcMmf:   srcMmf,
 			blobURL:  blobUrl,
 			pacer:    pacer,
@@ -264,14 +262,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		transferDone := func() {
 			bbu.jptm.ReportTransferDone()
 			bbu.srcMmf.Unmap()
-			err := bbu.srcFile.Close()
-			if err != nil {
-				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
-					bbu.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %v which failed to close the file because of following error %s",
-							workerId, err.Error()))
-				}
-			}
 		}
 
 		if bbu.jptm.WasCanceled() {
@@ -390,8 +380,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 	}
 }
 
-func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MMF,
-	blockBlobUrl azblob.BlockBlobURL, pacer *pacer) {
+func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl azblob.BlockBlobURL, pacer *pacer) {
 
 	// Get blob http headers and metadata.
 	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
@@ -446,18 +435,9 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common
 	// updating number of transfers done for job part order
 	jptm.ReportTransferDone()
 
-	// perform clean up for the case where blob size is not 0
+	// close the memory map
 	if jptm.Info().SourceSize != 0 {
-		//jptm.jobInfo.JobThroughPut.updateCurrentBytes(int64(localToBlockBlob.jptm.SourceSize))
-
 		srcMmf.Unmap()
-		err = srcFile.Close()
-		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("has worker which failed to close the file because of following error %s", err.Error()))
-			}
-		}
 	}
 }
 
@@ -477,13 +457,6 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 				pbu.jptm.SetStatus(common.ETransferStatus.Success())
 				pbu.jptm.ReportTransferDone()
 				pbu.srcMmf.Unmap()
-				err := pbu.srcFile.Close()
-				if err != nil {
-					if pbu.jptm.ShouldLog(pipeline.LogInfo) {
-						pbu.jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("got an error while closing file % because of %s", pbu.srcFile.Name(), err.Error()))
-					}
-				}
 			}
 		}
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 // XferRetryPolicy tells the pipeline what kind of retry policy to use. See the XferRetryPolicy* constants.
@@ -224,20 +225,20 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				case ctx.Err() != nil:
 					action = "NoRetry: Op timeout"
 
-				case err != nil && response == nil:
+				case err != nil :
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
 					// retry on all the network errors.
 					// zc_policy_retry perform the retries on Temporary and Timeout Errors only.
 					// some errors like 'connection reset by peer' or 'transport connection broken' does not implement the Temporary interface
 					// but they should be retried. So redefined the retry policy for azcopy to retry for such errors as well.
-					if _, ok := err.(net.Error); ok {
-						action = "Retry: net.Error and Temporary() or Timeout()"
-					} else {
-						action = "NoRetry: unrecognized error"
-					}
-
-				case err != nil && response != nil: // This case if for scenarios when there is error and valid http response.
-					if netErr, ok := err.(net.Error); ok && (netErr.Temporary() || netErr.Timeout()) {
+					if stErr, ok := err.(azblob.StorageError); ok {
+						// retry only in case of temporary storage errors.
+						if stErr.Temporary() {
+							action = "Retry: StorageError and Temporary()"
+						}else {
+							action = "NoRetry: expected storage error"
+						}
+					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error and Temporary() or Timeout()"
 					} else {
 						action = "NoRetry: unrecognized error"
