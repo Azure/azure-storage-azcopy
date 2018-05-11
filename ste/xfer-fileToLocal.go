@@ -51,6 +51,24 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		return
 	}
 
+	// If the force Write flags is set to false
+	// then check the file exists locally or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := os.Stat(info.Destination)
+		if err == nil{
+			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
+			}
+			// Mark the transfer as failed with FileAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
+			jptm.AddToBytesDone(info.SourceSize)
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// step 3: prep local file before download starts
 	if fileSize == 0 {
 		err := createEmptyFile(info.Destination)

@@ -62,6 +62,8 @@ func computeJobXfer(fromTo common.FromTo) newJobXfer {
 		return FileToLocal
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
 		return LocalToFile
+	case common.EFromTo.FileTrash():
+		return DeleteFilePrologue
 	}
 	panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
 }

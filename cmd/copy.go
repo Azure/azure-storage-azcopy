@@ -400,7 +400,11 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():
-		e := removeEnumerator(jobPartOrder)
+		e := removeBlobEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.FileTrash():
+		e := removeFileEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	}

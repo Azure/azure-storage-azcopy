@@ -43,12 +43,15 @@ func init() {
 			if len(args) != 1 {
 				return fmt.Errorf("remove command only takes 1 arguments. Passed %d arguments", len(args))
 			}
-			argsLocation := inferArgumentLocation(args[0])
-			if argsLocation != argsLocation.Blob() {
-				return fmt.Errorf("remove command supports delete of blob only. Passed %v as an argument", argsLocation)
-			}
 			raw.src = args[0]
-			raw.fromTo = common.EFromTo.BlobTrash().String()
+			srcLocationType := inferArgumentLocation(raw.src)
+			if srcLocationType == ELocation.Blob(){
+				raw.fromTo = common.EFromTo.BlobTrash().String()
+			}else if srcLocationType == ELocation.File(){
+				raw.fromTo = common.EFromTo.FileTrash().String()
+			}else {
+				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
+			}
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

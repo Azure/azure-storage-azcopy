@@ -7,14 +7,15 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/http"
 	"net/url"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
-func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	info := jptm.Info()
-	// Get the source blob url of blob to delete
+	// Get the source file url of file to delete
 	u, _ := url.Parse(info.Source)
-	srcBlobURL := azblob.NewBlobURL(*u, p)
+	srcFileUrl := azfile.NewFileURL(*u, p)
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -41,7 +42,8 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 		jptm.ReportTransferDone()
 	}
 
-	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+	// Delete the source file
+	_, err := srcFileUrl.Delete(jptm.Context())
 	if err != nil {
 		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
 		if err.(azblob.StorageError) != nil {

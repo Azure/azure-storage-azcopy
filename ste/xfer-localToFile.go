@@ -51,6 +51,31 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// TODO: remove the hard coded chunk size in case of pageblob or Azure file
 	chunkSize = common.DefaultAzureFileChunkSize
 
+	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
+	if jptm.WasCanceled() {
+		jptm.AddToBytesDone(info.SourceSize)
+		jptm.ReportTransferDone()
+		return
+	}
+
+	// If the force Write flags is set to false
+	// then check the file exists or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := fileURL.GetProperties(jptm.Context())
+		if err == nil{
+			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
+			}
+			// Mark the transfer as failed with FileAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
+			jptm.AddToBytesDone(info.SourceSize)
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// step 2: Map file upload before transferring chunks and get info from map file.
 	srcFile, err := os.Open(info.Source)
 	if err != nil {

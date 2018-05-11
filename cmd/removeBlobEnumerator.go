@@ -13,10 +13,10 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
-type removeEnumerator common.CopyJobPartOrderRequest
+type removeBlobEnumerator common.CopyJobPartOrderRequest
 
 // this function accepts a url (with or without *) to blobs for download and processes them
-func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
+func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 
@@ -154,13 +154,13 @@ func (e *removeEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool,
 }
 
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
-func (e *removeEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
+func (e *removeBlobEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
 }
 
 // send the current list of transfer to the STE
-func (e *removeEnumerator) dispatchFinalPart() error {
+func (e *removeBlobEnumerator) dispatchFinalPart() error {
 	// if the job is empty, throw an error
 	if len(e.Transfers) == 0 {
 		return errors.New("cannot initiate empty job, please make sure source is not empty or is a valid source")
@@ -176,6 +176,6 @@ func (e *removeEnumerator) dispatchFinalPart() error {
 	return nil
 }
 
-func (e *removeEnumerator) partNum() common.PartNumber {
+func (e *removeBlobEnumerator) partNum() common.PartNumber {
 	return e.PartNum
 }

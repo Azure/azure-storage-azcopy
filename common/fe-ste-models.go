@@ -161,6 +161,7 @@ func (FromTo) PipeBlob() FromTo  { return FromTo(6) }
 func (FromTo) FilePipe() FromTo  { return FromTo(7) }
 func (FromTo) PipeFile() FromTo  { return FromTo(8) }
 func (FromTo) BlobTrash() FromTo { return FromTo(9) }
+func (FromTo) FileTrash() FromTo { return FromTo(10) }
 
 func (ft FromTo) String() string {
 	return EnumHelper{}.StringInteger(ft, reflect.TypeOf(ft))
@@ -196,6 +197,8 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
 func (TransferStatus) BlobAlreadyExistsFailure() TransferStatus { return TransferStatus(-3) }
+
+func (TransferStatus) FileAlreadyExistsFailure() TransferStatus { return TransferStatus(-4) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
