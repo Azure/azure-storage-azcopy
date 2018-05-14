@@ -141,7 +141,7 @@ func (JobStatus) Paused() JobStatus     { return JobStatus(1) }
 func (JobStatus) Cancelled() JobStatus  { return JobStatus(2) }
 func (JobStatus) Completed() JobStatus  { return JobStatus(3) }
 func (js JobStatus) String() string {
-	return EnumHelper{}.StringInteger(uint32(js), reflect.TypeOf(js))
+	return EnumHelper{}.StringInteger(js, reflect.TypeOf(js))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
