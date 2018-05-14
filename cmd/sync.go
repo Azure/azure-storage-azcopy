@@ -101,8 +101,7 @@ func (cca cookedSyncCmdArgs) process() (err error) {
 }
 
 func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
-	// created a signal channel to receive the Interrupt and Kill signal send to OS
-	cancelChannel := make(chan os.Signal, 1)
+
 	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
 
