@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"fmt"
+	"strings"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,6 +81,37 @@ type Status uint32
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 type LogLevel byte
+
+func (ll *LogLevel) Parse(s string) error {
+	// converting string s to all lower case string
+	// to avoid case sensitiveness
+	s = strings.ToLower(s)
+	switch s {
+	case "none":
+		*ll = 0
+		return nil
+	case "fatal":
+		*ll = 1
+		return nil
+	case "error":
+		*ll = 2
+		return nil
+	case "panic":
+		*ll = 3
+		return nil
+	case "warning":
+		*ll = 4
+		return nil
+	case "info":
+		*ll = 5
+		return nil
+	case "debug":
+		*ll = 6
+		return  nil
+	default:
+		return fmt.Errorf("invaild log type %s passed. Azcopy supports none, fatal, error, panic, warning, info and debug log levels",s)
+	}
+}
 
 func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
 	// This assumes that pipeline's LogLevel values can fit in a byte (which they can)

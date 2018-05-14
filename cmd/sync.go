@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 	"os"
@@ -37,7 +36,7 @@ type syncCommandArguments struct {
 	recursive bool
 	// options from flags
 	blockSize    uint32
-	logVerbosity byte
+	logVerbosity string
 }
 
 // validates and transform raw input into cooked input
@@ -56,7 +55,10 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.blockSize = raw.blockSize
 
-	cooked.logVerbosity = common.LogLevel(raw.logVerbosity)
+	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil{
+		return cooked, err
+	}
 
 	cooked.recursive = raw.recursive
 
@@ -164,5 +166,5 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 100*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
-	syncCmd.PersistentFlags().Uint8Var(&raw.logVerbosity, "Logging", uint8(pipeline.LogWarning), "defines the log verbosity to be saved to log file")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 }
