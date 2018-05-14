@@ -33,8 +33,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/spf13/cobra"
@@ -85,7 +83,7 @@ type rawCopyCmdArgs struct {
 	background               bool
 	outputJson               bool
 	acl                      string
-	logVerbosity             byte
+	logVerbosity             string
 }
 
 // validates and transform raw input into cooked input
@@ -117,6 +115,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	err = cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil{
+		return cooked, err
+	}
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -125,8 +127,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.background = raw.background
 	cooked.outputJson = raw.outputJson
 	cooked.acl = raw.acl
-	cooked.logVerbosity = common.LogLevel(raw.logVerbosity)
-
 	return cooked, nil
 }
 
@@ -553,5 +553,5 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().Uint8Var(&raw.logVerbosity, "Logging", uint8(pipeline.LogWarning), "defines the log verbosity to be saved to log file")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 }

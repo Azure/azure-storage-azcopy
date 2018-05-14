@@ -22,8 +22,6 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	//"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -70,6 +68,6 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when deleting from container.")
-	deleteCmd.PersistentFlags().Uint8Var(&raw.logVerbosity, "Logging", uint8(pipeline.LogWarning), "defines the log verbosity to be saved to log file")
+	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 	deleteCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 }
