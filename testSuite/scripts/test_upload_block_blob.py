@@ -267,7 +267,7 @@ def test_force_flag_set_to_false_upload():
     sub_dir_name = os.path.join(dir_name + "/sub_dir_force_flag_set_upload")
     sub_dir_n_files_path = util.create_test_n_files(1024, 20, sub_dir_name)
 
-    result = util.Command("copy").add_arguments(sub_dir_n_files_path).add_arguments(util.test_container_url). \
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
         add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
     if not result:
         print("test_force_flag_set_to_false_upload failed while uploading ", 20, "files in " + sub_dir_force_flag_set)
