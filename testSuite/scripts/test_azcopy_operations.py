@@ -9,7 +9,7 @@ def test_cancel_job():
     file_path = create_test_file(file_name, 1024*1024*1024)
 
     # execute the azcopy upload job in background.
-    output = Command("copy").add_arguments(file_path).add_flags("Logging", "5").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()
+    output = Command("copy").add_arguments(file_path).add_flags("Logging", "info").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()
     if output is None:
         print("error copy file ", file_name, " in background mode")
         print("test_cancel_job test failed")
@@ -41,7 +41,7 @@ def test_pause_resume_job_95Mb_file():
     file_path = create_test_file(file_name, 95*1024*1024)
 
     # execute azcopy file upload in background.
-    output = Command("copy").add_arguments(file_path).add_flags("Logging", "5").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()
+    output = Command("copy").add_arguments(file_path).add_flags("Logging", "info").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()
     if output is None:
         print("error copy file ", file_name, " in background mode")
         print("test_cancel_job test failed")
@@ -85,7 +85,7 @@ def test_pause_resume_job_200Mb_file():
     file_path = create_test_file(file_name, 200*1024*1024)
 
     # execute azcopy file upload in background.
-    output = Command("copy").add_arguments(file_path).add_flags("Logging", "5").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()
+    output = Command("copy").add_arguments(file_path).add_flags("Logging", "info").add_flags("recursive", "true").add_flags("background-op", "true").execute_azcopy_copy_command_get_output()
     if output is None:
         print("error copy file ", file_name, " in background mode")
         print("test_cancel_job test failed")
@@ -131,7 +131,7 @@ def test_remove_virtual_directory():
 
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "5").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
     if not result:
         print("test_remove_virtual_directory failed while uploading ", dir_n_files_path, " files to the container")
         return
