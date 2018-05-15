@@ -377,3 +377,43 @@ def get_suite_executable_name():
     if osType == "LINUX":
         return "testSuite"
     return ""
+
+# parseAzcopyOutput parses the Azcopy Output in JSON format to give the final Azcopy Output in JSON Format
+# Final Azcopy Output is the last JobSummary for the Job
+# Azcopy Output can have more than one Summary for the Job
+# parseAzcopyOutput returns the final JobSummary in JSON format.
+def parseAzcopyOutput(s):
+    count = 0
+    output = ""
+    final_output = ""
+    # Split the lines
+    lines = s.split('\n')
+    # Iterating through the output in reverse order since last summary has to be considered.
+    # Increment the count when line is "}"
+    # Reduce the count when line is "{"
+    # append the line to final output
+    # When the count is 0, it means the last Summary has been traversed
+    for line in reversed(lines):
+        # If the line is empty, then continue
+        if line == "":
+            continue
+        elif line is '}':
+            count = count + 1
+        elif line is "{":
+            count = count - 1
+        if count >= 0:
+            if len(output) > 0:
+                output = output + '\n' + line
+            else:
+                output = line
+        if count == 0:
+            break
+    lines = output.split('\n')
+    # Since the lines were iterated in reverse order revering them again and
+    # concatenating the lines to get the final JobSummary
+    for line in reversed(lines):
+        if len(final_output) > 0 :
+            final_output = final_output + '\n' + line
+        else:
+            final_output = line
+    return final_output

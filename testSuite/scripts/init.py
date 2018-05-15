@@ -8,7 +8,7 @@ import glob, os
 import configparser
 import platform
 
-def execute_user_scenario_1() :
+def execute_user_scenario_blob_1() :
     test_1kb_blob_upload()
     test_63mb_blob_upload()
     test_n_1kb_blob_upload(5)
@@ -162,7 +162,7 @@ def cleanup():
 def main():
     init()
     execute_user_scenario_azcopy_op()
-    execute_user_scenario_1()
+    execute_user_scenario_blob_1()
     #execute_user_scenario_2()
     #execute_user_scenario_file_1()
     #temp_adhoc_scenario()
