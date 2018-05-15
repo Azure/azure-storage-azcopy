@@ -28,8 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"fmt"
-	"strings"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,37 +78,28 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type LogLevel byte
+type LogLevel uint8
+
+var ELogLevel  = LogLevel(0)
+
+func (LogLevel) None() LogLevel { return LogLevel(0)}
+func (LogLevel) Fatal() LogLevel { return LogLevel(1)}
+func (LogLevel) Panic() LogLevel { return LogLevel(2)}
+func (LogLevel) Error() LogLevel { return LogLevel(3)}
+func (LogLevel) Warn() LogLevel { return LogLevel(4)}
+func (LogLevel) Info() LogLevel { return LogLevel(5)}
+func (LogLevel) Debug() LogLevel { return LogLevel(6)}
 
 func (ll *LogLevel) Parse(s string) error {
-	// converting string s to all lower case string
-	// to avoid case sensitiveness
-	s = strings.ToLower(s)
-	switch s {
-	case "none":
-		*ll = 0
-		return nil
-	case "fatal":
-		*ll = 1
-		return nil
-	case "error":
-		*ll = 2
-		return nil
-	case "panic":
-		*ll = 3
-		return nil
-	case "warning":
-		*ll = 4
-		return nil
-	case "info":
-		*ll = 5
-		return nil
-	case "debug":
-		*ll = 6
-		return  nil
-	default:
-		return fmt.Errorf("invaild log type %s passed. Azcopy supports none, fatal, error, panic, warning, info and debug log levels",s)
+	val, err := EnumHelper{}.Parse(reflect.TypeOf(ll), s, true)
+	if err == nil {
+		*ll = val.(LogLevel)
 	}
+	return err
+}
+
+func (ll LogLevel) String() string {
+	return EnumHelper{}.StringInteger(ll, reflect.TypeOf(ll))
 }
 
 func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
