@@ -37,6 +37,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"mime/multipart"
+	"math"
 )
 
 const (
@@ -156,13 +158,55 @@ func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithout
 	return
 }
 
+func (util copyHandlerUtil) firstIndexOfWildCard(name string) int{
+	sIndex := strings.Index(name, "*")
+	if sIndex == -1 {
+		sIndex = math.MaxInt64
+	}
+	qIndex := strings.Index(name, "?")
+	if qIndex == -1 {
+		qIndex = math.MaxInt64
+	}
+	obIndex := strings.Index(name, "[")
+	if obIndex == -1 {
+		obIndex = math.MaxInt64
+	}
+	cbIndex := strings.Index(name, "]")
+	if (cbIndex == -1){
+		cbIndex = math.MaxInt64
+	}
+	return math.Min(math.Min(math.Min(sIndex, qIndex), obIndex), cbIndex)
+}
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
-	//blobParts :=	azblob.NewBlobURLParts(url)
-	//blobParts.BlobName = ""
-	//return blobParts.URL()
-	containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
-	url.Path = "/" + containerName
-	return url
+	blobParts :=	azblob.NewBlobURLParts(url)
+	blobParts.BlobName = ""
+	return blobParts.URL()
+	//containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
+	//url.Path = "/" + containerName
+	//return url
+}
+
+func (util copyHandlerUtil) getContainerUrl(blobParts azblob.BlobURLParts) url.URL {
+	blobParts.BlobName = ""
+	return blobParts.URL()
+}
+
+func (util copyHandlerUtil) blobNameFromUrl(blobParts azblob.BlobURLParts) string {
+	return blobParts.BlobName
+}
+
+func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobURLParts, blobName string) string {
+	blobUrlParts.BlobName = blobName
+	blobUrl := blobUrlParts.URL()
+	return blobUrl.String()
+}
+
+func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string){
+	if parts.BlobName == "" {
+		return
+	}
+	blobName := parts.BlobName
+
 }
 
 func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string) {
@@ -177,7 +221,11 @@ func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl,
 }
 
 func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) string {
-	containerUrl.Path = containerUrl.Path + blobName
+	if containerUrl.Path[len(containerUrl.Path)-1] != '/'{
+		containerUrl.Path = containerUrl.Path + "/"+ blobName
+	}else{
+		containerUrl.Path = containerUrl.Path + blobName
+	}
 	return containerUrl.String()
 }
 
