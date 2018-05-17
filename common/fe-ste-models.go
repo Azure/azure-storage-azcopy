@@ -80,15 +80,15 @@ type Status uint32
 
 type LogLevel uint8
 
-var ELogLevel  = LogLevel(0)
+var ELogLevel  = LogLevel(pipeline.LogNone)
 
-func (LogLevel) None() LogLevel { return LogLevel(0)}
-func (LogLevel) Fatal() LogLevel { return LogLevel(1)}
-func (LogLevel) Panic() LogLevel { return LogLevel(2)}
-func (LogLevel) Error() LogLevel { return LogLevel(3)}
-func (LogLevel) Warn() LogLevel { return LogLevel(4)}
-func (LogLevel) Info() LogLevel { return LogLevel(5)}
-func (LogLevel) Debug() LogLevel { return LogLevel(6)}
+func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone)}
+func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal)}
+func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic)}
+func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError)}
+func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning)}
+func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo)}
+func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug)}
 
 func (ll *LogLevel) Parse(s string) error {
 	val, err := EnumHelper{}.Parse(reflect.TypeOf(ll), s, true)

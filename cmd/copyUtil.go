@@ -159,23 +159,7 @@ func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithout
 }
 
 func (util copyHandlerUtil) firstIndexOfWildCard(name string) int{
-	sIndex := strings.Index(name, "*")
-	if sIndex == -1 {
-		sIndex = math.MaxInt64
-	}
-	qIndex := strings.Index(name, "?")
-	if qIndex == -1 {
-		qIndex = math.MaxInt64
-	}
-	obIndex := strings.Index(name, "[")
-	if obIndex == -1 {
-		obIndex = math.MaxInt64
-	}
-	cbIndex := strings.Index(name, "]")
-	if (cbIndex == -1){
-		cbIndex = math.MaxInt64
-	}
-	return math.Min(math.Min(math.Min(sIndex, qIndex), obIndex), cbIndex)
+	return strings.Index(name, "*")
 }
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
 	blobParts :=	azblob.NewBlobURLParts(url)
@@ -203,10 +187,24 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 
 func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string){
 	if parts.BlobName == "" {
+		pattern = "*"
 		return
 	}
-	blobName := parts.BlobName
-
+	wildCardIndex := util.firstIndexOfWildCard(parts.BlobName)
+	if wildCardIndex < 0 { // no wildcard exists
+		prefix = parts.BlobName
+		// check for separator at the end of virtual directory
+		if prefix[len(prefix)-1] != '/'{
+			prefix += "/"
+		}
+		pattern = "*"
+		return
+	}
+	// wild card exists prefix will be the content of blob name till the wildcard index
+	//TODO: example add
+	prefix = parts.BlobName[:wildCardIndex]
+	pattern = parts.BlobName
+	return
 }
 
 func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string) {
@@ -303,17 +301,14 @@ func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string 
 	return bnwc
 }
 
-// isBlobValid verifies whether blob is valid or not.
+// doesBlobRepresentAFolder verifies whether blob is valid or not.
 // Used to handle special scenarios or conditions.
-func (util copyHandlerUtil) isBlobValid(bInfo azblob.Blob) bool {
+func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 	// this condition is to handle the WASB V1 directory structure.
 	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
 	// The empty directory has meta-data 'hdi_isfolder = true'
-	if bInfo.Metadata["hdi_isfolder"] == "true" {
-		return false
-	}
-	return true
+	return bInfo.Metadata["hdi_isfolder"] == "true"
 }
 
 func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.JobStatus {
