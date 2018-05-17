@@ -105,7 +105,7 @@ func init() {
 
 // ReadStandardInputToCancelJob is a function that reads the standard Input
 // If Input given is "cancel", it cancels the current job.
-func ReadStandardInputToCancelJob() {
+func ReadStandardInputToCancelJob(cancelChannel chan <- os.Signal) {
 	for {
 		consoleReader := bufio.NewReader(os.Stdin)
 		// ReadString reads input until the first occurrence of \n in the input,
