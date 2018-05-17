@@ -433,16 +433,16 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
 
-	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
+	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
 
-	// waiting for signals from either cancelChannel or timeOut Channel.
+	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
-		case <-cancelChannel:
+		case <-CancelChannel:
 			fmt.Println("Cancelling Job")
 			cookedCancelCmdArgs{jobID: jobID}.process()
 			os.Exit(1)

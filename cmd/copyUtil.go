@@ -37,8 +37,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"mime/multipart"
-	"math"
 )
 
 const (
