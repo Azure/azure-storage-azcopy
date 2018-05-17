@@ -33,7 +33,7 @@ import (
 // created a signal channel to receive the Interrupt and Kill signal send to OS
 // this channel is shared by copy, resume, sync and an independent go routine reading stdin
 // for cancel command
-var cancelChannel = make(chan os.Signal, 1)
+var CancelChannel = make(chan os.Signal, 1)
 
 type rawCancelCmdArgs struct {
 	jobID string
