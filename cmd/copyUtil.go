@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"path/filepath"
 )
 
 const (
@@ -112,7 +113,7 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string
 }
 
 // this function can tell if a path represents a directory (must exist)
-func (util copyHandlerUtil) isPathDirectory(pathString string) bool {
+func (util copyHandlerUtil) isPathALocalDirectory(pathString string) bool {
 	// check if path exists
 	destinationInfo, err := os.Stat(pathString)
 
@@ -125,7 +126,6 @@ func (util copyHandlerUtil) isPathDirectory(pathString string) bool {
 
 func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
 	var result string
-
 	// check if the directory path ends with the path separator
 	if strings.LastIndex(directoryPath, string(os.PathSeparator)) == len(directoryPath)-1 {
 		result = fmt.Sprintf("%s%s", directoryPath, fileName)
@@ -133,10 +133,10 @@ func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) st
 		result = fmt.Sprintf("%s%s%s", directoryPath, string(os.PathSeparator), fileName)
 	}
 
-	if os.PathSeparator == '\\' {
-		return strings.Replace(result, "/", "\\", -1)
-	}
-	return result
+	// blob name has "/" as Path Separator.
+	// To preserve the path in blob name on local disk, replace "/" with OS Path Separator
+	// For Example blob name = "blob-1/blob-2/blob-2" will be "blob-1\\blob-2\\blob-3" for windows
+	return strings.Replace(result, "/", string(os.PathSeparator), -1)
 }
 
 func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
@@ -183,23 +183,45 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 	return blobUrl.String()
 }
 
+func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName string) (bool){
+	matched, err := filepath.Match(pattern, blobName)
+	if err != nil {
+		panic(err)
+	}
+	return matched
+}
+
 func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string){
+	// If the blobName is empty, it means  the url provided is of a container,
+	// then all blobs inside containers needs to be included, so pattern is set to *
 	if parts.BlobName == "" {
 		pattern = "*"
 		return
 	}
+	// Check for wildcards and get the index of first wildcard
+	// If the wild card does not exists, then index returned is -1
 	wildCardIndex := util.firstIndexOfWildCard(parts.BlobName)
-	if wildCardIndex < 0 { // no wildcard exists
+	if wildCardIndex < 0 {
+		// If no wild card exits and url represents a virtual directory
+		// prefix is the path of virtual directory after the container.
+		// Example: https://<container-name>/vd-1?<signature>, prefix = /vd-1
+		// Example: https://<container-name>/vd-1/vd-2?<signature>, prefix = /vd-1/vd-2
 		prefix = parts.BlobName
 		// check for separator at the end of virtual directory
 		if prefix[len(prefix)-1] != '/'{
 			prefix += "/"
 		}
+		// since the url is a virtual directory, then all blobs inside the virtual directory
+		// needs to be downloaded, so the pattern is "*"
+		// pattern being "*", all blobNames when matched with "*" will be true
+		// so all blobs inside the virtual dir will be included
 		pattern = "*"
 		return
 	}
 	// wild card exists prefix will be the content of blob name till the wildcard index
-	//TODO: example add
+	// Example: https://<container-name>/vd-1/vd-2/abc*
+	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
+	// All the blob inside the container in virtual dir vd-2 that have the prefix "abc"
 	prefix = parts.BlobName[:wildCardIndex]
 	pattern = parts.BlobName
 	return

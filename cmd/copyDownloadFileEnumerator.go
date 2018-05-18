@@ -74,7 +74,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 
 	if doPrefixSearch { // Case 1: Do prefix search, the file pattern would be [AnyLetter]+\*
 		// The destination must be a directory, otherwise we don't know where to put the files.
-		if !util.isPathDirectory(destinationPath) {
+		if !util.isPathALocalDirectory(destinationPath) {
 			return fmt.Errorf("the destination must be an existing directory in this download scenario")
 		}
 
@@ -123,7 +123,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 
 		if fileURL != nil { // Single file.
 			var singleFileDestinationPath string
-			if util.isPathDirectory(destinationPath) {
+			if util.isPathALocalDirectory(destinationPath) {
 				singleFileDestinationPath = util.generateLocalPath(destinationPath, util.getPossibleFileNameFromURL(sourceURL.Path))
 			} else {
 				singleFileDestinationPath = destinationPath
@@ -141,7 +141,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 
 		} else { // Directory.
 			// The destination must be a directory, otherwise we don't know where to put the files.
-			if !util.isPathDirectory(destinationPath) {
+			if !util.isPathALocalDirectory(destinationPath) {
 				return fmt.Errorf("the destination must be an existing directory in this download scenario")
 			}
 

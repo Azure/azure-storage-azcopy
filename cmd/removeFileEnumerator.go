@@ -76,7 +76,7 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 
 	if doPrefixSearch { // Case 1: Do prefix search, the file pattern would be [AnyLetter]+\*
 		// The destination must be a directory, otherwise we don't know where to put the files.
-		if !util.isPathDirectory(destinationPath) {
+		if !util.isPathALocalDirectory(destinationPath) {
 			return fmt.Errorf("the destination must be an existing directory in this remove scenario")
 		}
 
