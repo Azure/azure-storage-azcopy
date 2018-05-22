@@ -184,6 +184,12 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 }
 
 func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName string) (bool){
+	// Since filePath.Match matches "*" with any sequence of non-separator characters
+	// it will return false when "*" matched with "a/b" on linux or "a\\b" on windows
+	// Hence hard-coded check added for "*"
+	if pattern == "*" {
+		return true
+	}
 	matched, err := filepath.Match(pattern, blobName)
 	if err != nil {
 		panic(err)
