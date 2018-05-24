@@ -34,6 +34,9 @@ def temp_adhoc_scenario() :
     test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
     #test_upload_download_1kb_file_wildcard_several_files()
 
+def execute_user_scenario_wildcards_op():
+    test_remove_files_with_Wildcard()
+
 def execute_user_scenario_azcopy_op():
     test_download_blob_exclude_flag()
     test_download_blob_include_flag()
@@ -165,11 +168,12 @@ def cleanup():
 
 def main():
     init()
+    execute_user_scenario_wildcards_op()
     execute_user_scenario_azcopy_op()
     execute_user_scenario_blob_1()
     execute_user_scenario_2()
     execute_user_scenario_file_1()
-    #temp_adhoc_scenario()
+    temp_adhoc_scenario()
     cleanup()
 
 main()

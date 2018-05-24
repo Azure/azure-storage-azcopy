@@ -343,6 +343,19 @@ def get_resource_sas(resource_name):
     resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
     return resource_sas
 
+def append_text_path_resource_sas(resource_sas, text):
+    # Splitting the resource sas to add the text to the SAS
+    url_parts = resource_sas.split("?")
+
+    # adding the text to the blob name of the resource sas
+    if url_parts[0].endswith("/"):
+        # If there is a separator at the end of blob name
+        # no need to append "/" before the text after the blob name
+        resource_sas = url_parts[0] + text + '?' + url_parts[1]
+    else:
+        resource_sas = url_parts[0] + "/" + text + '?' + url_parts[1]
+    return resource_sas
+
 # get_resource_sas_from_share return the shared access signature for the given resource
 # based on the share url.
 def get_resource_sas_from_share(resource_name):

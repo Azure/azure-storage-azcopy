@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -15,22 +14,22 @@ import (
 
 type removeBlobEnumerator common.CopyJobPartOrderRequest
 
-// this function accepts a url (with or without *) to blobs for download and processes them
 func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
+	// Create Pipeline to Get the Blob Properties or List Blob Segment
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(),
 		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-		})
+			Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
+		},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		}, nil)
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(sourceUrlString)
@@ -38,117 +37,83 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 		return errors.New("cannot parse source URL")
 	}
 
-	// get the container url to be used later for listing
-	literalContainerUrl := util.getContainerURLFromString(*sourceUrl)
-	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
+	// get the blob parts
+	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl)
 
-	// check if the given url is a container
-	if util.urlIsContainerOrShare(sourceUrl) {
-		return errors.New("cannot remove an entire container, use prefix match with a * at the end of path instead")
+	// First Check if source blob exists
+	// This check is in place to avoid listing of the blobs and matching the given blob against it
+	// For example given source is https://<container>/a?<query-params> and there exists other blobs aa and aab
+	// Listing the blobs with prefix /a will list other blob as well
+	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
+	blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+
+	// If the source blob exists, then queue transfer for deletion and return
+	// Example: https://<container>/<blob>?<query-params>
+	if err == nil {
+		e.addTransfer(common.CopyTransfer{
+			Source:           sourceUrl.String(),
+			SourceSize:       blobProperties.ContentLength(),
+		}, wg, waitUntilJobCompletion)
+		// only one transfer for this Job, dispatch the JobPart
+		err := e.dispatchFinalPart()
+		if err != nil{
+			return err
+		}
+		return nil
 	}
 
-	numOfStarInUrlPath := util.numOfStarInUrl(sourceUrl.Path)
-	if numOfStarInUrlPath == 1 { // prefix search
+	// save the container Url in order to list the blobs further
+	literalContainerUrl := util.getContainerUrl(blobUrlParts)
+	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
 
-		// the * must be at the end of the path
-		if strings.LastIndex(sourceUrl.Path, "*") != len(sourceUrl.Path)-1 {
-			return errors.New("the * in the source URL must be at the end of the path")
-		}
+	// searchPrefix is the used in listing blob inside a container
+	// all the blob listed should have the searchPrefix as the prefix
+	// blobNamePattern represents the regular expression which the blobName should Match
+	// For Example: src = https://<container-name>/user-1?<sig> searchPrefix = user-1/
+	// For Example: src = https://<container-name>/user-1/file*?<sig> searchPrefix = user-1/file
+	searchPrefix, blobNamePattern := util.searchPrefixFromUrl(blobUrlParts)
 
-		// get the search prefix to query the service
-		searchPrefix := util.getBlobNameFromURL(sourceUrl.Path)
-		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
+	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
+	// It means that source url provided is either a container or a virtual directory
+	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
+	if blobNamePattern == "*" && !isRecursiveOn{
+		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
+	}
 
-		closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
-
-		// strip away the leading / in the closest virtual directory
-		if len(closestVirtualDirectory) > 0 && closestVirtualDirectory[0:1] == "/" {
-			closestVirtualDirectory = closestVirtualDirectory[1:]
-		}
-
-		// perform a list blob
-		for marker := (azblob.Marker{}); marker.NotDone(); {
-			// look for all blobs that start with the prefix
-			listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
-				azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
-			if err != nil {
-				return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
-			}
-
-			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-			for _, blobInfo := range listBlob.Blobs.Blob {
-				blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
-				if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
-					continue
-				}
-
-				e.addTransfer(common.CopyTransfer{
-					Source:     util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-					SourceSize: *blobInfo.Properties.ContentLength,
-				},
-					wg, waitUntilJobCompletion)
-			}
-			marker = listBlob.NextMarker
-		}
-
-		err = e.dispatchFinalPart()
+	// perform a list blob with search prefix
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
+		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
+			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
 		if err != nil {
-			return err
+			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 		}
-	} else if numOfStarInUrlPath == 0 { // no prefix search
-		// see if source blob exists
-		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
 
-		// if the single blob exists, remove it
-		if err == nil {
+		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
+		for _, blobInfo := range listBlob.Blobs.Blob {
+			// If the blob represents a folder as per the conditions mentioned in the
+			// api doesBlobRepresentAFolder, then skip the blob.
+			if util.doesBlobRepresentAFolder(blobInfo) {
+				continue
+			}
+			// If the blobName doesn't matches the blob name pattern, then blob is not included
+			// queued for transfer
+			if !util.blobNameMatchesThePattern(blobNamePattern, blobInfo.Name){
+				continue
+			}
+
 			e.addTransfer(common.CopyTransfer{
-				Source:     sourceUrl.String(),
-				SourceSize: blobProperties.ContentLength()},
-				wg, waitUntilJobCompletion)
-
-		} else if err != nil && !isRecursiveOn {
-			return errors.New("cannot get source blob properties, make sure it exists, for virtual directory remove please use --recursive")
+				Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
+				SourceSize:       *blobInfo.Properties.ContentLength},
+				wg,
+				waitUntilJobCompletion)
 		}
-
-		// if recursive happens to be turned on, then we will attempt to download a virtual directory
-		if isRecursiveOn {
-			// recursively download everything that is under the given path, that is a virtual directory
-			searchPrefix := util.getBlobNameFromURL(sourceUrl.Path)
-
-			// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
-			if strings.LastIndex(searchPrefix, "/") != len(searchPrefix)-1 {
-				searchPrefix += "/"
-			}
-
-			// perform a list blob
-			for marker := (azblob.Marker{}); marker.NotDone(); {
-				// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-				listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
-					azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
-				if err != nil {
-					return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
-				}
-
-				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-				for _, blobInfo := range listBlob.Blobs.Blob {
-					e.addTransfer(common.CopyTransfer{
-						Source:     util.generateBlobUrl(literalContainerUrl, blobInfo.Name),
-						SourceSize: *blobInfo.Properties.ContentLength},
-						wg,
-						waitUntilJobCompletion)
-				}
-
-				marker = listBlob.NextMarker
-			}
-		}
-		err = e.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-
-	} else { // more than one * is not supported
-		return errors.New("only one * is allowed in the source URL")
+		marker = listBlob.NextMarker
+	}
+	// dispatch the JobPart as Final Part of the Job
+	err = e.dispatchFinalPart()
+	if err != nil {
+		return err
 	}
 	return nil
 }

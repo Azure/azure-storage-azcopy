@@ -59,8 +59,8 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-// newBlobPipeline creates a Pipeline using the specified credentials and options.
-func newBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+// NewBlobPipeline creates a Pipeline using the specified credentials and options.
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -275,7 +275,7 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-			jpm.pipeline = newBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+			jpm.pipeline = NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 				Log:       jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
 			},
