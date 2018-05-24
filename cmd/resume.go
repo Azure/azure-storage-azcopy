@@ -28,11 +28,14 @@ import (
 	"os"
 	"os/signal"
 	"time"
+	"strings"
 )
 
 func init() {
 	var commandLineInput = ""
-
+	var includeTransfer = ""
+	var excludeTransfer = ""
+	rawResumeJobCommand := common.ResumeJob{}
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
 		Use:        "resume",
@@ -51,10 +54,53 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			HandleResumeCommand(commandLineInput)
+			jobID, err := common.ParseJobID(commandLineInput)
+			if err != nil {
+				fmt.Println(fmt.Sprintf("error parsing the jobId %s. Failed with error %s", commandLineInput, err.Error()))
+				os.Exit(1)
+			}
+			rawResumeJobCommand.JobID = jobID
+			rawResumeJobCommand.IncludeTransfer = make(map[string]int)
+			rawResumeJobCommand.ExcludeTransfer = make(map[string]int)
+
+			// If the transfer has been provided with the include
+			// parse the transfer list
+			if len(includeTransfer) > 0 {
+				// Split the Include Transfer using ';'
+				transfers := strings.Split(includeTransfer, ";")
+				for index := range transfers {
+					if len(transfers[index]) == 0 {
+						// If the transfer provided is empty
+						// skip the transfer
+						// This is to handle the misplaced ';'
+						continue
+					}
+					rawResumeJobCommand.IncludeTransfer[transfers[index]] = index
+				}
+			}
+			// If the transfer has been provided with the exclude
+			// parse the transfer list
+			if len(excludeTransfer) > 0 {
+				// Split the Exclude Transfer using ';'
+				transfers := strings.Split(excludeTransfer, ";")
+				for index := range transfers {
+					if len(transfers[index]) == 0 {
+						// If the transfer provided is empty
+						// skip the transfer
+						// This is to handle the misplaced ';'
+						continue
+					}
+					rawResumeJobCommand.ExcludeTransfer[transfers[index]] = index
+				}
+			}
+			HandleResumeCommand(rawResumeJobCommand)
 		},
 	}
 	rootCmd.AddCommand(resumeCmd)
+	rootCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job " +
+		"More than one file are separated by ';'")
+	rootCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job " +
+		"More than one file are separated by ';'")
 }
 
 func waitUntilJobCompletion(jobID common.JobID) {
@@ -89,20 +135,13 @@ func waitUntilJobCompletion(jobID common.JobID) {
 
 // handles the resume command
 // dispatches the resume Job order to the storage engine
-func HandleResumeCommand(jobIdString string) {
-	// parsing the given JobId to validate its format correctness
-	jobID, err := common.ParseJobID(jobIdString)
-	if err != nil {
-		// If parsing gives an error, hence it is not a valid JobId format
-		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
-		return
-	}
+func HandleResumeCommand(resJobOrder common.ResumeJob) {
 
 	var resumeJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.ResumeJob(), jobID, &resumeJobResponse)
+	Rpc(common.ERpcCmd.ResumeJob(), resJobOrder, &resumeJobResponse)
 	if !resumeJobResponse.CancelledPauseResumed {
 		fmt.Println(resumeJobResponse.ErrorMsg)
 		return
 	}
-	waitUntilJobCompletion(jobID)
+	waitUntilJobCompletion(resJobOrder.JobID)
 }

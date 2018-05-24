@@ -36,6 +36,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 // upload related
@@ -63,6 +64,7 @@ type rawCopyCmdArgs struct {
 	//blobUrlForRedirection string
 
 	// filters from flags
+	include		   string
 	exclude        string
 	recursive      bool
 	followSymlinks bool
@@ -100,7 +102,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
-	cooked.exclude = raw.exclude
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
@@ -119,6 +120,39 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil{
 		return cooked, err
 	}
+
+	// initialize the include map which contains the list of files to be included
+	// parse the string passed in include flag
+	// more than one file are expected to be separated by ';'
+	cooked.include = make(map[string]int)
+	if len(raw.include) > 0 {
+		files := strings.Split(raw.include, ";")
+		for index := range files {
+			// If split of the include string leads to an empty string
+			// not include that string
+			if len(files[index]) == 0 {
+				continue
+			}
+			cooked.include[files[index]] = index
+		}
+	}
+
+	// initialize the exclude map which contains the list of files to be excluded
+	// parse the string passed in exclude flag
+	// more than one file are expected to be separated by ';'
+	cooked.exclude = make(map[string]int)
+	if len(raw.exclude) > 0 {
+		files := strings.Split(raw.exclude, ";")
+		for index := range files {
+			// If split of the include string leads to an empty string
+			// not include that string
+			if len(files[index]) == 0 {
+				continue
+			}
+			cooked.exclude[files[index]] = index
+		}
+	}
+
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -138,7 +172,8 @@ type cookedCopyCmdArgs struct {
 	fromTo common.FromTo
 
 	// filters from flags
-	exclude        string
+	include		   map[string]int
+	exclude        map[string]int
 	recursive      bool
 	followSymlinks bool
 	withSnapshots  bool
@@ -367,6 +402,8 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceWrite: cca.forceWrite,
 		Priority: common.EJobPriority.Normal(),
 		LogLevel: cca.logVerbosity,
+		Include:cca.include,
+		Exclude:cca.exclude,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
@@ -535,6 +572,8 @@ Usage:
 
 	// define the flags relevant to the cp command
 	// filters
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. " +
+									"Support use of *. More than one file are separated by ';'")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")

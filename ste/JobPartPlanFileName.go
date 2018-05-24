@@ -7,7 +7,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"os"
-	"path"
 	"reflect"
 	"strings"
 	"time"
@@ -17,7 +16,7 @@ import (
 type JobPartPlanFileName string
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	return path.Join(JobsAdmin.AppPathFolder(), "/"+string(*jppfn))
+	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), string(os.PathSeparator), string(*jppfn))
 }
 
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"

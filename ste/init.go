@@ -111,7 +111,7 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		})
 	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
+			var payload common.ResumeJob
 			deserialize(request, &payload)
 			serialize(ResumeJobOrder(payload), writer)
 		})
@@ -264,7 +264,8 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 //	}
 //	return jr
 //}
-func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
+func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeResponse {
+	jobID := resJobOrder.JobID
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
 	if !found {
 		return common.CancelPauseResumeResponse{
@@ -296,7 +297,7 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", jobID))
 		}
-		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
+		jm.ResumeTransfers(steCtx, resJobOrder.IncludeTransfer, resJobOrder.ExcludeTransfer) // Reschedule all job part's transfers
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",

@@ -196,6 +196,15 @@ def create_test_html_file(filename):
     f.close()
     return file_path
 
+# creates a dir with given inside test directory
+def create_test_dir(dir_name):
+    dir_path = os.path.join(test_directory_path, dir_name)
+    try:
+        os.mkdir(dir_path)
+    except:
+        raise Exception("error creating directory ", dir_path)
+    return dir_path
+
 # create_test_n_files creates given number of files for given size
 # inside directory inside test directory.
 # returns the path of directory in which n files are created.

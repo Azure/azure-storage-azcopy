@@ -89,10 +89,42 @@ func (copyHandlerUtil) generateObjectPath(destinationPath, fileName string) stri
 	return fmt.Sprintf("%s/%s", destinationPath, fileName)
 }
 
+// resourceShouldBeExcluded decides whether the file at given filePath should be excluded from the transfer or not.
+// First, checks whether filePath exists in the Map or not.
+// Then iterates through each entry of the map and check whether the given filePath matches the expression of any
+// entry of the map.
+func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[string]int, filePath string) bool{
+	// Check if the given filePath exists as an entry in the map
+	_, ok := excludedFilePathMap[filePath]
+	if ok {
+		return true
+	}
+	// Iterate through each entry of the Map
+	// Matches the given filePath against map entry pattern
+	// This is to handle case when user passed a sub-dir inside
+	// source to exclude. All the files inside that sub-directory
+	// should be excluded.
+	// For Example: src = C:\User\user-1 exclude = "dir1"
+	// Entry in Map = C:\User\user-1\dir1\* will match the filePath C:\User\user-1\dir1\file1.txt
+	for key, _ := range excludedFilePathMap {
+		matched, err := filepath.Match(key, filePath)
+		if err != nil {
+			panic(err)
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 // get relative path given a root path
 func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string) string {
 	// root path contains the entire absolute path to the root directory, so we need to take away everything except the root directory from filePath
 	// example: rootPath = "/dir1/dir2/dir3" filePath = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt" scrubAway="/dir1/dir2/"
+	if len(rootPath) == 0 {
+		return filePath
+	}
 
 	var scrubAway string
 	// test if root path finishes with a /, if yes, ignore it
@@ -181,6 +213,19 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 	blobUrlParts.BlobName = blobName
 	blobUrl := blobUrlParts.URL()
 	return blobUrl.String()
+}
+
+func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts, blobName string) (url.URL, string){
+	if blobUrlParts.BlobName == "" {
+		blobUrlParts.BlobName = blobName
+	}else {
+		if blobUrlParts.BlobName[len(blobUrlParts.BlobName)-1] == '/' {
+			blobUrlParts.BlobName += blobName
+		}else{
+			blobUrlParts.BlobName += "/" + blobName
+		}
+	}
+	return blobUrlParts.URL(), blobUrlParts.BlobName
 }
 
 func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName string) (bool){

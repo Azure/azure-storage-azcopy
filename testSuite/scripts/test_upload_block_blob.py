@@ -369,3 +369,189 @@ def test_force_flag_set_to_false_download():
         print("test_force_flag_set_to_false_download failed with difference in the number of failed and successful transfers")
         return
     print("test_force_flag_set_to_false_download successfully passed")
+
+# test_upload_block_blob_include_flag tests the include flag in the upload scenario
+def test_upload_block_blob_include_flag():
+    dir_name = "dir_include_flag_set_upload"
+    # create 10 files inside the directory
+    dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
+
+    # create sub-directory inside the  dir_include_flag_set_upload
+    sub_dir_name = os.path.join(dir_name, "sub_dir_include_flag_set_upload")
+    # create 10 files inside the sub-dir
+    sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
+
+    # uploading the directory with 2 files in the include flag.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info")\
+        .add_flags("include", "test101024_2.txt;test101024_3.txt").add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of successful transfer should be 2 and there should be not a failed transfer
+    if x.TransfersCompleted is not 2 and x.TransfersFailed is not 0 :
+        print("test_upload_block_blob_include_flag failed with difference in the number of failed and successful transfers with 2 files in include flag")
+        return
+
+    # uploading the directory with sub-dir in the include flag.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info") \
+        .add_flags("include", "sub_dir_include_flag_set_upload").add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of successful transfer should be 10 and there should be not failed transfer
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_upload_block_blob_include_flag failed with difference in the number of failed and successful transfers with sub-dir in include flag")
+        return
+    print("test_upload_block_blob_include_flag successfully passed")
+
+# test_upload_block_blob_exclude_flag tests the exclude flag in the upload scenario
+def test_upload_block_blob_exclude_flag():
+    dir_name = "dir_exclude_flag_set_upload"
+    # create 10 files inside the directory
+    dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
+
+    # create sub-directory inside the  dir_exclude_flag_set_upload
+    sub_dir_name = os.path.join(dir_name, "sub_dir_exclude_flag_set_upload")
+    # create 10 files inside the sub-dir
+    sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
+
+    # uploading the directory with 2 files in the exclude flag.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info") \
+        .add_flags("exclude", "test101024_2.txt;test101024_3.txt").add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of successful transfer should be 18 and there should be not failed transfer
+    # Since total number of files inside dir_exclude_flag_set_upload is 20 and 2 files are set
+    # to exclude, so total number of transfer should be 18
+    if x.TransfersCompleted is not 18 and x.TransfersFailed is not 0 :
+        print("test_upload_block_blob_exclude_flag failed with difference in the number of failed and successful transfers with two files in exclude flag")
+        return
+
+    # uploading the directory with sub-dir in the exclude flag.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info") \
+        .add_flags("exclude", "sub_dir_exclude_flag_set_upload").add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of successful transfer should be 10 and there should be not failed transfer
+    # Since the total number of files in dir_exclude_flag_set_upload is 20 and sub_dir_exclude_flag_set_upload
+    # sub-dir is set to exclude, total number of transfer will be 10
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_upload_block_blob_exclude_flag failed with difference in the number of failed and successful transfers with sub-dir in exclude flag")
+        return
+    print("test_upload_block_blob_exclude_flag successfully passed")
+
+def test_download_blob_include_flag():
+    # create dir and 10 files of size 1024 inside it
+    dir_name = "dir_include_flag_set_download"
+    dir_n_files_path = util.create_test_n_files(1024, 10 , dir_name)
+
+    # create sub-dir inside dir dir_include_flag_set_download
+    # create 10 files inside the sub-dir of size 1024
+    sub_dir_name = os.path.join(dir_name, "sub_dir_include_flag_set_download")
+    sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
+
+    # uploading the directory with 20 files in it.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_download_blob_include_flag failed while uploading ", 20, "files in dir_include_flag_set_download in the container")
+        return
+    # execute the validator and validating the uploaded directory.
+    destination = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(destination). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_download_blob_include_flag test case failed while validating the directory uploaded")
+
+    #download from container with include flags
+    destination_sas = util.get_resource_sas(dir_name)
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path).\
+            add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true").\
+            add_flags("include", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
+        execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    if x.TransfersCompleted is not 2 and x.TransfersFailed is not 0 :
+        print("test_download_blob_include_flag failed with difference in the number of failed and successful transfers with 2 files in include flag")
+        return
+
+    #download from container with sub-dir in include flags
+    destination_sas = util.get_resource_sas(dir_name)
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
+        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("include", "sub_dir_include_flag_set_download/"). \
+        execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_download_blob_include_flag failed with difference in the number of failed and successful transfers with sub-dir in include flag")
+        return
+    print("test_download_blob_include_flag successfully passed")
+
+def test_download_blob_exclude_flag():
+    # create dir and 10 files of size 1024 inside it
+    dir_name = "dir_exclude_flag_set_download"
+    dir_n_files_path = util.create_test_n_files(1024, 10 , dir_name)
+
+    # create sub-dir inside dir dir_exclude_flag_set_download
+    # create 10 files inside the sub-dir of size 1024
+    sub_dir_name = os.path.join(dir_name, "sub_dir_exclude_flag_set_download")
+    sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
+
+    # uploading the directory with 20 files in it.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_download_blob_exclude_flag failed while uploading ", 20, "files in dir_exclude_flag_set_download in the container")
+        return
+    # execute the validator and validating the uploaded directory.
+    destination = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(destination). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_download_blob_exclude_flag test case failed while validating the directory uploaded")
+
+    #download from container with exclude flags
+    destination_sas = util.get_resource_sas(dir_name)
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
+        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("exclude", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
+        execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of expected successful transfer should be 18 since two files in directory are set to exclude
+    if x.TransfersCompleted is not 17 and x.TransfersFailed is not 0 :
+        print("test_download_blob_include_flag failed with difference in the number of failed and successful transfers with 2 files in include flag")
+        return
+
+    #download from container with sub-dir in exclude flags
+    destination_sas = util.get_resource_sas(dir_name)
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
+        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("exclude", "sub_dir_include_flag_set_download/"). \
+        execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of Expected Transfer should be 10 since sub-dir is to exclude which has 10 files in it.
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_download_blob_include_flag failed with difference in the number of failed and successful transfers with sub-dir in include flag")
+        return
+    print("test_download_blob_exclude_flag successfully passed")
