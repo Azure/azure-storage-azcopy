@@ -242,11 +242,11 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 				waitUntilJobCompletion)
 		}
 		marker = listBlob.NextMarker
-		// dispatch the JobPart as Final Part of the Job
-		err = e.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
+	}
+	// dispatch the JobPart as Final Part of the Job
+	err = e.dispatchFinalPart()
+	if err != nil {
+		return err
 	}
 	return nil
 }
