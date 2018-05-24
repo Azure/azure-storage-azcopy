@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"os"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -124,10 +123,10 @@ func inferArgumentLocation(arg string) Location {
 		}
 	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
-		_, err := os.Stat(arg)
-		if err != nil && !os.IsNotExist(err){
-			return ELocation.Unknown()
-		}
+		//_, err := os.Stat(arg)
+		//if err != nil && !os.IsNotExist(err){
+		//	return ELocation.Unknown()
+		//}
 		return ELocation.Local()
 	}
 

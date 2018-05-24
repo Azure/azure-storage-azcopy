@@ -39,11 +39,11 @@ def execute_user_scenario_azcopy_op():
     test_download_blob_include_flag()
     test_upload_block_blob_include_flag()
     test_upload_block_blob_exclude_flag()
-    # test_remove_virtual_directory()
-    # test_set_block_blob_tier()
-    # test_set_page_blob_tier()
-    # test_force_flag_set_to_false_upload()
-    # test_force_flag_set_to_false_download()
+    test_remove_virtual_directory()
+    test_set_block_blob_tier()
+    test_set_page_blob_tier()
+    test_force_flag_set_to_false_upload()
+    test_force_flag_set_to_false_download()
 
 def execute_user_scenario_file_1() :
     ###
@@ -166,9 +166,9 @@ def cleanup():
 def main():
     init()
     execute_user_scenario_azcopy_op()
-    #execute_user_scenario_blob_1()
-    #execute_user_scenario_2()
-    #execute_user_scenario_file_1()
+    execute_user_scenario_blob_1()
+    execute_user_scenario_2()
+    execute_user_scenario_file_1()
     #temp_adhoc_scenario()
     cleanup()
 
