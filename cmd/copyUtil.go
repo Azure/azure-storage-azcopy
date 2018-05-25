@@ -38,6 +38,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"path/filepath"
+	"regexp"
 )
 
 const (
@@ -235,7 +236,7 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName 
 	if pattern == "*" {
 		return true
 	}
-	matched, err := filepath.Match(pattern, blobName)
+	matched, err := regexp.MatchString(pattern, blobName)
 	if err != nil {
 		panic(err)
 	}
