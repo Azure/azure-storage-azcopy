@@ -38,7 +38,6 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"path/filepath"
-	"regexp"
 )
 
 const (
@@ -236,7 +235,18 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName 
 	if pattern == "*" {
 		return true
 	}
-	matched, err := regexp.MatchString(pattern, blobName)
+	// BlobName has "/" as path separators
+	// filePath.Match matches "*" with any sequence of non-separator characters
+	// since path separator on linux and blobName is same
+	// Replace "/" with its url encoded value "%2F"
+	// This is to handle cases like matching "dir* and dir/a.txt"
+	// or matching "dir/* and dir/a/b.txt"
+	if string(os.PathSeparator) == "/" {
+		pattern = strings.Replace(pattern, "/", "%2F", -1)
+		blobName = strings.Replace(blobName, "/", "%2F", -1)
+	}
+
+	matched, err := filepath.Match(pattern, blobName)
 	if err != nil {
 		panic(err)
 	}
