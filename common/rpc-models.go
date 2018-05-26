@@ -58,6 +58,10 @@ type SyncJobPartOrderRequest struct {
 	BlockSizeInBytes uint32
 	CopyJobRequest   CopyJobPartOrderRequest
 	DeleteJobRequest CopyJobPartOrderRequest
+	// FilesDeletedLocally is used to keep track of the file that are deleted locally
+	// Since local files to delete are not sent as transfer to STE
+	// the count of the local files deletion is tracked using it.
+	FilesDeletedLocally int
 }
 
 type CopyJobPartOrderResponse struct {
