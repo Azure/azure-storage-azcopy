@@ -241,7 +241,7 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName 
 	// Replace "/" with its url encoded value "%2F"
 	// This is to handle cases like matching "dir* and dir/a.txt"
 	// or matching "dir/* and dir/a/b.txt"
-	if string(os.PathSeparator) == "/" {
+	if os.PathSeparator == '/' {
 		pattern = strings.Replace(pattern, "/", "%2F", -1)
 		blobName = strings.Replace(blobName, "/", "%2F", -1)
 	}
@@ -411,8 +411,8 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb / timeElapsed, 0)
-		message := fmt.Sprintf("%v Complete, throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
-			summary.JobProgressPercentage, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
+		message := fmt.Sprintf("%v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
+			summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
 		fmt.Println(message)
 	}

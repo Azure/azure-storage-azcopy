@@ -196,7 +196,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 						fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
-				jptm.ReportTransferDone()
 				srcMmf.Unmap()
 				err := srcFile.Close()
 				if err != nil {
@@ -205,6 +204,18 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 							fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
 					}
 				}
+				// If the transfer status is less than or equal to 0
+				// then transfer was either failed or cancelled
+				// the file created in share needs to be deleted
+				if jptm.TransferStatus() <= 0 {
+					_,err = fileURL.Delete(context.TODO())
+					if err != nil {
+						if jptm.ShouldLog(pipeline.LogError) {
+							jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the file %s. Failed with error %s", fileURL.String(), err.Error()))
+						}
+					}
+				}
+				jptm.ReportTransferDone()
 			}
 		}
 

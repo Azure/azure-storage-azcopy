@@ -480,13 +480,15 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 	for {
 		select {
 		case <-CancelChannel:
-			fmt.Println("Cancelling Job")
-			cookedCancelCmdArgs{jobID: jobID}.process()
-			os.Exit(1)
+			err := cookedCancelCmdArgs{jobID: jobID}.process()
+			if err != nil {
+				fmt.Println(fmt.Sprintf("error occurred while cancelling the job %s. Failed with error %s", jobID, err.Error()))
+				os.Exit(1)
+			}
 		default:
 			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() {
+			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled() {
 				os.Exit(0)
 			}
 

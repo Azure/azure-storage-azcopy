@@ -101,7 +101,7 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.JobID
 			deserialize(request, &payload)
-			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelled()), writer)
+			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelling()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -195,7 +195,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		fallthrough
-	case common.EJobStatus.Cancelled():
+	case common.EJobStatus.Cancelling():
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
@@ -380,8 +380,10 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (jp0.Plan().JobStatus() == common.EJobStatus.Completed()) {
-		js.JobStatus = common.EJobStatus.Completed()
+	part0PlanStatus := jp0.Plan().JobStatus()
+	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed() ||
+									part0PlanStatus == common.EJobStatus.Cancelled()) {
+		js.JobStatus = part0PlanStatus
 	}
 	return js
 }

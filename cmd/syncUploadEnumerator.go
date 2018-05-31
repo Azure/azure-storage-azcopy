@@ -355,6 +355,9 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	e.CopyJobRequest.LogLevel = e.LogLevel
 	e.DeleteJobRequest.LogLevel = e.LogLevel
 
+	// Set the force flag to true
+	e.CopyJobRequest.ForceWrite = true
+
 	err, isSourceAFile := e.compareLocalAgainstRemote(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
 	if err != nil {
 		return err

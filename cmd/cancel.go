@@ -62,7 +62,7 @@ func (cca cookedCancelCmdArgs) process() error {
 	if !cancelJobResponse.CancelledPauseResumed {
 		return fmt.Errorf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg)
 	}
-	fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
+	//fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
 	return nil
 }
 

@@ -23,7 +23,6 @@ package ste
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"strings"
@@ -73,21 +72,11 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 	if blobSize == 0 {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
-			if strings.Contains(err.Error(), "too many open files") {
-				// dst file could not be created because azcopy process
-				// reached the open file descriptor limit set for each process.
-				// Rescheduling the transfer.
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, " rescheduled since process reached open file descriptor limit.")
-				}
-				jptm.RescheduleTransfer()
-			} else {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
 			return
 		}
 		lMTime, plmt := jptm.PreserveLastModifiedTime()
@@ -97,7 +86,15 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" failed while preserving last modified time for destionation %s", info.Destination))
 				}
-				return
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				// Since the transfer failed, the file created above should be deleted
+				err = deleteFile(info.Destination)
+				if err != nil {
+					// If there was an error deleting the file, log the error
+					if jptm.ShouldLog(pipeline.LogError) {
+						jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
+					}
+				}
 			}
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" successfully preserved the last modified time for destinaton %s", info.Destination))
@@ -112,21 +109,11 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 	} else { // 3b: source has content
 		dstFile, err := createFileOfSize(info.Destination, blobSize)
 		if err != nil {
-			if strings.Contains(err.Error(), "too many open files") {
-				// dst file could not be created because azcopy process
-				// reached the open file descriptor limit set for each process.
-				// Rescheduling the transfer.
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, " rescheduled since process reached open file descriptor limit.")
-				}
-				jptm.RescheduleTransfer()
-			} else {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
 			return
 		}
 
@@ -138,6 +125,14 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 				jptm.Log(pipeline.LogInfo, "transfer failed because dst file did not memory mapped successfully")
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			// Since the transfer failed, the file created above should be deleted
+			err = deleteFile(info.Destination)
+			if err != nil {
+				// If there was an error deleting the file, log the error
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
+				}
+			}
 			jptm.ReportTransferDone()
 			return
 		}
@@ -158,13 +153,13 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, srcBlobURL, blockIdCount, dstMMF, startIndex, adjustedChunkSize, pacer))
+			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, srcBlobURL, blockIdCount, dstMMF, info.Destination, startIndex, adjustedChunkSize, pacer))
 			blockIdCount++
 		}
 	}
 }
 
-func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
+func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF common.MMF, destinationPath string, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -174,8 +169,20 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
 				}
-				jptm.ReportTransferDone()
 				destinationMMF.Unmap()
+				// If the current transfer status value is less than or equal to 0
+				// then transfer either failed or was cancelled
+				// the file created locally should be deleted
+				if jptm.TransferStatus() <= 0 {
+					err := deleteFile(destinationPath)
+					if err != nil {
+						// If there was an error deleting the file, log the error
+						if jptm.ShouldLog(pipeline.LogError) {
+							jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", destinationPath, err.Error()))
+						}
+					}
+				}
+				jptm.ReportTransferDone()
 			}
 		}
 		if jptm.WasCanceled() {
@@ -198,8 +205,6 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body = newResponseBodyPacer(body, p)
 			_, err = io.ReadFull(body, destinationMMF[startIndex:startIndex+adjustedChunkSize])
-			io.Copy(ioutil.Discard, body)
-			body.Close()
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
@@ -273,6 +278,11 @@ func createEmptyFile(destinationPath string) error {
 	}
 	f.Close()
 	return nil
+}
+
+// deletes the file
+func deleteFile(destinationPath string) error{
+	return os.Remove(destinationPath)
 }
 
 // create a file, given its path and length

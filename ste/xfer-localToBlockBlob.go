@@ -32,6 +32,7 @@ import (
 	"os"
 	"strings"
 	"unsafe"
+	"net/http"
 )
 
 type blockBlobUpload struct {
@@ -162,6 +163,15 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				}
 				jptm.Cancel()
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				// Since transfer failed while setting the page blob tier
+				// Deleting the created page blob
+				_, err := pageBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+				if err != nil {
+					// Log the error if deleting the page blob failed.
+					if jptm.ShouldLog(pipeline.LogInfo) {
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the page blob %s. Failed with error %s", pageBlobUrl, err.Error()))
+					}
+				}
 				jptm.ReportTransferDone()
 				srcMmf.Unmap()
 				return
@@ -244,8 +254,23 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// and the chunkFunc has been changed to the version without param workId
 		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
 		transferDone := func() {
-			bbu.jptm.ReportTransferDone()
 			bbu.srcMmf.Unmap()
+			// Get the Status of the transfer
+			// If the transfer status value < 0, then transfer failed with some failure
+			// there is a possibility that some uncommitted blocks will be there
+			// Delete the uncommitted blobs
+			if bbu.jptm.TransferStatus() <= 0 {
+				_, err := bbu.blobURL.ToBlockBlobURL().Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound{
+					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
+					// Other errors report that uncommitted blocks are there
+					if bbu.jptm.ShouldLog(pipeline.LogInfo) {
+						bbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error occurred while deleting the uncommitted " +
+							"blocks of blob %s. Failed with error %s", bbu.blobURL.String(), err.Error()))
+					}
+				}
+			}
+			bbu.jptm.ReportTransferDone()
 		}
 
 		if bbu.jptm.WasCanceled() {
@@ -408,6 +433,14 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 						fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
 				}
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				// since blob tier failed, the transfer failed
+				// the blob created should be deleted
+				_, err := blockBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogInfo){
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the blob %s. Failed with error %s", blockBlobUrl.String(), err.Error()))
+					}
+				}
 			}
 		}
 		jptm.SetStatus(common.ETransferStatus.Success())
@@ -439,8 +472,20 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 						fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
 				}
 				pbu.jptm.SetStatus(common.ETransferStatus.Success())
-				pbu.jptm.ReportTransferDone()
 				pbu.srcMmf.Unmap()
+				// If the value of transfer Status is less than 0
+				// transfer failed. Delete the page blob created
+				if pbu.jptm.TransferStatus() <= 0 {
+					// Deleting the created page blob
+					_, err := pbu.blobUrl.ToPageBlobURL().Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+					if err != nil {
+						// Log the error if deleting the page blob failed.
+						if pbu.jptm.ShouldLog(pipeline.LogInfo) {
+							pbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the page blob %s. Failed with error %s", pbu.blobUrl, err.Error()))
+						}
+					}
+				}
+				pbu.jptm.ReportTransferDone()
 			}
 		}
 
