@@ -1,3 +1,5 @@
+// +build linux darwin
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,35 +23,22 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
+	"os/exec"
+	"path"
 )
 
-var eexitCode = exitCode(0)
-type exitCode int32
-
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
-
-func main() {
-	os.Exit(int(mainWithExitCode()))
+func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
+	return cmd
 }
 
-func mainWithExitCode() exitCode {
-	// If insufficient arguments, show usage & terminate
-	if len(os.Args) == 1 {
-		cmd.Execute()
-		return eexitCode.success()
+// GetAzCopyAppPath returns the path of Azcopy folder in local appdata.
+// Azcopy folder in local appdata contains all the files created by azcopy locally.
+func GetAzCopyAppPath() string {
+	localAppData := os.Getenv("HOME")
+	azcopyAppDataFolder := path.Join(localAppData, "/.azcopy")
+	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		return ""
 	}
-	go cmd.ReadStandardInputToCancelJob(cmd.CancelChannel)
-	azcopyAppPathFolder := GetAzCopyAppPath()
-	go ste.MainSTE(300, 500, azcopyAppPathFolder)
-	cmd.Execute()
-	return eexitCode.success()
+	return azcopyAppDataFolder
 }
-

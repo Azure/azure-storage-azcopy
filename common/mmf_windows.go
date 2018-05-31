@@ -18,38 +18,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package common
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
+	"reflect"
+	"syscall"
+	"unsafe"
 )
 
-var eexitCode = exitCode(0)
-type exitCode int32
+type MMF []byte
 
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
-
-func main() {
-	os.Exit(int(mainWithExitCode()))
-}
-
-func mainWithExitCode() exitCode {
-	// If insufficient arguments, show usage & terminate
-	if len(os.Args) == 1 {
-		cmd.Execute()
-		return eexitCode.success()
+func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, error) {
+	prot, access := uint32(syscall.PAGE_READONLY), uint32(syscall.FILE_MAP_READ) // Assume read-only
+	if writable {
+		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
 	}
-	go cmd.ReadStandardInputToCancelJob(cmd.CancelChannel)
-	azcopyAppPathFolder := GetAzCopyAppPath()
-	go ste.MainSTE(300, 500, azcopyAppPathFolder)
-	cmd.Execute()
-	return eexitCode.success()
+	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, uint32(int64(length)>>32), uint32(int64(length)&0xffffffff), nil)
+	if hMMF == 0 {
+		return nil, os.NewSyscallError("CreateFileMapping", errno)
+	}
+	defer syscall.CloseHandle(hMMF)
+	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
+	m := MMF{}
+	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
+	h.Data = addr
+	h.Len = int(length)
+	h.Cap = h.Len
+	return m, nil
 }
 
+func (m *MMF) Unmap() {
+	addr := uintptr(unsafe.Pointer(&(([]byte)(*m)[0])))
+	*m = MMF{}
+	err := syscall.UnmapViewOfFile(addr)
+	if err != nil {
+		panic(err)
+	}
+}

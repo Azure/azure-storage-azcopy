@@ -22,32 +22,52 @@ package cmd
 
 import (
 	"fmt"
-
 	"github.com/spf13/cobra"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// deleteCmd represents the delete command
-var deleteCmd = &cobra.Command{
-	Use:   "remove",
-	Aliases: []string{"rm", "r"},
-	SuggestFor: []string{"delete", "del"},
-	Short: "Coming soon: remove(rm) deletes blobs or containers in Azure Storage.",
-	Long: `Coming soon: remove(rm) deletes blobs or containers in Azure Storage.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("delete called, but not implemented yet.")
-	},
-}
-
 func init() {
+	// set the block-blob-tier and page-blob-tier to None since Parse fails for "" string
+	// while parsing block-blob and page-blob tier.
+	raw := rawCopyCmdArgs{blockBlobTier:common.EBlockBlobTier.None().String(), pageBlobTier:common.EPageBlobTier.None().String(),}
+	// deleteCmd represents the delete command
+	var deleteCmd = &cobra.Command{
+		Use:        "remove",
+		Aliases:    []string{"rm", "r"},
+		SuggestFor: []string{"delete", "del"},
+		Short:      "Coming soon: remove(rm) deletes blobs or containers in Azure Storage.",
+		Long:       `Coming soon: remove(rm) deletes blobs or containers in Azure Storage.`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 1 {
+				return fmt.Errorf("remove command only takes 1 arguments. Passed %d arguments", len(args))
+			}
+			raw.src = args[0]
+			srcLocationType := inferArgumentLocation(raw.src)
+			if srcLocationType == ELocation.Blob(){
+				raw.fromTo = common.EFromTo.BlobTrash().String()
+			}else if srcLocationType == ELocation.File(){
+				raw.fromTo = common.EFromTo.FileTrash().String()
+			}else {
+				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cooked, err := raw.cook()
+			if err != nil {
+				return fmt.Errorf("failed to parse user input due to error %s", err)
+			}
+
+			err = cooked.process()
+			if err != nil {
+				return fmt.Errorf("failed to perform copy command due to error %s", err)
+			}
+			return nil
+		},
+	}
 	rootCmd.AddCommand(deleteCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// deleteCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// deleteCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when deleting from container.")
+	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
+	deleteCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 }

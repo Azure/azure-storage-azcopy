@@ -21,44 +21,115 @@
 package cmd
 
 import (
-	"os"
-	"net/url"
+	"errors"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"net/url"
+	"reflect"
+	"strings"
+	"os"
 )
 
-func determineLocaltionType(stringToParse string) common.LocationType {
-	if IsLocalPath(stringToParse) {
-		return common.Local
-	} else if IsUrl(stringToParse) {
-		return common.Blob
-	} else {
-		return common.Unknown
+func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
+	inferredFromTo := inferFromTo(src, dst)
+	if userSpecifiedFromTo == "" {
+		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
+		if inferredFromTo == common.EFromTo.Unknown() {
+			return common.EFromTo.Unknown(), errors.New("Invalid source/destination combination. Pleasee use the --FromTo switch")
+		}
+		return inferredFromTo, nil
 	}
-}
 
-// verify if path is a valid local path
-func IsLocalPath(path string) bool {
-	// attempting to get stats from the OS validates whether a given path is a valid local path
-	_, err := os.Stat(path)
-	// in case the path does not exist yet, an err is returned
-	// we need to make sure that it is indeed just a local path that does not exist yet, and not a url
-	if err == nil || (!IsUrl(path) && os.IsNotExist(err)){
-		return true
-	}
-	return false
-}
-
-// verify if givenUrl is a valid url
-func IsUrl(givenUrl string) bool{
-	u, err := url.Parse(givenUrl)
-	// attempting to parse the url validates whether a given string is a valid url
+	// User explicitly specified FromTo, make sure it matches what we infer or accept it if we can't infer
+	var userFromTo common.FromTo
+	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
-		return false
+		return common.EFromTo.Unknown(), fmt.Errorf("Invalid --FromTo value specified: %q", userSpecifiedFromTo)
 	}
-	// a local path can also be parsed as a url sometimes, so in this case we make sure it is not a local path
-	// as Host, Scheme, and Path would be absent if it were a local path
-	if u.Host == "" || u.Scheme == "" || u.Path == "" {
-		return false
+	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
+					userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash(){
+		// We couldn't infer the FromTo or what we inferred matches what the user specified
+		// We'll accept what the user specified
+		return userFromTo, nil
 	}
-	return true
+	// inferredFromTo != raw.fromTo: What we inferred doesn't match what the user specified
+	return common.EFromTo.Unknown(), errors.New("The specified --FromTo swith is inconsistent with the specified source/destination combination.")
+}
+
+func inferFromTo(src, dst string) common.FromTo {
+	// Try to infer the 1st argument
+	srcLocation := inferArgumentLocation(src)
+	if srcLocation == srcLocation.Unknown() {
+		fmt.Printf("Can't infer source location of %q. Please specify the --FromTo switch", src)
+		return common.EFromTo.Unknown()
+	}
+
+	dstLocation := inferArgumentLocation(dst)
+	if dstLocation == dstLocation.Unknown() {
+		fmt.Printf("Can't infer destination location of %q. Please specify the --FromTo switch", dst)
+		return common.EFromTo.Unknown()
+	}
+
+	switch {
+	case srcLocation == ELocation.Local() && dstLocation == ELocation.Blob():
+		return common.EFromTo.LocalBlob()
+	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Local():
+		return common.EFromTo.BlobLocal()
+	case srcLocation == ELocation.Local() && dstLocation == ELocation.File():
+		return common.EFromTo.LocalFile()
+	case srcLocation == ELocation.File() && dstLocation == ELocation.Local():
+		return common.EFromTo.FileLocal()
+	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.Blob():
+		return common.EFromTo.PipeBlob()
+	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Pipe():
+		return common.EFromTo.BlobPipe()
+
+	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.File():
+		return common.EFromTo.PipeFile()
+	case srcLocation == ELocation.File() && dstLocation == ELocation.Pipe():
+		return common.EFromTo.FilePipe()
+	}
+	return common.EFromTo.Unknown()
+}
+
+var ELocation = Location(0)
+// JobStatus indicates the status of a Job; the default is InProgress.
+type Location uint32 // Must be 32-bit for atomic operations
+
+func (Location) Unknown() Location { return Location(0) }
+func (Location) Local() Location   { return Location(1) }
+func (Location) Pipe() Location    { return Location(2) }
+func (Location) Blob() Location    { return Location(3) }
+func (Location) File() Location    { return Location(4) }
+func (l Location) String() string {
+	return common.EnumHelper{}.StringInteger(uint32(l), reflect.TypeOf(l))
+}
+
+func inferArgumentLocation(arg string) Location {
+	if arg == pipeLocation {
+		return ELocation.Pipe()
+	}
+	if startsWith(arg, "https") {
+		// Let's try to parse the argument as a URL
+		u, err := url.Parse(arg)
+		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
+		if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
+			// Is the argument a URL to blob storage?
+			switch host := strings.ToLower(u.Host); true {
+			case strings.Contains(host, ".blob"):
+				return ELocation.Blob()
+			case strings.Contains(host, ".file.core.windows.net"):
+				return ELocation.File()
+			}
+		}
+	} else {
+		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
+		_, err := os.Stat(arg)
+		if err != nil && !os.IsNotExist(err){
+			return ELocation.Unknown()
+		}
+		return ELocation.Local()
+	}
+
+	return ELocation.Unknown()
 }

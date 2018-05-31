@@ -33,9 +33,9 @@ var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use:   "AzCopy",
-	Short: "AzCopy is a CLI tool that moves data into/out of Azure Storage.",
-	Long:  `AzCopy is a CLI tool that moves data into/out of Azure Storage. Please refer to the Github README for more info.`,
+	Use:   "validator",
+	Short: "validator is a cli based test framework for azcopy.",
+	Long:  `validator is a cli based test framework for azcopy.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	//	Run: func(cmd *cobra.Command, args []string) { },
@@ -56,7 +56,7 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.azs.yaml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.validator.yaml)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
@@ -78,7 +78,7 @@ func initConfig() {
 
 		// Search config in home directory with name ".azs" (without extension).
 		viper.AddConfigPath(home)
-		viper.SetConfigName(".azs")
+		viper.SetConfigName(".validator")
 	}
 
 	viper.AutomaticEnv() // read in environment variables that match

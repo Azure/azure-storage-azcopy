@@ -18,38 +18,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
-	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
+	chk "gopkg.in/check.v1"
+	"testing"
+	"net/url"
 )
 
-var eexitCode = exitCode(0)
-type exitCode int32
+// Hookup to the testing framework
+func Test(t *testing.T) { chk.TestingT(t) }
 
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
+type copyUtilTestSuite struct{}
+var _ = chk.Suite(&copyUtilTestSuite{})
 
-func main() {
-	os.Exit(int(mainWithExitCode()))
+func (s *copyUtilTestSuite) TestUrlIsContainerOrShare(c *chk.C) {
+	util := copyHandlerUtil{}
+
+	testUrl := url.URL{Path: "/container/dir1"}
+	isContainerOrShare := util.urlIsContainerOrShare(&testUrl)
+	c.Assert(isContainerOrShare, chk.Equals, false)
+
+	testUrl.Path = "/container/dir1/dir2"
+	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
+	c.Assert(isContainerOrShare, chk.Equals, false)
+
+	testUrl.Path = "/container/"
+	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
+	c.Assert(isContainerOrShare, chk.Equals, true)
+
+	testUrl.Path = "/container"
+	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
+	c.Assert(isContainerOrShare, chk.Equals, true)
+
+	// root container
+	testUrl.Path = "/"
+	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
+	c.Assert(isContainerOrShare, chk.Equals, true)
 }
-
-func mainWithExitCode() exitCode {
-	// If insufficient arguments, show usage & terminate
-	if len(os.Args) == 1 {
-		cmd.Execute()
-		return eexitCode.success()
-	}
-	go cmd.ReadStandardInputToCancelJob(cmd.CancelChannel)
-	azcopyAppPathFolder := GetAzCopyAppPath()
-	go ste.MainSTE(300, 500, azcopyAppPathFolder)
-	cmd.Execute()
-	return eexitCode.success()
-}
-

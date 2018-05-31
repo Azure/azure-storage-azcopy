@@ -21,35 +21,27 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
+	"os/exec"
+	"path"
+	"syscall"
 )
 
-var eexitCode = exitCode(0)
-type exitCode int32
-
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
-
-func main() {
-	os.Exit(int(mainWithExitCode()))
-}
-
-func mainWithExitCode() exitCode {
-	// If insufficient arguments, show usage & terminate
-	if len(os.Args) == 1 {
-		cmd.Execute()
-		return eexitCode.success()
+func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
+	// On Windows, create the child process in new process group to avoid receiving signals
+	// (Ctrl+C, Ctrl+Break) from the console
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
 	}
-	go cmd.ReadStandardInputToCancelJob(cmd.CancelChannel)
-	azcopyAppPathFolder := GetAzCopyAppPath()
-	go ste.MainSTE(300, 500, azcopyAppPathFolder)
-	cmd.Execute()
-	return eexitCode.success()
+	return cmd
 }
 
+// GetAzCopyAppPath returns the path of Azcopy in local appdata.
+func GetAzCopyAppPath() string {
+	localAppData := os.Getenv("LOCALAPPDATA")
+	azcopyAppDataFolder := path.Join(localAppData, "\\Azcopy")
+	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err) {
+		return ""
+	}
+	return azcopyAppDataFolder
+}

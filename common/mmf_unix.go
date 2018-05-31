@@ -1,3 +1,5 @@
+// +build linux darwin
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -18,38 +20,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package common
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
 	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
+	"syscall"
 )
 
-var eexitCode = exitCode(0)
-type exitCode int32
+type MMF []byte
 
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
-
-func main() {
-	os.Exit(int(mainWithExitCode()))
-}
-
-func mainWithExitCode() exitCode {
-	// If insufficient arguments, show usage & terminate
-	if len(os.Args) == 1 {
-		cmd.Execute()
-		return eexitCode.success()
+func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, error) {
+	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
+	if writable {
+		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
 	}
-	go cmd.ReadStandardInputToCancelJob(cmd.CancelChannel)
-	azcopyAppPathFolder := GetAzCopyAppPath()
-	go ste.MainSTE(300, 500, azcopyAppPathFolder)
-	cmd.Execute()
-	return eexitCode.success()
+	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
+	return MMF(addr), err
 }
 
+func (m *MMF) Unmap() {
+	err := syscall.Munmap(*m)
+	*m = nil
+	if err != nil {
+		panic(err)
+	}
+}
