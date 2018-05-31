@@ -186,16 +186,15 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	jpp0 := jpm.Plan()
 	var jr common.CancelPauseResumeResponse
 	switch jpp0.JobStatus() { // Current status
-	case common.EJobStatus.InProgress(): // Changing to InProgress/Paused/Canceled is OK
-		jpp0.SetJobStatus(desiredJobStatus) // Set status to paused/Canceled
-
 	case common.EJobStatus.Completed(): // You can't change state of a completed job
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("Can't %s JobID=%v because it has already completed", verb, jobID),
 		}
-
+	case common.EJobStatus.InProgress():
+		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
+		fallthrough
 	case common.EJobStatus.Cancelled():
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,

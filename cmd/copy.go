@@ -485,7 +485,6 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			os.Exit(1)
 		default:
 			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
-
 			// happy ending to the front end
 			if jobStatus == common.EJobStatus.Completed() {
 				os.Exit(0)

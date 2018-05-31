@@ -111,8 +111,7 @@ func ReadStandardInputToCancelJob(cancelChannel chan <- os.Signal) {
 		// ReadString reads input until the first occurrence of \n in the input,
 		input, err := consoleReader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return
 		}
 
 		//remove the delimiter "\n"
