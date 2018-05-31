@@ -33,11 +33,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 // upload related
@@ -65,6 +64,7 @@ type rawCopyCmdArgs struct {
 	//blobUrlForRedirection string
 
 	// filters from flags
+	include		   string
 	exclude        string
 	recursive      bool
 	followSymlinks bool
@@ -85,7 +85,7 @@ type rawCopyCmdArgs struct {
 	background               bool
 	outputJson               bool
 	acl                      string
-	logVerbosity             byte
+	logVerbosity             string
 }
 
 // validates and transform raw input into cooked input
@@ -102,7 +102,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
-	cooked.exclude = raw.exclude
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
@@ -117,6 +116,43 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	err = cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil{
+		return cooked, err
+	}
+
+	// initialize the include map which contains the list of files to be included
+	// parse the string passed in include flag
+	// more than one file are expected to be separated by ';'
+	cooked.include = make(map[string]int)
+	if len(raw.include) > 0 {
+		files := strings.Split(raw.include, ";")
+		for index := range files {
+			// If split of the include string leads to an empty string
+			// not include that string
+			if len(files[index]) == 0 {
+				continue
+			}
+			cooked.include[files[index]] = index
+		}
+	}
+
+	// initialize the exclude map which contains the list of files to be excluded
+	// parse the string passed in exclude flag
+	// more than one file are expected to be separated by ';'
+	cooked.exclude = make(map[string]int)
+	if len(raw.exclude) > 0 {
+		files := strings.Split(raw.exclude, ";")
+		for index := range files {
+			// If split of the include string leads to an empty string
+			// not include that string
+			if len(files[index]) == 0 {
+				continue
+			}
+			cooked.exclude[files[index]] = index
+		}
+	}
+
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
@@ -125,8 +161,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.background = raw.background
 	cooked.outputJson = raw.outputJson
 	cooked.acl = raw.acl
-	cooked.logVerbosity = common.LogLevel(raw.logVerbosity)
-
 	return cooked, nil
 }
 
@@ -138,7 +172,8 @@ type cookedCopyCmdArgs struct {
 	fromTo common.FromTo
 
 	// filters from flags
-	exclude        string
+	include		   map[string]int
+	exclude        map[string]int
 	recursive      bool
 	followSymlinks bool
 	withSnapshots  bool
@@ -367,6 +402,8 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceWrite: cca.forceWrite,
 		Priority: common.EJobPriority.Normal(),
 		LogLevel: cca.logVerbosity,
+		Include:cca.include,
+		Exclude:cca.exclude,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
@@ -400,7 +437,11 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():
-		e := removeEnumerator(jobPartOrder)
+		e := removeBlobEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.FileTrash():
+		e := removeFileEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	}
@@ -428,26 +469,26 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 }
 
 func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
-	// created a signal channel to receive the Interrupt and Kill signal send to OS
-	cancelChannel := make(chan os.Signal, 1)
-	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
 
-	// waiting for signals from either cancelChannel or timeOut Channel.
+	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
+
+	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
-		case <-cancelChannel:
-			fmt.Println("Cancelling Job")
-			cookedCancelCmdArgs{jobID: jobID}.process()
-			os.Exit(1)
+		case <-CancelChannel:
+			err := cookedCancelCmdArgs{jobID: jobID}.process()
+			if err != nil {
+				fmt.Println(fmt.Sprintf("error occurred while cancelling the job %s. Failed with error %s", jobID, err.Error()))
+				os.Exit(1)
+			}
 		default:
 			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
-
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() {
+			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled() {
 				os.Exit(0)
 			}
 
@@ -532,6 +573,8 @@ Usage:
 
 	// define the flags relevant to the cp command
 	// filters
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. " +
+									"Support use of *. More than one file are separated by ';'")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")
@@ -550,5 +593,5 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().Uint8Var(&raw.logVerbosity, "Logging", uint8(pipeline.LogWarning), "defines the log verbosity to be saved to log file")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 }

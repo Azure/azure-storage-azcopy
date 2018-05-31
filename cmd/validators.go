@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"os"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -46,7 +45,8 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	if err != nil {
 		return common.EFromTo.Unknown(), fmt.Errorf("Invalid --FromTo value specified: %q", userSpecifiedFromTo)
 	}
-	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo || userFromTo == common.EFromTo.BlobTrash() {
+	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
+					userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash(){
 		// We couldn't infer the FromTo or what we inferred matches what the user specified
 		// We'll accept what the user specified
 		return userFromTo, nil
@@ -123,10 +123,10 @@ func inferArgumentLocation(arg string) Location {
 		}
 	} else {
 		// If we successfully get the argument's file stats, then we'll infer that this argument is a local file
-		_, err := os.Stat(arg)
-		if err != nil && !os.IsNotExist(err){
-			return ELocation.Unknown()
-		}
+		//_, err := os.Stat(arg)
+		//if err != nil && !os.IsNotExist(err){
+		//	return ELocation.Unknown()
+		//}
 		return ELocation.Local()
 	}
 

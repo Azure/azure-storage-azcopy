@@ -46,8 +46,10 @@ func mainWithExitCode() exitCode {
 		cmd.Execute()
 		return eexitCode.success()
 	}
+	go cmd.ReadStandardInputToCancelJob(cmd.CancelChannel)
 	azcopyAppPathFolder := GetAzCopyAppPath()
 	go ste.MainSTE(300, 500, azcopyAppPathFolder)
 	cmd.Execute()
 	return eexitCode.success()
 }
+

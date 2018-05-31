@@ -25,7 +25,15 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+	"bufio"
+	"os"
+	"strings"
 )
+
+// created a signal channel to receive the Interrupt and Kill signal send to OS
+// this channel is shared by copy, resume, sync and an independent go routine reading stdin
+// for cancel command
+var CancelChannel = make(chan os.Signal, 1)
 
 type rawCancelCmdArgs struct {
 	jobID string
@@ -51,11 +59,10 @@ type cookedCancelCmdArgs struct {
 func (cca cookedCancelCmdArgs) process() error {
 	var cancelJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
-
 	if !cancelJobResponse.CancelledPauseResumed {
 		return fmt.Errorf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg)
 	}
-	fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
+	//fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
 	return nil
 }
 
@@ -94,4 +101,33 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(cancelCmd)
+}
+
+// ReadStandardInputToCancelJob is a function that reads the standard Input
+// If Input given is "cancel", it cancels the current job.
+func ReadStandardInputToCancelJob(cancelChannel chan <- os.Signal) {
+	for {
+		consoleReader := bufio.NewReader(os.Stdin)
+		// ReadString reads input until the first occurrence of \n in the input,
+		input, err := consoleReader.ReadString('\n')
+		if err != nil {
+			return
+		}
+
+		//remove the delimiter "\n"
+		input = strings.Trim(input, "\n")
+		// remove trailing white spaces
+		input = strings.Trim(input, " ")
+		// converting the input characters to lower case characters
+		// this is done to avoid case sensitiveness.
+		input = strings.ToLower(input)
+
+		switch input {
+		case "cancel":
+			// send a kill signal to the cancel channel.
+			cancelChannel <- os.Kill
+		default:
+			panic(fmt.Errorf("command %s not supported by azcopy", input))
+		}
+	}
 }

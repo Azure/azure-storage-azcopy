@@ -78,7 +78,29 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type LogLevel byte
+type LogLevel uint8
+
+var ELogLevel  = LogLevel(pipeline.LogNone)
+
+func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone)}
+func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal)}
+func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic)}
+func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError)}
+func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning)}
+func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo)}
+func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug)}
+
+func (ll *LogLevel) Parse(s string) error {
+	val, err := EnumHelper{}.Parse(reflect.TypeOf(ll), s, true)
+	if err == nil {
+		*ll = val.(LogLevel)
+	}
+	return err
+}
+
+func (ll LogLevel) String() string {
+	return EnumHelper{}.StringInteger(ll, reflect.TypeOf(ll))
+}
 
 func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
 	// This assumes that pipeline's LogLevel values can fit in a byte (which they can)
@@ -138,10 +160,11 @@ func (j *JobStatus) AtomicStore(newJobStatus JobStatus) {
 
 func (JobStatus) InProgress() JobStatus { return JobStatus(0) }
 func (JobStatus) Paused() JobStatus     { return JobStatus(1) }
-func (JobStatus) Cancelled() JobStatus  { return JobStatus(2) }
-func (JobStatus) Completed() JobStatus  { return JobStatus(3) }
+func (JobStatus) Cancelling() JobStatus { return JobStatus(2)}
+func (JobStatus) Cancelled() JobStatus  { return JobStatus(3) }
+func (JobStatus) Completed() JobStatus  { return JobStatus(4) }
 func (js JobStatus) String() string {
-	return EnumHelper{}.StringInteger(uint32(js), reflect.TypeOf(js))
+	return EnumHelper{}.StringInteger(js, reflect.TypeOf(js))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,6 +184,7 @@ func (FromTo) PipeBlob() FromTo  { return FromTo(6) }
 func (FromTo) FilePipe() FromTo  { return FromTo(7) }
 func (FromTo) PipeFile() FromTo  { return FromTo(8) }
 func (FromTo) BlobTrash() FromTo { return FromTo(9) }
+func (FromTo) FileTrash() FromTo { return FromTo(10) }
 
 func (ft FromTo) String() string {
 	return EnumHelper{}.StringInteger(ft, reflect.TypeOf(ft))
@@ -196,6 +220,8 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
 func (TransferStatus) BlobAlreadyExistsFailure() TransferStatus { return TransferStatus(-3) }
+
+func (TransferStatus) FileAlreadyExistsFailure() TransferStatus { return TransferStatus(-4) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()

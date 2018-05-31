@@ -51,6 +51,31 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// TODO: remove the hard coded chunk size in case of pageblob or Azure file
 	chunkSize = common.DefaultAzureFileChunkSize
 
+	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
+	if jptm.WasCanceled() {
+		jptm.AddToBytesDone(info.SourceSize)
+		jptm.ReportTransferDone()
+		return
+	}
+
+	// If the force Write flags is set to false
+	// then check the file exists or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := fileURL.GetProperties(jptm.Context())
+		if err == nil{
+			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
+			}
+			// Mark the transfer as failed with FileAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
+			jptm.AddToBytesDone(info.SourceSize)
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// step 2: Map file upload before transferring chunks and get info from map file.
 	srcFile, err := os.Open(info.Source)
 	if err != nil {
@@ -171,7 +196,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 						fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
-				jptm.ReportTransferDone()
 				srcMmf.Unmap()
 				err := srcFile.Close()
 				if err != nil {
@@ -180,6 +204,18 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 							fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
 					}
 				}
+				// If the transfer status is less than or equal to 0
+				// then transfer was either failed or cancelled
+				// the file created in share needs to be deleted
+				if jptm.TransferStatus() <= 0 {
+					_,err = fileURL.Delete(context.TODO())
+					if err != nil {
+						if jptm.ShouldLog(pipeline.LogError) {
+							jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the file %s. Failed with error %s", fileURL.String(), err.Error()))
+						}
+					}
+				}
+				jptm.ReportTransferDone()
 			}
 		}
 

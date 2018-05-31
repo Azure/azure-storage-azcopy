@@ -43,6 +43,8 @@ type CopyJobPartOrderRequest struct {
 	ForceWrite     bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
 	Priority       JobPriority // priority of the task
 	FromTo         FromTo
+	Include        map[string]int
+	Exclude			map[string]int
 	Transfers      []CopyTransfer
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
@@ -56,6 +58,10 @@ type SyncJobPartOrderRequest struct {
 	BlockSizeInBytes uint32
 	CopyJobRequest   CopyJobPartOrderRequest
 	DeleteJobRequest CopyJobPartOrderRequest
+	// FilesDeletedLocally is used to keep track of the file that are deleted locally
+	// Since local files to delete are not sent as transfer to STE
+	// the count of the local files deletion is tracked using it.
+	FilesDeletedLocally int
 }
 
 type CopyJobPartOrderResponse struct {
@@ -113,6 +119,12 @@ type ListJobSummaryResponse struct {
 type ListJobTransfersRequest struct {
 	JobID    JobID
 	OfStatus TransferStatus
+}
+
+type ResumeJob struct {
+	JobID JobID
+	IncludeTransfer map[string]int
+	ExcludeTransfer map[string]int
 }
 
 // represents the Details and details of a single transfer

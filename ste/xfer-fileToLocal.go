@@ -26,7 +26,6 @@ import (
 	"io/ioutil"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -51,25 +50,33 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		return
 	}
 
+	// If the force Write flags is set to false
+	// then check the file exists locally or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := os.Stat(info.Destination)
+		if err == nil{
+			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
+			}
+			// Mark the transfer as failed with FileAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
+			jptm.AddToBytesDone(info.SourceSize)
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// step 3: prep local file before download starts
 	if fileSize == 0 {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
-			if strings.Contains(err.Error(), "too many open files") {
-				// dst file could not be created because azcopy process
-				// reached the open file descriptor limit set for each process.
-				// Rescheduling the transfer.
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, " rescheduled since process reached open file descriptor limit.")
-				}
-				jptm.RescheduleTransfer()
-			} else {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
 			return
 		}
 		lMTime, plmt := jptm.PreserveLastModifiedTime()
@@ -79,6 +86,14 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" failed while preserving last modified time for destionation %s", info.Destination))
 				}
+				//delete the file if transfer failed
+				err := os.Remove(info.Destination)
+				if err != nil {
+					if jptm.ShouldLog(pipeline.LogError){
+						jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
+					}
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
 				return
 			}
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -94,29 +109,25 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	} else { // 3b: source has content
 		dstFile, err := createFileOfSize(info.Destination, fileSize)
 		if err != nil {
-			if strings.Contains(err.Error(), "too many open files") {
-				// dst file could not be created because azcopy process
-				// reached the open file descriptor limit set for each process.
-				// Rescheduling the transfer.
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, " rescheduled since process reached open file descriptor limit.")
-				}
-				jptm.RescheduleTransfer()
-			} else {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
 			return
 		}
-
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
 			dstFile.Close()
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, "transfer failed because dst file did not memory mapped successfully")
+			}
+			//delete the file if transfer failed
+			err := os.Remove(info.Destination)
+			if err != nil {
+				if jptm.ShouldLog(pipeline.LogError){
+					jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
+				}
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -139,13 +150,13 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, chunkIDCount, dstFile, dstMMF, startIndex, adjustedChunkSize))
+			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, chunkIDCount, info.Destination, dstFile, dstMMF, startIndex, adjustedChunkSize))
 			chunkIDCount++
 		}
 	}
 }
 
-func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkID int32, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkID int32, destinationPath string, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -155,12 +166,23 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
 				}
-				jptm.ReportTransferDone()
 				destinationMMF.Unmap()
 				err := destinationFile.Close()
 				if err != nil {
 					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
+					}
+				}
+				jptm.ReportTransferDone()
+				// If the status of transfer is less than or equal to 0
+				// then transfer failed or cancelled
+				// the downloaded file needs to be deleted
+				if jptm.TransferStatus() <= 0 {
+					err := os.Remove(destinationPath)
+					if err != nil {
+						if jptm.ShouldLog(pipeline.LogError){
+							jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", destinationPath, err.Error()))
+						}
 					}
 				}
 			}

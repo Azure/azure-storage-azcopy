@@ -101,7 +101,7 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		func(writer http.ResponseWriter, request *http.Request) {
 			var payload common.JobID
 			deserialize(request, &payload)
-			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelled()), writer)
+			serialize(CancelPauseJobOrder(payload, common.EJobStatus.Cancelling()), writer)
 		})
 	http.HandleFunc(common.ERpcCmd.PauseJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
@@ -111,7 +111,7 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		})
 	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.JobID
+			var payload common.ResumeJob
 			deserialize(request, &payload)
 			serialize(ResumeJobOrder(payload), writer)
 		})
@@ -186,17 +186,16 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	jpp0 := jpm.Plan()
 	var jr common.CancelPauseResumeResponse
 	switch jpp0.JobStatus() { // Current status
-	case common.EJobStatus.InProgress(): // Changing to InProgress/Paused/Canceled is OK
-		jpp0.SetJobStatus(desiredJobStatus) // Set status to paused/Canceled
-
 	case common.EJobStatus.Completed(): // You can't change state of a completed job
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("Can't %s JobID=%v because it has already completed", verb, jobID),
 		}
-
+	case common.EJobStatus.InProgress():
+		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
-	case common.EJobStatus.Cancelled():
+		fallthrough
+	case common.EJobStatus.Cancelling():
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
@@ -264,7 +263,8 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 //	}
 //	return jr
 //}
-func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
+func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeResponse {
+	jobID := resJobOrder.JobID
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
 	if !found {
 		return common.CancelPauseResumeResponse{
@@ -296,7 +296,7 @@ func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", jobID))
 		}
-		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
+		jm.ResumeTransfers(steCtx, resJobOrder.IncludeTransfer, resJobOrder.ExcludeTransfer) // Reschedule all job part's transfers
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
@@ -380,8 +380,10 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	if (js.CompleteJobOrdered) && (jp0.Plan().JobStatus() == common.EJobStatus.Completed()) {
-		js.JobStatus = common.EJobStatus.Completed()
+	part0PlanStatus := jp0.Plan().JobStatus()
+	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed() ||
+									part0PlanStatus == common.EJobStatus.Cancelled()) {
+		js.JobStatus = part0PlanStatus
 	}
 	return js
 }

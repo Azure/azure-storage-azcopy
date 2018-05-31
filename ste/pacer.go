@@ -71,7 +71,7 @@ func NewPacerPolicyFactory(p *pacer) pipeline.Factory {
 	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
 		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
 			resp, err := next.Do(ctx, request)
-			if err == nil {
+			if p != nil && err == nil {
 				// Reducing the pacer's rate limit by 10 s for every 503 error.
 				p.updateTargetRate(
 					(resp.Response().StatusCode != http.StatusServiceUnavailable) &&

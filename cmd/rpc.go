@@ -47,10 +47,10 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
 
 	case common.ERpcCmd.CancelJob():
-		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelled())
+		*(responseData.(*common.CancelPauseResumeResponse)) = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelling())
 
 	case common.ERpcCmd.ResumeJob():
-		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(requestData.(common.JobID))
+		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(requestData.(common.ResumeJob))
 
 	default:
 		panic(fmt.Errorf("Unrecognized RpcCmd: %q", rpcCmd.String()))

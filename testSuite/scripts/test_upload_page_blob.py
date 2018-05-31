@@ -9,7 +9,7 @@ def test_page_blob_upload_1mb():
 
     # execute azcopy upload.
     destination = util.get_resource_sas(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("Logging", "5").\
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("Logging", "info").\
                 add_flags("block-size","4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
@@ -31,7 +31,7 @@ def test_page_range_for_complete_sparse_file():
 
     # execute azcopy page blob upload.
     destination_sas = util.get_resource_sas(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "5").\
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info").\
         add_flags("block-size","4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
@@ -54,7 +54,7 @@ def test_page_blob_upload_partial_sparse_file():
 
     # execute azcopy pageblob upload.
     destination_sas = util.get_resource_sas(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "5").\
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info").\
                     add_flags("block-size","4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
@@ -78,7 +78,7 @@ def test_set_page_blob_tier():
 
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P10").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P10").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P10 failed.")
         return
@@ -95,7 +95,7 @@ def test_set_page_blob_tier():
     file_path = util.create_test_file(filename, 100 * 1024)
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P20").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P20").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P20 failed.")
         return
@@ -112,7 +112,7 @@ def test_set_page_blob_tier():
     file_path = util.create_test_file(filename, 100 * 1024)
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P30").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P30").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P30 failed.")
         return
@@ -129,7 +129,7 @@ def test_set_page_blob_tier():
     file_path = util.create_test_file(filename, 100 * 1024)
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P4").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P4").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P4 failed.")
         return
@@ -146,7 +146,7 @@ def test_set_page_blob_tier():
     file_path = util.create_test_file(filename, 100 * 1024)
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P40").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P40").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P40 failed.")
         return
@@ -163,7 +163,7 @@ def test_set_page_blob_tier():
     file_path = util.create_test_file(filename, 100 * 1024)
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P50").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P50").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P50 failed.")
         return
@@ -180,7 +180,7 @@ def test_set_page_blob_tier():
     file_path = util.create_test_file(filename, 100 * 1024)
     destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "5").add_flags("page-blob-tier", "P6").execute_azcopy_copy_command()
+        add_flags("Logging", "info").add_flags("page-blob-tier", "P6").execute_azcopy_copy_command()
     if not result:
         print("uploading file with page-blob-tier set to P6 failed.")
         return

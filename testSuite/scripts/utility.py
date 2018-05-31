@@ -196,6 +196,15 @@ def create_test_html_file(filename):
     f.close()
     return file_path
 
+# creates a dir with given inside test directory
+def create_test_dir(dir_name):
+    dir_path = os.path.join(test_directory_path, dir_name)
+    try:
+        os.mkdir(dir_path)
+    except:
+        raise Exception("error creating directory ", dir_path)
+    return dir_path
+
 # create_test_n_files creates given number of files for given size
 # inside directory inside test directory.
 # returns the path of directory in which n files are created.
@@ -334,6 +343,19 @@ def get_resource_sas(resource_name):
     resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
     return resource_sas
 
+def append_text_path_resource_sas(resource_sas, text):
+    # Splitting the resource sas to add the text to the SAS
+    url_parts = resource_sas.split("?")
+
+    # adding the text to the blob name of the resource sas
+    if url_parts[0].endswith("/"):
+        # If there is a separator at the end of blob name
+        # no need to append "/" before the text after the blob name
+        resource_sas = url_parts[0] + text + '?' + url_parts[1]
+    else:
+        resource_sas = url_parts[0] + "/" + text + '?' + url_parts[1]
+    return resource_sas
+
 # get_resource_sas_from_share return the shared access signature for the given resource
 # based on the share url.
 def get_resource_sas_from_share(resource_name):
@@ -377,3 +399,43 @@ def get_suite_executable_name():
     if osType == "LINUX":
         return "testSuite"
     return ""
+
+# parseAzcopyOutput parses the Azcopy Output in JSON format to give the final Azcopy Output in JSON Format
+# Final Azcopy Output is the last JobSummary for the Job
+# Azcopy Output can have more than one Summary for the Job
+# parseAzcopyOutput returns the final JobSummary in JSON format.
+def parseAzcopyOutput(s):
+    count = 0
+    output = ""
+    final_output = ""
+    # Split the lines
+    lines = s.split('\n')
+    # Iterating through the output in reverse order since last summary has to be considered.
+    # Increment the count when line is "}"
+    # Reduce the count when line is "{"
+    # append the line to final output
+    # When the count is 0, it means the last Summary has been traversed
+    for line in reversed(lines):
+        # If the line is empty, then continue
+        if line == "":
+            continue
+        elif line is '}':
+            count = count + 1
+        elif line is "{":
+            count = count - 1
+        if count >= 0:
+            if len(output) > 0:
+                output = output + '\n' + line
+            else:
+                output = line
+        if count == 0:
+            break
+    lines = output.split('\n')
+    # Since the lines were iterated in reverse order revering them again and
+    # concatenating the lines to get the final JobSummary
+    for line in reversed(lines):
+        if len(final_output) > 0 :
+            final_output = final_output + '\n' + line
+        else:
+            final_output = line
+    return final_output

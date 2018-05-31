@@ -38,7 +38,7 @@ type IJobMgr interface {
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
 	//Throughput() XferThroughput
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr
-	ResumeTransfers(appCtx context.Context)
+	ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone() uint32
 	Cancel()
@@ -101,7 +101,7 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
 	if scheduleTransfers {
-		jpm.ScheduleTransfers(jm.ctx)
+		jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
 	} else {
 		// If the transfer not scheduled, then Map the part file.
 		jpm.planMMF = jpm.filename.Map()
@@ -112,18 +112,11 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
+func (jm *jobMgr) ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
 	jm.reset(appCtx)
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
-		jpm.ScheduleTransfers(jm.ctx)
+		jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
-	//for p := common.PartNumber(0); true; p++ { // Schedule the transfer all of this job's parts
-	//	jpm, found := jm.JobPartMgr(p)
-	//	if !found {
-	//		break
-	//	}
-	//	jpm.ScheduleTransfers(jm.ctx)
-	//}
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
@@ -148,7 +141,8 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	}
 
 	switch part0Plan := jobPart0Mgr.Plan(); part0Plan.JobStatus() {
-	case common.EJobStatus.Cancelled():
+	case common.EJobStatus.Cancelling():
+		part0Plan.SetJobStatus(common.EJobStatus.Cancelled())
 		if shouldLog {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("all parts of Job %v successfully cancelled; cleaning up the Job", jm.jobID))
 		}

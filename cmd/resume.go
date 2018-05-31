@@ -28,11 +28,14 @@ import (
 	"os"
 	"os/signal"
 	"time"
+	"strings"
 )
 
 func init() {
 	var commandLineInput = ""
-
+	var includeTransfer = ""
+	var excludeTransfer = ""
+	rawResumeJobCommand := common.ResumeJob{}
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
 		Use:        "resume",
@@ -51,33 +54,78 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			HandleResumeCommand(commandLineInput)
+			jobID, err := common.ParseJobID(commandLineInput)
+			if err != nil {
+				fmt.Println(fmt.Sprintf("error parsing the jobId %s. Failed with error %s", commandLineInput, err.Error()))
+				os.Exit(1)
+			}
+			rawResumeJobCommand.JobID = jobID
+			rawResumeJobCommand.IncludeTransfer = make(map[string]int)
+			rawResumeJobCommand.ExcludeTransfer = make(map[string]int)
+
+			// If the transfer has been provided with the include
+			// parse the transfer list
+			if len(includeTransfer) > 0 {
+				// Split the Include Transfer using ';'
+				transfers := strings.Split(includeTransfer, ";")
+				for index := range transfers {
+					if len(transfers[index]) == 0 {
+						// If the transfer provided is empty
+						// skip the transfer
+						// This is to handle the misplaced ';'
+						continue
+					}
+					rawResumeJobCommand.IncludeTransfer[transfers[index]] = index
+				}
+			}
+			// If the transfer has been provided with the exclude
+			// parse the transfer list
+			if len(excludeTransfer) > 0 {
+				// Split the Exclude Transfer using ';'
+				transfers := strings.Split(excludeTransfer, ";")
+				for index := range transfers {
+					if len(transfers[index]) == 0 {
+						// If the transfer provided is empty
+						// skip the transfer
+						// This is to handle the misplaced ';'
+						continue
+					}
+					rawResumeJobCommand.ExcludeTransfer[transfers[index]] = index
+				}
+			}
+			HandleResumeCommand(rawResumeJobCommand)
 		},
 	}
 	rootCmd.AddCommand(resumeCmd)
+	rootCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job " +
+		"More than one file are separated by ';'")
+	rootCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job " +
+		"More than one file are separated by ';'")
 }
 
 func waitUntilJobCompletion(jobID common.JobID) {
-	// created a signal channel to receive the Interrupt and Kill signal send to OS
-	cancelChannel := make(chan os.Signal, 1)
-	// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	signal.Notify(cancelChannel, os.Interrupt, os.Kill)
 
-	// waiting for signals from either cancelChannel or timeOut Channel.
+	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
+
+	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
-		case <-cancelChannel:
-			fmt.Println("Cancelling Job")
-			cookedCancelCmdArgs{jobID: jobID}.process()
-			os.Exit(1)
+		case <-CancelChannel:
+			//fmt.Println("Cancelling Job")
+			err := cookedCancelCmdArgs{jobID: jobID}.process()
+			if err != nil {
+				fmt.Println(fmt.Sprintf("error occurred while cancelling the job %s. Failed with error %s", jobID, err.Error()))
+				os.Exit(1)
+			}
 		default:
 			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval,false)
 
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() {
+			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled(){
 				os.Exit(0)
 			}
 
@@ -90,20 +138,13 @@ func waitUntilJobCompletion(jobID common.JobID) {
 
 // handles the resume command
 // dispatches the resume Job order to the storage engine
-func HandleResumeCommand(jobIdString string) {
-	// parsing the given JobId to validate its format correctness
-	jobID, err := common.ParseJobID(jobIdString)
-	if err != nil {
-		// If parsing gives an error, hence it is not a valid JobId format
-		fmt.Println("invalid jobId string passed. Failed while parsing string to jobId")
-		return
-	}
+func HandleResumeCommand(resJobOrder common.ResumeJob) {
 
 	var resumeJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.ResumeJob(), jobID, &resumeJobResponse)
+	Rpc(common.ERpcCmd.ResumeJob(), resJobOrder, &resumeJobResponse)
 	if !resumeJobResponse.CancelledPauseResumed {
 		fmt.Println(resumeJobResponse.ErrorMsg)
 		return
 	}
-	waitUntilJobCompletion(jobID)
+	waitUntilJobCompletion(resJobOrder.JobID)
 }

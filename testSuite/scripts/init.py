@@ -8,7 +8,7 @@ import glob, os
 import configparser
 import platform
 
-def execute_user_scenario_1() :
+def execute_user_scenario_blob_1() :
     test_1kb_blob_upload()
     test_63mb_blob_upload()
     test_n_1kb_blob_upload(5)
@@ -34,7 +34,14 @@ def temp_adhoc_scenario() :
     test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
     #test_upload_download_1kb_file_wildcard_several_files()
 
+def execute_user_scenario_wildcards_op():
+    test_remove_files_with_Wildcard()
+
 def execute_user_scenario_azcopy_op():
+    test_download_blob_exclude_flag()
+    test_download_blob_include_flag()
+    test_upload_block_blob_include_flag()
+    test_upload_block_blob_exclude_flag()
     test_remove_virtual_directory()
     test_set_block_blob_tier()
     test_set_page_blob_tier()
@@ -161,11 +168,12 @@ def cleanup():
 
 def main():
     init()
+    execute_user_scenario_wildcards_op()
     execute_user_scenario_azcopy_op()
-    execute_user_scenario_1()
-    #execute_user_scenario_2()
-    #execute_user_scenario_file_1()
-    #temp_adhoc_scenario()
+    execute_user_scenario_blob_1()
+    execute_user_scenario_2()
+    execute_user_scenario_file_1()
+    temp_adhoc_scenario()
     cleanup()
 
 main()

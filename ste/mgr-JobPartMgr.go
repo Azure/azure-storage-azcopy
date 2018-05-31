@@ -18,7 +18,7 @@ var _ IJobPartMgr = &jobPartMgr{}
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context)
+	ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	IsForceWriteTrue() bool
@@ -59,8 +59,8 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-// newBlobPipeline creates a Pipeline using the specified credentials and options.
-func newBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+// NewBlobPipeline creates a Pipeline using the specified credentials and options.
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -150,7 +150,7 @@ type jobPartMgr struct {
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
 	jpm.atomicTransfersDone = 0      // Reset the # of transfers done back to 0
 	jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
@@ -203,10 +203,42 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
 			continue
 		}
+
+		// If the list of transfer to be included is passed
+		// then check current transfer exists in the list of included transfer
+		// If it doesn't exists, skip the transfer
+		if len(includeTransfer) > 0 {
+			// Get the source string from the part plan header
+			src, _ := plan.TransferSrcDstStrings(t)
+			// If source doesn't exists, skip the transfer
+			_, ok := includeTransfer[src]
+			if !ok {
+				jpm.ReportTransferDone()                   // Don't schedule transfer which is not mentioned to be included
+				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
+				continue
+			}
+		}
+		// If the list of transfer to be excluded is passed
+		// then check the current transfer in the list of excluded transfer
+		// If it exists, then skip the transfer
+		if len(excludeTransfer) > 0 {
+			// Get the source string from the part plan header
+			src, _ := plan.TransferSrcDstStrings(t)
+			// If the source exists in the list of excluded transfer
+			// skip the transfer
+			_, ok := excludeTransfer[src]
+			if ok {
+				jpm.ReportTransferDone()                   // Don't schedule transfer which is mentioned to be excluded
+				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
+				continue
+			}
+		}
+
 		// If the transfer was failed, then while rescheduling the transfer marking it Started.
 		if ts == common.ETransferStatus.Failed() {
 			jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
 		}
+
 		// Each transfer gets its own context (so any chunk can cancel the whole transfer) based off the job's context
 		transferCtx, transferCancel := context.WithCancel(jobCtx)
 		jptm := &jobPartTransferMgr{
@@ -243,7 +275,7 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-			jpm.pipeline = newBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+			jpm.pipeline = NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 				Log:       jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
 			},
@@ -254,6 +286,8 @@ func (jpm *jobPartMgr) createPipeline() {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
+		case common.EFromTo.FileTrash():
+			fallthrough
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system
 			fallthrough
 		case common.EFromTo.LocalFile(): // upload from local file system to Azure File

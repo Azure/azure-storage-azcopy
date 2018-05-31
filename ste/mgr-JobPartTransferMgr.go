@@ -24,6 +24,7 @@ type IJobPartTransferMgr interface {
 	StartJobXfer()
 	IsForceWriteTrue() bool
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
+	TransferStatus()(common.TransferStatus)
 	SetStatus(status common.TransferStatus)
 	SetNumberOfChunks(numChunks uint32)
 	ReportTransferDone() uint32
@@ -144,6 +145,11 @@ func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32) {
 func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone uint32) {
 	chunksDone = atomic.AddUint32(&jptm.atomicChunksDone, 1)
 	return chunksDone == jptm.numChunks, chunksDone
+}
+
+//
+func (jptm *jobPartTransferMgr) TransferStatus()(common.TransferStatus){
+	return jptm.jobPartPlanTransfer.TransferStatus()
 }
 
 // TransferStatus updates the status of given transfer for given jobId and partNumber
