@@ -191,11 +191,23 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 			CancelledPauseResumed: false,
 			ErrorMsg:              fmt.Sprintf("Can't %s JobID=%v because it has already completed", verb, jobID),
 		}
+	case common.EJobStatus.Cancelled():
+		// If the status of Job is cancelled, it means that it has already been cancelled
+		// No need to cancel further
+		jr = common.CancelPauseResumeResponse{
+			CancelledPauseResumed:false,
+			ErrorMsg:fmt.Sprintf("cannot cancel the job %s since it is already cancelled", jobID),
+		}
+	case common.EJobStatus.Cancelling():
+		// If the status of Job is cancelling, it means that it has already been requested for cancellation
+		// No need to cancel further
+		jr = common.CancelPauseResumeResponse{
+			CancelledPauseResumed:true,
+			ErrorMsg:fmt.Sprintf("cannot cancel the job %s since it has already been requested for cancellation", jobID),
+		}
 	case common.EJobStatus.InProgress():
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
-		fallthrough
-	case common.EJobStatus.Cancelling():
 		jpp0.SetJobStatus(desiredJobStatus)
 		msg := fmt.Sprintf("JobID=%v %s", jobID,
 			common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "paused", "canceled"))
