@@ -145,6 +145,11 @@ func (jl *jobLogger) CloseLog() {
 }
 
 func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
+	// If the logger for Job is not initialized i.e file is not open
+	// or logger instance is not initialized, then initialize it
+	if jl.file == nil || jl.logger == nil {
+		jl.OpenLog()
+	}
 	if jl.ShouldLog(loglevel) {
 		jl.logger.Println(msg)
 	}
