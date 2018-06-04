@@ -105,8 +105,7 @@ def execute_user_scenario_file_1() :
 def execute_user_scenario_2():
     test_blob_download_with_special_characters()
 
-def init():
-    # initializing config parser to read the testsuite_config file.
+def parse_config_file_set_env():
     config = configparser.RawConfigParser()
     files_read = config.read('../test_suite_config.ini')
     if len(files_read) != 1:
@@ -122,26 +121,64 @@ def init():
         platform_list.index(osType)
     except:
         raise "not able to find the config defined for ostype " + osType
+    # set all the environment variables
+    # TEST_DIRECTORY_PATH is the location where test_data folder will be created and test files will be created further.
+    # set the environment variable TEST_DIRECTORY_PATH
+    os.environ['TEST_DIRECTORY_PATH'] = config[osType]['TEST_DIRECTORY_PATH']
 
+    # AZCOPY_EXECUTABLE_PATH is the location of the azcopy executable
+    # azcopy executable will be copied to test data folder.
+    # set the environment variables
+    os.environ['AZCOPY_EXECUTABLE_PATH'] = config[osType]['AZCOPY_EXECUTABLE_PATH']
+
+    # TEST_SUITE_EXECUTABLE_LOCATION is the location of the test suite executable
+    # test suite executable will be copied to test data folder.
+    # set the environment variable TEST_SUITE_EXECUTABLE_LOCATION
+    os.environ['TEST_SUITE_EXECUTABLE_LOCATION'] = config[osType]['TEST_SUITE_EXECUTABLE_LOCATION']
+
+    # CONTAINER_SAS_URL is the shared access signature of the container where test data will be uploaded to and downloaded from.
+    os.environ['CONTAINER_SAS_URL'] = config['CREDENTIALS']['CONTAINER_SAS_URL']
+
+    # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
+    os.environ['SHARE_SAS_URL'] = config['CREDENTIALS']['SHARE_SAS_URL']
+
+    # container sas of the premium storage account.
+    os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
+
+def init():
+
+    # Check the environment variables.
+    # If they are not set, then parse the config file and set
+    # environment variables. If any of the env variable is not set
+    # test_config_file is parsed and env variables are reset.
+    if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
+            os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
+            os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
+            os.environ.get('CONTAINER_SAS_URL', '-1') == '-1' or \
+            os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
+            os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1':
+        parse_config_file_set_env()
+
+    # Get the environment variables value
     # test_dir_path is the location where test_data folder will be created and test files will be created further.
-    test_dir_path = config[osType]['TEST_DIRECTORY_PATH']
+    test_dir_path = os.environ.get('TEST_DIRECTORY_PATH')
 
     # azcopy_exec_location is the location of the azcopy executable
     # azcopy executable will be copied to test data folder.
-    azcopy_exec_location = config[osType]['AZCOPY_EXECUTABLE_PATH']
+    azcopy_exec_location = os.environ.get('AZCOPY_EXECUTABLE_PATH')
 
     # test_suite_exec_location is the location of the test suite executable
     # test suite executable will be copied to test data folder.
-    test_suite_exec_location = config[osType]['TEST_SUITE_EXECUTABLE_LOCATION']
+    test_suite_exec_location = os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION')
 
     # container_sas is the shared access signature of the container where test data will be uploaded to and downloaded from.
-    container_sas = config['CREDENTIALS']['CONTAINER_SAS_URL']
+    container_sas = os.environ.get('CONTAINER_SAS_URL')
 
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
-    share_sas_url = config['CREDENTIALS']['SHARE_SAS_URL']
+    share_sas_url = os.environ.get('SHARE_SAS_URL')
 
     # container sas of the premium storage account.
-    premium_container_sas = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
+    premium_container_sas = os.environ.get('PREMIUM_CONTAINER_SAS_URL')
 
     # deleting the log files.
     for f in glob.glob('*.log'):
