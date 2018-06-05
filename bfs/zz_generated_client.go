@@ -97,9 +97,7 @@ func (client managementClient) createFilesystemPreparer(filesystem string, resou
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -293,9 +291,7 @@ func (client managementClient) createPathPreparer(filesystem string, pathParamet
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -374,9 +370,7 @@ func (client managementClient) deleteFilesystemPreparer(filesystem string, resou
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -478,9 +472,7 @@ func (client managementClient) deletePathPreparer(filesystem string, pathParamet
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -543,9 +535,7 @@ func (client managementClient) getFilesystemPropertiesPreparer(filesystem string
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -630,9 +620,7 @@ func (client managementClient) getPathPropertiesPreparer(filesystem string, path
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -749,9 +737,7 @@ func (client managementClient) leasePathPreparer(xMsLeaseAction string, filesyst
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -835,9 +821,7 @@ func (client managementClient) listPathsPreparer(recursive bool, filesystem stri
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -857,6 +841,7 @@ func (client managementClient) listPathsResponder(resp pipeline.Response) (pipel
 		return result, NewResponseError(err, resp.Response(), "failed to read response body")
 	}
 	if len(b) > 0 {
+		b = removeBOM(b)
 		err = json.Unmarshal(b, result)
 		if err != nil {
 			return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
@@ -939,9 +924,7 @@ func (client managementClient) readPathPreparer(filesystem string, pathParameter
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -1021,9 +1004,7 @@ func (client managementClient) setFilesystemPropertiesPreparer(filesystem string
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -1178,9 +1159,7 @@ func (client managementClient) updatePathPreparer(action string, filesystem stri
 	if xMsDate != nil {
 		req.Header.Set("x-ms-date", *xMsDate)
 	}
-	if xMsVersion != nil {
-		req.Header.Set("x-ms-version", *client.XMsVersion)
-	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
