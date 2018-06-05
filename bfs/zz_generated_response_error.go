@@ -18,7 +18,6 @@ var responseErrorFactory func(cause error, response *http.Response, description 
 type ResponseError interface {
 	// Error exposes the Error(), Temporary() and Timeout() methods.
 	net.Error // Includes the Go error interface
-
 	// Response returns the HTTP response. You may examine this but you should not modify it.
 	Response() *http.Response
 }

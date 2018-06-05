@@ -3,7 +3,11 @@
   "info": {
     "description": "The Azure Distributed Filesystem is designed to provide storage for big data and Hadoop workloads.",
     "title": "Azure Distributed Filesystem",
-    "version": "2018-03-28"
+    "version": "2018-03-28",
+    "x-ms-code-generation-settings": {
+      "header": "MIT",
+      "strictSpecAdherence": false
+    }
   },
   "x-ms-parameterized-host": {
     "hostTemplate": "{accountName}.{dnsSuffix}",
@@ -36,7 +40,7 @@
       "description": "Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.",
       "in": "header",
       "name": "x-ms-version",
-      "required": false,
+      "required": true,
       "type": "string"
     },
     "accountName": {
