@@ -185,6 +185,8 @@ func (FromTo) FilePipe() FromTo  { return FromTo(7) }
 func (FromTo) PipeFile() FromTo  { return FromTo(8) }
 func (FromTo) BlobTrash() FromTo { return FromTo(9) }
 func (FromTo) FileTrash() FromTo { return FromTo(10) }
+func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
+//func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
 
 func (ft FromTo) String() string {
 	return EnumHelper{}.StringInteger(ft, reflect.TypeOf(ft))

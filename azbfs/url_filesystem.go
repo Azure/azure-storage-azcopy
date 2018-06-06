@@ -60,22 +60,19 @@ func (s FileSystemURL) NewRootDirectoryURL() DirectoryURL {
 	return NewDirectoryURL(s.URL(), s.fileSystemClient.Pipeline())
 }
 
-// Create creates a new share within a storage account. If a share with the same name already exists, the operation fails.
-// quotaInGB specifies the maximum size of the share in gigabytes, 0 means you accept service's default quota.
-// For more information, see https://docs.microsoft.com/rest/api/storageservices/create-share.
+// Create creates a new file system within a storage account. If a file system with the same name already exists, the operation fails.
+// quotaInGB specifies the maximum size of the file system in gigabytes, 0 means you accept service's default quota.
 func (s FileSystemURL) Create(ctx context.Context) (*CreateFilesystemResponse, error) {
 	return s.fileSystemClient.CreateFilesystem(ctx, s.name, FileSystemResourceName, nil, nil, nil, nil)
 }
 
-// Delete marks the specified share or share snapshot for deletion.
-// The share or share snapshot and any files contained within it are later deleted during garbage collection.
-// For more information, see https://docs.microsoft.com/rest/api/storageservices/delete-share.
-func (s FileSystemURL) Delete(ctx context.Context, ) (*DeleteFilesystemResponse, error) {
+// Delete marks the specified file system for deletion.
+// The file system and any files contained within it are later deleted during garbage collection.
+func (s FileSystemURL) Delete(ctx context.Context) (*DeleteFilesystemResponse, error) {
 	return s.fileSystemClient.DeleteFilesystem(ctx, s.name, FileSystemResourceName, nil, nil, nil, nil, nil)
 }
 
-// GetProperties returns all user-defined metadata and system properties for the specified share or share snapshot.
-// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/get-share-properties.
+// GetProperties returns all user-defined metadata and system properties for the specified file system or file system snapshot.
 func (s FileSystemURL) GetProperties(ctx context.Context) (*GetFilesystemPropertiesResponse, error) {
 	return s.fileSystemClient.GetFilesystemProperties(ctx, s.name, FileSystemResourceName, nil, nil, nil)
 }

@@ -82,11 +82,14 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.PipeBlob()
 	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Pipe():
 		return common.EFromTo.BlobPipe()
-
 	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.File():
 		return common.EFromTo.PipeFile()
 	case srcLocation == ELocation.File() && dstLocation == ELocation.Pipe():
 		return common.EFromTo.FilePipe()
+	case srcLocation == ELocation.Local() && dstLocation == ELocation.BlobFS():
+		return common.EFromTo.LocalBlobFS()
+	//case srcLocation == ELocation.BlobFS() && dstLocation == ELocation.Local():
+	//	return common.EFromTo.BlobFSLocal()
 	}
 	return common.EFromTo.Unknown()
 }
@@ -100,6 +103,7 @@ func (Location) Local() Location   { return Location(1) }
 func (Location) Pipe() Location    { return Location(2) }
 func (Location) Blob() Location    { return Location(3) }
 func (Location) File() Location    { return Location(4) }
+func (Location) BlobFS() Location    { return Location(5) }
 func (l Location) String() string {
 	return common.EnumHelper{}.StringInteger(uint32(l), reflect.TypeOf(l))
 }
@@ -115,10 +119,13 @@ func inferArgumentLocation(arg string) Location {
 		if err == nil && u.Scheme != "" || u.Host != "" || u.Path != "" {
 			// Is the argument a URL to blob storage?
 			switch host := strings.ToLower(u.Host); true {
+			// Azure Stack does not have the core.windows.net
 			case strings.Contains(host, ".blob"):
 				return ELocation.Blob()
 			case strings.Contains(host, ".file.core.windows.net"):
 				return ELocation.File()
+			case strings.Contains(host, ".dfs.core.windows.net"):
+				return ELocation.BlobFS()
 			}
 		}
 	} else {
