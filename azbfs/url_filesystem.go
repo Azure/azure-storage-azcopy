@@ -79,23 +79,3 @@ func (s FileSystemURL) Delete(ctx context.Context, ) (*DeleteFilesystemResponse,
 func (s FileSystemURL) GetProperties(ctx context.Context) (*GetFilesystemPropertiesResponse, error) {
 	return s.fileSystemClient.GetFilesystemProperties(ctx, s.name, FileSystemResourceName, nil, nil, nil)
 }
-
-// appendToURLPath appends a string to the end of a URL's path (prefixing the string with a '/' if required)
-func appendToURLPath(u url.URL, name string) url.URL {
-	// e.g. "https://ms.com/a/b/?k1=v1&k2=v2#f"
-	// When you call url.Parse() this is what you'll get:
-	//     Scheme: "https"
-	//     Opaque: ""
-	//       User: nil
-	//       Host: "ms.com"
-	//       Path: "/a/b/"	This should start with a / and it might or might not have a trailing slash
-	//    RawPath: ""
-	// ForceQuery: false
-	//   RawQuery: "k1=v1&k2=v2"
-	//   Fragment: "f"
-	if len(u.Path) == 0 || u.Path[len(u.Path)-1] != '/' {
-		u.Path += "/" // Append "/" to end before appending name
-	}
-	u.Path += name
-	return u
-}
