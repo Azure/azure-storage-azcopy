@@ -36,27 +36,27 @@ func (d DirectoryURL) String() string {
 func (d DirectoryURL) WithPipeline(p pipeline.Pipeline) DirectoryURL {
 	return NewDirectoryURL(d.URL(), p)
 }
-//
-//// NewFileURL creates a new FileURL object by concatenating fileName to the end of
-//// DirectoryURL's URL. The new FileURL uses the same request policy pipeline as the DirectoryURL.
-//// To change the pipeline, create the FileURL and then call its WithPipeline method passing in the
-//// desired pipeline object. Or, call this package's NewFileURL instead of calling this object's
-//// NewFileURL method.
-//func (d DirectoryURL) NewFileURL(fileName string) FileURL {
-//	fileURL := appendToURLPath(d.URL(), fileName)
-//	return NewFileURL(fileURL, d.directoryClient.Pipeline())
-//}
-//
-//// NewDirectoryURL creates a new DirectoryURL object by concatenating directoryName to the end of
-//// DirectoryURL's URL. The new DirectoryURL uses the same request policy pipeline as the DirectoryURL.
-//// To change the pipeline, create the DirectoryURL and then call its WithPipeline method passing in the
-//// desired pipeline object. Or, call this package's NewDirectoryURL instead of calling this object's
-//// NewDirectoryURL method.
-//func (d DirectoryURL) NewDirectoryURL(directoryName string) DirectoryURL {
-//	directoryURL := appendToURLPath(d.URL(), directoryName)
-//	return NewDirectoryURL(directoryURL, d.directoryClient.Pipeline())
-//}
-//
+
+// NewFileURL creates a new FileURL object by concatenating fileName to the end of
+// DirectoryURL's URL. The new FileURL uses the same request policy pipeline as the DirectoryURL.
+// To change the pipeline, create the FileURL and then call its WithPipeline method passing in the
+// desired pipeline object. Or, call this package's NewFileURL instead of calling this object's
+// NewFileURL method.
+func (d DirectoryURL) NewFileURL(fileName string) FileURL {
+	fileURL := appendToURLPath(d.URL(), fileName)
+	return NewFileURL(fileURL, d.directoryClient.Pipeline())
+}
+
+// NewDirectoryURL creates a new DirectoryURL object by concatenating directoryName to the end of
+// DirectoryURL's URL. The new DirectoryURL uses the same request policy pipeline as the DirectoryURL.
+// To change the pipeline, create the DirectoryURL and then call its WithPipeline method passing in the
+// desired pipeline object. Or, call this package's NewDirectoryURL instead of calling this object's
+// NewDirectoryURL method.
+func (d DirectoryURL) NewDirectoryURL(directoryName string) DirectoryURL {
+	directoryURL := appendToURLPath(d.URL(), directoryName)
+	return NewDirectoryURL(directoryURL, d.directoryClient.Pipeline())
+}
+
 //// Create creates a new directory within a storage account.
 //// For more information, see https://docs.microsoft.com/rest/api/storageservices/create-directory.
 //func (d DirectoryURL) Create(ctx context.Context, metadata Metadata) (*DirectoryCreateResponse, error) {
