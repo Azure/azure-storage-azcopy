@@ -13,8 +13,6 @@ type FileSystemURLSuite struct{}
 
 var _ = chk.Suite(&FileSystemURLSuite{})
 
-type testPipeline struct{}
-
 func delFileSystem(c *chk.C, fs azbfs.FileSystemURL) {
 	resp, err := fs.Delete(context.Background())
 	c.Assert(err, chk.IsNil)

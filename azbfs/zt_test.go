@@ -47,7 +47,7 @@ func getAccountAndKey() (string, string) {
 
 func getBfsServiceURL() azbfs.ServiceURL {
 	name, key := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("http://%s.dfs.core.windows.net/", name))
+	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", name))
 
 	credential := azbfs.NewSharedKeyCredential(name, key)
 	pipeline := azbfs.NewPipeline(credential, azbfs.PipelineOptions{})
@@ -125,16 +125,16 @@ func getFileURLFromDirectory(c *chk.C, directory azfile.DirectoryURL) (file azfi
 
 	return file, name
 }
-//
-//func createNewShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-//	share, name = getFileSystemURL(c, fsu)
-//
-//	cResp, err := share.Create(ctx, nil, 0)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return share, name
-//}
-//
+
+func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
+	fs, name = getFileSystemURL(c, fsu)
+
+	cResp, err := fs.Create(ctx)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return fs, name
+}
+
 //func createNewShareWithPrefix(c *chk.C, fsu azfile.ServiceURL, prefix string) (share azfile.ShareURL, name string) {
 //	name = generateName(prefix)
 //	share = fsu.NewShareURL(name)
