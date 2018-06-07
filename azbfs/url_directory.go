@@ -1,15 +1,42 @@
 package azbfs
 
 import (
-	//"context"
 	"net/url"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"context"
+	"net/http"
 )
+
+var DirectoryResourceType = "directory"
+var DeleteDirectoryRecursively = true
+var MaxEntriesinListOperation = int32(1000)
+
+// DirectoryCreateResponse is the CreatePathResponse response type returned for directory specific operations
+// The type is used to establish difference in the response for file and directory operations since both type of
+// operations has same response type.
+type DirectoryCreateResponse CreatePathResponse
+
+// DirectoryDeleteResponse is the DeletePathResponse response type returned for directory specific operations
+// The type is used to establish difference in the response for file and directory operations since both type of
+// operations has same response type.
+type DirectoryDeleteResponse DeletePathResponse
+
+// DirectoryGetPropertiesResponse is the GetPathPropertiesResponse response type returned for directory specific operations
+// The type is used to establish difference in the response for file and directory operations since both type of
+// operations has same response type.
+type DirectoryGetPropertiesResponse GetPathPropertiesResponse
+
+// DirectoryListResponse is the ListSchema response type. This type declaration is used to implement useful methods on
+// ListPath response
+type DirectoryListResponse ListSchema
 
 // A DirectoryURL represents a URL to the Azure Storage directory allowing you to manipulate its directories and files.
 type DirectoryURL struct {
 	directoryClient managementClient
+	// filesystem is the filesystem identifier
+	filesystem string
+	// pathParameter is the file or directory path
+	pathParameter     string
 }
 
 // NewDirectoryURL creates a DirectoryURL object using the specified URL and request policy pipeline.
@@ -17,8 +44,9 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 	if p == nil {
 		panic("p can't be nil")
 	}
+	urlParts := NewFileURLParts(url)
 	directoryClient := newManagementClient(url, p)
-	return DirectoryURL{directoryClient: directoryClient}
+	return DirectoryURL{directoryClient: directoryClient, filesystem:urlParts.FileSystemName, pathParameter:urlParts.DirectoryOrFilePath}
 }
 
 // URL returns the URL endpoint used by the DirectoryURL object.
@@ -47,33 +75,87 @@ func (d DirectoryURL) NewFileURL(fileName string) FileURL {
 	return NewFileURL(fileURL, d.directoryClient.Pipeline())
 }
 
-// NewDirectoryURL creates a new DirectoryURL object by concatenating directoryName to the end of
-// DirectoryURL's URL. The new DirectoryURL uses the same request policy pipeline as the DirectoryURL.
-// To change the pipeline, create the DirectoryURL and then call its WithPipeline method passing in the
-// desired pipeline object. Or, call this package's NewDirectoryURL instead of calling this object's
-// NewDirectoryURL method.
-func (d DirectoryURL) NewDirectoryURL(directoryName string) DirectoryURL {
-	directoryURL := appendToURLPath(d.URL(), directoryName)
-	return NewDirectoryURL(directoryURL, d.directoryClient.Pipeline())
+
+// NewSubDirectoryUrl creates a new Directory Url for Sub directory inside the directory of given directory URL.
+// The new NewSubDirectoryUrl uses the same request policy pipeline as the DirectoryURL.
+// To change the pipeline, create the NewDirectoryUrl and then call its WithPipeline method passing in the
+// desired pipeline object.
+func (d DirectoryURL) NewSubDirectoryUrl(dirName string) DirectoryURL {
+	subDirUrl := appendToURLPath(d.URL(), dirName)
+	return NewDirectoryURL(subDirUrl, d.directoryClient.Pipeline())
 }
 
-//// Create creates a new directory within a storage account.
-//// For more information, see https://docs.microsoft.com/rest/api/storageservices/create-directory.
-//func (d DirectoryURL) Create(ctx context.Context, metadata Metadata) (*DirectoryCreateResponse, error) {
-//	return d.directoryClient.Create(ctx, nil, metadata)
-//}
-//
-//// Delete removes the specified empty directory. Note that the directory must be empty before it can be deleted..
-//// For more information, see https://docs.microsoft.com/rest/api/storageservices/delete-directory.
-//func (d DirectoryURL) Delete(ctx context.Context) (*DirectoryDeleteResponse, error) {
-//	return d.directoryClient.Delete(ctx, nil)
-//}
-//
-//// GetProperties returns the directory's metadata and system properties.
-//// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/get-directory-properties.
-//func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertiesResponse, error) {
-//	return d.directoryClient.GetProperties(ctx, nil, nil)
-//}
+// Create creates a new directory within a File System
+func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, error) {
+		resp, err := d.directoryClient.CreatePath(ctx, d.filesystem, d.pathParameter, &DirectoryResourceType, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil)
+		return (*DirectoryCreateResponse)(resp),err
+}
+
+
+// Delete removes the specified empty directory. Note that the directory must be empty before it can be deleted..
+// For more information, see https://docs.microsoft.com/rest/api/storageservices/delete-directory.
+func (d DirectoryURL) Delete(ctx context.Context) (*DirectoryDeleteResponse, error) {
+	resp, err :=  d.directoryClient.DeletePath(ctx, d.filesystem, d.pathParameter, &(DeleteDirectoryRecursively), nil, nil,
+					nil, nil, nil, nil, nil, nil, nil)
+	return (*DirectoryDeleteResponse)(resp), err
+}
+
+
+// GetProperties returns the directory's metadata and system properties.
+func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertiesResponse, error) {
+	resp, err := d.directoryClient.GetPathProperties(ctx, d.filesystem, d.pathParameter, nil, nil, nil,
+		nil, nil, nil, nil)
+	return (*DirectoryGetPropertiesResponse)(resp), err
+}
+
+// ListDirectory returns a files inside the directory. If recursive is set to true then ListDirectory will recursively
+// list all files inside the directory. Use an empty Marker to start enumeration from the beginning.
+// After getting a segment, process it, and then call ListDirectory again (passing the the previously-returned
+// Marker) to get the next segment.
+func (d DirectoryURL) ListDirectory(ctx context.Context, marker *string, recursive bool) (*DirectoryListResponse, error) {
+	resp , err := d.directoryClient.ListPaths(ctx, recursive, d.filesystem, FileSystemResourceName, &d.pathParameter, nil,
+					&MaxEntriesinListOperation, nil, nil, nil)
+	return (*DirectoryListResponse)(resp), err
+}
+
+// Files returns the slice of all Files in ListDirectory Response.
+// It does not include the sub-directory path
+func (d DirectoryListResponse) Files() []string {
+	var files []string
+	lSchema :=  (ListSchema)(d)
+	for _, path := range lSchema.Paths {
+		if *path.IsDirectory {
+			continue
+		}
+		files = append(files, *path.Name)
+	}
+	return files
+}
+
+// Directories returns the slice of all directories in ListDirectory Response
+// It does not include the files inside the directory only returns the sub-directories
+func (d DirectoryListResponse) Directories() []string {
+	var dir []string
+	lSchema :=  (ListSchema)(d)
+	for _, path := range lSchema.Paths {
+		if !*path.IsDirectory {
+			continue
+		}
+		dir = append(dir, *path.Name)
+	}
+	return dir
+}
+
+// Response returns the raw HTTP response object.
+func (ls DirectoryListResponse) Response() *http.Response {
+	return ls.rawResponse
+}
+
 //
 //// SetMetadata sets the directory's metadata.
 //// For more information, see https://docs.microsoft.com/rest/api/storageservices/set-directory-metadata.
