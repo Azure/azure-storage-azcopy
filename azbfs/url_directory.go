@@ -4,31 +4,13 @@ import (
 	"net/url"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"context"
-	"net/http"
 )
 
 var DirectoryResourceType = "directory"
 var DeleteDirectoryRecursively = true
 var MaxEntriesinListOperation = int32(1000)
 
-// DirectoryCreateResponse is the CreatePathResponse response type returned for directory specific operations
-// The type is used to establish difference in the response for file and directory operations since both type of
-// operations has same response type.
-type DirectoryCreateResponse CreatePathResponse
 
-// DirectoryDeleteResponse is the DeletePathResponse response type returned for directory specific operations
-// The type is used to establish difference in the response for file and directory operations since both type of
-// operations has same response type.
-type DirectoryDeleteResponse DeletePathResponse
-
-// DirectoryGetPropertiesResponse is the GetPathPropertiesResponse response type returned for directory specific operations
-// The type is used to establish difference in the response for file and directory operations since both type of
-// operations has same response type.
-type DirectoryGetPropertiesResponse GetPathPropertiesResponse
-
-// DirectoryListResponse is the ListSchema response type. This type declaration is used to implement useful methods on
-// ListPath response
-type DirectoryListResponse ListSchema
 
 // A DirectoryURL represents a URL to the Azure Storage directory allowing you to manipulate its directories and files.
 type DirectoryURL struct {
@@ -37,6 +19,8 @@ type DirectoryURL struct {
 	filesystem string
 	// pathParameter is the file or directory path
 	pathParameter     string
+
+	p pipeline.Pipeline
 }
 
 // NewDirectoryURL creates a DirectoryURL object using the specified URL and request policy pipeline.
@@ -46,7 +30,7 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 	}
 	urlParts := NewFileURLParts(url)
 	directoryClient := newManagementClient(url, p)
-	return DirectoryURL{directoryClient: directoryClient, filesystem:urlParts.FileSystemName, pathParameter:urlParts.DirectoryOrFilePath}
+	return DirectoryURL{directoryClient: directoryClient, filesystem:urlParts.FileSystemName, pathParameter:urlParts.DirectoryOrFilePath, p : p}
 }
 
 // URL returns the URL endpoint used by the DirectoryURL object.
@@ -99,8 +83,8 @@ func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, err
 
 // Delete removes the specified empty directory. Note that the directory must be empty before it can be deleted..
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/delete-directory.
-func (d DirectoryURL) Delete(ctx context.Context) (*DirectoryDeleteResponse, error) {
-	resp, err :=  d.directoryClient.DeletePath(ctx, d.filesystem, d.pathParameter, &(DeleteDirectoryRecursively), nil, nil,
+func (d DirectoryURL) Delete(ctx context.Context, continuationString *string) (*DirectoryDeleteResponse, error) {
+	resp, err :=  d.directoryClient.DeletePath(ctx, d.filesystem, d.pathParameter, &(DeleteDirectoryRecursively), continuationString, nil,
 					nil, nil, nil, nil, nil, nil, nil)
 	return (*DirectoryDeleteResponse)(resp), err
 }
@@ -113,48 +97,30 @@ func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertie
 	return (*DirectoryGetPropertiesResponse)(resp), err
 }
 
+// FileSystemUrl returns the fileSystemUrl from the directoryUrl
+// FileSystemUrl is of the FS in which the current directory exists.
+func (d DirectoryURL) FileSystemUrl() FileSystemURL {
+	// Parse Url into FileUrlParts
+	// Set the DirectoryOrFilePath empty
+	// and generate the Url
+	urlParts := NewFileURLParts(d.URL())
+	urlParts.DirectoryOrFilePath = ""
+	return NewFileSystemURL(urlParts.URL(), d.p)
+}
+
 // ListDirectory returns a files inside the directory. If recursive is set to true then ListDirectory will recursively
 // list all files inside the directory. Use an empty Marker to start enumeration from the beginning.
 // After getting a segment, process it, and then call ListDirectory again (passing the the previously-returned
 // Marker) to get the next segment.
 func (d DirectoryURL) ListDirectory(ctx context.Context, marker *string, recursive bool) (*DirectoryListResponse, error) {
-	resp , err := d.directoryClient.ListPaths(ctx, recursive, d.filesystem, FileSystemResourceName, &d.pathParameter, nil,
-					&MaxEntriesinListOperation, nil, nil, nil)
+	// Since listPath is supported on filesystem Url
+	// covert the directory url to fileSystemUrl
+	// and listPath for filesystem with directory path set in the path parameter
+	resp , err := d.FileSystemUrl().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, FileSystemResourceName, &d.pathParameter, nil,
+					nil, nil, nil, nil)
 	return (*DirectoryListResponse)(resp), err
 }
 
-// Files returns the slice of all Files in ListDirectory Response.
-// It does not include the sub-directory path
-func (d DirectoryListResponse) Files() []string {
-	var files []string
-	lSchema :=  (ListSchema)(d)
-	for _, path := range lSchema.Paths {
-		if *path.IsDirectory {
-			continue
-		}
-		files = append(files, *path.Name)
-	}
-	return files
-}
-
-// Directories returns the slice of all directories in ListDirectory Response
-// It does not include the files inside the directory only returns the sub-directories
-func (d DirectoryListResponse) Directories() []string {
-	var dir []string
-	lSchema :=  (ListSchema)(d)
-	for _, path := range lSchema.Paths {
-		if !*path.IsDirectory {
-			continue
-		}
-		dir = append(dir, *path.Name)
-	}
-	return dir
-}
-
-// Response returns the raw HTTP response object.
-func (ls DirectoryListResponse) Response() *http.Response {
-	return ls.rawResponse
-}
 
 //
 //// SetMetadata sets the directory's metadata.
