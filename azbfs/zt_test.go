@@ -97,29 +97,28 @@ func getFileSystemURL(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, n
 	return fs, name
 }
 
-func getDirectoryURLFromShare(c *chk.C, share azfile.ShareURL) (directory azfile.DirectoryURL, name string) {
+func getDirectoryURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (directory azbfs.DirectoryURL, name string) {
 	name = generateDirectoryName()
-	directory = share.NewDirectoryURL(name)
+	directory = fs.NewDirectoryURL(name)
 
 	return directory, name
 }
 
-func getDirectoryURLFromDirectory(c *chk.C, parentDirectory azfile.DirectoryURL) (directory azfile.DirectoryURL, name string) {
+func getDirectoryURLFromDirectory(c *chk.C, parentDirectory azbfs.DirectoryURL) (directory azbfs.DirectoryURL, name string) {
 	name = generateDirectoryName()
-	directory = parentDirectory.NewDirectoryURL(name)
-
+	directory = parentDirectory.NewSubDirectoryUrl(name)
 	return directory, name
 }
 
 // This is a convenience method, No public API to create file URL from share now. This method uses share's root directory.
-func getFileURLFromShare(c *chk.C, share azfile.ShareURL) (file azfile.FileURL, name string) {
+func getFileURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
 	name = generateFileName()
-	file = share.NewRootDirectoryURL().NewFileURL(name)
+	file = fs.NewRootDirectoryURL().NewFileURL(name)
 
 	return file, name
 }
 
-func getFileURLFromDirectory(c *chk.C, directory azfile.DirectoryURL) (file azfile.FileURL, name string) {
+func getFileURLFromDirectory(c *chk.C, directory azbfs.DirectoryURL) (file azbfs.FileURL, name string) {
 	name = generateFileName()
 	file = directory.NewFileURL(name)
 
