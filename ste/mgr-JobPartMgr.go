@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"os"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -76,6 +77,32 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
 
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+}
+
+// NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
+// The blobFS operations currently in azcopy are supported by SharedKey Credentials
+// TODO: The shared key credentials authentication might be removed later in azcopy
+func NewBlobFSPipeline(o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+	// Get the Account Name and Key variables from environment
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+	if name == "" || key == "" {
+		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+	}
+
+	c := azblob.NewSharedKeyCredential(name, key)
+	f := []pipeline.Factory{
+		azblob.NewTelemetryPolicyFactory(o.Telemetry),
+		azblob.NewUniqueRequestIDPolicyFactory(),
+		NewXferRetryPolicyFactory(r),
+		c,
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+		NewPacerPolicyFactory(p),
+		NewVersionPolicyFactory(),
+		azblob.NewRequestLogPolicyFactory(o.RequestLog),
+	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
 }
 
@@ -286,6 +313,19 @@ func (jpm *jobPartMgr) createPipeline() {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
+		case common.EFromTo.LocalBlobFS():
+			jpm.pipeline = NewBlobFSPipeline(
+				azblob.PipelineOptions{
+					Log:       jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
+				},
+				XferRetryOptions{
+					Policy:        0,
+					MaxTries:      UploadMaxTries,
+					TryTimeout:    UploadTryTimeout,
+					RetryDelay:    UploadRetryDelay,
+					MaxRetryDelay: UploadMaxRetryDelay},
+					jpm.pacer)
 		case common.EFromTo.FileTrash():
 			fallthrough
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system

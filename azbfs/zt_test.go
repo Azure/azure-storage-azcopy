@@ -100,7 +100,6 @@ func getFileSystemURL(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, n
 func getDirectoryURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (directory azbfs.DirectoryURL, name string) {
 	name = generateDirectoryName()
 	directory = fs.NewDirectoryURL(name)
-
 	return directory, name
 }
 
