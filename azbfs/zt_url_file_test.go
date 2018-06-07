@@ -27,7 +27,7 @@ const (
 func delFile(c *chk.C, file azbfs.FileURL) {
 	resp, err := file.Delete(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(resp.Response().StatusCode, chk.Equals, 202)
+	c.Assert(resp.Response().StatusCode, chk.Equals, 200)
 }
 
 func getReaderToRandomBytes(n int) *bytes.Reader {
