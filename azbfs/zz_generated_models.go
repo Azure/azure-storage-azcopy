@@ -430,10 +430,10 @@ func (lpr LeasePathResponse) XMsVersion() string {
 // ListEntrySchema ...
 type ListEntrySchema struct {
 	Name          *string `json:"name,omitempty"`
-	IsDirectory   *bool   `json:"isDirectory,omitempty"`
+	IsDirectory   *bool   `json:"isDirectory,string,omitempty"`
 	LastModified  *string `json:"lastModified,omitempty"`
 	ETag          *string `json:"eTag,omitempty"`
-	ContentLength *int64  `json:"contentLength,omitempty"`
+	ContentLength *int64  `json:"contentLength,string,omitempty"`
 }
 
 // ListSchema ...

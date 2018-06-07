@@ -223,4 +223,3 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
 
 }
-

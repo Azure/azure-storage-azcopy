@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"context"
+	"strings"
 )
 
 var DirectoryResourceType = "directory"
@@ -19,8 +20,6 @@ type DirectoryURL struct {
 	filesystem string
 	// pathParameter is the file or directory path
 	pathParameter     string
-
-	p pipeline.Pipeline
 }
 
 // NewDirectoryURL creates a DirectoryURL object using the specified URL and request policy pipeline.
@@ -30,7 +29,7 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 	}
 	urlParts := NewFileURLParts(url)
 	directoryClient := newManagementClient(url, p)
-	return DirectoryURL{directoryClient: directoryClient, filesystem:urlParts.FileSystemName, pathParameter:urlParts.DirectoryOrFilePath, p : p}
+	return DirectoryURL{directoryClient: directoryClient, filesystem:urlParts.FileSystemName, pathParameter:urlParts.DirectoryOrFilePath}
 }
 
 // URL returns the URL endpoint used by the DirectoryURL object.
@@ -105,7 +104,7 @@ func (d DirectoryURL) FileSystemUrl() FileSystemURL {
 	// and generate the Url
 	urlParts := NewFileURLParts(d.URL())
 	urlParts.DirectoryOrFilePath = ""
-	return NewFileSystemURL(urlParts.URL(), d.p)
+	return NewFileSystemURL(urlParts.URL(), d.directoryClient.Pipeline())
 }
 
 // ListDirectory returns a files inside the directory. If recursive is set to true then ListDirectory will recursively
@@ -121,6 +120,29 @@ func (d DirectoryURL) ListDirectory(ctx context.Context, marker *string, recursi
 	return (*DirectoryListResponse)(resp), err
 }
 
+// IsDirectory determines whether the resource at given directoryUrl is a directory Url or not
+// It returns false if the directoryUrl is not able to get resource properties
+// It returns false if the url represent a file in the filesystem
+func (d DirectoryURL) IsDirectory(ctx context.Context) bool {
+	grep, err := d.GetProperties(ctx)
+	// If the error occurs while getting resource properties return false
+	if err != nil {
+		return false
+	}
+	// return false if the resource type is not
+	if !strings.EqualFold(grep.XMsResourceType(), DirectoryResourceType) {
+		return false
+	}
+	return true
+}
+
+// FileUrl converts the current directory Url into the FileUrl
+// This api is used when the directoryUrl is to determine whether the
+// resource is file or directory. If resource is a file, then directoryUrl
+// is converted to FileUrl for further operations on resource
+func (d DirectoryURL) FileUrl() FileURL {
+	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
+}
 
 //
 //// SetMetadata sets the directory's metadata.
