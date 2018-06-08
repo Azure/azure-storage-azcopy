@@ -48,7 +48,8 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			}
 			// append file name as blob name in case the given URL is a container
 			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) {
+				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) ||
+				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsDFSFileSystemOrDirectory(ctx, destinationURL)){
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
 			}
 
@@ -217,7 +218,28 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						return err
 					}
 					if f.IsDir() {
-						// skip the subdirectories, we only care about files
+						// For Blob and Azure Files, empty directories are not uploaded
+						// For BlobFs, empty directories are to be uploaded as well
+						// If the directory is not empty, then uploading a file inside the directory path
+						// will create the parent directory of file, so transfe is not required to create
+						// a directory
+						// For Example: Dst := FSystem/dir1/a.txt If dir1 doesn't exists
+						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0{
+							destinationURL.Path = util.generateObjectPath(cleanContainerPath,
+								util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
+							err = e.addTransfer(common.CopyTransfer{
+								Source:           pathToFile,
+								Destination:      destinationURL.String(),
+								LastModifiedTime: f.ModTime(),
+								SourceSize:       f.Size(),
+							}, wg, waitUntilJobCompletion)
+							if err != nil {
+								return err
+							}
+						}
+						// If the file inside sub-dir is again a sub-dir
+						// then skip it, since files inside sub-dir will be
+						// considered by walk func
 						return nil
 					} else {
 						// Check if the file should be excluded or not.

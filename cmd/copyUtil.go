@@ -38,6 +38,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"path/filepath"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 const (
@@ -62,6 +63,26 @@ func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 		return true
 	}
 	return false
+}
+
+func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential{
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+	if name == "" || key == "" {
+		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+	}
+	return azbfs.NewSharedKeyCredential(name, key)
+}
+func (util copyHandlerUtil) urlIsDFSFileSystemOrDirectory(ctx context.Context, url *url.URL) bool {
+	if util.urlIsContainerOrShare(url){
+		return true
+	}
+	c := util.sharedKeyCreds()
+	// Need to get the resource properties and verify if it is a file or directory
+	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+	dirUrl := azbfs.NewDirectoryURL(*url, p)
+	return dirUrl.IsDirectory(context.Background())
 }
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
