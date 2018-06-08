@@ -41,7 +41,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		*(responseData.(*common.ListJobSummaryResponse)) = ste.GetJobSummary(*requestData.(*common.JobID))
 
 	case common.ERpcCmd.ListJobTransfers():
-		responseData = ste.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
+		*(responseData.(*common.ListJobTransfersResponse)) = ste.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
 
 	case common.ERpcCmd.PauseJob():
 		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())

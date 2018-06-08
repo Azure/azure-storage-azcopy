@@ -92,7 +92,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		transferDone(common.ETransferStatus.Success())
 		return
 	}
-	
+
 	// Open the source file and memory map it
 	srcfile, err := os.Open(info.Source)
 	if err != nil {
