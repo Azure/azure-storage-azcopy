@@ -1,6 +1,9 @@
 package azbfs
 
-import "net/http"
+import (
+	"context"
+	"net/http"
+)
 
 // DirectoryCreateResponse is the CreatePathResponse response type returned for directory specific operations
 // The type is used to establish difference in the response for file and directory operations since both type of
@@ -260,7 +263,7 @@ func (dlr DirectoryListResponse) XMsVersion() string {
 // It does not include the sub-directory path
 func (dlr *DirectoryListResponse) Files() []string {
 	files := []string{}
-	lSchema :=  ListSchema(*dlr)
+	lSchema := ListSchema(*dlr)
 	for _, path := range lSchema.Paths {
 		if path.IsDirectory != nil && *path.IsDirectory {
 			continue
@@ -274,7 +277,7 @@ func (dlr *DirectoryListResponse) Files() []string {
 // It does not include the files inside the directory only returns the sub-directories
 func (dlr *DirectoryListResponse) Directories() []string {
 	var dir []string
-	lSchema :=  (ListSchema)(*dlr)
+	lSchema := (ListSchema)(*dlr)
 	for _, path := range lSchema.Paths {
 		if path.IsDirectory == nil || (path.IsDirectory != nil && !*path.IsDirectory) {
 			continue
@@ -282,4 +285,94 @@ func (dlr *DirectoryListResponse) Directories() []string {
 		dir = append(dir, *path.Name)
 	}
 	return dir
+}
+
+// DownloadResponse wraps AutoRest generated downloadResponse and helps to provide info for retry.
+type DownloadResponse struct {
+	dr *ReadPathResponse
+
+	// Fields need for retry.
+	ctx  context.Context
+	f    FileURL
+	info HTTPGetterInfo
+}
+
+// Response returns the raw HTTP response object.
+func (dr DownloadResponse) Response() *http.Response {
+	return dr.dr.Response()
+}
+
+// StatusCode returns the HTTP status code of the response, e.g. 200.
+func (dr DownloadResponse) StatusCode() int {
+	return dr.dr.StatusCode()
+}
+
+// Status returns the HTTP status message of the response, e.g. "200 OK".
+func (dr DownloadResponse) Status() string {
+	return dr.dr.Status()
+}
+
+// AcceptRanges returns the value for header Accept-Ranges.
+func (dr DownloadResponse) AcceptRanges() string {
+	return dr.dr.AcceptRanges()
+}
+
+// CacheControl returns the value for header Cache-Control.
+func (dr DownloadResponse) CacheControl() string {
+	return dr.dr.CacheControl()
+}
+
+// ContentDisposition returns the value for header Content-Disposition.
+func (dr DownloadResponse) ContentDisposition() string {
+	return dr.dr.ContentDisposition()
+}
+
+// ContentEncoding returns the value for header Content-Encoding.
+func (dr DownloadResponse) ContentEncoding() string {
+	return dr.dr.ContentEncoding()
+}
+
+// ContentLanguage returns the value for header Content-Language.
+func (dr DownloadResponse) ContentLanguage() string {
+	return dr.dr.ContentLanguage()
+}
+
+// ContentLength returns the value for header Content-Length.
+func (dr DownloadResponse) ContentLength() string {
+	return dr.dr.ContentLength()
+}
+
+// ContentRange returns the value for header Content-Range.
+func (dr DownloadResponse) ContentRange() string {
+	return dr.dr.ContentRange()
+}
+
+// ContentType returns the value for header Content-Type.
+func (dr DownloadResponse) ContentType() string {
+	return dr.dr.ContentType()
+}
+
+// Date returns the value for header Date.
+func (dr DownloadResponse) Date() string {
+	return dr.dr.Date()
+}
+
+// ETag returns the value for header ETag.
+func (dr DownloadResponse) ETag() string {
+	return dr.dr.ETag()
+}
+
+// LastModified returns the value for header Last-Modified.
+func (dr DownloadResponse) LastModified() string {
+	return dr.dr.LastModified()
+}
+
+// RequestID returns the value for header x-ms-request-id.
+func (dr DownloadResponse) RequestID() string {
+	return dr.dr.XMsRequestID()
+}
+
+// Version returns the value for header x-ms-version.
+func (dr DownloadResponse) Version() string {
+	return dr.dr.XMsVersion()
 }

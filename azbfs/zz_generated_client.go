@@ -1020,20 +1020,20 @@ func (client managementClient) setFilesystemPropertiesResponder(resp pipeline.Re
 // Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).
 //
 // action is the action must be "append" to upload data to be appended to a file, "flush" to flush previously uploaded
-// data to a file, or "setProperties" to set the properties of a file or directory. filesystem is the filesystem
-// identifier. pathParameter is the file or directory path. position is this parameter allows the caller to upload data
-// in parallel and control the order in which it is appended to the file.  It is required when uploading data to be
-// appended to the file and when flushing previously uploaded data to the file.  The value must be the position where
-// the data is to be appended.  Uploaded data is not immediately flushed, or written, to the file.  To flush, the
-// previously uploaded data must be contiguous, the position parameter must be specified and equal to the length of the
-// file after all data has been written, and there must not be a request entity body included with the request.
-// retainUncommittedData is valid only for flush operations.  If "true", uncommitted data is retained after the flush
-// operation completes; otherwise, the uncommitted data is deleted after the flush operation.  The default is false.
-// Data at offsets less than the specified position are written to the file when flush succeeds, but this optional
-// parameter allows data after the flush position to be retained for a future flush operation. contentLength is
-// required for "Append Data" and "Flush Data".  Must be 0 for "Flush Data".  Must be the length of the request content
-// in bytes for "Append Data". xMsLeaseAction is optional.  The lease action can be "renew" to renew an existing lease
-// or "release" to release a lease. xMsLeaseID is the lease ID must be specified if there is an active lease.
+// data to a file, or "setProperties" to set the properties of a file or directory. contentLength is required for
+// "Append Data" and "Flush Data".  Must be 0 for "Flush Data".  Must be the length of the request content in bytes for
+// "Append Data". filesystem is the filesystem identifier. pathParameter is the file or directory path. position is
+// this parameter allows the caller to upload data in parallel and control the order in which it is appended to the
+// file.  It is required when uploading data to be appended to the file and when flushing previously uploaded data to
+// the file.  The value must be the position where the data is to be appended.  Uploaded data is not immediately
+// flushed, or written, to the file.  To flush, the previously uploaded data must be contiguous, the position parameter
+// must be specified and equal to the length of the file after all data has been written, and there must not be a
+// request entity body included with the request. retainUncommittedData is valid only for flush operations.  If "true",
+// uncommitted data is retained after the flush operation completes; otherwise, the uncommitted data is deleted after
+// the flush operation.  The default is false.  Data at offsets less than the specified position are written to the
+// file when flush succeeds, but this optional parameter allows data after the flush position to be retained for a
+// future flush operation. xMsLeaseAction is optional.  The lease action can be "renew" to renew an existing lease or
+// "release" to release a lease. xMsLeaseID is the lease ID must be specified if there is an active lease.
 // xMsCacheControl is optional and only valid for flush and set properties operations.  The service stores this value
 // and includes it in the "Cache-Control" response header for "Read File" operations. xMsContentType is optional and
 // only valid for flush and set properties operations.  The service stores this value and includes it in the
@@ -1063,7 +1063,7 @@ func (client managementClient) setFilesystemPropertiesResponder(resp pipeline.Re
 // optional operation timeout value in seconds. The period begins when the request is received by the service. If the
 // timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
 // Universal Time (UTC) for the request.  This is required when using shared key authorization.
-func (client managementClient) UpdatePath(ctx context.Context, action string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, contentLength *string, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*UpdatePathResponse, error) {
+func (client managementClient) UpdatePath(ctx context.Context, action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*UpdatePathResponse, error) {
 	if err := validate([]validation{
 		{targetValue: xMsLeaseID,
 			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
@@ -1079,7 +1079,7 @@ func (client managementClient) UpdatePath(ctx context.Context, action string, fi
 				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
 		return nil, err
 	}
-	req, err := client.updatePathPreparer(action, filesystem, pathParameter, position, retainUncommittedData, contentLength, xMsLeaseAction, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsProperties, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, body, xMsClientRequestID, timeout, xMsDate)
+	req, err := client.updatePathPreparer(action, contentLength, filesystem, pathParameter, position, retainUncommittedData, xMsLeaseAction, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsProperties, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, body, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
@@ -1091,8 +1091,10 @@ func (client managementClient) UpdatePath(ctx context.Context, action string, fi
 }
 
 // updatePathPreparer prepares the UpdatePath request.
-func (client managementClient) updatePathPreparer(action string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, contentLength *string, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
-	req, err := pipeline.NewRequest("PATCH", client.url, body)
+func (client managementClient) updatePathPreparer(action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
+	// TODO changing PATCH to PUT is a hack to make content-length=0 go over the wire
+	// TODO more investigation is needed
+	req, err := pipeline.NewRequest("PUT", client.url, body)
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
@@ -1108,9 +1110,7 @@ func (client managementClient) updatePathPreparer(action string, filesystem stri
 		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
 	}
 	req.URL.RawQuery = params.Encode()
-	if contentLength != nil {
-		req.Header.Set("Content-Length", *contentLength)
-	}
+	req.Header.Set("Content-Length", contentLength)
 	if xMsLeaseAction != nil {
 		req.Header.Set("x-ms-lease-action", *xMsLeaseAction)
 	}
