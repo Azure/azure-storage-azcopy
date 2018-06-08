@@ -46,7 +46,7 @@ func (s *FileSystemURLSuite) TestFileSystemCreate(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := getFileSystemURL(c, fsu)
 
-	_, err := fileSystemURL.Create(ctx)
+	_, err := fileSystemURL.Creiate(ctx)
 	defer delFileSystem(c, fileSystemURL)
 	c.Assert(err, chk.IsNil)
 

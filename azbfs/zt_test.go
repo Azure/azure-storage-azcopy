@@ -47,7 +47,7 @@ func getAccountAndKey() (string, string) {
 
 func getBfsServiceURL() azbfs.ServiceURL {
 	name, key := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("http://%s.dfs.core.windows.net/", name))
+	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", name))
 
 	credential := azbfs.NewSharedKeyCredential(name, key)
 	pipeline := azbfs.NewPipeline(credential, azbfs.PipelineOptions{})
