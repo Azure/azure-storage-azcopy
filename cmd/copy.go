@@ -86,6 +86,7 @@ type rawCopyCmdArgs struct {
 	outputJson               bool
 	acl                      string
 	logVerbosity             string
+	stdInEnable			 bool
 }
 
 // validates and transform raw input into cooked input
@@ -573,7 +574,13 @@ Usage:
 			if err != nil {
 				return fmt.Errorf("failed to parse user input due to error: %s", err)
 			}
-
+			// If the stdInEnable is set true, then a separate go routines is reading the standard input.
+			// If the "cancel\n" keyword is passed to the standard input, it will cancel the job
+			// Any other word keyword provided will panic
+			// This feature is to support cancel for node.js applications spawning azcopy
+			if raw.stdInEnable {
+				go ReadStandardInputToCancelJob(CancelChannel)
+			}
 			err = cooked.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform copy command due to error: %s", err)
@@ -605,6 +612,8 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
+	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' " +
+																							"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 }

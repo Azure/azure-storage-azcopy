@@ -55,9 +55,7 @@ func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Cont
 }
 
 func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
-	// Not opening the log here since it opens the log file for
-	// all the Jobs existing in the history.
-	//jm.logger.OpenLog()
+	jm.logger.OpenLog()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
