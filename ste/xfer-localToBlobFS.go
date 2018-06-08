@@ -75,6 +75,24 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		return
 	}
 
+	// If the file Size is 0, there is no need to open the file and memory map it
+	if fInfo.Size() == 0 {
+		fileUrl := azbfs.NewFileURL(*dUrl, p)
+		_, err = fileUrl.Create(jptm.Context(), nil)
+		if err != nil {
+			if jptm.ShouldLog(pipeline.LogError) {
+				jptm.Log(pipeline.LogError, fmt.Sprintf("error creating the file for destination url %s. failed with error %s", info.Destination, err.Error()))
+			}
+			transferDone(common.ETransferStatus.Failed())
+			return
+		}
+		if jptm.ShouldLog(pipeline.LogInfo) {
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("successfully created the empty file for destination url %s", info.Destination))
+		}
+		transferDone(common.ETransferStatus.Success())
+		return
+	}
+	
 	// Open the source file and memory map it
 	srcfile, err := os.Open(info.Source)
 	if err != nil {
