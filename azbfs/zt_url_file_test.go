@@ -49,7 +49,7 @@ func (s *FileURLSuite) TestFileNewFileURLNegative(c *chk.C) {
 }
 
 
-func (s *FileURLSuite) TestFileCreateDeleteDefault(c *chk.C) {
+func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fsURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fsURL)
@@ -96,7 +96,7 @@ func (s *FileURLSuite) TestFileCreateDeleteDefault(c *chk.C) {
 	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
 }
 
-func (s *FileURLSuite) TestFileCreateDeleteNonExistingParentDefault(c *chk.C) {
+func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fsURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fsURL)
@@ -121,7 +121,7 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParentDefault(c *chk.C) {
 	c.Assert(dirResp.StatusCode(), chk.Equals, 201)
 }
 
-func (s *FileURLSuite) TestFileGetPropertiesNonDefault(c *chk.C) {
+func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
@@ -174,7 +174,7 @@ func (s *FileURLSuite) TestFileGetPropertiesNonDefault(c *chk.C) {
 //	c.Assert(download, chk.DeepEquals, contentD[:1024])
 //}
 
-func (s *FileURLSuite) TestUploadDownloadDefaultNonDefaultMD5(c *chk.C) {
+func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
