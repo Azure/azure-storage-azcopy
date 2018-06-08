@@ -47,7 +47,7 @@ func getAccountAndKey() (string, string) {
 
 func getBfsServiceURL() azbfs.ServiceURL {
 	name, key := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", name))
+	u, _ := url.Parse(fmt.Sprintf("http://%s.dfs.core.windows.net/", name))
 
 	credential := azbfs.NewSharedKeyCredential(name, key)
 	pipeline := azbfs.NewPipeline(credential, azbfs.PipelineOptions{})
@@ -109,7 +109,7 @@ func getDirectoryURLFromDirectory(c *chk.C, parentDirectory azbfs.DirectoryURL) 
 	return directory, name
 }
 
-// This is a convenience method, No public API to create file URL from share now. This method uses share's root directory.
+// This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
 func getFileURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
 	name = generateFileName()
 	file = fs.NewRootDirectoryURL().NewFileURL(name)
@@ -133,14 +133,14 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 	return fs, name
 }
 
-//func createNewShareWithPrefix(c *chk.C, fsu azfile.ServiceURL, prefix string) (share azfile.ShareURL, name string) {
+//func createNewShareWithPrefix(c *chk.C, fsu azfile.ServiceURL, prefix string) (fileSystem azbfs.FileSystemURL, name string) {
 //	name = generateName(prefix)
-//	share = fsu.NewShareURL(name)
+//	fileSystem = fsu.NewShareURL(name)
 //
-//	cResp, err := share.Create(ctx, nil, 0)
+//	cResp, err := fileSystem.Create(ctx, nil, 0)
 //	c.Assert(err, chk.IsNil)
 //	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return share, name
+//	return fileSystem, name
 //}
 //
 //func createNewDirectoryWithPrefix(c *chk.C, parentDirectory azfile.DirectoryURL, prefix string) (dir azfile.DirectoryURL, name string) {
@@ -153,7 +153,7 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 //	return dir, name
 //}
 //
-//func createNewFileWithPrefix(c *chk.C, dir azfile.DirectoryURL, prefix string, size int64) (file azfile.FileURL, name string) {
+//func createNewFileWithPrefix(c *chk.C, dir azfile.DirectoryURL, prefix string, size int64) (file azbfs.FileURL, name string) {
 //	name = generateName(prefix)
 //	file = dir.NewFileURL(name)
 //
@@ -163,14 +163,14 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 //	return file, name
 //}
 //
-//func createNewDirectoryFromShare(c *chk.C, share azfile.ShareURL) (dir azfile.DirectoryURL, name string) {
-//	dir, name = getDirectoryURLFromShare(c, share)
-//
-//	cResp, err := dir.Create(ctx, nil)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return dir, name
-//}
+func createNewDirectoryFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (dir azbfs.DirectoryURL, name string) {
+	dir, name = getDirectoryURLFromFileSystem(c, fileSystem)
+
+	cResp, err := dir.Create(ctx)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return dir, name
+}
 //
 //func createNewDirectoryFromDirectory(c *chk.C, parentDirectory azfile.DirectoryURL) (dir azfile.DirectoryURL, name string) {
 //	dir, name = getDirectoryURLFromDirectory(c, parentDirectory)
@@ -181,22 +181,22 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 //	return dir, name
 //}
 //
-//// This is a convenience method, No public API to create file URL from share now. This method uses share's root directory.
-//func createNewFileFromShare(c *chk.C, share azfile.ShareURL, fileSize int64) (file azfile.FileURL, name string) {
-//	dir := share.NewRootDirectoryURL()
+// This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
+func createNewFileFromShare(c *chk.C, fileSystem azbfs.FileSystemURL, fileSize int64) (file azbfs.FileURL, name string) {
+	dir := fileSystem.NewRootDirectoryURL()
+
+	file, name = getFileURLFromDirectory(c, dir)
+
+	cResp, err := file.Create(ctx, nil)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+	return file, name
+}
 //
-//	file, name = getFileURLFromDirectory(c, dir)
-//
-//	cResp, err := file.Create(ctx, fileSize, azfile.FileHTTPHeaders{}, nil)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//
-//	return file, name
-//}
-//
-//// This is a convenience method, No public API to create file URL from share now. This method uses share's root directory.
-//func createNewFileFromShareWithDefaultData(c *chk.C, share azfile.ShareURL) (file azfile.FileURL, name string) {
-//	dir := share.NewRootDirectoryURL()
+//// This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
+//func createNewFileFromShareWithDefaultData(c *chk.C, fileSystem azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
+//	dir := fileSystem.NewRootDirectoryURL()
 //
 //	file, name = getFileURLFromDirectory(c, dir)
 //
@@ -210,7 +210,7 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 //	return file, name
 //}
 //
-//func createNewFileFromDirectory(c *chk.C, directory azfile.DirectoryURL, fileSize int64) (file azfile.FileURL, name string) {
+//func createNewFileFromDirectory(c *chk.C, directory azfile.DirectoryURL, fileSize int64) (file azbfs.FileURL, name string) {
 //	file, name = getFileURLFromDirectory(c, directory)
 //
 //	cResp, err := file.Create(ctx, fileSize, azfile.FileHTTPHeaders{}, nil)

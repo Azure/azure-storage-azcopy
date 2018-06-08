@@ -7,6 +7,10 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"io"
+	"net/http"
+	"strconv"
+	"bytes"
 )
 
 const (
@@ -56,60 +60,54 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
-func (f FileURL) Create(ctx context.Context) (*CreatePathResponse, error) {
+func (f FileURL) Create(ctx context.Context, body io.ReadSeeker) (*CreatePathResponse, error) {
 	fileType := fileType
 	return f.fileClient.CreatePath(ctx, f.fileSystemName, f.path, &fileType,
 		nil, nil, nil, nil, nil, nil,
 			nil, nil, nil, nil, nil,
 				nil ,nil, nil, nil, nil, nil,
 					nil, nil, nil, nil, nil,
-						nil, nil, nil, nil, nil,
+						nil, nil, body, nil, nil,
 							nil)
 }
 
-//// Download downloads count bytes of data from the start offset. If count is CountToEnd (0), then data is read from specified offset to the end.
-//// The response includes all of the file’s properties. However, passing true for rangeGetContentMD5 returns the range’s MD5 in the ContentMD5
-//// response header/property if the range is <= 4MB; the HTTP request fails with 400 (Bad Request) if the requested range is greater than 4MB.
-//// For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file.
-//func (f FileURL) Download(ctx context.Context, offset int64, count int64, rangeGetContentMD5 bool) (*DownloadResponse, error) {
-//	var xRangeGetContentMD5 *bool
-//	if rangeGetContentMD5 {
-//		if offset == 0 && count == CountToEnd {
-//			panic("rangeGetContentMD5 only work with partial data downloading")
-//		}
-//		xRangeGetContentMD5 = &rangeGetContentMD5
-//	}
-//	dr, err := f.fileClient.Download(ctx, nil, (&httpRange{offset: offset, count: count}).pointers(), xRangeGetContentMD5)
-//	if err != nil {
-//		return nil, err
-//	}
-//
-//	return &DownloadResponse{
-//		f:    f,
-//		dr:   dr,
-//		ctx:  ctx,
-//		info: HTTPGetterInfo{Offset: offset, Count: count, ETag: dr.ETag()}, // TODO: Note conditional header is not currently supported in Azure File.
-//	}, err
-//}
-//
-//// Body constructs a stream to read data from with a resilient reader option.
-//// A zero-value option means to get a raw stream.
-//func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
-//	if o.MaxRetryRequests == 0 {
-//		return dr.Response().Body
-//	}
-//
-//	return NewRetryReader(
-//		dr.ctx,
-//		dr.Response(),
-//		dr.info,
-//		o,
-//		func(ctx context.Context, info HTTPGetterInfo) (*http.Response, error) {
-//			resp, err := dr.f.Download(ctx, info.Offset, info.Count, false)
-//			return resp.Response(), err
-//		})
-//}
-//
+// Download downloads count bytes of data from the start offset. If count is CountToEnd (0), then data is read from specified offset to the end.
+// The response includes all of the file’s properties. However, passing true for rangeGetContentMD5 returns the range’s MD5 in the ContentMD5
+// response header/property if the range is <= 4MB; the HTTP request fails with 400 (Bad Request) if the requested range is greater than 4MB.
+// For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file.
+func (f FileURL) Download(ctx context.Context, offset int64, count int64) (*DownloadResponse, error) {
+	dr, err := f.fileClient.ReadPath(ctx, f.fileSystemName, f.path, (&httpRange{offset: offset, count: count}).pointers(),
+		nil, nil,nil, nil, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DownloadResponse{
+		f:    f,
+		dr:   dr,
+		ctx:  ctx,
+		info: HTTPGetterInfo{Offset: offset, Count: count, ETag: dr.ETag()}, // TODO: Note conditional header is not currently supported in Azure File.
+	}, err
+}
+
+// Body constructs a stream to read data from with a resilient reader option.
+// A zero-value option means to get a raw stream.
+func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
+	if o.MaxRetryRequests == 0 {
+		return dr.Response().Body
+	}
+
+	return NewRetryReader(
+		dr.ctx,
+		dr.Response(),
+		dr.info,
+		o,
+		func(ctx context.Context, info HTTPGetterInfo) (*http.Response, error) {
+			resp, err := dr.f.Download(ctx, info.Offset, info.Count)
+			return resp.Response(), err
+		})
+}
+
 
 // Delete immediately removes the file from the storage account.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/delete-file2.
@@ -119,29 +117,45 @@ func (f FileURL) Delete(ctx context.Context) (*DeletePathResponse, error) {
 		nil, nil, nil, nil, nil, nil,
 			nil,nil,nil)
 }
-//
-//// GetProperties returns the file's metadata and properties.
-//// For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
-//func (f FileURL) GetProperties(ctx context.Context) (*FileGetPropertiesResponse, error) {
-//	return f.fileClient.GetProperties(ctx, nil, nil)
-//}
 
-//// UploadRange writes bytes to a file.
-//// offset indiciates the offset at which to begin writing, in bytes.
-//// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/put-range.
-//func (f FileURL) UploadRange(ctx context.Context, offset int64, body io.ReadSeeker) (*FileUploadRangeResponse, error) {
-//	if offset < 0 {
-//		panic("offset must be >= 0")
-//	}
-//	if body == nil {
-//		panic("body must not be nil")
-//	}
-//
-//	count := validateSeekableStreamAt0AndGetCount(body)
-//	if count == 0 {
-//		panic("body must contain readable data whose size is > 0")
-//	}
-//
-//	// TransactionalContentMD5 isn't supported currently.
-//	return f.fileClient.UploadRange(ctx, *toRange(offset, count), FileRangeWriteUpdate, count, body, nil, nil)
-//}
+// GetProperties returns the file's metadata and properties.
+// For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
+func (f FileURL) GetProperties(ctx context.Context) (*GetPathPropertiesResponse, error) {
+	return f.fileClient.GetPathProperties(ctx, f.fileSystemName, f.path, nil, nil, nil, nil,
+		nil, nil, nil)
+}
+
+// UploadRange writes bytes to a file.
+// offset indiciates the offset at which to begin writing, in bytes.
+func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeker) (*UpdatePathResponse, error) {
+	if offset < 0 {
+		panic("offset must be >= 0")
+	}
+	if body == nil {
+		panic("body must not be nil")
+	}
+
+	count := validateSeekableStreamAt0AndGetCount(body)
+	if count == 0 {
+		panic("body must contain readable data whose size is > 0")
+	}
+
+	// TransactionalContentMD5 isn't supported currently.
+	return f.fileClient.UpdatePath(ctx, "append", strconv.FormatInt(count, 10), f.fileSystemName, f.path, &offset, nil,
+		nil, nil, nil, nil,
+			nil, nil, nil, nil, nil,
+				nil, nil, nil, body, nil, nil, nil)
+}
+
+// flushes writes previously uploaded data to a file
+func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResponse, error) {
+	if fileSize < 0 {
+		panic("fileSize must be >= 0")
+	}
+
+	// TransactionalContentMD5 isn't supported currently.
+	return f.fileClient.UpdatePath(ctx, "flush", "0", f.fileSystemName, f.path, &fileSize, nil,
+		nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, bytes.NewReader(nil), nil, nil, nil)
+}

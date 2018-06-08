@@ -818,8 +818,7 @@
             "name": "Content-Length",
             "in": "header",
             "description": "Required for \"Append Data\" and \"Flush Data\".  Must be 0 for \"Flush Data\".  Must be the length of the request content in bytes for \"Append Data\".",
-            "minimum": 0,
-            "required": false,
+            "required": true,
             "type": "string"
           },
           {
