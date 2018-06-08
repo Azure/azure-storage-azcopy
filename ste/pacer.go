@@ -85,13 +85,14 @@ func NewPacerPolicyFactory(p *pacer) pipeline.Factory {
 // this function is called by goroutines to request right to send a certain amount of bytes
 func (p *pacer) requestRightToSend(bytesToSend int64) {
 
-	// attempt to take off the desired number of tickets until success (total number of tickets is not negative)
-	for atomic.AddInt64(&p.bytesAvailable, -bytesToSend) < 0 {
-
-		// put tickets back if attempt was unsuccessful
-		atomic.AddInt64(&p.bytesAvailable, bytesToSend)
-		time.Sleep(time.Millisecond * 1)
-	}
+	//// attempt to take off the desired number of tickets until success (total number of tickets is not negative)
+	//for atomic.AddInt64(&p.bytesAvailable, -bytesToSend) < 0 {
+	//
+	//	// put tickets back if attempt was unsuccessful
+	//	atomic.AddInt64(&p.bytesAvailable, bytesToSend)
+	//	time.Sleep(time.Millisecond * 1)
+	//}
+	return
 }
 
 func (p *pacer) updateTargetRate(increase bool) {
