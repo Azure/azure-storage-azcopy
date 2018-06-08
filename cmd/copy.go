@@ -101,6 +101,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	cooked.fromTo = fromTo
 
+	// If fromTo is local to BlobFS or BlobFS to local then verify the
+	// ACCOUNT_NAME & ACCOUNT_KEY in environment variables
+	if fromTo == common.EFromTo.LocalBlobFS(){
+		// Get the Account Name and Key variables from environment
+		name := os.Getenv("ACCOUNT_NAME")
+		key := os.Getenv("ACCOUNT_KEY")
+		if name == "" || key == "" {
+			return cooked, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+		}
+	}
 	// copy&transform flags to type-safety
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
@@ -424,6 +434,8 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
 		fallthrough
+	case common.EFromTo.LocalBlobFS():
+		fallthrough
 	case common.EFromTo.LocalFile():
 		e := copyUploadEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
@@ -587,6 +599,7 @@ Usage:
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "Specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")

@@ -276,8 +276,8 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		if bbu.jptm.WasCanceled() {
 			if bbu.jptm.ShouldLog(pipeline.LogInfo) {
 				bbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
-				bbu.jptm.AddToBytesDone(adjustedChunkSize)
 			}
+			bbu.jptm.AddToBytesDone(adjustedChunkSize)
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
 					bbu.jptm.Log(pipeline.LogInfo,

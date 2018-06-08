@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"os"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -80,10 +81,8 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
 }
 
-// NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
-// The blobFS operations currently in azcopy are supported by SharedKey Credentials
-// TODO: The shared key credentials authentication might be removed later in azcopy
-func NewBlobFSPipeline(o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+// NewPipeline creates a Pipeline using the specified credentials and options.
+func NewPipeline1( o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
@@ -91,18 +90,52 @@ func NewBlobFSPipeline(o azblob.PipelineOptions, r XferRetryOptions, p *pacer) p
 	if name == "" || key == "" {
 		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
 	}
+	c := azbfs.NewSharedKeyCredential(name, key)
 
-	c := azblob.NewSharedKeyCredential(name, key)
+	// Closest to API goes first; closest to the wire goes last
 	f := []pipeline.Factory{
-		azblob.NewTelemetryPolicyFactory(o.Telemetry),
-		azblob.NewUniqueRequestIDPolicyFactory(),
+		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
+		azbfs.NewUniqueRequestIDPolicyFactory(),
 		NewXferRetryPolicyFactory(r),
-		c,
+	}
+
+	f = append(f, c)
+
+	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewPacerPolicyFactory(p),
-		NewVersionPolicyFactory(),
-		azblob.NewRequestLogPolicyFactory(o.RequestLog),
+		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
+
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+}
+
+// NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
+// The blobFS operations currently in azcopy are supported by SharedKey Credentials
+// TODO: The shared key credentials authentication might be removed later in azcopy
+func NewBlobFSPipeline(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+	// Get the Account Name and Key variables from environment
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+	if name == "" || key == "" {
+		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
 	}
+	c := azbfs.NewSharedKeyCredential(name, key)
+
+	// Closest to API goes first; closest to the wire goes last
+	f := []pipeline.Factory{
+		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
+		azbfs.NewUniqueRequestIDPolicyFactory(),
+		NewXferRetryPolicyFactory(r),
+	}
+
+	f = append(f, c)
+
+	f = append(f,
+		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
+		NewPacerPolicyFactory(p),
+		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
+
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
 }
 
@@ -315,9 +348,9 @@ func (jpm *jobPartMgr) createPipeline() {
 				jpm.pacer)
 		case common.EFromTo.LocalBlobFS():
 			jpm.pipeline = NewBlobFSPipeline(
-				azblob.PipelineOptions{
+				azbfs.PipelineOptions{
 					Log:       jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
+					Telemetry: azbfs.TelemetryOptions{Value: "azcopy-V2"},
 				},
 				XferRetryOptions{
 					Policy:        0,

@@ -8,6 +8,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"net/url"
 	"context"
+	"bytes"
 )
 
 type fileRangeAppend struct {
@@ -99,7 +100,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// before the ranges are appended, file has to be created first and the ranges are scheduled to append
 	//Create the fileUrl and then create the file on FileSystem
 	fileUrl := azbfs.NewFileURL(*dUrl, p)
-	_, err = fileUrl.Create(jptm.Context())
+	_, err = fileUrl.Create(jptm.Context(), nil)
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogError) {
 			jptm.Log(pipeline.LogError, fmt.Sprintf("error creating the file for destination url %s. failed with error %s", info.Destination, err.Error()))
@@ -158,6 +159,8 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			if fru.jptm.ShouldLog(pipeline.LogInfo){
 				fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("not picking up the chunk since transfer was cancelled"))
 			}
+			// add range updated to bytes done for progress
+			fru.jptm.AddToBytesDone(calculatedRangeInterval)
 			// report the chunk done
 			// if it is the last range that was scheduled to be appended to the file
 			// report transfer done
@@ -167,8 +170,9 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			}
 			return
 		}
-		// TODO : needs to place the file append range api
-		var err error = nil
+
+		body := newRequestBodyPacer(bytes.NewReader(fru.srcMmf[startRange : startRange + calculatedRangeInterval]), fru.pacer)
+		_, err := fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled
 			// status of transfer does not change when it is cancelled
@@ -186,6 +190,8 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				fru.jptm.Cancel()
 				fru.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
+			// add range updated to bytes done for progress
+			fru.jptm.AddToBytesDone(calculatedRangeInterval)
 			// report the number of range done
 			lastRangeDone, _ := fru.jptm.ReportChunkDone()
 			// if the current range is the last range to be appended for the transfer
@@ -200,6 +206,10 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("successfully appended the range for file %s for startrange %d " +
 								"and rangeInterval %s", fru.fileUrl, startRange, calculatedRangeInterval))
 		}
+
+		// add range updated to bytes done for progress
+		fru.jptm.AddToBytesDone(calculatedRangeInterval)
+
 		//report the chunkDone
 		lastRangeDone, _ := fru.jptm.ReportChunkDone()
 		// if this the last range, then transfer needs to be concluded
@@ -209,7 +219,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				transferDone()
 				return
 			}
-			// TODO place the flush range api
+			_, err = fru.fileUrl.FlushData(fru.jptm.Context(), fru.jptm.Info().SourceSize)
 			if err != nil {
 				if fru.jptm.WasCanceled() {
 					// Flush Range failed because the transfer was cancelled
@@ -229,6 +239,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			if fru.jptm.ShouldLog(pipeline.LogError) {
 				fru.jptm.Log(pipeline.LogError, fmt.Sprintf("successfully flushed the ranges for file %s", fru.fileUrl))
 			}
+			fru.jptm.SetStatus(common.ETransferStatus.Success())
 			transferDone()
 			return
 		}
