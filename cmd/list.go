@@ -74,8 +74,8 @@ func init() {
 
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
-			HandleListCommand(commandLineInput)
+		RunE: func(cmd *cobra.Command, args []string) error{
+			return HandleListCommand(commandLineInput)
 		},
 	}
 
@@ -89,15 +89,7 @@ func init() {
 
 // handles the list command
 // dispatches the list order to theZiyi Wang storage engine
-func HandleListCommand(listRequest common.ListRequest) {
-	// check whether ofstatus transfer status is valid or not
-	if listRequest.OfStatus != "" {
-		/* TODO: Fix this: &&
-		common.TransferStatusStringToCode(listRequest.OfStatus) == math.MaxUint32 */
-		fmt.Println("invalid transfer status passed. Please provide the correct transfer status flag")
-		return
-	}
-
+func HandleListCommand(listRequest common.ListRequest) error {
 	rpcCmd := common.ERpcCmd.None()
 	if listRequest.JobID.IsEmpty() {
 		resp := common.ListJobsResponse{}
@@ -110,11 +102,20 @@ func HandleListCommand(listRequest common.ListRequest) {
 		Rpc(rpcCmd, &listRequest.JobID, &resp)
 		PrintJobProgressSummary(resp)
 	} else {
+		lsRequest := common.ListJobTransfersRequest{}
+		lsRequest.JobID = listRequest.JobID
+		// Parse the given expected Transfer Status
+		// If there is an error parsing, then kill return the error
+		err := lsRequest.OfStatus.Parse(listRequest.OfStatus)
+		if err != nil {
+			return fmt.Errorf("cannot parse the given Transfer Status %s", listRequest.OfStatus)
+		}
 		resp := common.ListJobTransfersResponse{}
 		rpcCmd = common.ERpcCmd.ListJobTransfers()
-		Rpc(rpcCmd, listRequest, &resp)
+		Rpc(rpcCmd, lsRequest, &resp)
 		PrintJobTransfers(resp)
 	}
+	return nil
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
