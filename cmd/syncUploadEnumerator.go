@@ -3,8 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -119,7 +117,14 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 
 	util := copyHandlerUtil{}
-
+	// rootPath is the path of source without wildCards
+	// sourcePattern is the filePath pattern inside the source
+	// For Example: src = C:\a1\a* , so rootPath = C:\a1 and filePattern is a*
+	// This is to avoid enumerator to compare any file inside the destination directory
+	// that doesn't match the pattern
+	// For Example: src = C:\a1\a* des = https://<container-name>?<sig>
+	// Only files that follow pattern a* will be compared
+	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(sourcePath, os.PathSeparator)
 	destinationUrl, err := url.Parse(destinationUrlString)
 	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
@@ -164,9 +169,14 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 			// Example: src ="C:\User1\user-1" dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
 			// remove the virtual directory from the realtivePathofBlobLocally
-			realtivePathofBlobLocally := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+			realtivePathofBlobLocally := util.relativePathToRoot(searchPrefix, blobInfo.Name, '/')
 			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "",1)
-			blobLocalPath := util.generateLocalPath(sourcePath, realtivePathofBlobLocally)
+			// check if the listed blob segment matches the sourcePath pattern
+			// if it does not comparison is not required
+			if !util.blobNameMatchesThePattern(sourcePattern, realtivePathofBlobLocally) {
+				continue
+			}
+			blobLocalPath := util.generateLocalPath(rootPath, realtivePathofBlobLocally)
 			// Check if the blob exists locally or not
 			_, err := os.Stat(blobLocalPath)
 			if err == nil {
@@ -198,31 +208,40 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		panic(err)
 	}
 	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
-	// Get the local file Info
-	f, ferr := os.Stat(src)
+	// Get the files and directories for the given source pattern
+	listOfFilesAndDir, lofaderr := filepath.Glob(src)
+	if lofaderr != nil {
+		return fmt.Errorf("error getting the files and directories for source pattern %s", src), false
+	}
+	// isSourceASingleFile is used to determine whether given source pattern represents single file or not
+	// If the source is a single file, this pointer will not be nil
+	// if it is nil, it means the source is a directory or list of file
+	var isSourceASingleFile os.FileInfo = nil
+
+	// If the number of files matching the given pattern is 1
+	// determine the type of the source
+	if len(listOfFilesAndDir) == 1 {
+		lofadInfo, lofaderr := os.Stat(listOfFilesAndDir[0])
+		if lofaderr != nil {
+			return fmt.Errorf("error getting the file info the source %s", listOfFilesAndDir[0]), false
+		}
+		// If the given source represents a single file, then set isSourceASingleFile pointer to the fileInfo pointer
+		if !lofadInfo.IsDir() {
+			isSourceASingleFile = lofadInfo
+		}
+	}
 	// Get the destination blob properties
 	bProperties, berr := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
-	// If the error occurs while fetching the fileInfo of the source
-	// return the error
-	if ferr != nil {
-		return fmt.Errorf("cannot access the source %s. Failed with error %s", src, err.Error()), false
-	}
-	// If the source is a file locally and destination is not a blob
-	// it means that it could be a virtual directory / container
-	// sync cannot happen between a file and a virtual directory / container
-	if !f.IsDir() && berr != nil {
-		return fmt.Errorf("cannot perform sync since source is a file and destination "+
-			"is not a blob. Listing blob failed with error %s", berr.Error()), true
-	}
+
 	// If the destination is an existing blob and the source is a directory
 	// sync cannot happen between an existing blob and a local directory
-	if berr == nil && f.IsDir() {
+	if berr == nil && isSourceASingleFile != nil {
 		return fmt.Errorf("cannot perform the sync since source %s "+
 			"is a directory and destination %s is a blob", src, destinationUrl.String()), false
 	}
 	// If the source is a file and destination is a blob
 	// For Example: "src = C:\User\user-1\a.txt" && "dst = https://<container-name>/vd-1/a.txt"
-	if berr == nil && !f.IsDir() {
+	if berr == nil && isSourceASingleFile != nil{
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
 		// Example1: "dst = https://<container-name>/blob1?<sig>  blobName = blob1"
@@ -230,27 +249,64 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		blobName := destinationUrl.Path[strings.LastIndex(destinationUrl.Path, "/")+1:]
 		// Compare the blob name and file name
 		// blobName and filename should be same for sync to happen
-		if strings.Compare(blobName, f.Name()) != 0 {
-			return fmt.Errorf("sync cannot be done since blob %s and filename %s doesn't match", blobName, f.Name()), true
+		if strings.Compare(blobName, isSourceASingleFile.Name()) != 0 {
+			return fmt.Errorf("sync cannot be done since blob %s and filename %s doesn't match", blobName, isSourceASingleFile.Name()), true
 		}
 		// If the modified time of file local is later than that of blob
 		// sync needs to happen. The transfer is queued
-		if f.ModTime().After(bProperties.LastModified()) {
+		if isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:      src,
 				Destination: destinationUrl.String(),
-				SourceSize:  f.Size(),
-				LastModifiedTime:f.ModTime(),
+				SourceSize:  isSourceASingleFile.Size(),
+				LastModifiedTime:isSourceASingleFile.ModTime(),
 			}, wg, waitUntilJobCompletion)
 		}
 		return nil, true
 	}
 
 	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl)
+	// If the source is a file and destination is not a blob, it could be a container or directory
+	// then compare the file against the possible blob. If file doesn't exists as a blob upload it
+	// it it exists then compare it.
+	if isSourceASingleFile != nil && berr != nil {
+		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, isSourceASingleFile.Name())
+		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
+		bProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		// If err is not nil, it means the blob does not exists
+		if err != nil {
+			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
+				return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", filedestinationUrl, err.Error()), true
+			}
+		}
+		if err == nil && !isSourceASingleFile.ModTime().After(bProperties.LastModified()){
+			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", src, filedestinationUrl), true
+		}
+		e.addTransferToUpload(common.CopyTransfer{
+			Source:src,
+			Destination:filedestinationUrl.String(),
+			LastModifiedTime:isSourceASingleFile.ModTime(),
+			SourceSize:isSourceASingleFile.Size(),
+		},wg, waitUntilJobCompletion)
+		return nil, true
+	}
 
 	// checkAndQueue is an internal function which check the modified time of file locally
 	// and on container and then decideds whether to queue transfer for upload or not.
 	checkAndQueue := func(root string, pathToFile string, f os.FileInfo) error {
+		// If root path equals the pathToFile it means that source passed was a filePath
+		// For Example: root = C:\a1\a2\f1.txt, pathToFile: C:\a1\a2\f1.txt
+		// localFileRelativePath = f1.txt
+		// remove the last component in the root path
+		// root = C:\a1\a2
+		if strings.EqualFold(root, pathToFile) {
+			pathSepIndex := strings.LastIndex(root, string(os.PathSeparator))
+			if pathSepIndex <= 0 {
+				root = ""
+			}else {
+				root = root[:pathSepIndex]
+			}
+		}
 		// localfileRelativePath is the path of file relative to root directory
 		// Example1: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\a.txt localfileRelativePath = \a.txt
 		// Example2: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
@@ -264,7 +320,6 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
-
 		// Get the properties of given on container
 		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
 		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
@@ -279,11 +334,6 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		if err == nil && !f.ModTime().After(blobProperties.LastModified()) {
 			return nil
 		}
-		// Closing the blob Properties response body if not nil.
-		if blobProperties != nil && blobProperties.Response() != nil {
-			io.Copy(ioutil.Discard, blobProperties.Response().Body)
-			blobProperties.Response().Body.Close()
-		}
 		err = e.addTransferToUpload(common.CopyTransfer{
 			Source:           pathToFile,
 			Destination:      filedestinationUrl.String(),
@@ -295,13 +345,15 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		}
 		return nil
 	}
-
-	listOfFilesAndDir, err := filepath.Glob(src)
-
-	if err != nil {
-		return fmt.Errorf("error listing the file name inside the source %s", src), false
-	}
-
+	// rootPath will be the parent source directory before the first wildcard
+	// For Example: src = C:\a\b* rootPath = C:\a
+	// For Example: src = C:\*\a* rootPath = c:\
+	// In case of no wildCard, rootPath is equal to the source directory
+	// This rootPath is effective when wildCards are provided
+	// Using this rootPath, path of file on blob is calculated
+	// for ex: src := C:\a*\f*.txt rootPath = C:\
+	// path of file C:\a1\f1.txt on the destination path will be destination/a1/f1.txt
+	rootPath,_ := util.sourceRootPathWithoutWildCards(src, os.PathSeparator)
 	// Iterate through each file / dir inside the source
 	// and then checkAndQueue
 	for _, fileOrDir := range listOfFilesAndDir {
@@ -317,11 +369,11 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 					if f.IsDir(){
 						return nil
 					} else {
-						return checkAndQueue(src, pathToFile, f)
+						return checkAndQueue(rootPath, pathToFile, f)
 					}
 				})
 			} else if !f.IsDir() {
-				err = checkAndQueue(src, fileOrDir, f)
+				err = checkAndQueue(rootPath, fileOrDir, f)
 			}
 		}
 	}

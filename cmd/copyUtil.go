@@ -139,6 +139,22 @@ func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[str
 	return false
 }
 
+// relativePathToRoot returns the path of filePath relative to root
+// For Example: root = /a1/a2/ filePath = /a1/a2/f1.txt
+// relativePath = `f1.txt
+// For Example: root = /a1 filePath =/a1/a2/f1.txt
+// relativePath = a2/f1.txt
+func (util copyHandlerUtil) relativePathToRoot(rootPath , filePath string, pathSep byte) string{
+	if len(rootPath) == 0 {
+		return filePath
+	}
+	result := strings.Replace(filePath, rootPath, "", -1)
+	if len(result) > 0 && result[0] == pathSep {
+		result = result[1:]
+	}
+	return result
+}
+
 // get relative path given a root path
 func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string) string {
 	// root path contains the entire absolute path to the root directory, so we need to take away everything except the root directory from filePath
@@ -237,6 +253,9 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 }
 
 func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts, blobName string) (url.URL, string){
+	if os.PathSeparator == '\\' {
+		blobName = strings.Replace(blobName, string(os.PathSeparator), "/", -1)
+	}
 	if blobUrlParts.BlobName == "" {
 		blobUrlParts.BlobName = blobName
 	}else {
@@ -249,29 +268,87 @@ func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts
 	return blobUrlParts.URL(), blobUrlParts.BlobName
 }
 
-func (util copyHandlerUtil) blobNameMatchesThePattern(pattern string , blobName string) (bool){
-	// Since filePath.Match matches "*" with any sequence of non-separator characters
-	// it will return false when "*" matched with "a/b" on linux or "a\\b" on windows
-	// Hence hard-coded check added for "*"
-	if pattern == "*" {
-		return true
+// sourceRootPathWithoutWildCards returns the directory from path that does not have wildCards
+// returns the patterns that defines pattern for relativePath of files to the above mentioned directory
+// For Example: src = C:\User\a*\a1*\*.txt rootDir = C:\User\ pattern = a*\a1*\*.txt
+func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep byte) (string, string){
+	if len(path) == 0 {
+		return path, "*"
 	}
-	// BlobName has "/" as path separators
-	// filePath.Match matches "*" with any sequence of non-separator characters
-	// since path separator on linux and blobName is same
-	// Replace "/" with its url encoded value "%2F"
-	// This is to handle cases like matching "dir* and dir/a.txt"
-	// or matching "dir/* and dir/a/b.txt"
-	if os.PathSeparator == '/' {
-		pattern = strings.Replace(pattern, "/", "%2F", -1)
-		blobName = strings.Replace(blobName, "/", "%2F", -1)
+	// if no wild card exists, then root directory is the given directory
+	// pattern is '*' i.e to include all the files inside the given path
+	wIndex := util.firstIndexOfWildCard(path)
+	if wIndex == -1 {
+		return path, "*"
+	}
+	pathWithoutWildcard := path[:wIndex]
+	// find the last separator in path without the wildCards
+	// result will be content of path till the above separator
+	// for Example: src = C:\User\a*\a1*\*.txt pathWithoutWildcard = C:\User\a
+	// sepIndex = 7
+	// rootDirectory = C:\User and pattern = a*\a1*\*.txt
+	sepIndex := strings.LastIndex(pathWithoutWildcard, string(pathSep))
+	if sepIndex == -1 {
+		return "", path
+	}
+	return pathWithoutWildcard[:sepIndex], path[sepIndex+1:]
+}
+
+func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string , blobName string) (bool){
+	//// Since filePath.Match matches "*" with any sequence of non-separator characters
+	//// it will return false when "*" matched with "a/b" on linux or "a\\b" on windows
+	//// Hence hard-coded check added for "*"
+	//if pattern == "*" {
+	//	return true
+	//}
+	//// BlobName has "/" as path separators
+	//// filePath.Match matches "*" with any sequence of non-separator characters
+	//// since path separator on linux and blobName is same
+	//// Replace "/" with its url encoded value "%2F"
+	//// This is to handle cases like matching "dir* and dir/a.txt"
+	//// or matching "dir/* and dir/a/b.txt"
+	//if os.PathSeparator == '/' {
+	//	pattern = strings.Replace(pattern, "/", "%2F", -1)
+	//	blobName = strings.Replace(blobName, "/", "%2F", -1)
+	//}
+	//
+	//matched, err := filepath.Match(pattern, blobName)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//return matched
+	str := []rune(blobName)
+	pattern := []rune(patternString)
+	s := 0 // counter for str index
+	p := 0 // counter for pattern index
+	startIndex := -1
+	match := 0
+	for s < len(str){
+		// advancing both pointers
+		if p < len(pattern)  && str[s] == pattern[p]{
+			s++
+			p++
+		} else if p < len(pattern) && pattern[p] == '*'{
+		// * found, only advancing pattern pointer
+			startIndex = p
+			match = s
+			p++
+		} else if startIndex != -1{
+			p = startIndex + 1
+			match++
+			s = match
+		} else {
+			//current pattern pointer is not star, last patter pointer was not *
+			//characters do not match
+			return false
+		}
+	}
+		//check for remaining characters in pattern
+	for p < len(pattern) && pattern[p] == '*'{
+		p++
 	}
 
-	matched, err := filepath.Match(pattern, blobName)
-	if err != nil {
-		panic(err)
-	}
-	return matched
+	return p == len(pattern)
 }
 
 func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string){
