@@ -352,18 +352,16 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 			// SearchPrefix is used to list to all the blobs inside the destination
 			// and pattern is used to identify which blob to compare further
 			if !util.blobNameMatchesThePattern(pattern, blobInfo.Name) {
-				fmt.Println("pattern not matched ", pattern, " ", blobInfo.Name)
 				continue
 			}
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: src ="C:\User1\user-1" dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
 			// remove the virtual directory from the realtivePathofBlobLocally
-			realtivePathofBlobLocally := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+			blobRootPath, _ := util.sourceRootPathWithoutWildCards(blobUrlParts.BlobName, '/')
+			realtivePathofBlobLocally := util.relativePathToRoot(blobRootPath, blobInfo.Name, '/')
 			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "",1)
 			blobLocalPath := util.generateLocalPath(sourcePath, realtivePathofBlobLocally)
-			//fmt.Println("blob name ", blobInfo.Name)
-			//fmt.Println("blob loca path ", blobLocalPath)
 			// Check if the blob exists locally or not
 			_, err := os.Stat(blobLocalPath)
 			if err == nil {
@@ -373,7 +371,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 			}
 			// if the blob doesn't exits locally, then we need to download blob.
 			if err != nil && os.IsNotExist(err) {
-				// delete the blob.
+				// download the blob
 				err = e.addTransferToUpload(common.CopyTransfer{
 					Source:      util.generateBlobUrl(containerUrl, blobInfo.Name),
 					Destination: blobLocalPath,
@@ -451,9 +449,13 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		}
 		return nil, true
 	}
-
+	var sourcePattern = ""
 	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl)
-
+	// get the root path without wildCards and get the source Pattern
+	// For Example: source = <container-name>/a*/*/*
+	// rootPath = <container-name> sourcePattern = a*/*/*
+	blobUrlParts.BlobName, sourcePattern = util.sourceRootPathWithoutWildCards(blobUrlParts.BlobName, '/')
+	sourcePattern = strings.Replace(sourcePattern, "/", string(os.PathSeparator), -1)
 	// checkAndQueue is an internal function which check the modified time of file locally
 	// and on container and then decideds whether to queue transfer for upload or not.
 	checkAndQueue := func(root string, pathToFile string, f os.FileInfo) error {
@@ -465,12 +467,16 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		if len(localfileRelativePath) > 0  && localfileRelativePath[0] == os.PathSeparator {
 			localfileRelativePath = localfileRelativePath[1:]
 		}
+		// if the localfileRelativePath does not match the source pattern, then it is not compared
+		if !util.blobNameMatchesThePattern(sourcePattern, localfileRelativePath) {
+			return nil
+		}
+
 		// Appending the fileRelativePath to the destinationUrl
 		// root = C:\User\user1\dir-1  dst = https://<container-name>/<vir-d>?<sig>
 		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
-
 		// Get the properties of given on container
 		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
 		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
