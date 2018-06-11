@@ -23,11 +23,11 @@ package common
 import (
 	"encoding/json"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"math"
 	"reflect"
 	"sync/atomic"
 	"time"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,15 +80,15 @@ type Status uint32
 
 type LogLevel uint8
 
-var ELogLevel  = LogLevel(pipeline.LogNone)
+var ELogLevel = LogLevel(pipeline.LogNone)
 
-func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone)}
-func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal)}
-func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic)}
-func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError)}
-func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning)}
-func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo)}
-func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug)}
+func (LogLevel) None() LogLevel    { return LogLevel(pipeline.LogNone) }
+func (LogLevel) Fatal() LogLevel   { return LogLevel(pipeline.LogFatal) }
+func (LogLevel) Panic() LogLevel   { return LogLevel(pipeline.LogPanic) }
+func (LogLevel) Error() LogLevel   { return LogLevel(pipeline.LogError) }
+func (LogLevel) Warning() LogLevel { return LogLevel(pipeline.LogWarning) }
+func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo) }
+func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug) }
 
 func (ll *LogLevel) Parse(s string) error {
 	val, err := EnumHelper{}.Parse(reflect.TypeOf(ll), s, true)
@@ -160,7 +160,7 @@ func (j *JobStatus) AtomicStore(newJobStatus JobStatus) {
 
 func (JobStatus) InProgress() JobStatus { return JobStatus(0) }
 func (JobStatus) Paused() JobStatus     { return JobStatus(1) }
-func (JobStatus) Cancelling() JobStatus { return JobStatus(2)}
+func (JobStatus) Cancelling() JobStatus { return JobStatus(2) }
 func (JobStatus) Cancelled() JobStatus  { return JobStatus(3) }
 func (JobStatus) Completed() JobStatus  { return JobStatus(4) }
 func (js JobStatus) String() string {
@@ -174,18 +174,19 @@ var EFromTo = FromTo(0)
 // FromTo defines the different types of sources/destination location combinations
 type FromTo uint8
 
-func (FromTo) Unknown() FromTo   { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo { return FromTo(1) }
-func (FromTo) LocalFile() FromTo { return FromTo(2) }
-func (FromTo) BlobLocal() FromTo { return FromTo(3) }
-func (FromTo) FileLocal() FromTo { return FromTo(4) }
-func (FromTo) BlobPipe() FromTo  { return FromTo(5) }
-func (FromTo) PipeBlob() FromTo  { return FromTo(6) }
-func (FromTo) FilePipe() FromTo  { return FromTo(7) }
-func (FromTo) PipeFile() FromTo  { return FromTo(8) }
-func (FromTo) BlobTrash() FromTo { return FromTo(9) }
-func (FromTo) FileTrash() FromTo { return FromTo(10) }
+func (FromTo) Unknown() FromTo     { return FromTo(0) }
+func (FromTo) LocalBlob() FromTo   { return FromTo(1) }
+func (FromTo) LocalFile() FromTo   { return FromTo(2) }
+func (FromTo) BlobLocal() FromTo   { return FromTo(3) }
+func (FromTo) FileLocal() FromTo   { return FromTo(4) }
+func (FromTo) BlobPipe() FromTo    { return FromTo(5) }
+func (FromTo) PipeBlob() FromTo    { return FromTo(6) }
+func (FromTo) FilePipe() FromTo    { return FromTo(7) }
+func (FromTo) PipeFile() FromTo    { return FromTo(8) }
+func (FromTo) BlobTrash() FromTo   { return FromTo(9) }
+func (FromTo) FileTrash() FromTo   { return FromTo(10) }
 func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
+
 //func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
 
 func (ft FromTo) String() string {
@@ -318,7 +319,7 @@ func (pbt *PageBlobTier) Parse(s string) error {
 	return err
 }
 
-func (pbt PageBlobTier) ToAccessTierType() 	azblob.AccessTierType {
+func (pbt PageBlobTier) ToAccessTierType() azblob.AccessTierType {
 	return azblob.AccessTierType(pbt.String())
 }
 

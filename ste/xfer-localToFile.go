@@ -63,7 +63,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
 		_, err := fileURL.GetProperties(jptm.Context())
-		if err == nil{
+		if err == nil {
 			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
@@ -208,7 +208,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf common.MM
 				// then transfer was either failed or cancelled
 				// the file created in share needs to be deleted
 				if jptm.TransferStatus() <= 0 {
-					_,err = fileURL.Delete(context.TODO())
+					_, err = fileURL.Delete(context.TODO())
 					if err != nil {
 						if jptm.ShouldLog(pipeline.LogError) {
 							jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the file %s. Failed with error %s", fileURL.String(), err.Error()))

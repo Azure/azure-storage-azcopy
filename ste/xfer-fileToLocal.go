@@ -55,7 +55,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
 		_, err := os.Stat(info.Destination)
-		if err == nil{
+		if err == nil {
 			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
@@ -89,7 +89,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 				//delete the file if transfer failed
 				err := os.Remove(info.Destination)
 				if err != nil {
-					if jptm.ShouldLog(pipeline.LogError){
+					if jptm.ShouldLog(pipeline.LogError) {
 						jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
 					}
 				}
@@ -125,7 +125,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			//delete the file if transfer failed
 			err := os.Remove(info.Destination)
 			if err != nil {
-				if jptm.ShouldLog(pipeline.LogError){
+				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
 				}
 			}
@@ -180,7 +180,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				if jptm.TransferStatus() <= 0 {
 					err := os.Remove(destinationPath)
 					if err != nil {
-						if jptm.ShouldLog(pipeline.LogError){
+						if jptm.ShouldLog(pipeline.LogError) {
 							jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", destinationPath, err.Error()))
 						}
 					}

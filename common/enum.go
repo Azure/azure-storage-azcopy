@@ -123,7 +123,7 @@ func (EnumHelper) ParseIntegerFlags(enumTypePtr reflect.Type, s string, caseInse
 			val |= ifaceToUint64(v) // Symbol found, OR its value
 		} else {
 			// strict is off: Try to parse f as a base 10 string of digits into a uint64 & return its value
-			i, err := strconv.ParseUint(f, 0, int(enumTypePtr.Elem().Size()) * 8)
+			i, err := strconv.ParseUint(f, 0, int(enumTypePtr.Elem().Size())*8)
 			if err == nil {
 				val |= i // Successful parse, OR its value
 			} else {

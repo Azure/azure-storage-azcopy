@@ -56,7 +56,7 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 	cooked.blockSize = raw.blockSize
 
 	err := cooked.logVerbosity.Parse(raw.logVerbosity)
-	if err != nil{
+	if err != nil {
 		return cooked, err
 	}
 

@@ -26,17 +26,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/spf13/cobra"
 	"io"
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/spf13/cobra"
-	"strings"
 )
 
 // upload related
@@ -64,14 +64,14 @@ type rawCopyCmdArgs struct {
 	//blobUrlForRedirection string
 
 	// filters from flags
-	include		   string
+	include        string
 	exclude        string
 	recursive      bool
 	followSymlinks bool
 	withSnapshots  bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
-	forceWrite				 bool
+	forceWrite bool
 
 	// options from flags
 	blockSize                uint32
@@ -86,7 +86,7 @@ type rawCopyCmdArgs struct {
 	outputJson               bool
 	acl                      string
 	logVerbosity             string
-	stdInEnable			 bool
+	stdInEnable              bool
 }
 
 // validates and transform raw input into cooked input
@@ -104,7 +104,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// If fromTo is local to BlobFS or BlobFS to local then verify the
 	// ACCOUNT_NAME & ACCOUNT_KEY in environment variables
-	if fromTo == common.EFromTo.LocalBlobFS(){
+	if fromTo == common.EFromTo.LocalBlobFS() {
 		// Get the Account Name and Key variables from environment
 		name := os.Getenv("ACCOUNT_NAME")
 		key := os.Getenv("ACCOUNT_KEY")
@@ -128,7 +128,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 	err = cooked.logVerbosity.Parse(raw.logVerbosity)
-	if err != nil{
+	if err != nil {
 		return cooked, err
 	}
 
@@ -183,7 +183,7 @@ type cookedCopyCmdArgs struct {
 	fromTo common.FromTo
 
 	// filters from flags
-	include		   map[string]int
+	include        map[string]int
 	exclude        map[string]int
 	recursive      bool
 	followSymlinks bool
@@ -408,13 +408,13 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:    common.NewJobID(),
-		FromTo:   cca.fromTo,
+		JobID:      common.NewJobID(),
+		FromTo:     cca.fromTo,
 		ForceWrite: cca.forceWrite,
-		Priority: common.EJobPriority.Normal(),
-		LogLevel: cca.logVerbosity,
-		Include:cca.include,
-		Exclude:cca.exclude,
+		Priority:   common.EJobPriority.Normal(),
+		LogLevel:   cca.logVerbosity,
+		Include:    cca.include,
+		Exclude:    cca.exclude,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
@@ -592,8 +592,8 @@ Usage:
 
 	// define the flags relevant to the cp command
 	// filters
-	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. " +
-									"Support use of *. More than one file are separated by ';'")
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
+		"Support use of *. More than one file are separated by ';'")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")
@@ -612,8 +612,8 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
-	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' " +
-																							"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
+	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' "+
+		"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 }

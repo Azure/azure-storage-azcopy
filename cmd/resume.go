@@ -27,8 +27,8 @@ import (
 	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
-	"time"
 	"strings"
+	"time"
 )
 
 func init() {
@@ -97,9 +97,9 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(resumeCmd)
-	rootCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job " +
+	rootCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
 		"More than one file are separated by ';'")
-	rootCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job " +
+	rootCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
 		"More than one file are separated by ';'")
 }
 
@@ -122,10 +122,10 @@ func waitUntilJobCompletion(jobID common.JobID) {
 				os.Exit(1)
 			}
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval,false)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
 
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled(){
+			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled() {
 				os.Exit(0)
 			}
 

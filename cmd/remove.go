@@ -22,14 +22,14 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/spf13/cobra"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/spf13/cobra"
 )
 
 func init() {
 	// set the block-blob-tier and page-blob-tier to None since Parse fails for "" string
 	// while parsing block-blob and page-blob tier.
-	raw := rawCopyCmdArgs{blockBlobTier:common.EBlockBlobTier.None().String(), pageBlobTier:common.EPageBlobTier.None().String(),}
+	raw := rawCopyCmdArgs{blockBlobTier: common.EBlockBlobTier.None().String(), pageBlobTier: common.EPageBlobTier.None().String()}
 	// deleteCmd represents the delete command
 	var deleteCmd = &cobra.Command{
 		Use:        "remove",
@@ -43,11 +43,11 @@ func init() {
 			}
 			raw.src = args[0]
 			srcLocationType := inferArgumentLocation(raw.src)
-			if srcLocationType == ELocation.Blob(){
+			if srcLocationType == ELocation.Blob() {
 				raw.fromTo = common.EFromTo.BlobTrash().String()
-			}else if srcLocationType == ELocation.File(){
+			} else if srcLocationType == ELocation.File() {
 				raw.fromTo = common.EFromTo.FileTrash().String()
-			}else {
+			} else {
 				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
 			}
 			return nil

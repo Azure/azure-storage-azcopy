@@ -18,7 +18,6 @@ import (
 
 type syncDownloadEnumerator common.SyncJobPartOrderRequest
 
-
 /*
 //TODO: Deprecated Api's. Need to delete the api's after unit test cases for sync are Inplace
 func (e *syncDownloadEnumerator) compareRemoteAgainstLocal1(
@@ -261,7 +260,7 @@ func (e *syncDownloadEnumerator) dispatchFinalPart() error {
 		// display the files
 		if e.FilesDeletedLocally > 0 {
 			return fmt.Errorf("%d files deleted locally. No transfer to upload or download ", e.FilesDeletedLocally)
-		}else {
+		} else {
 			return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
 				"The source and destination are in sync")
 		}
@@ -360,7 +359,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 			// remove the virtual directory from the realtivePathofBlobLocally
 			blobRootPath, _ := util.sourceRootPathWithoutWildCards(blobUrlParts.BlobName, '/')
 			realtivePathofBlobLocally := util.relativePathToRoot(blobRootPath, blobInfo.Name, '/')
-			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "",1)
+			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "", 1)
 			blobLocalPath := util.generateLocalPath(sourcePath, realtivePathofBlobLocally)
 			// Check if the blob exists locally or not
 			_, err := os.Stat(blobLocalPath)
@@ -373,10 +372,10 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 			if err != nil && os.IsNotExist(err) {
 				// download the blob
 				err = e.addTransferToUpload(common.CopyTransfer{
-					Source:      util.generateBlobUrl(containerUrl, blobInfo.Name),
-					Destination: blobLocalPath,
-					LastModifiedTime:blobInfo.Properties.LastModified,
-					SourceSize:  *blobInfo.Properties.ContentLength,
+					Source:           util.generateBlobUrl(containerUrl, blobInfo.Name),
+					Destination:      blobLocalPath,
+					LastModifiedTime: blobInfo.Properties.LastModified,
+					SourceSize:       *blobInfo.Properties.ContentLength,
 				}, wg, waitUntilJobCompletion)
 				if err != nil {
 					return err
@@ -441,10 +440,10 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		// sync needs to happen. The transfer is queued
 		if f.ModTime().Before(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:      destinationUrl.String(),
-				Destination: src,
-				SourceSize:  bProperties.ContentLength(),
-				LastModifiedTime:bProperties.LastModified(),
+				Source:           destinationUrl.String(),
+				Destination:      src,
+				SourceSize:       bProperties.ContentLength(),
+				LastModifiedTime: bProperties.LastModified(),
 			}, wg, waitUntilJobCompletion)
 		}
 		return nil, true
@@ -464,7 +463,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		// Example2: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		localfileRelativePath := strings.Replace(pathToFile, root, "", 1)
 		// remove the path separator at the start of relative path
-		if len(localfileRelativePath) > 0  && localfileRelativePath[0] == os.PathSeparator {
+		if len(localfileRelativePath) > 0 && localfileRelativePath[0] == os.PathSeparator {
 			localfileRelativePath = localfileRelativePath[1:]
 		}
 		// if the localfileRelativePath does not match the source pattern, then it is not compared
@@ -492,7 +491,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 				if err != nil {
 					return fmt.Errorf("error deleting the file %s. Failed with error %s", pathToFile, err.Error())
 				}
-				e.FilesDeletedLocally ++
+				e.FilesDeletedLocally++
 				return nil
 			}
 			return err
@@ -529,13 +528,13 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		f, err := os.Stat(fileOrDir)
 		if err == nil {
 			// directories are uploaded only if recursive is on
-			if f.IsDir()  {
+			if f.IsDir() {
 				// walk goes through the entire directory tree
 				err = filepath.Walk(fileOrDir, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {
 						return err
 					}
-					if f.IsDir(){
+					if f.IsDir() {
 						return nil
 					} else {
 						return checkAndQueue(src, pathToFile, f)

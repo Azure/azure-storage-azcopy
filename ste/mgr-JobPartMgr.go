@@ -8,15 +8,14 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"os"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
-
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
@@ -36,7 +35,7 @@ type IJobPartMgr interface {
 	common.ILogger
 }
 
-type serviceAPIVersionOverride struct {}
+type serviceAPIVersionOverride struct{}
 
 // ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
@@ -82,7 +81,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 }
 
 // NewPipeline creates a Pipeline using the specified credentials and options.
-func NewPipeline1( o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+func NewPipeline1(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
@@ -259,7 +258,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 		jpm.AddToBytesToTransfer(jppt.SourceSize)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone()                   // Don't schedule an already-completed/failed transfer
+			jpm.ReportTransferDone()            // Don't schedule an already-completed/failed transfer
 			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
 			continue
 		}
@@ -273,7 +272,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 			// If source doesn't exists, skip the transfer
 			_, ok := includeTransfer[src]
 			if !ok {
-				jpm.ReportTransferDone()                   // Don't schedule transfer which is not mentioned to be included
+				jpm.ReportTransferDone()            // Don't schedule transfer which is not mentioned to be included
 				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
 				continue
 			}
@@ -288,7 +287,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 			// skip the transfer
 			_, ok := excludeTransfer[src]
 			if ok {
-				jpm.ReportTransferDone()                   // Don't schedule transfer which is mentioned to be excluded
+				jpm.ReportTransferDone()            // Don't schedule transfer which is mentioned to be excluded
 				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
 				continue
 			}
@@ -358,7 +357,7 @@ func (jpm *jobPartMgr) createPipeline() {
 					TryTimeout:    UploadTryTimeout,
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
-					jpm.pacer)
+				jpm.pacer)
 		case common.EFromTo.FileTrash():
 			fallthrough
 		case common.EFromTo.FileLocal(): // download from Azure File to local file system

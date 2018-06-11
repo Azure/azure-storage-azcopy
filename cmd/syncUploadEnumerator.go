@@ -170,7 +170,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 			// realtivePathofBlobLocally = virtual-dir/a.txt
 			// remove the virtual directory from the realtivePathofBlobLocally
 			realtivePathofBlobLocally := util.relativePathToRoot(searchPrefix, blobInfo.Name, '/')
-			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "",1)
+			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "", 1)
 			// check if the listed blob segment matches the sourcePath pattern
 			// if it does not comparison is not required
 			if !util.blobNameMatchesThePattern(sourcePattern, realtivePathofBlobLocally) {
@@ -241,7 +241,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 	}
 	// If the source is a file and destination is a blob
 	// For Example: "src = C:\User\user-1\a.txt" && "dst = https://<container-name>/vd-1/a.txt"
-	if berr == nil && isSourceASingleFile != nil{
+	if berr == nil && isSourceASingleFile != nil {
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
 		// Example1: "dst = https://<container-name>/blob1?<sig>  blobName = blob1"
@@ -256,10 +256,10 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		// sync needs to happen. The transfer is queued
 		if isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:      src,
-				Destination: destinationUrl.String(),
-				SourceSize:  isSourceASingleFile.Size(),
-				LastModifiedTime:isSourceASingleFile.ModTime(),
+				Source:           src,
+				Destination:      destinationUrl.String(),
+				SourceSize:       isSourceASingleFile.Size(),
+				LastModifiedTime: isSourceASingleFile.ModTime(),
 			}, wg, waitUntilJobCompletion)
 		}
 		return nil, true
@@ -279,15 +279,15 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 				return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", filedestinationUrl.String(), err.Error()), true
 			}
 		}
-		if err == nil && !isSourceASingleFile.ModTime().After(bProperties.LastModified()){
+		if err == nil && !isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", src, filedestinationUrl.String()), true
 		}
 		e.addTransferToUpload(common.CopyTransfer{
-			Source:src,
-			Destination:filedestinationUrl.String(),
-			LastModifiedTime:isSourceASingleFile.ModTime(),
-			SourceSize:isSourceASingleFile.Size(),
-		},wg, waitUntilJobCompletion)
+			Source:           src,
+			Destination:      filedestinationUrl.String(),
+			LastModifiedTime: isSourceASingleFile.ModTime(),
+			SourceSize:       isSourceASingleFile.Size(),
+		}, wg, waitUntilJobCompletion)
 		return nil, true
 	}
 
@@ -303,7 +303,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 			pathSepIndex := strings.LastIndex(root, string(os.PathSeparator))
 			if pathSepIndex <= 0 {
 				root = ""
-			}else {
+			} else {
 				root = root[:pathSepIndex]
 			}
 		}
@@ -312,7 +312,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		// Example2: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		localfileRelativePath := strings.Replace(pathToFile, root, "", 1)
 		// remove the path separator at the start of relative path
-		if len(localfileRelativePath) > 0  && localfileRelativePath[0] == os.PathSeparator {
+		if len(localfileRelativePath) > 0 && localfileRelativePath[0] == os.PathSeparator {
 			localfileRelativePath = localfileRelativePath[1:]
 		}
 		// Appending the fileRelativePath to the destinationUrl
@@ -353,20 +353,20 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 	// Using this rootPath, path of file on blob is calculated
 	// for ex: src := C:\a*\f*.txt rootPath = C:\
 	// path of file C:\a1\f1.txt on the destination path will be destination/a1/f1.txt
-	rootPath,_ := util.sourceRootPathWithoutWildCards(src, os.PathSeparator)
+	rootPath, _ := util.sourceRootPathWithoutWildCards(src, os.PathSeparator)
 	// Iterate through each file / dir inside the source
 	// and then checkAndQueue
 	for _, fileOrDir := range listOfFilesAndDir {
 		f, err := os.Stat(fileOrDir)
 		if err == nil {
 			// directories are uploaded only if recursive is on
-			if f.IsDir()  {
+			if f.IsDir() {
 				// walk goes through the entire directory tree
 				err = filepath.Walk(fileOrDir, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {
 						return err
 					}
-					if f.IsDir(){
+					if f.IsDir() {
 						return nil
 					} else {
 						return checkAndQueue(rootPath, pathToFile, f)

@@ -44,7 +44,7 @@ type CopyJobPartOrderRequest struct {
 	Priority       JobPriority // priority of the task
 	FromTo         FromTo
 	Include        map[string]int
-	Exclude			map[string]int
+	Exclude        map[string]int
 	Transfers      []CopyTransfer
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
@@ -122,7 +122,7 @@ type ListJobTransfersRequest struct {
 }
 
 type ResumeJob struct {
-	JobID JobID
+	JobID           JobID
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
 }

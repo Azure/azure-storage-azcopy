@@ -195,15 +195,15 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// If the status of Job is cancelled, it means that it has already been cancelled
 		// No need to cancel further
 		jr = common.CancelPauseResumeResponse{
-			CancelledPauseResumed:false,
-			ErrorMsg:fmt.Sprintf("cannot cancel the job %s since it is already cancelled", jobID),
+			CancelledPauseResumed: false,
+			ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it is already cancelled", jobID),
 		}
 	case common.EJobStatus.Cancelling():
 		// If the status of Job is cancelling, it means that it has already been requested for cancellation
 		// No need to cancel further
 		jr = common.CancelPauseResumeResponse{
-			CancelledPauseResumed:true,
-			ErrorMsg:fmt.Sprintf("cannot cancel the job %s since it has already been requested for cancellation", jobID),
+			CancelledPauseResumed: true,
+			ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it has already been requested for cancellation", jobID),
 		}
 	case common.EJobStatus.InProgress():
 		fallthrough
@@ -343,7 +343,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		JobID:              jobID,
 		ErrorMsg:           "",
 		JobStatus:          common.EJobStatus.InProgress(), // Default
-		CompleteJobOrdered: false,                           // default to false; returns true if ALL job parts have been ordered
+		CompleteJobOrdered: false,                          // default to false; returns true if ALL job parts have been ordered
 		FailedTransfers:    []common.TransferDetail{},
 	}
 
@@ -394,7 +394,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
 	part0PlanStatus := jp0.Plan().JobStatus()
 	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed() ||
-									part0PlanStatus == common.EJobStatus.Cancelled()) {
+		part0PlanStatus == common.EJobStatus.Cancelled()) {
 		js.JobStatus = part0PlanStatus
 	}
 	return js
