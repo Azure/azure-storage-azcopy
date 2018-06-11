@@ -1,14 +1,14 @@
 package ste
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"os"
-	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"net/url"
-	"context"
 	"bytes"
+	"context"
+	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"net/url"
+	"os"
 )
 
 type fileRangeAppend struct {
@@ -17,6 +17,7 @@ type fileRangeAppend struct {
 	fileUrl azbfs.FileURL
 	pacer   *pacer
 }
+
 func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// transferDone is the internal api that sets the transfer status
@@ -60,7 +61,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 					jptm.Log(pipeline.LogError, fmt.Sprintf("creating directory %s failed since transfer was cancelled ", info.Destination))
 				}
 				transferDone(jptm.TransferStatus())
-			}else {
+			} else {
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, fmt.Sprintf("creating directory %s failed with error ", err.Error()))
 				}
@@ -105,7 +106,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	defer srcfile.Close()
 
 	// memory map the source file
-	srcMmf, err := common.NewMMF(srcfile, false, 0 , sourceSize)
+	srcMmf, err := common.NewMMF(srcfile, false, 0, sourceSize)
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogError) {
 			jptm.Log(pipeline.LogError, fmt.Sprintf("error mapping the source file %s. failed with error %s", info.Source, err.Error()))
@@ -127,9 +128,9 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		return
 	}
 	// Calculate the number of file Ranges for the given fileSize.
-	numRanges := common.Iffuint32(sourceSize % chunkSize == 0,
-		uint32(sourceSize / chunkSize),
-		uint32(sourceSize /chunkSize) + 1	)
+	numRanges := common.Iffuint32(sourceSize%chunkSize == 0,
+		uint32(sourceSize/chunkSize),
+		uint32(sourceSize/chunkSize)+1)
 
 	// set the number of ranges for the given file
 	jptm.SetNumberOfChunks(numRanges)
@@ -163,7 +164,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			// if the transfer status is less than or equal to 0, it means that transfer was cancelled or failed
 			// in this case, we need to delete the file which was created before any range was appended
 			if fru.jptm.TransferStatus() <= 0 {
-				_,err := fru.fileUrl.Delete(context.Background())
+				_, err := fru.fileUrl.Delete(context.Background())
 				if err != nil {
 					if fru.jptm.ShouldLog(pipeline.LogInfo) {
 						fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the file %s. failed with error ", fru.fileUrl, err.Error()))
@@ -173,8 +174,8 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			// report transfer done
 			fru.jptm.ReportTransferDone()
 		}
-		if fru.jptm.WasCanceled(){
-			if fru.jptm.ShouldLog(pipeline.LogInfo){
+		if fru.jptm.WasCanceled() {
+			if fru.jptm.ShouldLog(pipeline.LogInfo) {
 				fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("not picking up the chunk since transfer was cancelled"))
 			}
 			// add range updated to bytes done for progress
@@ -189,20 +190,20 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			return
 		}
 
-		body := newRequestBodyPacer(bytes.NewReader(fru.srcMmf[startRange : startRange + calculatedRangeInterval]), fru.pacer)
+		body := newRequestBodyPacer(bytes.NewReader(fru.srcMmf[startRange:startRange+calculatedRangeInterval]), fru.pacer)
 		_, err := fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled
 			// status of transfer does not change when it is cancelled
-			if fru.jptm.WasCanceled(){
+			if fru.jptm.WasCanceled() {
 				if fru.jptm.ShouldLog(pipeline.LogInfo) {
 					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error appending the range to the file %s since transfer was cancelled", fru.fileUrl))
 				}
-			}else{
+			} else {
 				// If the transfer was not cancelled, then append range failed due to some other reason
 				if fru.jptm.ShouldLog(pipeline.LogInfo) {
-					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error appending the range to the file %s for startIndex %s and range interval %s. " +
-									"Failed with error %s", fru.fileUrl, startRange, calculatedRangeInterval, err.Error()))
+					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error appending the range to the file %s for startIndex %s and range interval %s. "+
+						"Failed with error %s", fru.fileUrl, startRange, calculatedRangeInterval, err.Error()))
 				}
 				// cancel the transfer
 				fru.jptm.Cancel()
@@ -221,8 +222,8 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		}
 		// successfully appended the range to the file
 		if fru.jptm.ShouldLog(pipeline.LogInfo) {
-			fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("successfully appended the range for file %s for startrange %d " +
-								"and rangeInterval %s", fru.fileUrl, startRange, calculatedRangeInterval))
+			fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("successfully appended the range for file %s for startrange %d "+
+				"and rangeInterval %s", fru.fileUrl, startRange, calculatedRangeInterval))
 		}
 
 		// add range updated to bytes done for progress
@@ -233,7 +234,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		// if this the last range, then transfer needs to be concluded
 		if lastRangeDone {
 			// If the transfer was cancelled before the ranges could be flushed
-			if fru.jptm.WasCanceled(){
+			if fru.jptm.WasCanceled() {
 				transferDone()
 				return
 			}
@@ -244,7 +245,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 					if fru.jptm.ShouldLog(pipeline.LogInfo) {
 						fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error flushing the ranges for file %s since transfer was cancelled ", fru.fileUrl))
 					}
-				}else{
+				} else {
 					if fru.jptm.ShouldLog(pipeline.LogError) {
 						fru.jptm.Log(pipeline.LogError, fmt.Sprintf("error flushing the ranges for file %s failed with error %s", fru.fileUrl, err.Error()))
 					}

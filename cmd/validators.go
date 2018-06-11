@@ -46,7 +46,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 		return common.EFromTo.Unknown(), fmt.Errorf("Invalid --FromTo value specified: %q", userSpecifiedFromTo)
 	}
 	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
-					userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash(){
+		userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash() {
 		// We couldn't infer the FromTo or what we inferred matches what the user specified
 		// We'll accept what the user specified
 		return userFromTo, nil
@@ -88,13 +88,14 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.FilePipe()
 	case srcLocation == ELocation.Local() && dstLocation == ELocation.BlobFS():
 		return common.EFromTo.LocalBlobFS()
-	//case srcLocation == ELocation.BlobFS() && dstLocation == ELocation.Local():
-	//	return common.EFromTo.BlobFSLocal()
+		//case srcLocation == ELocation.BlobFS() && dstLocation == ELocation.Local():
+		//	return common.EFromTo.BlobFSLocal()
 	}
 	return common.EFromTo.Unknown()
 }
 
 var ELocation = Location(0)
+
 // JobStatus indicates the status of a Job; the default is InProgress.
 type Location uint32 // Must be 32-bit for atomic operations
 
@@ -103,7 +104,7 @@ func (Location) Local() Location   { return Location(1) }
 func (Location) Pipe() Location    { return Location(2) }
 func (Location) Blob() Location    { return Location(3) }
 func (Location) File() Location    { return Location(4) }
-func (Location) BlobFS() Location    { return Location(5) }
+func (Location) BlobFS() Location  { return Location(5) }
 func (l Location) String() string {
 	return common.EnumHelper{}.StringInteger(uint32(l), reflect.TypeOf(l))
 }

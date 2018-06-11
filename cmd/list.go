@@ -74,7 +74,7 @@ func init() {
 
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error{
+		RunE: func(cmd *cobra.Command, args []string) error {
 			return HandleListCommand(commandLineInput)
 		},
 	}

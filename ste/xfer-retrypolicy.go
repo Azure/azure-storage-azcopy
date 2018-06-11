@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -10,7 +11,6 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 // XferRetryPolicy tells the pipeline what kind of retry policy to use. See the XferRetryPolicy* constants.
@@ -225,7 +225,7 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				case ctx.Err() != nil:
 					action = "NoRetry: Op timeout"
 
-				case err != nil :
+				case err != nil:
 					// NOTE: Protocol Responder returns non-nil if REST API returns invalid status code for the invoked operation
 					// retry on all the network errors.
 					// zc_policy_retry perform the retries on Temporary and Timeout Errors only.
@@ -235,7 +235,7 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 						// retry only in case of temporary storage errors.
 						if stErr.Temporary() {
 							action = "Retry: StorageError and Temporary()"
-						}else {
+						} else {
 							action = "NoRetry: expected storage error"
 						}
 					} else if _, ok := err.(net.Error); ok {

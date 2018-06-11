@@ -76,7 +76,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		}, wg, waitUntilJobCompletion)
 		// only one transfer for this Job, dispatch the JobPart
 		err := e.dispatchFinalPart()
-		if err != nil{
+		if err != nil {
 			return err
 		}
 		return nil
@@ -91,7 +91,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 
 	literalContainerUrl := util.getContainerUrl(blobUrlParts)
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
-	
+
 	// If the files to be downloaded are mentioned in the include flag
 	// Download the blobs or virtual directory mentioned with the include flag
 	if len(e.Include) > 0 {
@@ -99,7 +99,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			// Get the blobUrl by appending the blob name to the given source Url
 			// blobName is the name after the container in the appended blobUrl
 			blobUrl, blobName := util.appendBlobNameToUrl(blobUrlParts, blob)
-			if blob[len(blob) - 1] != '/' {
+			if blob[len(blob)-1] != '/' {
 				// If there is no separator at the end of blobName, then it is consider to be a blob
 				// For Example src = https://<container-name>?<sig> include = "file1.txt"
 				// blobUrl = https://<container-name>/file1.txt?<sig> ; blobName = file1.txt
@@ -117,7 +117,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 					LastModifiedTime: bProperties.LastModified(),
 					SourceSize:       bProperties.ContentLength(),
 				}, wg, waitUntilJobCompletion)
-			}else {
+			} else {
 				// If there is a separator at the end of blobName, then it is consider to be a virtual directory in the container
 				// all blobs inside this virtual directory needs to downloaded
 				// For Example: src = https://<container-name>?<sig> include = "dir1/"
@@ -143,7 +143,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 						}
 						// If the blobName doesn't matches the blob name pattern, then blob is not included
 						// queued for transfer
-						if !util.blobNameMatchesThePattern(pattern, blobInfo.Name){
+						if !util.blobNameMatchesThePattern(pattern, blobInfo.Name) {
 							continue
 						}
 
@@ -177,7 +177,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// blobNameToExclude will be dir/file.txt
 	if len(e.Exclude) > 0 {
 		destinationBlobName := blobUrlParts.BlobName
-		if len(destinationBlobName) > 0 && destinationBlobName[len(destinationBlobName)-1] != '/'{
+		if len(destinationBlobName) > 0 && destinationBlobName[len(destinationBlobName)-1] != '/' {
 			destinationBlobName += "/"
 		}
 		for blob, index := range e.Exclude {
@@ -203,7 +203,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	if blobNamePattern == "*" && !isRecursiveOn{
+	if blobNamePattern == "*" && !isRecursiveOn {
 		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
 	}
 	// perform a list blob with search prefix
@@ -224,7 +224,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			}
 			// If the blobName doesn't matches the blob name pattern, then blob is not included
 			// queued for transfer
-			if !util.blobNameMatchesThePattern(blobNamePattern, blobInfo.Name){
+			if !util.blobNameMatchesThePattern(blobNamePattern, blobInfo.Name) {
 				continue
 			}
 			if util.resourceShouldBeExcluded(e.Exclude, blobInfo.Name) {

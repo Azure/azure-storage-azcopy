@@ -51,12 +51,12 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	// Example: https://<container>/<blob>?<query-params>
 	if err == nil {
 		e.addTransfer(common.CopyTransfer{
-			Source:           sourceUrl.String(),
-			SourceSize:       blobProperties.ContentLength(),
+			Source:     sourceUrl.String(),
+			SourceSize: blobProperties.ContentLength(),
 		}, wg, waitUntilJobCompletion)
 		// only one transfer for this Job, dispatch the JobPart
 		err := e.dispatchFinalPart()
-		if err != nil{
+		if err != nil {
 			return err
 		}
 		return nil
@@ -76,7 +76,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	if blobNamePattern == "*" && !isRecursiveOn{
+	if blobNamePattern == "*" && !isRecursiveOn {
 		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
 	}
 
@@ -98,13 +98,13 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 			}
 			// If the blobName doesn't matches the blob name pattern, then blob is not included
 			// queued for transfer
-			if !util.blobNameMatchesThePattern(blobNamePattern, blobInfo.Name){
+			if !util.blobNameMatchesThePattern(blobNamePattern, blobInfo.Name) {
 				continue
 			}
 
 			e.addTransfer(common.CopyTransfer{
-				Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
-				SourceSize:       *blobInfo.Properties.ContentLength},
+				Source:     util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
+				SourceSize: *blobInfo.Properties.ContentLength},
 				wg,
 				waitUntilJobCompletion)
 		}

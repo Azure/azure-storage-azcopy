@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type copyUploadEnumerator common.CopyJobPartOrderRequest
@@ -49,7 +49,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			// append file name as blob name in case the given URL is a container
 			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
 				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsDFSFileSystemOrDirectory(ctx, destinationURL)){
+				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsDFSFileSystemOrDirectory(ctx, destinationURL)) {
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
 			}
 
@@ -84,7 +84,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			// temporary saving the destination Url to later modify it
 			// to get the resource Url
 			currentDestinationUrl := *destinationURL
-			f , err := os.Stat(currentFile)
+			f, err := os.Stat(currentFile)
 			if err != nil {
 				return fmt.Errorf("invalid file name %s. It doesn't exists inside the directory %s", file, src)
 			}
@@ -100,7 +100,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					LastModifiedTime: f.ModTime(),
 					SourceSize:       f.Size(),
 				}, wg, waitUntilJobCompletion)
-			}else {
+			} else {
 				// When the string in include flag is a sub-directory
 				// Example: currentFile = C:\User\new\User\dir1
 				if !isRecursiveOn {
@@ -113,14 +113,14 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					if err != nil {
 						return err
 					}
-					if f.IsDir(){
+					if f.IsDir() {
 						// For Blob and Azure Files, empty directories are not uploaded
 						// For BlobFs, empty directories are to be uploaded as well
 						// If the directory is not empty, then uploading a file inside the directory path
 						// will create the parent directory of file, so transfe is not required to create
 						// a directory
 						// For Example: Dst := FSystem/dir1/a.txt If dir1 doesn't exists
-						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0{
+						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
 							currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
 								util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
 							err = e.addTransfer(common.CopyTransfer{
@@ -137,7 +137,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						// then skip it, since files inside sub-dir will be
 						// considered by walk func
 						return nil
-					}else{
+					} else {
 						// create the remote Url of file inside sub-dir
 						currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
 							util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
@@ -174,7 +174,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			// place a separator between the source and file
 			if src[len(src)-1] != os.PathSeparator {
 				filePath = fmt.Sprintf("%s%s%s", src, string(os.PathSeparator), file)
-			}else {
+			} else {
 				filePath = fmt.Sprintf("%s%s", src, file)
 			}
 			// Get the file info to verify file exists or not.
@@ -195,7 +195,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 				// place a separator between filePath and '*'
 				if filePath[len(filePath)-1] == os.PathSeparator {
 					filePath = fmt.Sprintf("%s%s%s", filePath, string(os.PathSeparator), "*")
-				}else {
+				} else {
 					filePath = fmt.Sprintf("%s%s", filePath, "*")
 				}
 			}
@@ -224,7 +224,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						// will create the parent directory of file, so transfe is not required to create
 						// a directory
 						// For Example: Dst := FSystem/dir1/a.txt If dir1 doesn't exists
-						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0{
+						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
 							destinationURL.Path = util.generateObjectPath(cleanContainerPath,
 								util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
 							err = e.addTransfer(common.CopyTransfer{
@@ -243,7 +243,9 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						return nil
 					} else {
 						// Check if the file should be excluded or not.
-						if util.resourceShouldBeExcluded(e.Exclude, pathToFile) { return nil}
+						if util.resourceShouldBeExcluded(e.Exclude, pathToFile) {
+							return nil
+						}
 						// upload the files
 						// the path in the blob name started at the given fileOrDirectoryPath
 						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"

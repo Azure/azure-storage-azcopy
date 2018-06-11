@@ -4,8 +4,9 @@ import (
 	"context"
 	"os"
 
-	chk "gopkg.in/check.v1"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
+	chk "gopkg.in/check.v1"
+	"net/http"
 	"net/url"
 )
 
@@ -16,7 +17,7 @@ var _ = chk.Suite(&FileSystemURLSuite{})
 func delFileSystem(c *chk.C, fs azbfs.FileSystemURL) {
 	resp, err := fs.Delete(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(resp.Response().StatusCode, chk.Equals, 202)
+	c.Assert(resp.Response().StatusCode, chk.Equals, http.StatusAccepted)
 }
 
 func (s *FileSystemURLSuite) TestFileSystemCreateRootDirectoryURL(c *chk.C) {
@@ -42,7 +43,7 @@ func (s *FileSystemURLSuite) TestFileSystemNewFileSystemURLNegative(c *chk.C) {
 	c.Assert(func() { azbfs.NewFileSystemURL(url.URL{}, nil) }, chk.Panics, "p can't be nil")
 }
 
-func (s *FileSystemURLSuite) TestFileSystemCreate(c *chk.C) {
+func (s *FileSystemURLSuite) TestFileSystemCreateDelete(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fileSystemURL, _ := getFileSystemURL(c, fsu)
 
@@ -50,6 +51,8 @@ func (s *FileSystemURLSuite) TestFileSystemCreate(c *chk.C) {
 	defer delFileSystem(c, fileSystemURL)
 	c.Assert(err, chk.IsNil)
 
-	_, err = fileSystemURL.GetProperties(ctx)
+	// Test get properties
+	resp, err := fileSystemURL.GetProperties(ctx)
+	c.Assert(resp.StatusCode(), chk.Equals, http.StatusOK)
 	c.Assert(err, chk.IsNil)
 }

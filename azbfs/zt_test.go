@@ -2,7 +2,6 @@ package azbfs_test
 
 import (
 	"context"
-	"crypto/md5"
 	"fmt"
 	"net/url"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	chk "gopkg.in/check.v1"
 )
@@ -23,17 +21,12 @@ type aztestsSuite struct{}
 var _ = chk.Suite(&aztestsSuite{})
 
 const (
-	fileSystemPrefix         = "go"
-	directoryPrefix          = "gotestdirectory"
-	filePrefix               = "gotestfile"
-	validationErrorSubstring = "validation failed"
-	fileDefaultData          = "file default data"
+	fileSystemPrefix = "go"
+	directoryPrefix  = "gotestdirectory"
+	filePrefix       = "gotestfile"
 )
 
 var ctx = context.Background()
-var basicHeaders = azfile.FileHTTPHeaders{ContentType: "my_type", ContentDisposition: "my_disposition",
-	CacheControl: "control", ContentMD5: md5.Sum([]byte("")), ContentLanguage: "my_language", ContentEncoding: "my_encoding"}
-var basicMetadata = azfile.Metadata{"foo": "bar"}
 
 func getAccountAndKey() (string, string) {
 	name := os.Getenv("ACCOUNT_NAME")
@@ -133,36 +126,6 @@ func createNewFileSystem(c *chk.C, fsu azbfs.ServiceURL) (fs azbfs.FileSystemURL
 	return fs, name
 }
 
-//func createNewShareWithPrefix(c *chk.C, fsu azfile.ServiceURL, prefix string) (fileSystem azbfs.FileSystemURL, name string) {
-//	name = generateName(prefix)
-//	fileSystem = fsu.NewShareURL(name)
-//
-//	cResp, err := fileSystem.Create(ctx, nil, 0)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return fileSystem, name
-//}
-//
-//func createNewDirectoryWithPrefix(c *chk.C, parentDirectory azfile.DirectoryURL, prefix string) (dir azfile.DirectoryURL, name string) {
-//	name = generateName(prefix)
-//	dir = parentDirectory.NewDirectoryURL(name)
-//
-//	cResp, err := dir.Create(ctx, azfile.Metadata{})
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return dir, name
-//}
-//
-//func createNewFileWithPrefix(c *chk.C, dir azfile.DirectoryURL, prefix string, size int64) (file azbfs.FileURL, name string) {
-//	name = generateName(prefix)
-//	file = dir.NewFileURL(name)
-//
-//	cResp, err := file.Create(ctx, size, azfile.FileHTTPHeaders{}, nil)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return file, name
-//}
-//
 func createNewDirectoryFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (dir azbfs.DirectoryURL, name string) {
 	dir, name = getDirectoryURLFromFileSystem(c, fileSystem)
 
@@ -171,18 +134,9 @@ func createNewDirectoryFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) 
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	return dir, name
 }
-//
-//func createNewDirectoryFromDirectory(c *chk.C, parentDirectory azfile.DirectoryURL) (dir azfile.DirectoryURL, name string) {
-//	dir, name = getDirectoryURLFromDirectory(c, parentDirectory)
-//
-//	cResp, err := dir.Create(ctx, nil)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//	return dir, name
-//}
-//
+
 // This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
-func createNewFileFromShare(c *chk.C, fileSystem azbfs.FileSystemURL, fileSize int64) (file azbfs.FileURL, name string) {
+func createNewFileFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
 	dir := fileSystem.NewRootDirectoryURL()
 
 	file, name = getFileURLFromDirectory(c, dir)
@@ -193,36 +147,3 @@ func createNewFileFromShare(c *chk.C, fileSystem azbfs.FileSystemURL, fileSize i
 
 	return file, name
 }
-//
-//// This is a convenience method, No public API to create file URL from fileSystem now. This method uses fileSystem's root directory.
-//func createNewFileFromShareWithDefaultData(c *chk.C, fileSystem azbfs.FileSystemURL) (file azbfs.FileURL, name string) {
-//	dir := fileSystem.NewRootDirectoryURL()
-//
-//	file, name = getFileURLFromDirectory(c, dir)
-//
-//	cResp, err := file.Create(ctx, int64(len(fileDefaultData)), azfile.FileHTTPHeaders{}, nil)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//
-//	_, err = file.UploadRange(ctx, 0, strings.NewReader(fileDefaultData))
-//	c.Assert(err, chk.IsNil)
-//
-//	return file, name
-//}
-//
-//func createNewFileFromDirectory(c *chk.C, directory azfile.DirectoryURL, fileSize int64) (file azbfs.FileURL, name string) {
-//	file, name = getFileURLFromDirectory(c, directory)
-//
-//	cResp, err := file.Create(ctx, fileSize, azfile.FileHTTPHeaders{}, nil)
-//	c.Assert(err, chk.IsNil)
-//	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-//
-//	return file, name
-//}
-//
-//func validateStorageError(c *chk.C, err error, code azfile.ServiceCodeType) {
-//	c.Assert(err, chk.NotNil)
-//
-//	serr, _ := err.(azfile.StorageError)
-//	c.Assert(serr.ServiceCode(), chk.Equals, code)
-//}

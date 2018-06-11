@@ -28,11 +28,11 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"unsafe"
-	"net/http"
 )
 
 type blockBlobUpload struct {
@@ -76,7 +76,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
 		_, err := blobUrl.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
-		if err == nil{
+		if err == nil {
 			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
@@ -119,7 +119,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 	}
 
-	if EndsWith(info.Source, ".vhd") && (blobSize % azblob.PageBlobPageBytes == 0) {
+	if EndsWith(info.Source, ".vhd") && (blobSize%azblob.PageBlobPageBytes == 0) {
 		// step 3.b: If the Source is vhd file and its size is multiple of 512,
 		// then upload the blob as a pageBlob.
 		pageBlobUrl := blobUrl.ToPageBlobURL()
@@ -127,7 +127,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// If the given chunk Size for the Job is greater than maximum page size i.e 4 MB
 		// then set maximum pageSize will be 4 MB.
 		chunkSize = common.Iffint64(
-			chunkSize > common.DefaultPageBlobChunkSize || (chunkSize % azblob.PageBlobPageBytes != 0),
+			chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
 			common.DefaultPageBlobChunkSize,
 			chunkSize)
 
@@ -179,9 +179,9 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 
 		// Calculate the number of Page Ranges for the given PageSize.
-		numPages := common.Iffuint32(blobSize % chunkSize == 0,
-			uint32(blobSize / chunkSize),
-			uint32(blobSize/chunkSize) + 1	)
+		numPages := common.Iffuint32(blobSize%chunkSize == 0,
+			uint32(blobSize/chunkSize),
+			uint32(blobSize/chunkSize)+1)
 
 		jptm.SetNumberOfChunks(numPages)
 
@@ -211,9 +211,9 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// then uploading the source as block Blob.
 		// calculating num of chunks using the source size and chunkSize.
 		numChunks := common.Iffuint32(
-			info.SourceSize % int64(info.BlockSize) == 0,
-			uint32(info.SourceSize / int64(info.BlockSize)),
-			uint32(info.SourceSize/int64(info.BlockSize)) + 1)
+			info.SourceSize%int64(info.BlockSize) == 0,
+			uint32(info.SourceSize/int64(info.BlockSize)),
+			uint32(info.SourceSize/int64(info.BlockSize))+1)
 
 		// Set the number of chunk for the current transfer.
 		jptm.SetNumberOfChunks(numChunks)
@@ -261,11 +261,11 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			// Delete the uncommitted blobs
 			if bbu.jptm.TransferStatus() <= 0 {
 				_, err := bbu.blobURL.ToBlockBlobURL().Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound{
+				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 					// Other errors report that uncommitted blocks are there
 					if bbu.jptm.ShouldLog(pipeline.LogInfo) {
-						bbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error occurred while deleting the uncommitted " +
+						bbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error occurred while deleting the uncommitted "+
 							"blocks of blob %s. Failed with error %s", bbu.blobURL.String(), err.Error()))
 					}
 				}
@@ -437,7 +437,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 				// the blob created should be deleted
 				_, err := blockBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo){
+					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the blob %s. Failed with error %s", blockBlobUrl.String(), err.Error()))
 					}
 				}

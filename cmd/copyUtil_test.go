@@ -22,14 +22,15 @@ package cmd
 
 import (
 	chk "gopkg.in/check.v1"
-	"testing"
 	"net/url"
+	"testing"
 )
 
 // Hookup to the testing framework
 func Test(t *testing.T) { chk.TestingT(t) }
 
 type copyUtilTestSuite struct{}
+
 var _ = chk.Suite(&copyUtilTestSuite{})
 
 func (s *copyUtilTestSuite) TestUrlIsContainerOrShare(c *chk.C) {

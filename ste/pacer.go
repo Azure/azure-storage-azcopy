@@ -35,7 +35,7 @@ import (
 type pacer struct {
 	bytesAvailable          int64
 	availableBytesPerPeriod int64
-	bytesTransferred		int64
+	bytesTransferred        int64
 	lastUpdatedTimestamp    int64
 }
 
@@ -133,9 +133,9 @@ func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer) io.ReadCloser {
 // read blocks until tickets are obtained
 func (rbp *bodyPacer) Read(p []byte) (int, error) {
 	//rbp.p.requestRightToSend(int64(len(p)))
-	n , err := rbp.body.Read(p)
+	n, err := rbp.body.Read(p)
 	atomic.AddInt64(&rbp.p.bytesTransferred, int64(n))
-	return n,err
+	return n, err
 }
 
 // Seeking is required to support retries

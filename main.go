@@ -31,6 +31,7 @@ import (
 )
 
 var eexitCode = exitCode(0)
+
 type exitCode int32
 
 func (exitCode) success() exitCode { return exitCode(0) }
@@ -51,4 +52,3 @@ func mainWithExitCode() exitCode {
 	cmd.Execute()
 	return eexitCode.success()
 }
-

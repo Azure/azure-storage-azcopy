@@ -11,29 +11,20 @@ import (
 	//"strings"
 	//"time"
 
-	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"net/http"
+	chk "gopkg.in/check.v1" // go get gopkg.in/check.v1
 	"io/ioutil"
+	"net/http"
 )
 
 type FileURLSuite struct{}
 
 var _ = chk.Suite(&FileURLSuite{})
 
-const (
-	testFileRangeSize = 512 // Use this number considering clear range's function
-)
-
 func delFile(c *chk.C, file azbfs.FileURL) {
 	resp, err := file.Delete(context.Background())
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.Response().StatusCode, chk.Equals, 200)
-}
-
-func getReaderToRandomBytes(n int) *bytes.Reader {
-	r, _ := getRandomDataAndReader(n)
-	return r
 }
 
 func getRandomDataAndReader(n int) (*bytes.Reader, []byte) {
@@ -48,18 +39,17 @@ func (s *FileURLSuite) TestFileNewFileURLNegative(c *chk.C) {
 	c.Assert(func() { azbfs.NewFileURL(url.URL{}, nil) }, chk.Panics, "p can't be nil")
 }
 
-
 func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	fsu := getBfsServiceURL()
 	fsURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fsURL)
 
 	// Create and delete file in root directory.
-	file := fsURL.NewRootDirectoryURL().NewFileURL(generateFileName())
+	file, _ := getFileURLFromFileSystem(c, fsURL)
 
 	cResp, err := file.Create(context.Background(), nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.Response().StatusCode, chk.Equals, 201)
+	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
 	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
 	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
@@ -68,20 +58,20 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 
 	delResp, err := file.Delete(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(delResp.Response().StatusCode, chk.Equals, 200)
+	c.Assert(delResp.Response().StatusCode, chk.Equals, http.StatusOK)
 	c.Assert(delResp.XMsRequestID(), chk.Not(chk.Equals), "")
 	c.Assert(delResp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
 
-	dir, _ := createNewDirectoryFromFileSystem(c, fsURL)
-	defer deleteDirectory(c, dir)
+	dirURL, _ := createNewDirectoryFromFileSystem(c, fsURL)
+	defer deleteDirectory(c, dirURL)
 
 	// Create and delete file in named directory.
-	file = dir.NewFileURL(generateFileName())
+	file, _ = getFileURLFromDirectory(c, dirURL)
 
 	cResp, err = file.Create(context.Background(), nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.Response().StatusCode, chk.Equals, 201)
+	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
 	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
 	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
@@ -90,7 +80,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 
 	delResp, err = file.Delete(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(delResp.Response().StatusCode, chk.Equals, 200)
+	c.Assert(delResp.Response().StatusCode, chk.Equals, http.StatusOK)
 	c.Assert(delResp.XMsRequestID(), chk.Not(chk.Equals), "")
 	c.Assert(delResp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(delResp.Date(), chk.Not(chk.Equals), "")
@@ -103,12 +93,12 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 
 	// Create and delete file in directory that does not exist yet.
 	dirNotExist, _ := getDirectoryURLFromFileSystem(c, fsURL)
-	file := dirNotExist.NewFileURL(generateFileName())
+	file, _ := getFileURLFromDirectory(c, dirNotExist)
 
 	// Verify that the file was created even though its parent directory does not exist yet
 	cResp, err := file.Create(context.Background(), nil)
 	c.Assert(err, chk.IsNil)
-	c.Assert(cResp.Response().StatusCode, chk.Equals, 201)
+	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
 	c.Assert(cResp.LastModified(), chk.Not(chk.Equals), "")
 	c.Assert(cResp.XMsRequestID(), chk.Not(chk.Equals), "")
@@ -116,9 +106,9 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	c.Assert(cResp.Date(), chk.Not(chk.Equals), "")
 
 	// Verify that the parent directory was created successfully
-	dirResp, err := dirNotExist.Create(ctx)
+	dirResp, err := dirNotExist.GetProperties(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(dirResp.StatusCode(), chk.Equals, 201)
+	c.Assert(dirResp.StatusCode(), chk.Equals, http.StatusOK)
 }
 
 func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
@@ -126,12 +116,12 @@ func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
 
-	fileURL, _ := createNewFileFromShare(c, fileSystemURL, 0)
+	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL)
 	defer delFile(c, fileURL)
 
 	getResp, err := fileURL.GetProperties(context.Background())
 	c.Assert(err, chk.IsNil)
-	c.Assert(getResp.Response().StatusCode, chk.Equals, 200)
+	c.Assert(getResp.Response().StatusCode, chk.Equals, http.StatusOK)
 	c.Assert(getResp.LastModified(), chk.Not(chk.Equals), "")
 	c.Assert(getResp.XMsResourceType(), chk.Equals, "file")
 	c.Assert(getResp.ETag(), chk.Not(chk.Equals), "")
@@ -146,7 +136,7 @@ func (s *FileURLSuite) TestFileGetProperties(c *chk.C) {
 //	fileSystemURL, _ := createNewFileSystem(c, fsu)
 //	defer delFileSystem(c, fileSystemURL)
 //
-//	fileURL, _ := createNewFileFromShare(c, fileSystemURL, 2048)
+//	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL, 2048)
 //	defer delFile(c, fileURL)
 //
 //	contentR, contentD := getRandomDataAndReader(2048)
@@ -179,9 +169,10 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	fileSystemURL, _ := createNewFileSystem(c, fsu)
 	defer delFileSystem(c, fileSystemURL)
 
-	fileURL, _ := createNewFileFromShare(c, fileSystemURL, 2048)
+	fileURL, _ := createNewFileFromFileSystem(c, fileSystemURL)
 	defer delFile(c, fileURL)
 
+	// The file content will be made up of two parts
 	contentR1, contentD1 := getRandomDataAndReader(2048)
 	contentR2, contentD2 := getRandomDataAndReader(2048)
 
@@ -229,16 +220,15 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, http.StatusOK)
 	c.Assert(resp.ContentLength(), chk.Equals, "4096")
+	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
+	c.Assert(resp.ETag(), chk.Not(chk.Equals), "")
+	c.Assert(resp.LastModified(), chk.Not(chk.Equals), "")
+	c.Assert(resp.RequestID(), chk.Not(chk.Equals), "")
+	c.Assert(resp.Version(), chk.Not(chk.Equals), "")
 
 	// Verify the entire content
 	download, err = ioutil.ReadAll(resp.Response().Body)
 	c.Assert(err, chk.IsNil)
 	c.Assert(download[:2048], chk.DeepEquals, contentD1[:])
 	c.Assert(download[2048:], chk.DeepEquals, contentD2[:])
-
-	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
-	c.Assert(resp.ETag(), chk.Not(chk.Equals), "")
-	c.Assert(resp.LastModified(), chk.Not(chk.Equals), "")
-	c.Assert(resp.RequestID(), chk.Not(chk.Equals), "")
-	c.Assert(resp.Version(), chk.Not(chk.Equals), "")
 }

@@ -33,12 +33,12 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"path/filepath"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 const (
@@ -65,7 +65,7 @@ func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	return false
 }
 
-func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential{
+func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential {
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
@@ -75,7 +75,7 @@ func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential{
 	return azbfs.NewSharedKeyCredential(name, key)
 }
 func (util copyHandlerUtil) urlIsDFSFileSystemOrDirectory(ctx context.Context, url *url.URL) bool {
-	if util.urlIsContainerOrShare(url){
+	if util.urlIsContainerOrShare(url) {
 		return true
 	}
 	c := util.sharedKeyCreds()
@@ -114,7 +114,7 @@ func (copyHandlerUtil) generateObjectPath(destinationPath, fileName string) stri
 // First, checks whether filePath exists in the Map or not.
 // Then iterates through each entry of the map and check whether the given filePath matches the expression of any
 // entry of the map.
-func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[string]int, filePath string) bool{
+func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[string]int, filePath string) bool {
 	// Check if the given filePath exists as an entry in the map
 	_, ok := excludedFilePathMap[filePath]
 	if ok {
@@ -144,7 +144,7 @@ func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[str
 // relativePath = `f1.txt
 // For Example: root = /a1 filePath =/a1/a2/f1.txt
 // relativePath = a2/f1.txt
-func (util copyHandlerUtil) relativePathToRoot(rootPath , filePath string, pathSep byte) string{
+func (util copyHandlerUtil) relativePathToRoot(rootPath, filePath string, pathSep byte) string {
 	if len(rootPath) == 0 {
 		return filePath
 	}
@@ -225,11 +225,11 @@ func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithout
 	return
 }
 
-func (util copyHandlerUtil) firstIndexOfWildCard(name string) int{
+func (util copyHandlerUtil) firstIndexOfWildCard(name string) int {
 	return strings.Index(name, "*")
 }
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
-	blobParts :=	azblob.NewBlobURLParts(url)
+	blobParts := azblob.NewBlobURLParts(url)
 	blobParts.BlobName = ""
 	return blobParts.URL()
 	//containerName := strings.SplitAfterN(url.Path[1:], "/", 2)[0]
@@ -252,16 +252,16 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 	return blobUrl.String()
 }
 
-func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts, blobName string) (url.URL, string){
+func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts, blobName string) (url.URL, string) {
 	if os.PathSeparator == '\\' {
 		blobName = strings.Replace(blobName, string(os.PathSeparator), "/", -1)
 	}
 	if blobUrlParts.BlobName == "" {
 		blobUrlParts.BlobName = blobName
-	}else {
+	} else {
 		if blobUrlParts.BlobName[len(blobUrlParts.BlobName)-1] == '/' {
 			blobUrlParts.BlobName += blobName
-		}else{
+		} else {
 			blobUrlParts.BlobName += "/" + blobName
 		}
 	}
@@ -271,7 +271,7 @@ func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts
 // sourceRootPathWithoutWildCards returns the directory from path that does not have wildCards
 // returns the patterns that defines pattern for relativePath of files to the above mentioned directory
 // For Example: src = C:\User\a*\a1*\*.txt rootDir = C:\User\ pattern = a*\a1*\*.txt
-func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep byte) (string, string){
+func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep byte) (string, string) {
 	if len(path) == 0 {
 		return path, "*"
 	}
@@ -294,7 +294,7 @@ func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep 
 	return pathWithoutWildcard[:sepIndex], path[sepIndex+1:]
 }
 
-func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string , blobName string) (bool){
+func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string, blobName string) bool {
 	//// Since filePath.Match matches "*" with any sequence of non-separator characters
 	//// it will return false when "*" matched with "a/b" on linux or "a\\b" on windows
 	//// Hence hard-coded check added for "*"
@@ -323,17 +323,17 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string , blo
 	p := 0 // counter for pattern index
 	startIndex := -1
 	match := 0
-	for s < len(str){
+	for s < len(str) {
 		// advancing both pointers
-		if p < len(pattern)  && str[s] == pattern[p]{
+		if p < len(pattern) && str[s] == pattern[p] {
 			s++
 			p++
-		} else if p < len(pattern) && pattern[p] == '*'{
-		// * found, only advancing pattern pointer
+		} else if p < len(pattern) && pattern[p] == '*' {
+			// * found, only advancing pattern pointer
 			startIndex = p
 			match = s
 			p++
-		} else if startIndex != -1{
+		} else if startIndex != -1 {
 			p = startIndex + 1
 			match++
 			s = match
@@ -343,15 +343,15 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string , blo
 			return false
 		}
 	}
-		//check for remaining characters in pattern
-	for p < len(pattern) && pattern[p] == '*'{
+	//check for remaining characters in pattern
+	for p < len(pattern) && pattern[p] == '*' {
 		p++
 	}
 
 	return p == len(pattern)
 }
 
-func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string){
+func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string) {
 	// If the blobName is empty, it means  the url provided is of a container,
 	// then all blobs inside containers needs to be included, so pattern is set to *
 	if parts.BlobName == "" {
@@ -368,7 +368,7 @@ func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (pref
 		// Example: https://<container-name>/vd-1/vd-2?<signature>, prefix = /vd-1/vd-2
 		prefix = parts.BlobName
 		// check for separator at the end of virtual directory
-		if prefix[len(prefix)-1] != '/'{
+		if prefix[len(prefix)-1] != '/' {
 			prefix += "/"
 		}
 		// since the url is a virtual directory, then all blobs inside the virtual directory
@@ -399,9 +399,9 @@ func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl,
 }
 
 func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) string {
-	if containerUrl.Path[len(containerUrl.Path)-1] != '/'{
-		containerUrl.Path = containerUrl.Path + "/"+ blobName
-	}else{
+	if containerUrl.Path[len(containerUrl.Path)-1] != '/' {
+		containerUrl.Path = containerUrl.Path + "/" + blobName
+	} else {
 		containerUrl.Path = containerUrl.Path + blobName
 	}
 	return containerUrl.String()
@@ -504,11 +504,11 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		fmt.Println(string(jsonOutput))
 	} else {
 		fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
-		bytesInMb := float64(float64(summary.BytesOverWire - *bytesTransferredInLastInterval) / float64(1024*1024))
+		bytesInMb := float64(float64(summary.BytesOverWire-*bytesTransferredInLastInterval) / float64(1024*1024))
 		timeElapsed := time.Since(*startTime).Seconds()
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
-		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb / timeElapsed, 0)
+		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 		message := fmt.Sprintf("%v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
 			summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)

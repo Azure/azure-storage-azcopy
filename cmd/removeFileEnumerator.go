@@ -66,8 +66,6 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 		return fmt.Errorf("cannot find accessible file or base directory with specified sourceURLString")
 	}
 
-
-
 	// Check if source URL is in directory/* expression, and transfer it to remove from directory if the express is directory/*.
 	if hasEquivalentDirectoryURL, equivalentURL := util.hasEquivalentDirectoryURL(*sourceURL); hasEquivalentDirectoryURL {
 		*sourceURL = equivalentURL
@@ -105,8 +103,8 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 				}
 
 				e.addTransfer(common.CopyTransfer{
-					Source:           f.String(),
-					SourceSize:       fileInfo.Properties.ContentLength},
+					Source:     f.String(),
+					SourceSize: fileInfo.Properties.ContentLength},
 					wg,
 					waitUntilJobCompletion)
 			}
@@ -124,8 +122,8 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 		if fileURL != nil { // Single file.
 			e.addTransfer(
 				common.CopyTransfer{
-					Source:           sourceURL.String(),
-					SourceSize:       fileProperties.ContentLength(),
+					Source:     sourceURL.String(),
+					SourceSize: fileProperties.ContentLength(),
 				},
 				wg,
 				waitUntilJobCompletion)
@@ -151,8 +149,8 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 
 						e.addTransfer(
 							common.CopyTransfer{
-								Source:           f.String(),
-								SourceSize:       fileInfo.Properties.ContentLength},
+								Source:     f.String(),
+								SourceSize: fileInfo.Properties.ContentLength},
 							wg,
 							waitUntilJobCompletion)
 					}
@@ -190,4 +188,3 @@ func (e *removeFileEnumerator) dispatchFinalPart() error {
 func (e *removeFileEnumerator) partNum() common.PartNumber {
 	return e.PartNum
 }
-

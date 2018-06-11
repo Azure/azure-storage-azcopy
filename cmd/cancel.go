@@ -21,11 +21,11 @@
 package cmd
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
-	"bufio"
 	"os"
 	"strings"
 )
@@ -105,7 +105,7 @@ func init() {
 
 // ReadStandardInputToCancelJob is a function that reads the standard Input
 // If Input given is "cancel", it cancels the current job.
-func ReadStandardInputToCancelJob(cancelChannel chan <- os.Signal) {
+func ReadStandardInputToCancelJob(cancelChannel chan<- os.Signal) {
 	for {
 		consoleReader := bufio.NewReader(os.Stdin)
 		// ReadString reads input until the first occurrence of \n in the input,

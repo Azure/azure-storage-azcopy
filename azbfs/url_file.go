@@ -6,28 +6,22 @@ import (
 	//"net/http"
 	"net/url"
 
+	"bytes"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"net/http"
 	"strconv"
-	"bytes"
 )
 
 const (
 	fileType = "file"
-
-	// FileMaxUploadRangeBytes indicates the maximum number of bytes that can be sent in a call to UploadRange.
-	FileMaxUploadRangeBytes = 4 * 1024 * 1024 // 4MB
-
-	// FileMaxSizeInBytes indicates the maxiumum file size, in bytes.
-	FileMaxSizeInBytes = 1 * 1024 * 1024 * 1024 * 1024 // 1TB
 )
 
 // A FileURL represents a URL to an Azure Storage file.
 type FileURL struct {
-	fileClient managementClient
+	fileClient     managementClient
 	fileSystemName string
-	path string
+	path           string
 }
 
 // NewFileURL creates a FileURL object using the specified URL and request policy pipeline.
@@ -38,7 +32,7 @@ func NewFileURL(url url.URL, p pipeline.Pipeline) FileURL {
 	fileClient := newManagementClient(url, p)
 
 	urlParts := NewFileURLParts(url)
-	return FileURL{fileClient: fileClient, fileSystemName:urlParts.FileSystemName, path:urlParts.DirectoryOrFilePath}
+	return FileURL{fileClient: fileClient, fileSystemName: urlParts.FileSystemName, path: urlParts.DirectoryOrFilePath}
 }
 
 // URL returns the URL endpoint used by the FileURL object.
@@ -57,18 +51,17 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 	return NewFileURL(f.fileClient.URL(), p)
 }
 
-
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
 func (f FileURL) Create(ctx context.Context, body io.ReadSeeker) (*CreatePathResponse, error) {
 	fileType := fileType
 	return f.fileClient.CreatePath(ctx, f.fileSystemName, f.path, &fileType,
 		nil, nil, nil, nil, nil, nil,
-			nil, nil, nil, nil, nil,
-				nil ,nil, nil, nil, nil, nil,
-					nil, nil, nil, nil, nil,
-						nil, nil, body, nil, nil,
-							nil)
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil,
+		nil, nil, body, nil, nil,
+		nil)
 }
 
 // Download downloads count bytes of data from the start offset. If count is CountToEnd (0), then data is read from specified offset to the end.
@@ -77,7 +70,7 @@ func (f FileURL) Create(ctx context.Context, body io.ReadSeeker) (*CreatePathRes
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file.
 func (f FileURL) Download(ctx context.Context, offset int64, count int64) (*DownloadResponse, error) {
 	dr, err := f.fileClient.ReadPath(ctx, f.fileSystemName, f.path, (&httpRange{offset: offset, count: count}).pointers(),
-		nil, nil,nil, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -108,14 +101,13 @@ func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
 		})
 }
 
-
 // Delete immediately removes the file from the storage account.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/delete-file2.
 func (f FileURL) Delete(ctx context.Context) (*DeletePathResponse, error) {
 	recursive := false
 	return f.fileClient.DeletePath(ctx, f.fileSystemName, f.path, &recursive,
 		nil, nil, nil, nil, nil, nil,
-			nil,nil,nil)
+		nil, nil, nil)
 }
 
 // GetProperties returns the file's metadata and properties.
@@ -143,8 +135,8 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.UpdatePath(ctx, "append", strconv.FormatInt(count, 10), f.fileSystemName, f.path, &offset, nil,
 		nil, nil, nil, nil,
-			nil, nil, nil, nil, nil,
-				nil, nil, nil, body, nil, nil, nil)
+		nil, nil, nil, nil, nil,
+		nil, nil, nil, body, nil, nil, nil)
 }
 
 // flushes writes previously uploaded data to a file

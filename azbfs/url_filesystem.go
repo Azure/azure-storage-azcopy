@@ -12,7 +12,7 @@ const FileSystemResourceName = "filesystem"
 // A FileSystemURL represents a URL to the Azure Storage Blob File System allowing you to manipulate its directories and files.
 type FileSystemURL struct {
 	fileSystemClient managementClient
-	name string
+	name             string
 }
 
 // NewFileSystemURL creates a FileSystemURL object using the specified URL and request policy pipeline.

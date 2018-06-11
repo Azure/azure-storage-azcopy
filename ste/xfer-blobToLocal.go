@@ -55,7 +55,7 @@ func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *p
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
 		_, err := os.Stat(info.Destination)
-		if err == nil{
+		if err == nil {
 			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
@@ -281,7 +281,7 @@ func createEmptyFile(destinationPath string) error {
 }
 
 // deletes the file
-func deleteFile(destinationPath string) error{
+func deleteFile(destinationPath string) error {
 	return os.Remove(destinationPath)
 }
 
