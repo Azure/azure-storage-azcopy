@@ -276,11 +276,11 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		// If err is not nil, it means the blob does not exists
 		if err != nil {
 			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
-				return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", filedestinationUrl, err.Error()), true
+				return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", filedestinationUrl.String(), err.Error()), true
 			}
 		}
 		if err == nil && !isSourceASingleFile.ModTime().After(bProperties.LastModified()){
-			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", src, filedestinationUrl), true
+			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", src, filedestinationUrl.String()), true
 		}
 		e.addTransferToUpload(common.CopyTransfer{
 			Source:src,
