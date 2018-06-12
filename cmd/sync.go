@@ -37,6 +37,7 @@ type syncCommandArguments struct {
 	// options from flags
 	blockSize    uint32
 	logVerbosity string
+	outputJson	bool
 }
 
 // validates and transform raw input into cooked input
@@ -61,7 +62,7 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.recursive = raw.recursive
-
+	cooked.outputJson = raw.outputJson
 	return cooked, nil
 }
 
@@ -73,6 +74,7 @@ type cookedSyncCmdArgs struct {
 	// options from flags
 	blockSize    uint32
 	logVerbosity common.LogLevel
+	outputJson   bool
 }
 
 func (cca cookedSyncCmdArgs) process() (err error) {
@@ -118,7 +120,7 @@ func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			cookedCancelCmdArgs{jobID: jobID}.process()
 			os.Exit(1)
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
+			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
 
 			// happy ending to the front end
 			if jobStatus == common.EJobStatus.Completed() {
@@ -152,12 +154,14 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cooked, err := raw.cook()
 			if err != nil {
-				return fmt.Errorf("failed to parse user input due to error %s", err)
+				fmt.Println("error parsing the input given by the user. Failed with error ", err.Error())
+				os.Exit(1)
 			}
 
 			err = cooked.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform copy command due to error %s", err)
+				fmt.Println("error performing the sync between source and destination. Failed with error ", err.Error())
+				os.Exit(1)
 			}
 			return nil
 		},
@@ -166,5 +170,6 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 100*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
+	syncCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 }

@@ -2,6 +2,8 @@ import utility as util
 import shutil
 import os
 import json
+import datetime
+from stat import *
 from collections import namedtuple
 
 # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
@@ -555,3 +557,180 @@ def test_download_blob_exclude_flag():
         print("test_download_blob_include_flag failed with difference in the number of failed and successful transfers with sub-dir in include flag")
         return
     print("test_download_blob_exclude_flag successfully passed")
+
+def test_sync_local_to_blob_without_wildCards():
+    # create 10 files inside the dir 'sync_local_blob'
+    dir_name ="sync_local_blob"
+    dir_n_files_path = util.create_test_n_files(1024, 10 , dir_name)
+
+    # create sub-dir inside dir sync_local_blob
+    # create 10 files inside the sub-dir of size 1024
+    sub_dir_name = os.path.join(dir_name, "sub_dir_sync_local_blob")
+    sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
+
+    # uploading the directory with 20 files in it.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_sync_local_to_blob_without_wildCards failed while uploading ", 20, "files in sync_local_blob to the container")
+        return
+    # execute the validator and validating the uploaded directory.
+    destination = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(destination). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_local_to_blob_without_wildCards test case failed while validating the directory sync_upload_blob")
+        return
+    # execute a sync command
+    dir_sas = util.get_resource_sas(dir_name)
+    result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas).\
+                add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
+    if result:
+        print("test_sync_local_to_blob_without_wildCards failed while performing a sync of ", dir_name, " and ", dir_sas)
+        return
+    try:
+        shutil.rmtree(sub_dir_n_file_path)
+    except:
+        print("test_sync_local_to_blob_without_wildCards failed deleting the sub-directory ", sub_dir_name)
+        return
+    # deleted entire sub-dir inside the dir created above
+    # sync between source and destination should delete the sub-dir on container
+    # number of successful transfer should be equal to 10
+    result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json","true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of Expected Transfer should be 10 since sub-dir is to exclude which has 10 files in it.
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_sync_local_to_blob_without_wildCards failed with difference in the number of failed and successful transfers")
+        return
+
+
+    # delete 5 files inside the directory
+    for r in range(5, 9):
+        filename = "test101024_" + str(r) + ".txt"
+        filepath = os.path.join(dir_n_files_path, filename)
+        try:
+            os.remove(filepath)
+        except:
+            print("test_sync_local_to_blob_without_wildCards failed removing the file ", filepath)
+            return
+
+    # sync between source and destination should delete the deleted files on container
+    # number of successful transfer should be equal to 5
+    result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json","true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of Expected Transfer should be 10 since 10 files were deleted
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_sync_local_to_blob_without_wildCards failed with difference in the number of failed and successful transfers")
+        return
+
+    # change the modified time of file
+    # perform the sync
+    # expected number of transfer is 1
+    filepath = os.path.join(dir_n_files_path, "test101024_0.txt")
+    st = os.stat(filepath)
+    atime = st[ST_ATIME] #access time
+    mtime = st[ST_MTIME] #modification time
+    new_mtime = mtime + (4*3600) #new modification time
+    os.utime(filepath, (atime, new_mtime))
+    # sync source to destination
+    result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json","true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of Expected Transfer should be 10 since 10 files were deleted
+    if x.TransfersCompleted is not 1 and x.TransfersFailed is not 0 :
+        print("test_sync_local_to_blob_without_wildCards failed with difference in the number of failed and successful transfers")
+        return
+    print("test_sync_local_to_blob_without_wildCards successfully passed")
+
+def test_sync_local_to_blob_with_wildCards():
+    # create 10 files inside the dir 'sync_local_blob'
+    dir_name ="sync_local_blob_wc"
+    dir_n_files_path = util.create_test_n_files(1024, 10 , dir_name)
+
+    # create sub-dir inside dir sync_local_blob_wc
+    # create 10 files inside the sub-dir of size 1024
+    sub_dir_1 = os.path.join(dir_name, "sub_dir_1")
+    sub_dir1_n_file_path = util.create_test_n_files(1024, 10, sub_dir_1)
+
+    # create sub-dir inside dir sync_local_blob_wc
+    sub_dir_2 = os.path.join(dir_name, "sub_dir_2")
+    sub_dir2_n_file_path = util.create_test_n_files(1024, 10, sub_dir_2)
+
+    # uploading the directory with 30 files in it.
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_sync_local_to_blob_with_wildCards failed while uploading ", 30, "files in sync_local_blob_wc to the container")
+        return
+
+    # execute the validator and validating the uploaded directory.
+    destination = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(destination). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_local_to_blob_with_wildCards test case failed while validating the directory sync_upload_blob_wc")
+        return
+
+    # add wildcard at the end of dirpath
+    dir_n_files_path_wcard = os.path.join(dir_n_files_path, "*")
+    # execute a sync command
+    dir_sas = util.get_resource_sas(dir_name)
+    result = util.Command("sync").add_arguments(dir_n_files_path_wcard).add_arguments(dir_sas). \
+        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
+    if result:
+        print("test_sync_local_to_blob_with_wildCards failed while performing a sync of ", dir_n_files_path_wcard, " and ", dir_sas)
+        return
+
+    # sync all the files the ends with .txt extension inside all sub-dirs inside inside
+    # sd_dir_n_files_path_wcard is in format dir/*/*.txt
+    sd_dir_n_files_path_wcard = os.path.join(dir_n_files_path_wcard, "*.txt")
+    result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
+        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
+    if result:
+        print("test_sync_local_to_blob_with_wildCards failed while performing a sync of ", sd_dir_n_files_path_wcard, " and ", dir_sas)
+        return
+
+    # remove 5 files inside both the sub-directories
+    for r in range(5,9):
+        filename = "test101024_"+str(r)+".txt"
+        filepath = os.path.join(sub_dir1_n_file_path, filename)
+        try:
+            os.remove(filepath)
+        except:
+            print("test_sync_local_to_blob_with_wildCards failed removing the file ", filepath)
+            return
+        filepath = os.path.join(sub_dir2_n_file_path, filename)
+        try:
+            os.remove(filepath)
+        except:
+            print("test_sync_local_to_blob_with_wildCards failed removing the file ", filepath)
+            return
+    # sync all the files the ends with .txt extension inside all sub-dirs inside inside
+    # since 5 files inside each sub-dir are deleted, sync will have total 10 transfer
+    # 10 files will deleted from container
+    sd_dir_n_files_path_wcard = os.path.join(dir_n_files_path_wcard, "*.txt")
+    result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
+        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json","true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of Expected Transfer should be 10 since 10 files were deleted
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_sync_local_to_blob_with_wildCards failed with difference in the number of failed and successful transfers")
+        return
+    print("test_sync_local_to_blob_with_wildCards successfully passed")

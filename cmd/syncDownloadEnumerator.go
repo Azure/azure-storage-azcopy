@@ -390,47 +390,79 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 // compareLocalAgainstRemote iterates through each files/dir inside the source and compares
 // them against blobs on container. If the blobs doesn't exists but exists locally, then delete
 // the files locally
-func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
+func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isRecursiveOn bool, srcString string, wg *sync.WaitGroup, p pipeline.Pipeline,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error, bool) {
 	util := copyHandlerUtil{}
 
 	// attempt to parse the destination url
-	destinationUrl, err := url.Parse(dst)
+	sourceUrl, err := url.Parse(srcString)
 	if err != nil {
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
-	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
+	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
 	// Get the local file Info
-	f, ferr := os.Stat(src)
+	f, ferr := os.Stat(dstString)
 	// Get the destination blob properties
 	bProperties, berr := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	// get the blob url parts
+	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl)
 	// If the error occurs while fetching the fileInfo of the source
 	// return the error
 	if ferr != nil {
-		return fmt.Errorf("cannot access the source %s. Failed with error %s", src, err.Error()), false
+		return fmt.Errorf("cannot access the source %s. Failed with error %s", dstString, err.Error()), false
 	}
-	// If the source is a file locally and destination is not a blob
+	// If the destination is a file locally and source is not a blob
 	// it means that it could be a virtual directory / container
 	// sync cannot happen between a file and a virtual directory / container
 	if !f.IsDir() && berr != nil {
 		return fmt.Errorf("cannot perform sync since source is a file and destination "+
 			"is not a blob. Listing blob failed with error %s", berr.Error()), false
 	}
-	// If the destination is an existing blob and the source is a directory
-	// sync cannot happen between an existing blob and a local directory
+	// If the source is an existing blob and the destination is a directory
+	// need to check if the blob exists in the destination or not
 	if berr == nil && f.IsDir() {
+		// Get the blob name without the any virtual directory as path in the blobName
+		// for example: srcString = https://<container-name>/a1/a2/f1.txt blobName = f1.txt
+		bName := blobUrlParts.BlobName
+		// Find the Index of the last Separator
+		sepIndex := strings.LastIndex(bName, "/")
+		// If there is no separator in the blobName
+		// blobName is the complete blobName
+		// for example: srcString = https://<container-name>/f1.txt blobName = f1.txt
+		// If there exists a path separator in the blobName
+		// Get the lastIndex of Path Separator
+		// bName with blob name content from the last path separator till the end.
+		// for example: srcString = https://<container-name>/a1/f1.txt blobName = a1/f1.txt bName = f1.txt
+		if sepIndex != -1{
+			bName = bName[sepIndex+1:]
+		}
+		blobLocalPath := util.generateObjectPath(dstString, bName)
+		blobLocalInfo, err := os.Stat(blobLocalPath)
+		// If the blob does not exists locally ||
+		// If it exists and the blobModified time is after modified time of blob existing locally
+		// download is required.
+		if (err != nil && os.IsNotExist(err)) ||
+			(err == nil && bProperties.LastModified().After(blobLocalInfo.ModTime())){
+			e.addTransferToUpload(common.CopyTransfer{
+				Source:           sourceUrl.String(),
+				Destination:      blobLocalPath,
+				LastModifiedTime: bProperties.LastModified(),
+				SourceSize:       bProperties.ContentLength(),
+			}, wg, waitUntilJobCompletion)
+			return nil, true
+		}
 		return fmt.Errorf("cannot perform the sync since source %s "+
-			"is a directory and destination %s is a blob", src, destinationUrl.String()), true
+			"is a directory and destination %s are already in sync", dstString, sourceUrl.String()), true
 	}
 	// If the source is a file and destination is a blob
-	// For Example: "src = C:\User\user-1\a.txt" && "dst = https://<container-name>/vd-1/a.txt"
+	// For Example: "dstString = C:\User\user-1\a.txt" && "srcString = https://<container-name>/vd-1/a.txt"
 	if berr == nil && !f.IsDir() {
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
-		// Example1: "dst = https://<container-name>/blob1?<sig>  blobName = blob1"
-		// Example1: "dst = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
-		blobName := destinationUrl.Path[strings.LastIndex(destinationUrl.Path, "/")+1:]
+		// Example1: "srcString = https://<container-name>/blob1?<sig>  blobName = blob1"
+		// Example1: "srcString = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
+		blobName := sourceUrl.Path[strings.LastIndex(sourceUrl.Path, "/")+1:]
 		// Compare the blob name and file name
 		// blobName and filename should be same for sync to happen
 		if strings.Compare(blobName, f.Name()) != 0 {
@@ -440,8 +472,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		// sync needs to happen. The transfer is queued
 		if f.ModTime().Before(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:           destinationUrl.String(),
-				Destination:      src,
+				Source:           sourceUrl.String(),
+				Destination:      dstString,
 				SourceSize:       bProperties.ContentLength(),
 				LastModifiedTime: bProperties.LastModified(),
 			}, wg, waitUntilJobCompletion)
@@ -449,7 +481,6 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		return nil, true
 	}
 	var sourcePattern = ""
-	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl)
 	// get the root path without wildCards and get the source Pattern
 	// For Example: source = <container-name>/a*/*/*
 	// rootPath = <container-name> sourcePattern = a*/*/*
@@ -471,8 +502,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 			return nil
 		}
 
-		// Appending the fileRelativePath to the destinationUrl
-		// root = C:\User\user1\dir-1  dst = https://<container-name>/<vir-d>?<sig>
+		// Appending the fileRelativePath to the sourceUrl
+		// root = C:\User\user1\dir-1  srcString = https://<container-name>/<vir-d>?<sig>
 		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
@@ -516,10 +547,10 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 		return nil
 	}
 
-	listOfFilesAndDir, err := filepath.Glob(src)
+	listOfFilesAndDir, err := filepath.Glob(dstString)
 
 	if err != nil {
-		return fmt.Errorf("error listing the file name inside the source %s", src), false
+		return fmt.Errorf("error listing the file name inside the source %s", dstString), false
 	}
 
 	// Iterate through each file / dir inside the source
@@ -537,11 +568,11 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(src string, isRecursi
 					if f.IsDir() {
 						return nil
 					} else {
-						return checkAndQueue(src, pathToFile, f)
+						return checkAndQueue(dstString, pathToFile, f)
 					}
 				})
 			} else if !f.IsDir() {
-				err = checkAndQueue(src, fileOrDir, f)
+				err = checkAndQueue(dstString, fileOrDir, f)
 			}
 		}
 	}
@@ -587,7 +618,7 @@ func (e *syncDownloadEnumerator) enumerate(src string, isRecursiveOn bool, dst s
 
 	err, isSourceABlob := e.compareLocalAgainstRemote(dst, isRecursiveOn, src, wg, p, waitUntilJobCompletion)
 	if err != nil {
-		return nil
+		return err
 	}
 	// If the source provided is a blob, then remote doesn't needs to be compared against the local
 	// since single blob already has been compared against the file

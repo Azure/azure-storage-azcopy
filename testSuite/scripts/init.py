@@ -37,6 +37,10 @@ def temp_adhoc_scenario() :
 def execute_user_scenario_wildcards_op():
     test_remove_files_with_Wildcard()
 
+def execute_sync_user_scenario():
+    test_sync_local_to_blob_without_wildCards()
+    test_sync_local_to_blob_with_wildCards()
+
 def execute_user_scenario_azcopy_op():
     test_download_blob_exclude_flag()
     test_download_blob_include_flag()
@@ -205,12 +209,13 @@ def cleanup():
 
 def main():
     init()
-    execute_user_scenario_wildcards_op()
-    execute_user_scenario_azcopy_op()
-    execute_user_scenario_blob_1()
-    execute_user_scenario_2()
-    execute_user_scenario_file_1()
-    temp_adhoc_scenario()
+    execute_sync_user_scenario()
+    # execute_user_scenario_wildcards_op()
+    # execute_user_scenario_azcopy_op()
+    # execute_user_scenario_blob_1()
+    # execute_user_scenario_2()
+    # execute_user_scenario_file_1()
+    # temp_adhoc_scenario()
     cleanup()
 
 main()

@@ -148,7 +148,7 @@ func (util copyHandlerUtil) relativePathToRoot(rootPath, filePath string, pathSe
 	if len(rootPath) == 0 {
 		return filePath
 	}
-	result := strings.Replace(filePath, rootPath, "", -1)
+	result := strings.Replace(filePath, rootPath, "", 1)
 	if len(result) > 0 && result[0] == pathSep {
 		result = result[1:]
 	}

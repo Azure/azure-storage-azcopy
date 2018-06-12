@@ -125,6 +125,8 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	// For Example: src = C:\a1\a* des = https://<container-name>?<sig>
 	// Only files that follow pattern a* will be compared
 	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(sourcePath, os.PathSeparator)
+	//replace the os path separator  with path separator "/" which is path separator for blobs
+	sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/",-1)
 	destinationUrl, err := url.Parse(destinationUrlString)
 	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
@@ -135,17 +137,6 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	searchPrefix, pattern := util.searchPrefixFromUrl(blobUrlParts)
 
 	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
-	// virtual directory is the entire virtual directory path before the blob name
-	// passed in the searchPrefix
-	// Example: dst = https://<container-name>/vd-1?<sig> searchPrefix = vd-1/
-	// virtualDirectory = vd-1
-	// Example: dst = https://<container-name>/vd-1/vd-2/fi*.txt?<sig> searchPrefix = vd-1/vd-2/fi*.txt
-	// virtualDirectory = vd-1/vd-2/
-	virtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
-	// strip away the leading / in the closest virtual directory
-	if len(virtualDirectory) > 0 && virtualDirectory[0:1] == "/" {
-		virtualDirectory = virtualDirectory[1:]
-	}
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
@@ -168,9 +159,8 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: src ="C:\User1\user-1" dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
-			// remove the virtual directory from the realtivePathofBlobLocally
 			realtivePathofBlobLocally := util.relativePathToRoot(searchPrefix, blobInfo.Name, '/')
-			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "", 1)
+
 			// check if the listed blob segment matches the sourcePath pattern
 			// if it does not comparison is not required
 			if !util.blobNameMatchesThePattern(sourcePattern, realtivePathofBlobLocally) {
