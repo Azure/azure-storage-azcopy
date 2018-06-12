@@ -35,7 +35,7 @@ func init() {
 		Aliases:    []string{"logout"},
 		SuggestFor: []string{"lgout"}, //TODO why does message appear twice on the console
 		Short:      "logout(lgout) launch logout for current user.",
-		Long: `logout(lg) launch logout for current user.. The most common cases are:
+		Long: `logout(lgout) launch logout for current user. The most common cases are:
   - launch oauth device logout for current user, all cached token for current user will be deleted.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil

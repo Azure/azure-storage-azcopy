@@ -38,6 +38,15 @@ func (credInfo OAuthTokenInfo) ToJSON() ([]byte, error) {
 	return json.Marshal(credInfo)
 }
 
+// IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
+func (credInfo OAuthTokenInfo) IsEmpty() bool {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() {
+		return true
+	}
+
+	return false
+}
+
 // JSONToTokenInfo converts bytes to OAuthTokenInfo
 func JSONToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	var OAuthTokenInfo OAuthTokenInfo

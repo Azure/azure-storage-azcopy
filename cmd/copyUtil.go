@@ -32,13 +32,14 @@ import (
 	"strings"
 	"time"
 
+	"path/filepath"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"path/filepath"
 )
 
 const (
@@ -163,21 +164,25 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string
 		return filePath
 	}
 
-	var scrubAway string
-	// test if root path finishes with a /, if yes, ignore it
-	if rootPath[len(rootPath)-1:] == pathSep {
-		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
-	} else {
-		// +1 because we want to include the / at the end of the dir
-		scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
-	}
+	result := filePath
+	if rootPath != "" { // Note: there would be case when rootPath is empty
+		var scrubAway string
+		// test if root path finishes with a /, if yes, ignore it
+		if rootPath[len(rootPath)-1:] == pathSep {
+			scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
+		} else {
+			// +1 because we want to include the / at the end of the dir
+			scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
+		}
 
-	result := strings.Replace(filePath, scrubAway, "", 1)
+		result = strings.Replace(filePath, scrubAway, "", 1)
+	}
 
 	// the back slashes need to be replaced with forward ones
 	if os.PathSeparator == '\\' {
 		result = strings.Replace(result, "\\", "/", -1)
 	}
+
 	return result
 }
 

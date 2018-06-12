@@ -23,15 +23,22 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
+
+// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan
+// Should be immutable after transfer from cmd(FE) module to coordinator and job manager modules.
+type InMemoryTransitJobState struct {
+	credentialInfo common.CredentialInfo
+}
 
 type IJobMgr interface {
 	JobID() common.JobID
@@ -43,6 +50,9 @@ type IJobMgr interface {
 	ReportJobPartDone() uint32
 	Cancel()
 	//Close()
+	getInMemoryTransitedJobState() InMemoryTransitJobState
+	setInMemoryTransitedJobState(state InMemoryTransitJobState)
+
 	common.ILoggerCloser
 }
 
@@ -74,6 +84,8 @@ type jobMgr struct {
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
 	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
+
+	inMemoryTransitJobState InMemoryTransitJobState
 
 	finalPartOrdered           bool
 	atomicNumberOfBytesCovered uint64
@@ -151,6 +163,14 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 		part0Plan.SetJobStatus((common.EJobStatus).Completed())
 	}
 	return partsDone
+}
+
+func (jm *jobMgr) getInMemoryTransitedJobState() InMemoryTransitJobState {
+	return jm.inMemoryTransitJobState
+}
+
+func (jm *jobMgr) setInMemoryTransitedJobState(state InMemoryTransitJobState) {
+	jm.inMemoryTransitJobState = state
 }
 
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }

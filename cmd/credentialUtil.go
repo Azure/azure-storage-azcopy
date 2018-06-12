@@ -25,11 +25,13 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 var once sync.Once
@@ -55,6 +57,12 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // Credential type methods
 // ==============================================================================================
 
+// getBlobCredentialType is used to get credential type when user wish to use OAuth session mode.
+// The verification follows following steps:
+// 1. For source or dest url, if the url contains SAS, indicating using anonymous credential(SAS).
+// 2. If it's source blob url, and it's a public resource, indicating using anonymous credential(public resource).
+// 3. If there is cached session OAuth token, indicating using token credential.
+// 4. Otherwise use anonymous credential.
 func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 	if err != nil {
@@ -72,6 +80,8 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 
 	if !uotm.HasCachedToken() {
 		return common.ECredentialType.Anonymous(), nil
+	} else if !isSource {
+		return common.ECredentialType.OAuthToken(), nil
 	} else {
 		// If has cached token, and no SAS token provided, it could be a public blob resource.
 		p := azblob.NewPipeline(
@@ -112,39 +122,91 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
+func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
+	credential := createCredential(ctx, credInfo)
 
-func createBlobPipeline(credentialType common.CredentialType) (pipeline.Pipeline, error) {
-	switch credentialType {
-	case common.ECredentialType.Anonymous():
-		return azblob.NewPipeline(
-			azblob.NewAnonymousCredential(),
-			azblob.PipelineOptions{
-				Retry: azblob.RetryOptions{
-					Policy:        azblob.RetryPolicyExponential,
-					MaxTries:      ste.UploadMaxTries,
-					TryTimeout:    ste.UploadTryTimeout,
-					RetryDelay:    ste.UploadRetryDelay,
-					MaxRetryDelay: ste.UploadMaxRetryDelay,
-				},
-			}), nil
-	case common.ECredentialType.OAuthToken():
-		uotm := GetUserOAuthTokenManagerInstance()
-		if freshToken, err := uotm.GetTokenInfoWithDefaultSettings(); err != nil {
-			return nil, err
-		} else {
-			return azblob.NewPipeline(
-				azblob.NewTokenCredential(freshToken.AccessToken),
-				azblob.PipelineOptions{
-					Retry: azblob.RetryOptions{
-						Policy:        azblob.RetryPolicyExponential,
-						MaxTries:      ste.UploadMaxTries,
-						TryTimeout:    ste.UploadTryTimeout,
-						RetryDelay:    ste.UploadRetryDelay,
-						MaxRetryDelay: ste.UploadMaxRetryDelay,
-					},
-				}), nil
+	return azblob.NewPipeline(
+		credential,
+		azblob.PipelineOptions{
+			Retry: azblob.RetryOptions{
+				Policy:        azblob.RetryPolicyExponential,
+				MaxTries:      ste.UploadMaxTries,
+				TryTimeout:    ste.UploadTryTimeout,
+				RetryDelay:    ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+		}), nil
+}
+
+func createCredential(ctx context.Context, credInfo common.CredentialInfo) azblob.Credential {
+	credential := azblob.NewAnonymousCredential()
+
+	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		if credInfo.OAuthTokenInfo.IsEmpty() {
+			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
 		}
-	default:
-		panic(fmt.Errorf("illegal credentialType: %v", credentialType))
+
+		// Create TokenCredential and set access token into it.
+		tokenCredential := azblob.NewTokenCredential(credInfo.OAuthTokenInfo.AccessToken)
+
+		if credInfo.OAuthTokenInfo.IsExpired() || credInfo.OAuthTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
+			refreshToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
+		} else {
+			waitDuration := credInfo.OAuthTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+
+			//waitDuration = time.Second * 2 // TODO: Add mock testing
+			if waitDuration < time.Second {
+				waitDuration = time.Nanosecond
+			}
+
+			_ = time.AfterFunc(waitDuration, func() {
+				refreshToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
+			})
+		}
+
+		credential = tokenCredential
 	}
+
+	return credential
+}
+
+func refreshToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
+	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	if err != nil {
+		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+	}
+
+	// Otherwise, refresh the token.
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(
+		*oauthConfig,
+		common.ApplicationID,
+		common.Resource,
+		tokenInfo.Token)
+	if err != nil {
+		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+	}
+
+	err = spt.RefreshWithContext(ctx)
+	if err != nil {
+		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+	}
+
+	newToken := spt.Token()
+	tokenCredential.SetToken(newToken.AccessToken)
+
+	// fmt.Println("FE token refreshed, newToken: ", newToken.AccessToken) //For debugging purpose
+	// For FE(commandline module), refreshing token until process exit.
+
+	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+	if waitDuration < time.Second {
+		waitDuration = time.Nanosecond
+	}
+
+	_ = time.AfterFunc(waitDuration, func() {
+		refreshToken(ctx, common.OAuthTokenInfo{
+			Token:                   newToken,
+			Tenant:                  tokenInfo.Tenant,
+			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+		}, tokenCredential)
+	})
 }

@@ -18,8 +18,6 @@ const (
 	ContentEncodingMaxBytes = 256  // If > 65536, then jobPartPlanBlobData's ContentEncodingLength's type  field must change
 	MetadataMaxBytes        = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
 	BlobTierMaxBytes        = 10
-
-	JsonFormatTokenMaxBytes = 10000
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -50,10 +48,6 @@ type JobPartPlanHeader struct {
 	LogLevel           common.LogLevel     // This Job Part's minimal log level
 	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData       JobPartPlanDstLocal // Additional data for local destinations
-
-	CredentialType      common.CredentialType         // Whether to use OAuth token
-	JSONFormatTokenInfo [JsonFormatTokenMaxBytes]byte // TODO: Json format token, might need be further encrypted
-	JSONFormatTokenLen  uint16
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

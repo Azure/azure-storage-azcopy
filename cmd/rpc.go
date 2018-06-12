@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // Global singleton for sending RPC requests from the frontend to the STE
@@ -50,7 +51,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		*(responseData.(*common.CancelPauseResumeResponse)) = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelling())
 
 	case common.ERpcCmd.ResumeJob():
-		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(requestData.(common.ResumeJob))
+		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(*requestData.(*common.ResumeJobRequest))
 
 	default:
 		panic(fmt.Errorf("Unrecognized RpcCmd: %q", rpcCmd.String()))

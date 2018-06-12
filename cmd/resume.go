@@ -23,19 +23,18 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/spf13/cobra"
 )
 
 func init() {
-	var commandLineInput = ""
-	var includeTransfer = ""
-	var excludeTransfer = ""
-	rawResumeJobCommand := common.ResumeJob{}
+	resumeCmdArgs := resumeCmdArgs{}
+
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
 		Use:        "resume",
@@ -50,57 +49,37 @@ func init() {
 			if len(args) != 1 {
 				return errors.New("this command only requires jobId")
 			}
-			commandLineInput = args[0]
+			resumeCmdArgs.jobID = args[0]
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string) {
-			jobID, err := common.ParseJobID(commandLineInput)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			err := resumeCmdArgs.process()
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error parsing the jobId %s. Failed with error %s", commandLineInput, err.Error()))
-				os.Exit(1)
+				return fmt.Errorf("failed to perform resume command due to error: %s", err)
 			}
-			rawResumeJobCommand.JobID = jobID
-			rawResumeJobCommand.IncludeTransfer = make(map[string]int)
-			rawResumeJobCommand.ExcludeTransfer = make(map[string]int)
 
-			// If the transfer has been provided with the include
-			// parse the transfer list
-			if len(includeTransfer) > 0 {
-				// Split the Include Transfer using ';'
-				transfers := strings.Split(includeTransfer, ";")
-				for index := range transfers {
-					if len(transfers[index]) == 0 {
-						// If the transfer provided is empty
-						// skip the transfer
-						// This is to handle the misplaced ';'
-						continue
-					}
-					rawResumeJobCommand.IncludeTransfer[transfers[index]] = index
-				}
-			}
-			// If the transfer has been provided with the exclude
-			// parse the transfer list
-			if len(excludeTransfer) > 0 {
-				// Split the Exclude Transfer using ';'
-				transfers := strings.Split(excludeTransfer, ";")
-				for index := range transfers {
-					if len(transfers[index]) == 0 {
-						// If the transfer provided is empty
-						// skip the transfer
-						// This is to handle the misplaced ';'
-						continue
-					}
-					rawResumeJobCommand.ExcludeTransfer[transfers[index]] = index
-				}
-			}
-			HandleResumeCommand(rawResumeJobCommand)
+			return nil
 		},
 	}
+
 	rootCmd.AddCommand(resumeCmd)
-	rootCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
 		"More than one file are separated by ';'")
-	rootCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
 		"More than one file are separated by ';'")
+	// oauth options
+	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and authentication for Azure storage resource.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth device login.")
+}
+
+type resumeCmdArgs struct {
+	jobID           string
+	includeTransfer string
+	excludeTransfer string
+
+	// oauth options
+	useOAuthUserCredential bool
+	tenantID               string
 }
 
 func waitUntilJobCompletion(jobID common.JobID) {
@@ -136,15 +115,82 @@ func waitUntilJobCompletion(jobID common.JobID) {
 	}
 }
 
-// handles the resume command
-// dispatches the resume Job order to the storage engine
-func HandleResumeCommand(resJobOrder common.ResumeJob) {
-
-	var resumeJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.ResumeJob(), resJobOrder, &resumeJobResponse)
-	if !resumeJobResponse.CancelledPauseResumed {
-		fmt.Println(resumeJobResponse.ErrorMsg)
-		return
+// processes the resume command,
+// dispatches the resume Job order to the storage engine.
+func (rca resumeCmdArgs) process() error {
+	// parsing the given JobId to validate its format correctness
+	jobID, err := common.ParseJobID(rca.jobID)
+	if err != nil {
+		// If parsing gives an error, hence it is not a valid JobId format
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
 	}
-	waitUntilJobCompletion(resJobOrder.JobID)
+
+	includeTransfer := make(map[string]int)
+	excludeTransfer := make(map[string]int)
+
+	// If the transfer has been provided with the include, parse the transfer list.
+	if len(rca.includeTransfer) > 0 {
+		// Split the Include Transfer using ';'
+		transfers := strings.Split(rca.includeTransfer, ";")
+		for index := range transfers {
+			if len(transfers[index]) == 0 {
+				// If the transfer provided is empty
+				// skip the transfer
+				// This is to handle the misplaced ';'
+				continue
+			}
+			includeTransfer[transfers[index]] = index
+		}
+	}
+	// If the transfer has been provided with the exclude, parse the transfer list.
+	if len(rca.excludeTransfer) > 0 {
+		// Split the Exclude Transfer using ';'
+		transfers := strings.Split(rca.excludeTransfer, ";")
+		for index := range transfers {
+			if len(transfers[index]) == 0 {
+				// If the transfer provided is empty
+				// skip the transfer
+				// This is to handle the misplaced ';'
+				continue
+			}
+			excludeTransfer[transfers[index]] = index
+		}
+	}
+
+	// Check oauth related command switch, and create token with interactive login if required.
+	credentialInfo := common.CredentialInfo{}
+	if rca.useOAuthUserCredential {
+		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
+
+		userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
+		oAuthTokenInfo, err := userOAuthTokenManager.LoginWithDefaultADEndpoint(rca.tenantID, false)
+		if err != nil {
+			return fmt.Errorf(
+				"login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
+				rca.tenantID,
+				err.Error())
+		}
+		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
+	} else {
+		credentialInfo.CredentialType = common.ECredentialType.Anonymous()
+	}
+
+	// Send resume job request.
+	var resumeJobResponse common.CancelPauseResumeResponse
+	Rpc(common.ERpcCmd.ResumeJob(),
+		&common.ResumeJobRequest{
+			JobID:           jobID,
+			CredentialInfo:  credentialInfo,
+			IncludeTransfer: includeTransfer,
+			ExcludeTransfer: excludeTransfer,
+		},
+		&resumeJobResponse)
+
+	if !resumeJobResponse.CancelledPauseResumed {
+		return fmt.Errorf("resume failed due to error: %s", resumeJobResponse.ErrorMsg)
+	}
+
+	waitUntilJobCompletion(jobID)
+
+	return nil
 }

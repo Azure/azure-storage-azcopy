@@ -18,9 +18,10 @@ type copyDownloadBlobEnumerator common.CopyJobPartOrderRequest
 func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
+	ctx := context.TODO()
 
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p, err := createBlobPipeline(e.CredentialType)
+	p, err := createBlobPipeline(ctx, e.CredentialInfo)
 	if err != nil {
 		return err
 	}
@@ -39,7 +40,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// For example given source is https://<container>/a?<query-params> and there exists other blobs aa and aab
 	// Listing the blobs with prefix /a will list other blob as well
 	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-	blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
 	// If the source blob exists, then queue transfer and return
 	// Example: https://<container>/<blob>?<query-params>
@@ -202,7 +203,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// perform a list blob with search prefix
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
+		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())

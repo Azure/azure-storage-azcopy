@@ -158,13 +158,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 		},
-		CredentialType:     order.CredentialType,
-		JSONFormatTokenLen: uint16(len(order.JSONFormatTokenInfo)),
-		atomicJobStatus:    common.EJobStatus.InProgress(), // We default to InProgress
+		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
 	}
-
-	fmt.Printf("In JobPartPlanFileName, here is the token I get: %s\n", order.JSONFormatTokenInfo)
-	copy(jpph.JSONFormatTokenInfo[:], order.JSONFormatTokenInfo)
 
 	// Copy any strings into their respective fields
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)

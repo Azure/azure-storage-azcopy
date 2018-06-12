@@ -111,7 +111,7 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		})
 	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ResumeJob
+			var payload common.ResumeJobRequest
 			deserialize(request, &payload)
 			serialize(ResumeJobOrder(payload), writer)
 		})
@@ -132,7 +132,11 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                             // Convert the order to a plan file
 	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
-	jm.AddJobPart(order.PartNum, jppfn, true)                       // Add this part to the Job and schedule its transfers
+	inMemoryTransitJobState := InMemoryTransitJobState{
+		credentialInfo: order.CredentialInfo,
+	}
+	jm.setInMemoryTransitedJobState(inMemoryTransitJobState)
+	jm.AddJobPart(order.PartNum, jppfn, true) // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -275,13 +279,12 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 //	}
 //	return jr
 //}
-func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeResponse {
-	jobID := resJobOrder.JobID
-	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
+func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
+	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
 	if !found {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("no active job with JobId %v exists", jobID),
+			ErrorMsg:              fmt.Sprintf("no active job with JobId %v exists", req.JobID),
 		}
 	}
 
@@ -290,7 +293,7 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 	if !found {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", jobID),
+			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
 
@@ -303,12 +306,18 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 	case common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
+		inMemoryTransitJobState := InMemoryTransitJobState{
+			credentialInfo: req.CredentialInfo,
+		}
+
+		jm.setInMemoryTransitedJobState(inMemoryTransitJobState)
+
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
 		if jm.ShouldLog(pipeline.LogInfo) {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", jobID))
+			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
 		}
-		jm.ResumeTransfers(steCtx, resJobOrder.IncludeTransfer, resJobOrder.ExcludeTransfer) // Reschedule all job part's transfers
+		jm.ResumeTransfers(steCtx, req.IncludeTransfer, req.ExcludeTransfer) // Reschedule all job part's transfers
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",

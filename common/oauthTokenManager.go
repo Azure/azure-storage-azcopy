@@ -34,19 +34,17 @@ import (
 )
 
 // ApplicationID for azcopy-v2
-// TODO: azcopy-v2 need register a new first party application
-// currently use powershell's application ID for testing
+// TODO: azcopy-v2 need register a new first party application, currently use powershell's application ID for testing
 const ApplicationID = "1950a258-227b-4e31-a9cf-717495945fc2"
 
 // Resource for azure storage
 const Resource = "https://storage.azure.com"
-
-const defaultTokenFileName = "AccessToken.json"
+const DefaultTenantID = "microsoft.com"
+const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
-const DefaultTenantID = "microsoft.com"
-const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
+const defaultTokenFileName = "AccessToken.json"
 
 var adEndpoints = map[string]string{
 	"AzureCloud":        "https://login.microsoftonline.com",
@@ -56,8 +54,7 @@ var adEndpoints = map[string]string{
 }
 
 // UserOAuthTokenManager for token manager
-// TODO: add validation logic, if different tenantID's cache found
-// TODO: note the design for storage explorer
+// TODO: add testing for non-microsoft.com tenantID
 type UserOAuthTokenManager struct {
 	oauthClient        *http.Client
 	userTokenCachePath string
@@ -73,15 +70,15 @@ func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthToken
 }
 
 // LoginWithDefaultADEndpoint interactively logins in with specified tenantID.
-func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string) error {
-	return uotm.LoginWithADEndpoint(tenantID, DefaultActiveDirectoryEndpoint)
+func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string, persist bool) (*OAuthTokenInfo, error) {
+	return uotm.LoginWithADEndpoint(tenantID, DefaultActiveDirectoryEndpoint, persist)
 }
 
 // LoginWithADEndpoint interactively logins in with specified tenantID and activeDirectoryEndpoint.
-func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectoryEndpoint string) error {
+func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Acquire the device code
@@ -92,7 +89,7 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 		Resource)
 
 	if err != nil {
-		return fmt.Errorf("Failed to start device auth flow: %s", err)
+		return nil, fmt.Errorf("Failed to login due to error: %s", err.Error())
 	}
 
 	// Display the authentication message
@@ -101,41 +98,39 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 	// Wait here until the user is authenticated
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
-		return fmt.Errorf("Failed to finish device auth flow: %s", err)
+		return nil, fmt.Errorf("Failed to login due to error: %s", err.Error())
 	}
 
-	return uotm.saveTokenInfo(
-		OAuthTokenInfo{
-			Token:                   *token,
-			Tenant:                  tenantID,
-			ActiveDirectoryEndpoint: activeDirectoryEndpoint,
-		})
+	oAuthTokenInfo := OAuthTokenInfo{
+		Token:                   *token,
+		Tenant:                  tenantID,
+		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
+	}
+
+	if persist {
+		err = uotm.saveTokenInfo(oAuthTokenInfo)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %s", err.Error())
+		}
+	}
+
+	return &oAuthTokenInfo, nil
 }
 
-// GetTokenInfoWithDefaultSettings use GetTokenInfo to get a fresh token with default settings.
-func (uotm *UserOAuthTokenManager) GetTokenInfoWithDefaultSettings() (*OAuthTokenInfo, error) {
-	return uotm.GetTokenInfo(DefaultActiveDirectoryEndpoint, DefaultTenantID)
-}
-
-// GetTokenInfo get a fresh token, if access token expired, refresh the token.
-// if refresh token expired, fail and ask user for new login action.
+// GetCachedTokenInfo get a fresh token from cached token, if access token expired, it will refresh the token.
+// if refresh token expired, the method will fail and ask user for new login action.
 // Fresh token is persisted if acces token or refresh token is changed.
-func (uotm *UserOAuthTokenManager) GetTokenInfo(activeDirectoryEndpoint, tenantID string) (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error) {
 	if !uotm.HasCachedToken() {
 		return nil, fmt.Errorf("getToken failed: No cached token found, please use login command first before getToken")
 	}
 
 	tokenInfo, err := uotm.loadTokenInfo()
 	if err != nil {
-		return nil, fmt.Errorf("getToken failed due to error: %v", err)
+		return nil, fmt.Errorf("getToken failed due to error: %v", err.Error())
 	}
-
-	if tokenInfo.ActiveDirectoryEndpoint != activeDirectoryEndpoint || tokenInfo.Tenant != tenantID {
-		return nil, fmt.Errorf(
-			"getToken failed: No cached token found for ActiveDirectoryEndpoint '%s', and Tenant '%s'",
-			activeDirectoryEndpoint,
-			tenantID)
-	}
+	activeDirectoryEndpoint := tokenInfo.ActiveDirectoryEndpoint
+	tenantID := tokenInfo.Tenant
 
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
@@ -154,13 +149,14 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(activeDirectoryEndpoint, tenantI
 	// Ensure at least 10 minutes fresh time.
 	spt.SetRefreshWithin(DefaultTokenExpiryWithinThreshold)
 	spt.SetAutoRefresh(true)
-	err = spt.EnsureFresh()
+	err = spt.EnsureFresh() // EnsureFresh only refresh token when access token's fresh duration is less than threshold set in RefreshWithin.
 	if err != nil {
-		return nil, fmt.Errorf("getToken failed to ensure token fresh due to error: %v", err)
+		return nil, fmt.Errorf("getToken failed to ensure token fresh due to error: %v", err.Error())
 	}
 
 	freshToken := spt.Token()
 
+	// Update token cache, if token is updated.
 	if freshToken.AccessToken != tokenInfo.AccessToken || freshToken.RefreshToken != tokenInfo.RefreshToken {
 		tokenInfoToPersist := OAuthTokenInfo{
 			Token:                   freshToken,
@@ -192,7 +188,7 @@ func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 		// Cached token file existed
 		err = os.Remove(tokenFilePath)
 		if err != nil { // remove failed
-			return fmt.Errorf("failed to delete cached token file with path: %s, due to error: %v", tokenFilePath, err)
+			return fmt.Errorf("failed to remove cached token file with path: %s, due to error: %v", tokenFilePath, err)
 		}
 
 		// remove succeeded
