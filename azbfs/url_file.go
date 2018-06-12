@@ -133,8 +133,8 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 	}
 
 	// TransactionalContentMD5 isn't supported currently.
-	return f.fileClient.UpdatePath(ctx, "append", strconv.FormatInt(count, 10), f.fileSystemName, f.path, &offset, nil,
-		nil, nil, nil, nil,
+	return f.fileClient.UpdatePath(ctx, "append", strconv.FormatInt(count, 10), f.fileSystemName, f.path, &offset,
+		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, body, nil, nil, nil)
 }
@@ -145,9 +145,13 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResp
 		panic("fileSize must be >= 0")
 	}
 
+	// hardcoded to be false for the moment
+	// azcopy does not need this
+	retainUncommittedData := false
+
 	// TransactionalContentMD5 isn't supported currently.
-	return f.fileClient.UpdatePath(ctx, "flush", "0", f.fileSystemName, f.path, &fileSize, nil,
-		nil, nil, nil, nil,
+	return f.fileClient.UpdatePath(ctx, "flush", "0", f.fileSystemName, f.path, &fileSize,
+		&retainUncommittedData, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, bytes.NewReader(nil), nil, nil, nil)
 }

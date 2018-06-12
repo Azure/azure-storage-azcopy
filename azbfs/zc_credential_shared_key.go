@@ -161,21 +161,28 @@ func (f *SharedKeyCredential) buildCanonicalizedResource(u *url.URL) string {
 		cr.WriteString("/")
 	}
 
-	// params is a map[string][]string; param name is key; params values is []string
-	params, err := url.ParseQuery(u.RawQuery) // Returns URL decoded values
+	// rawParams is a map[string][]string; param name is key; rawParams values is []string
+	rawParams, err := url.ParseQuery(u.RawQuery) // Returns URL decoded values
 	if err != nil {
 		panic(err)
 	}
 
-	if len(params) > 0 { // There is at least 1 query parameter
-		paramNames := []string{} // We use this to sort the parameter key names
-		for paramName := range params {
-			paramNames = append(paramNames, paramName) // paramNames must be lowercase
+	if len(rawParams) > 0 { // There is at least 1 query parameter
+
+		// the parameter names might container uppercase characters
+		normalizedParams := map[string][]string{}
+		for rawParamName, rawParamValues := range rawParams {
+			normalizedParams[strings.ToLower(rawParamName)] = rawParamValues
+		}
+
+		var paramNames []string // We use this to sort the parameter key names
+		for paramName := range normalizedParams {
+			paramNames = append(paramNames, paramName)
 		}
 		sort.Strings(paramNames)
 
 		for _, paramName := range paramNames {
-			paramValues := params[paramName]
+			paramValues := normalizedParams[paramName]
 			sort.Strings(paramValues)
 
 			// Join the sorted key values separated by ','
