@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"os"
+	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -41,7 +43,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // defaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-const defaultServiceApiVersion = "2017-04-17"
+const defaultServiceApiVersion = "2017-11-09"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -182,6 +184,10 @@ type jobPartMgr struct {
 	blobMetadata azblob.Metadata
 	fileMetadata azfile.Metadata
 
+	// OAuth related fields
+	credentialType common.CredentialType
+	oAuthTokenInfo *common.OAuthTokenInfo
+
 	preserveLastModifiedTime bool
 
 	newJobXfer newJobXfer // Method used to start the transfer
@@ -248,9 +254,21 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
+	jpm.credentialType = plan.CredentialType
+	if jpm.credentialType == common.ECredentialType.OAuthToken() {
+		tokenInfo, err := common.JSONToTokenInfo(plan.JSONFormatTokenInfo[:plan.JSONFormatTokenLen])
+		if err != nil {
+			panic(err)
+		}
+		jpm.oAuthTokenInfo = tokenInfo
+		fmt.Println("mgr-JobPartMgr printing oAuthTokenInfo: ", *jpm.oAuthTokenInfo)
+	}
+
 	jpm.newJobXfer = computeJobXfer(plan.FromTo)
 
 	jpm.priority = plan.Priority
+
+	jpm.createPipeline(jobCtx)
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -324,9 +342,128 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipeline() {
+func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
+	//fmt.Println(time.Now(), "refresh token called")
+	//fmt.Println("refresh token before: ", tokenInfo)
+
+	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err))
+		}
+	}
+
+	// Otherwise, refresh the token.
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(
+		*oauthConfig,
+		common.ApplicationID,
+		common.Resource,
+		tokenInfo.Token)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err))
+		}
+	}
+
+	err = spt.RefreshWithContext(ctx)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err))
+		}
+	}
+
+	newToken := spt.Token()
+	tokenCredential.SetToken(newToken.AccessToken)
+
+	if jpm.ShouldLog(pipeline.LogDebug) {
+
+		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
+	}
+
+	//fmt.Println("refresh token after: ", newToken)
+
+	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+	if waitDuration < time.Second {
+		waitDuration = time.Second
+	}
+
+	waitDuration = time.Second * 1 // to delete, for testing
+
+	//doneChan := make(chan bool)
+
+	_ = time.AfterFunc(waitDuration, func() {
+		jpm.refreshToken(ctx, common.OAuthTokenInfo{
+			Token:                   newToken,
+			Tenant:                  tokenInfo.Tenant,
+			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+		}, tokenCredential)
+
+		//doneChan <- true
+	})
+
+	// go func() {
+	// 	select {
+	// 	case <-ctx.Done():
+	// 		afterFuncTimer.Stop()
+	// 		if jpm.ShouldLog(pipeline.LogDebug) {
+	// 			jpm.Log(pipeline.LogDebug, "ctx.Done refresh 2")
+	// 		}
+	// 	case <-doneChan:
+	// 		if jpm.ShouldLog(pipeline.LogDebug) {
+	// 			jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed, stop after func timer monitoring.", jpm.Plan().JobID, jpm.Plan().PartNum)
+	// 		}
+	// 	}
+	// }()
+}
+
+func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 	if jpm.pipeline == nil {
 		fromTo := jpm.planMMF.Plan().FromTo
+
+		credential := azblob.NewAnonymousCredential()
+		if jpm.credentialType == common.ECredentialType.OAuthToken() {
+			if jpm.oAuthTokenInfo == nil {
+				panic("invalid state, when using OAuthToken, JobPartMgr should get valid token.")
+			}
+
+			// Set access token into TokenCredential
+			tokenCredential := azblob.NewTokenCredential(jpm.oAuthTokenInfo.AccessToken)
+
+			if jpm.oAuthTokenInfo.Token.IsExpired() || jpm.oAuthTokenInfo.Token.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
+				jpm.refreshToken(ctx, *jpm.oAuthTokenInfo, tokenCredential)
+			} else {
+				waitDuration := jpm.oAuthTokenInfo.Token.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+
+				//waitDuration = time.Second * 1 // to delete, for testing
+				if waitDuration < time.Second {
+					waitDuration = time.Second
+				}
+
+				//doneChan := make(chan bool)
+
+				_ = time.AfterFunc(waitDuration, func() {
+					jpm.refreshToken(ctx, *jpm.oAuthTokenInfo, tokenCredential)
+
+					//doneChan <- true
+				})
+
+				// go func() {
+				// 	select {
+				// 	case <-ctx.Done():
+				// 		afterFuncTimer.Stop()
+				// 		if jpm.ShouldLog(pipeline.LogDebug) {
+				// 			jpm.Log(pipeline.LogDebug, "ctx.Done refresh 1")
+				// 		}
+				// 	case <-doneChan:
+				// 		if jpm.ShouldLog(pipeline.LogDebug) {
+				// 			jpm.Log(pipeline.LogDebug, "launch token refresh")
+				// 		}
+				// 	}
+				// }()
+			}
+
+			credential = tokenCredential
+		}
 
 		switch fromTo {
 		case common.EFromTo.BlobTrash():
@@ -334,7 +471,7 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-			jpm.pipeline = NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+			jpm.pipeline = NewBlobPipeline(credential, azblob.PipelineOptions{
 				Log:       jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
 			},
@@ -386,7 +523,7 @@ func (jpm *jobPartMgr) createPipeline() {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.createPipeline()
+	//jpm.createPipeline() //TODO: Ensure with @Prateek and @Jeff
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 

@@ -4,13 +4,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type JobPartPlanFileName string
@@ -157,8 +158,14 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 		},
-		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
+		CredentialType:     order.CredentialType,
+		JSONFormatTokenLen: uint16(len(order.JSONFormatTokenInfo)),
+		atomicJobStatus:    common.EJobStatus.InProgress(), // We default to InProgress
 	}
+
+	fmt.Printf("In JobPartPlanFileName, here is the token I get: %s\n", order.JSONFormatTokenInfo)
+	copy(jpph.JSONFormatTokenInfo[:], order.JSONFormatTokenInfo)
+
 	// Copy any strings into their respective fields
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)

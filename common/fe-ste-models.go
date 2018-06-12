@@ -22,12 +22,13 @@ package common
 
 import (
 	"encoding/json"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"math"
 	"reflect"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -334,6 +335,30 @@ func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
 	}
 	return pbt.Parse(s)
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var ECredentialType = CredentialType(0)
+
+// CredentialType defines the different types of credentials
+type CredentialType uint8
+
+func (CredentialType) Unknown() CredentialType    { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType { return CredentialType(1) }
+func (CredentialType) Anonymous() CredentialType  { return CredentialType(2) } // For SAS or public.
+
+func (ct CredentialType) String() string {
+	return EnumHelper{}.StringInteger(ct, reflect.TypeOf(ct))
+}
+func (ct *CredentialType) Parse(s string) error {
+	val, err := EnumHelper{}.Parse(reflect.TypeOf(ct), s, true)
+	if err == nil {
+		*ct = val.(CredentialType)
+	}
+	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /*type BlockBlobTier azblob.AccessTierType
 

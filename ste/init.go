@@ -130,9 +130,9 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                              // Convert the order to a plan file
-	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
-	jpm.AddJobPart(order.PartNum, jppfn, true)                       // Add this part to the Job and schedule its transfers
+	jppfn.Create(order)                                             // Convert the order to a plan file
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
+	jm.AddJobPart(order.PartNum, jppfn, true)                       // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 

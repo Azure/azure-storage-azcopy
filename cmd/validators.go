@@ -23,10 +23,11 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"reflect"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -123,7 +124,7 @@ func inferArgumentLocation(arg string) Location {
 			// Azure Stack does not have the core.windows.net
 			case strings.Contains(host, ".blob"):
 				return ELocation.Blob()
-			case strings.Contains(host, ".file.core.windows.net"):
+			case strings.Contains(host, ".file"):
 				return ELocation.File()
 			case strings.Contains(host, ".dfs.core.windows.net"):
 				return ELocation.BlobFS()
@@ -135,6 +136,7 @@ func inferArgumentLocation(arg string) Location {
 		//if err != nil && !os.IsNotExist(err){
 		//	return ELocation.Unknown()
 		//}
+
 		return ELocation.Local()
 	}
 

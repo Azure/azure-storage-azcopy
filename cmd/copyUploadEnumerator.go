@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type copyUploadEnumerator common.CopyJobPartOrderRequest

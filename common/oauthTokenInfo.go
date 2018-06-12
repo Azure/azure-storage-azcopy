@@ -18,40 +18,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package common
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
-	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
+	"encoding/json"
+
+	"github.com/Azure/go-autorest/autorest/adal"
 )
 
-var eexitCode = exitCode(0)
-
-type exitCode int32
-
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
-
-func main() {
-	os.Exit(int(mainWithExitCode()))
+// OAuthTokenInfo contains info necessary for azcopy to get/refresh OAuth credentials.
+type OAuthTokenInfo struct {
+	adal.Token
+	Tenant                  string `json:"_tenant"`
+	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 }
 
-func mainWithExitCode() exitCode {
-	azcopyAppPathFolder := GetAzCopyAppPath()
+// ToJSON converts OAuthTokenInfo to json format.
+func (credInfo OAuthTokenInfo) ToJSON() ([]byte, error) {
+	return json.Marshal(credInfo)
+}
 
-	// If insufficient arguments, show usage & terminate
-	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder)
-		return eexitCode.success()
+// JSONToTokenInfo converts bytes to OAuthTokenInfo
+func JSONToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
+	var OAuthTokenInfo OAuthTokenInfo
+	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
+		return nil, err
 	}
-
-	go ste.MainSTE(300, 2400, azcopyAppPathFolder)
-	cmd.Execute(azcopyAppPathFolder)
-
-	return eexitCode.success()
+	return &OAuthTokenInfo, nil
 }

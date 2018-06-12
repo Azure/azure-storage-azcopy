@@ -20,17 +20,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	util := copyHandlerUtil{}
 
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-		})
+	p, err := createBlobPipeline(e.CredentialType)
+	if err != nil {
+		return err
+	}
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(sourceUrlString)

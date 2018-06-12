@@ -26,9 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/spf13/cobra"
 	"io"
 	"net/url"
 	"os"
@@ -37,6 +34,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/spf13/cobra"
 )
 
 // upload related
@@ -105,7 +106,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// If fromTo is local to BlobFS or BlobFS to local then verify the
 	// ACCOUNT_NAME & ACCOUNT_KEY in environment variables
 	if fromTo == common.EFromTo.LocalBlobFS() ||
-		fromTo == common.EFromTo.BlobFSLocal(){
+		fromTo == common.EFromTo.BlobFSLocal() {
 		// Get the Account Name and Key variables from environment
 		name := os.Getenv("ACCOUNT_NAME")
 		key := os.Getenv("ACCOUNT_KEY")
@@ -432,7 +433,43 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	var wg sync.WaitGroup
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
+	// credentialType involved in the transfer
+	var credentialType = common.ECredentialType.Anonymous()
+
 	// depending on the source and destination type, we process the cp command differently
+	// verify credential type and set credential info.
+	switch cca.fromTo {
+	case common.EFromTo.LocalBlob():
+		credentialType, err = getBlobCredentialType(context.Background(), cca.dst, false)
+		if err != nil {
+			return err
+		}
+	case common.EFromTo.BlobLocal():
+		credentialType, err = getBlobCredentialType(context.Background(), cca.src, true)
+		if err != nil {
+			return err
+		}
+	}
+	jobPartOrder.CredentialType = credentialType
+
+	fmt.Println("credentialType", credentialType)
+
+	// For OAuthToken credential, assign proper info to CopyJobPartOrderRequest,
+	// so the info can be transferred to STE, and STE will use this info to reconstruct the Token.
+	if credentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+		tokenInfo, err := uotm.GetTokenInfoWithDefaultSettings()
+		if err != nil {
+			return err
+		}
+		jsonFormatTokenInfo, err := tokenInfo.ToJSON()
+		if err != nil {
+			return err
+		}
+		jobPartOrder.JSONFormatTokenInfo = string(jsonFormatTokenInfo)
+	}
+
+	// Create enumerator and do enumerating
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
 		fallthrough
