@@ -6,7 +6,6 @@ import (
 	//"net/http"
 	"net/url"
 
-	"bytes"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"net/http"
@@ -132,11 +131,15 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 		panic("body must contain readable data whose size is > 0")
 	}
 
+	// TODO the go http client has a problem with PATCH and content-length header
+	// TODO we should investigate and report the issue
+	overrideHttpVerb := "PATCH"
+
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.UpdatePath(ctx, "append", strconv.FormatInt(count, 10), f.fileSystemName, f.path, &offset,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, nil, body, nil, nil, nil)
+		nil, nil, nil, &overrideHttpVerb, body, nil, nil, nil)
 }
 
 // flushes writes previously uploaded data to a file
@@ -149,9 +152,13 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResp
 	// azcopy does not need this
 	retainUncommittedData := false
 
+	// TODO the go http client has a problem with PATCH and content-length header
+	// TODO we should investigate and report the issue
+	overrideHttpVerb := "PATCH"
+
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.UpdatePath(ctx, "flush", "0", f.fileSystemName, f.path, &fileSize,
 		&retainUncommittedData, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, nil, bytes.NewReader(nil), nil, nil, nil)
+		nil, nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
 }
