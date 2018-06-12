@@ -13,7 +13,7 @@ var _ = chk.Suite(&DirectoryUrlSuite{})
 
 // deleteDirectory deletes the directory represented by directory Url
 func deleteDirectory(c *chk.C, dul azbfs.DirectoryURL) {
-	resp, err := dul.Delete(context.Background(), nil)
+	resp, err := dul.Delete(context.Background(), nil, true)
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.Response().StatusCode, chk.Equals, http.StatusOK)
 }
@@ -199,10 +199,13 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 	c.Assert(fresp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(fresp.Date(), chk.Not(chk.Equals), "")
 
-	// List the directory create above.
-	// Expected number of files inside the dir is 2 i.e one inside the dir itself and one inside the sub-dir
-	// Expected number of sub-dir inside the dir is 1
-	lresp, err := dirUrl.ListDirectory(context.Background(), nil, true)
+	// list the directory create above.
+	// expected number of file inside the dir is 2 i.e one
+	// inside the dir itself and one inside the sub-dir
+	// expected number of sub-dir inside the dir is 1
+	continuationMarker := ""
+	lresp, err := dirUrl.ListDirectory(context.Background(), &continuationMarker, true)
+
 	c.Assert(err, chk.IsNil)
 	c.Assert(lresp.Response().StatusCode, chk.Equals, http.StatusOK)
 	c.Assert(len(lresp.Files()), chk.Equals, 2)

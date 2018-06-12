@@ -104,7 +104,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// If fromTo is local to BlobFS or BlobFS to local then verify the
 	// ACCOUNT_NAME & ACCOUNT_KEY in environment variables
-	if fromTo == common.EFromTo.LocalBlobFS() {
+	if fromTo == common.EFromTo.LocalBlobFS() ||
+		fromTo == common.EFromTo.BlobFSLocal(){
 		// Get the Account Name and Key variables from environment
 		name := os.Getenv("ACCOUNT_NAME")
 		key := os.Getenv("ACCOUNT_KEY")
@@ -447,6 +448,10 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileLocal():
 		e := copyDownloadFileEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.BlobFSLocal():
+		e := copyDownloadBlobFSEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():

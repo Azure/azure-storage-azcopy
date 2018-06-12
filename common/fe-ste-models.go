@@ -186,8 +186,7 @@ func (FromTo) PipeFile() FromTo    { return FromTo(8) }
 func (FromTo) BlobTrash() FromTo   { return FromTo(9) }
 func (FromTo) FileTrash() FromTo   { return FromTo(10) }
 func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
-
-//func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
+func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
 
 func (ft FromTo) String() string {
 	return EnumHelper{}.StringInteger(ft, reflect.TypeOf(ft))
@@ -469,5 +468,5 @@ type CopyTransfer struct {
 	Source           string
 	Destination      string
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
-	SourceSize       int64     // size of the source entity in bytes
+	SourceSize       int64     // size of the source entity in bytes.
 }

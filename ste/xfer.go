@@ -53,7 +53,7 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 func computeJobXfer(fromTo common.FromTo) newJobXfer {
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-		return BlobToLocalPrologue
+		return BlobToLocal
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 		return LocalToBlockBlob
 	case common.EFromTo.BlobTrash():
@@ -66,6 +66,8 @@ func computeJobXfer(fromTo common.FromTo) newJobXfer {
 		return DeleteFilePrologue
 	case common.EFromTo.LocalBlobFS():
 		return LocalToBlobFS
+	case common.EFromTo.BlobFSLocal():
+		return BlobFSToLocal
 	}
 	panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
 }

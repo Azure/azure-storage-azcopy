@@ -78,8 +78,8 @@ func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, err
 
 // Delete removes the specified empty directory. Note that the directory must be empty before it can be deleted..
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/delete-directory.
-func (d DirectoryURL) Delete(ctx context.Context, continuationString *string) (*DirectoryDeleteResponse, error) {
-	resp, err := d.directoryClient.DeletePath(ctx, d.filesystem, d.pathParameter, &(DeleteDirectoryRecursively), continuationString, nil,
+func (d DirectoryURL) Delete(ctx context.Context, continuationString *string, recursive bool) (*DirectoryDeleteResponse, error) {
+	resp, err := d.directoryClient.DeletePath(ctx, d.filesystem, d.pathParameter, &recursive, continuationString, nil,
 		nil, nil, nil, nil, nil, nil, nil)
 	return (*DirectoryDeleteResponse)(resp), err
 }
@@ -110,8 +110,8 @@ func (d DirectoryURL) ListDirectory(ctx context.Context, marker *string, recursi
 	// Since listPath is supported on filesystem Url
 	// covert the directory url to fileSystemUrl
 	// and listPath for filesystem with directory path set in the path parameter
-	resp, err := d.FileSystemUrl().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, FileSystemResourceName, &d.pathParameter, nil,
-		nil, nil, nil, nil)
+	resp , err := d.FileSystemUrl().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, FileSystemResourceName, &d.pathParameter, marker,
+					&MaxEntriesinListOperation, nil, nil, nil)
 	return (*DirectoryListResponse)(resp), err
 }
 
@@ -132,9 +132,7 @@ func (d DirectoryURL) IsDirectory(ctx context.Context) bool {
 }
 
 // FileUrl converts the current directory Url into the FileUrl
-// This api is used when the directoryUrl is to determine whether the
-// resource is file or directory. If resource is a file, then directoryUrl
-// is converted to FileUrl for further operations on resource
+// This api is used when the directoryUrl is to represents a file
 func (d DirectoryURL) FileUrl() FileURL {
 	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
 }

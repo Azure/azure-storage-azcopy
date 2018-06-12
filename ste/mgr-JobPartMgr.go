@@ -345,6 +345,8 @@ func (jpm *jobPartMgr) createPipeline() {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
+		case common.EFromTo.BlobFSLocal():
+			fallthrough
 		case common.EFromTo.LocalBlobFS():
 			jpm.pipeline = NewBlobFSPipeline(
 				azbfs.PipelineOptions{

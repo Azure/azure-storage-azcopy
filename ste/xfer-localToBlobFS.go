@@ -19,7 +19,6 @@ type fileRangeAppend struct {
 }
 
 func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
-
 	// transferDone is the internal api that sets the transfer status
 	// and report transfer done
 	transferDone := func(status common.TransferStatus) {

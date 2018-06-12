@@ -32,7 +32,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
-func BlobToLocalPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// step 1: get the source, destination info for the transfer.
 	info := jptm.Info()

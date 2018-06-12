@@ -261,14 +261,14 @@ func (dlr DirectoryListResponse) XMsVersion() string {
 
 // Files returns the slice of all Files in ListDirectory Response.
 // It does not include the sub-directory path
-func (dlr *DirectoryListResponse) Files() []string {
-	files := []string{}
+func (dlr *DirectoryListResponse) Files() []ListEntrySchema {
+	files := []ListEntrySchema{}
 	lSchema := ListSchema(*dlr)
 	for _, path := range lSchema.Paths {
 		if path.IsDirectory != nil && *path.IsDirectory {
 			continue
 		}
-		files = append(files, *path.Name)
+		files = append(files, path)
 	}
 	return files
 }
@@ -285,6 +285,15 @@ func (dlr *DirectoryListResponse) Directories() []string {
 		dir = append(dir, *path.Name)
 	}
 	return dir
+}
+
+func (dlr *DirectoryListResponse) FilesAndDirectories() []ListEntrySchema {
+	var entities []ListEntrySchema
+	lSchema := (ListSchema)(*dlr)
+	for _, path := range lSchema.Paths {
+		entities = append(entities, path)
+	}
+	return entities
 }
 
 // DownloadResponse wraps AutoRest generated downloadResponse and helps to provide info for retry.
