@@ -581,6 +581,15 @@ def test_sync_local_to_blob_without_wildCards():
     if not result:
         print("test_sync_local_to_blob_without_wildCards test case failed while validating the directory sync_upload_blob")
         return
+
+    # download the destination to the source to match the last modified time
+    result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path). \
+        add_flags("Logging", "info").add_flags("recursive","true").add_flags("output-json", "true"). \
+        add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
+    if not result:
+        print("test_sync_local_to_blob_without_wildCards failed downloading the source ", destination, " to the destination ", dir_n_files_path)
+        return
+
     # execute a sync command
     dir_sas = util.get_resource_sas(dir_name)
     result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas).\
@@ -681,6 +690,14 @@ def test_sync_local_to_blob_with_wildCards():
         add_flags("is-object-dir","true").execute_azcopy_verify()
     if not result:
         print("test_sync_local_to_blob_with_wildCards test case failed while validating the directory sync_upload_blob_wc")
+        return
+
+    # download the destination to the source to match the last modified time
+    result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path). \
+        add_flags("Logging", "info").add_flags("recursive","true").add_flags("output-json", "true"). \
+        add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
+    if not result:
+        print("test_sync_local_to_blob_with_wildCards failed downloading the source ", destination, " to the destination ", dir_n_files_path)
         return
 
     # add wildcard at the end of dirpath

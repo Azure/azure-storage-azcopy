@@ -3,6 +3,9 @@ import time
 import urllib
 import shutil
 import os
+import json
+from collections import namedtuple
+
 # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
 def test_download_1kb_blob() :
     # create file of size 1KB.
@@ -181,3 +184,160 @@ def test_blob_download_with_special_characters():
         print("error verifying the download of file ", filepath)
         return
     print("test_download_file_with_special_characters successfully passed")
+
+def test_sync_blob_download_without_wildcards():
+    # created a directory and created 10 files inside the directory
+    dir_name = "sync_download_without_wildcards"
+    dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
+
+    # upload the directory
+    # execute azcopy command
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_sync_blob_download_without_wildcards failed while uploading ", 10, " files to the container")
+        return
+
+    # execute the validator.
+    dir_sas = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_blob_download_without_wildcards test case failed validating the upload dir sync_download_without_wildcards on the container")
+        return
+    # download the destination to the source to match the last modified time
+    result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path).\
+        add_flags("Logging", "info").add_flags("recursive","true").add_flags("output-json", "true").\
+        add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
+    if not result:
+        print("test_sync_blob_download_without_wildcards failed downloading the source ", dir_sas, " to the destination ", dir_n_files_path)
+        return
+    # execute the validator and verify the downloaded dir
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_blob_download_without_wildcards test case failed validating the downloaded dir sync_download_without_wildcards ")
+        return
+    # sync the source and destination
+    result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path).\
+            add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    if result:
+        print("test_sync_blob_download_without_wildcards failed performing a sync between source ", dir_sas, " and ", dir_n_files_path)
+        return
+    print("test_sync_blob_download_without_wildcards successfully passed ")
+
+def test_sync_blob_download_with_wildcards():
+    # created a directory and created 10 files inside the directory
+    dir_name = "sync_download_with_wildcards"
+    dir_n_files_path = util.create_test_n_files(1024, 10, dir_name)
+
+    # upload the directory
+    # execute azcopy command
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_sync_blob_download_with_wildcards failed while uploading ", 10, " files to the container")
+        return
+
+    # execute the validator.
+    dir_sas = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_blob_download_with_wildcards test case failed validating the upload dir sync_download_with_wildcards on the container")
+        return
+    # download the destination to the source to match the last modified time
+    result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
+        add_flags("Logging", "info").add_flags("recursive","true").add_flags("output-json", "true").\
+        add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
+    if not result:
+        print("test_sync_blob_download_with_wildcards failed downloading the source ", dir_sas, " to the destination ", dir_n_files_path)
+        return
+    # execute the validator and verify the downloaded dir
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_blob_download_with_wildcards test case failed validating the downloaded dir sync_download_with_wildcards ")
+        return
+
+    # add "*" at the end of dir sas
+    # since both the source and destination are in sync, it will fail
+    dir_sas = util.append_text_path_resource_sas(dir_sas, "*")
+    # sync the source and destination
+    result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
+        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    if result:
+        print("test_sync_blob_download_without_wildcards failed performing a sync between source ", dir_sas, " and ", dir_n_files_path)
+        return
+    subdir1 = os.path.join(dir_name, "subdir1")
+    subdir1_file_path = util.create_test_n_files(1024, 10, subdir1)
+
+    subdir2 = os.path.join(dir_name, "subdir2")
+    subdir2_file_path = util.create_test_n_files(1024, 10 , subdir2)
+
+    # upload the directory
+    # execute azcopy command
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+    if not result:
+        print("test_sync_blob_download_with_wildcards failed while uploading ", 30, " files to the container")
+        return
+
+    # execute the validator.
+    dir_sas = util.get_resource_sas(dir_name)
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
+        add_flags("is-object-dir","true").execute_azcopy_verify()
+    if not result:
+        print("test_sync_blob_download_with_wildcards test case failed validating the upload dir with sub-dirs sync_download_with_wildcards on the container")
+        return
+
+    #Download the directory to match the blob modified time
+    result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path).\
+        add_flags("Logging", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    if not result:
+        print("execute_azcopy_copy_command failed downloading the directory ", dir_sas, " locally")
+        return
+    # sync the source and destination
+    # add extra wildcards
+    dir_sas = util.append_text_path_resource_sas(dir_sas, "*/*.txt")
+    result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
+        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    if result:
+        print("test_sync_blob_download_without_wildcards failed performing a sync between source ", dir_sas, " and ", dir_n_files_path)
+        return
+
+    # delete 5 files inside each sub-directories locally
+    for r in range(5, 9):
+        filename = "test101024_"+str(r)+".txt"
+        filepath = os.path.join(subdir1_file_path, filename)
+        try:
+            os.remove(filepath)
+        except:
+            print("test_sync_blob_download_with_wildcards while deleting file ", filepath)
+            return
+        filepath = os.path.join(subdir2_file_path, filename)
+        try:
+            os.remove(filepath)
+        except:
+            print("test_sync_blob_download_with_wildcards while deleting file ", filepath)
+            return
+    # 10 files have been deleted inside the sub-dir
+    # sync remote to local
+    # 10 files will be downloaded
+    result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
+        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
+    # parse the result to get the last job progress summary
+    result = util.parseAzcopyOutput(result)
+    # parse the Json Output
+    x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    # Number of Expected Transfer should be 10 since 10 files were deleted
+    if x.TransfersCompleted is not 10 and x.TransfersFailed is not 0 :
+        print("test_sync_blob_download_with_wildcards failed with difference in the number of failed and successful transfers")
+        return
+    print("test_sync_blob_download_with_wildcards successfully passed ")
+
+
+
+
+
+

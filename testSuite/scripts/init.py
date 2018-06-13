@@ -40,6 +40,8 @@ def execute_user_scenario_wildcards_op():
 def execute_sync_user_scenario():
     test_sync_local_to_blob_without_wildCards()
     test_sync_local_to_blob_with_wildCards()
+    test_sync_blob_download_with_wildcards()
+    test_sync_blob_download_without_wildcards()
 
 def execute_user_scenario_azcopy_op():
     test_download_blob_exclude_flag()
