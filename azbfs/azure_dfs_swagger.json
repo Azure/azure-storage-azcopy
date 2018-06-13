@@ -906,6 +906,13 @@
             "type": "string"
           },
           {
+            "name": "x-http-method-override",
+            "description": "Optional.  Override the http verb on the service side. Some older http clients do not support PATCH",
+            "in": "header",
+            "required": false,
+            "type": "string"
+          },
+          {
             "name": "requestBody",
             "description": "Valid only for append operations.  The data to be uploaded and appended to the file.",
             "in": "body",

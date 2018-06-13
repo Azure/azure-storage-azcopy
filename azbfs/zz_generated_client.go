@@ -1057,13 +1057,14 @@ func (client managementClient) setFilesystemPropertiesResponder(resp pipeline.Re
 // time value. Specify this header to perform the operation only if the resource has been modified since the specified
 // date and time. ifUnmodifiedSince is optional for Flush Data and Set Properties, but invalid for Append Data. A date
 // and time value. Specify this header to perform the operation only if the resource has not been modified since the
-// specified date and time. requestBody is valid only for append operations.  The data to be uploaded and appended to
-// the file. requestBody will be closed upon successful return. Callers should ensure closure when receiving an
-// error.xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation. timeout is an
-// optional operation timeout value in seconds. The period begins when the request is received by the service. If the
-// timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
-// Universal Time (UTC) for the request.  This is required when using shared key authorization.
-func (client managementClient) UpdatePath(ctx context.Context, action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*UpdatePathResponse, error) {
+// specified date and time. xHTTPMethodOverride is optional.  Override the http verb on the service side. Some older
+// http clients do not support PATCH requestBody is valid only for append operations.  The data to be uploaded and
+// appended to the file. requestBody will be closed upon successful return. Callers should ensure closure when
+// receiving an error.xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation.
+// timeout is an optional operation timeout value in seconds. The period begins when the request is received by the
+// service. If the timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the
+// Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
+func (client managementClient) UpdatePath(ctx context.Context, action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*UpdatePathResponse, error) {
 	if err := validate([]validation{
 		{targetValue: xMsLeaseID,
 			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
@@ -1079,7 +1080,7 @@ func (client managementClient) UpdatePath(ctx context.Context, action string, co
 				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
 		return nil, err
 	}
-	req, err := client.updatePathPreparer(action, contentLength, filesystem, pathParameter, position, retainUncommittedData, xMsLeaseAction, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsProperties, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, body, xMsClientRequestID, timeout, xMsDate)
+	req, err := client.updatePathPreparer(action, contentLength, filesystem, pathParameter, position, retainUncommittedData, xMsLeaseAction, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsProperties, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xHTTPMethodOverride, body, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
@@ -1091,9 +1092,9 @@ func (client managementClient) UpdatePath(ctx context.Context, action string, co
 }
 
 // updatePathPreparer prepares the UpdatePath request.
-func (client managementClient) updatePathPreparer(action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
+func (client managementClient) updatePathPreparer(action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
 	// TODO changing PATCH to PUT is a hack to make content-length=0 go over the wire
-	// TODO more investigation is needed
+	// TODO this is a Go issue, so we have to manually change the generated code here instead of modifying the swagger
 	req, err := pipeline.NewRequest("PUT", client.url, body)
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
@@ -1146,6 +1147,9 @@ func (client managementClient) updatePathPreparer(action string, contentLength s
 	}
 	if ifUnmodifiedSince != nil {
 		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xHTTPMethodOverride != nil {
+		req.Header.Set("x-http-method-override", *xHTTPMethodOverride)
 	}
 	if xMsClientRequestID != nil {
 		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
