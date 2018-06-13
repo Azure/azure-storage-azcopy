@@ -36,11 +36,11 @@ import (
 
 var once sync.Once
 
-// only one UserOAuthTokenManager should exists in one azcopy-v2 process for current user.
+// only one UserOAuthTokenManager should exists in azcopy-v2 process in cmd(FE) module for current user.
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 
-// GetUserOAuthTokenManagerInstance get or create OAuthTokenManager for current user.
+// GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 	once.Do(func() {
@@ -57,12 +57,13 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // Credential type methods
 // ==============================================================================================
 
-// getBlobCredentialType is used to get credential type when user wish to use OAuth session mode.
-// The verification follows following steps:
+// getBlobCredentialType is used to get credential type when user wishes to use OAuth session mode.
+// The verification logic follows following rules:
 // 1. For source or dest url, if the url contains SAS, indicating using anonymous credential(SAS).
 // 2. If it's source blob url, and it's a public resource, indicating using anonymous credential(public resource).
-// 3. If there is cached session OAuth token, indicating using token credential.
+// 3. Otherwise, if there is cached session OAuth token, indicating using token credential.
 // 4. Otherwise use anonymous credential.
+// The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
 func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 	if err != nil {
@@ -150,8 +151,10 @@ func createCredential(ctx context.Context, credInfo common.CredentialInfo) azblo
 		tokenCredential := azblob.NewTokenCredential(credInfo.OAuthTokenInfo.AccessToken)
 
 		if credInfo.OAuthTokenInfo.IsExpired() || credInfo.OAuthTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
+			// If token is near expire, or already expired, refresh immediately before return token.
 			refreshToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
 		} else {
+			// Otherwise, calculate the next refresh time, and schedule the refresh.
 			waitDuration := credInfo.OAuthTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
 
 			//waitDuration = time.Second * 2 // TODO: Add mock testing
@@ -176,7 +179,6 @@ func refreshToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCre
 		fmt.Printf("fail to refresh token, due to error: %v\n", err)
 	}
 
-	// Otherwise, refresh the token.
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
 		common.ApplicationID,
@@ -194,9 +196,9 @@ func refreshToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCre
 	newToken := spt.Token()
 	tokenCredential.SetToken(newToken.AccessToken)
 
-	// fmt.Println("FE token refreshed, newToken: ", newToken.AccessToken) //For debugging purpose
 	// For FE(commandline module), refreshing token until process exit.
 
+	// Calculate wait duration, and schedule next refresh.
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
 	if waitDuration < time.Second {
 		waitDuration = time.Nanosecond

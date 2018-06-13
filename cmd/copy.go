@@ -89,8 +89,8 @@ type rawCopyCmdArgs struct {
 	logVerbosity             string
 	stdInEnable              bool
 	// oauth options
-	useOAuthUserCredential bool
-	tenantID               string
+	useInteractiveOAuthUserCredential bool
+	tenantID                          string
 }
 
 // validates and transform raw input into cooked input
@@ -178,7 +178,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.outputJson = raw.outputJson
 	cooked.acl = raw.acl
 
-	cooked.useOAuthUserCredential = raw.useOAuthUserCredential
+	cooked.useInteractiveOAuthUserCredential = raw.useInteractiveOAuthUserCredential
 	cooked.tenantID = raw.tenantID
 
 	return cooked, nil
@@ -213,8 +213,8 @@ type cookedCopyCmdArgs struct {
 	acl                      string
 	logVerbosity             common.LogLevel
 	// oauth options
-	useOAuthUserCredential bool
-	tenantID               string
+	useInteractiveOAuthUserCredential bool
+	tenantID                          string
 }
 
 func (cca cookedCopyCmdArgs) isRedirection() bool {
@@ -415,14 +415,16 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 	}
 }
 
-// getCredentialType checks user provided commandline switches, and get the proper credential type
+// getCredentialType checks user provided commandline switches, and gets the proper credential type
 // for current copy command.
 func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
 	credentialType = common.ECredentialType.Anonymous()
 
-	if cca.useOAuthUserCredential { // Scenario-1: user explicty specify to use interactive login per command-line
+	if cca.useInteractiveOAuthUserCredential { // User explicty specify to use interactive login per command-line
 		credentialType = common.ECredentialType.OAuthToken()
-	} else { // Scenario-2: Candidate session mode, verify credential type with cached token info, src and dest
+	} else {
+		// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
+		// verify credential type with cached token info, src or dest blob resource URL.
 		switch cca.fromTo {
 		case common.EFromTo.LocalBlob():
 			credentialType, err = getBlobCredentialType(context.Background(), cca.dst, false)
@@ -469,23 +471,20 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
 
-	// depending on the source and destination type, we process the cp command differently
 	// verify credential type and set credential info.
 	jobPartOrder.CredentialInfo = common.CredentialInfo{}
 	jobPartOrder.CredentialInfo.CredentialType, err = cca.getCredentialType()
 	if err != nil {
 		return err
 	}
-
-	//fmt.Println("credentialType", jobPartOrder.CredentialInfo.CredentialType) // Comment out for debug purpose
-
-	// For OAuthToken credential, assign proper info to CopyJobPartOrderRequest,
-	// so the info can be transferred to STE, and STE will use this info to reconstruct the Token.
+	// fmt.Println("credentialType", jobPartOrder.CredentialInfo.CredentialType) // Comment out for debug purpose
+	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
+	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		uotm := GetUserOAuthTokenManagerInstance()
 
 		var tokenInfo *common.OAuthTokenInfo
-		if cca.useOAuthUserCredential { // Scenario-1: interactive login per copy command
+		if cca.useInteractiveOAuthUserCredential { // Scenario-1: interactive login per copy command
 			tokenInfo, err = uotm.LoginWithDefaultADEndpoint(cca.tenantID, false)
 			if err != nil {
 				return err
@@ -499,6 +498,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
+	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
@@ -690,6 +690,6 @@ Usage:
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
 
 	// oauth options
-	cpCmd.PersistentFlags().BoolVar(&raw.useOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
+	cpCmd.PersistentFlags().BoolVar(&raw.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
 	cpCmd.PersistentFlags().StringVar(&raw.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
 }

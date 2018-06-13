@@ -30,11 +30,11 @@ import (
 func init() {
 	loginCmdArgs := loginCmdArgs{tenantID: common.DefaultTenantID}
 
-	// lsCmd represents the ls command
+	// lgCmd represents the login command
 	lgCmd := &cobra.Command{
 		Use:        "login",
 		Aliases:    []string{"login"},
-		SuggestFor: []string{"lgin"}, //TODO why does message appear twice on the console
+		SuggestFor: []string{"lgin"},
 		Short:      "login(lgin) launch oauth device login for current user.",
 		Long: `login(lgin) launch oauth device login for current user. The most common cases are:
   - launch oauth device login for current user.
@@ -45,7 +45,7 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := loginCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform login command due to error %s", err)
+				return fmt.Errorf("failed to perform login command due to error %s", err.Error())
 			}
 			return nil
 		},
@@ -53,22 +53,21 @@ func init() {
 
 	rootCmd.AddCommand(lgCmd)
 
-	// TODO: add cloud name, i.e. support other cloud names, e.g.: fairfax, mooncake, blackforest and etc.
+	// TODO: add cloud name, i.e. support other cloud, e.g.: fairfax, mooncake, blackforest and etc.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Filter: tenant id to use for OAuth device login")
 }
 
 type loginCmdArgs struct {
 	// OAuth login arguments
 	tenantID string
-	//cloudName string
 }
 
 func (lca loginCmdArgs) process() error {
 	userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-	_, err := userOAuthTokenManager.LoginWithDefaultADEndpoint(lca.tenantID, true)
+	_, err := userOAuthTokenManager.LoginWithDefaultADEndpoint(lca.tenantID, true) // persist token = true
 	if err != nil {
 		return fmt.Errorf(
-			"fatal: login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
+			"login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
 			lca.tenantID,
 			err.Error())
 	}

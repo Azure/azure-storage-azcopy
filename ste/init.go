@@ -130,12 +130,14 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                             // Convert the order to a plan file
+	jppfn.Create(order) // Convert the order to a plan file
+
 	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
-	inMemoryTransitJobState := InMemoryTransitJobState{
-		credentialInfo: order.CredentialInfo,
-	}
-	jm.setInMemoryTransitedJobState(inMemoryTransitJobState)
+	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
+	jm.setInMemoryTransitJobState(
+		InMemoryTransitJobState{
+			credentialInfo: order.CredentialInfo,
+		})
 	jm.AddJobPart(order.PartNum, jppfn, true) // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
@@ -306,11 +308,12 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	case common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
-		inMemoryTransitJobState := InMemoryTransitJobState{
-			credentialInfo: req.CredentialInfo,
-		}
 
-		jm.setInMemoryTransitedJobState(inMemoryTransitJobState)
+		// Get credential info from RPC request, and set in InMemoryTransitJobState.
+		jm.setInMemoryTransitJobState(
+			InMemoryTransitJobState{
+				credentialInfo: req.CredentialInfo,
+			})
 
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 

@@ -55,7 +55,7 @@ func init() {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := resumeCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform resume command due to error: %s", err)
+				return fmt.Errorf("failed to perform resume command due to error: %s", err.Error())
 			}
 
 			return nil
@@ -68,8 +68,8 @@ func init() {
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
 		"More than one file are separated by ';'")
 	// oauth options
-	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and authentication for Azure storage resource.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth device login.")
+	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
 }
 
 type resumeCmdArgs struct {
@@ -78,8 +78,8 @@ type resumeCmdArgs struct {
 	excludeTransfer string
 
 	// oauth options
-	useOAuthUserCredential bool
-	tenantID               string
+	useInteractiveOAuthUserCredential bool
+	tenantID                          string
 }
 
 func waitUntilJobCompletion(jobID common.JobID) {
@@ -157,9 +157,9 @@ func (rca resumeCmdArgs) process() error {
 		}
 	}
 
-	// Check oauth related command switch, and create token with interactive login if required.
+	// Check oauth related commandline switch, and create token with interactive login if necessary.
 	credentialInfo := common.CredentialInfo{}
-	if rca.useOAuthUserCredential {
+	if rca.useInteractiveOAuthUserCredential {
 		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
 
 		userOAuthTokenManager := GetUserOAuthTokenManagerInstance()

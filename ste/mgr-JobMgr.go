@@ -34,8 +34,8 @@ var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
 
-// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan
-// Should be immutable after transfer from cmd(FE) module to coordinator and job manager modules.
+// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
+// Should be immutable after transfer from cmd(FE) module to STE module.
 type InMemoryTransitJobState struct {
 	credentialInfo common.CredentialInfo
 }
@@ -50,8 +50,8 @@ type IJobMgr interface {
 	ReportJobPartDone() uint32
 	Cancel()
 	//Close()
-	getInMemoryTransitedJobState() InMemoryTransitJobState
-	setInMemoryTransitedJobState(state InMemoryTransitJobState)
+	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
+	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 
 	common.ILoggerCloser
 }
@@ -165,11 +165,11 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	return partsDone
 }
 
-func (jm *jobMgr) getInMemoryTransitedJobState() InMemoryTransitJobState {
+func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
 	return jm.inMemoryTransitJobState
 }
 
-func (jm *jobMgr) setInMemoryTransitedJobState(state InMemoryTransitJobState) {
+func (jm *jobMgr) setInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }
 

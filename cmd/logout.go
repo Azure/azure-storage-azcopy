@@ -29,43 +29,38 @@ import (
 func init() {
 	logoutCmdArgs := logoutCmdArgs{}
 
-	// lsCmd represents the ls command
+	// logoutCmd represents the logout command
 	logoutCmd := &cobra.Command{
 		Use:        "logout",
 		Aliases:    []string{"logout"},
-		SuggestFor: []string{"lgout"}, //TODO why does message appear twice on the console
+		SuggestFor: []string{"lgout"},
 		Short:      "logout(lgout) launch logout for current user.",
 		Long: `logout(lgout) launch logout for current user. The most common cases are:
-  - launch oauth device logout for current user, all cached token for current user will be deleted.`,
+  - launch logout for current user, all cached token for current user will be deleted.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := logoutCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform logout command due to error %s", err)
+				return fmt.Errorf("failed to perform logout command due to error %s", err.Error())
 			}
 			return nil
 		},
 	}
 
 	rootCmd.AddCommand(logoutCmd)
-
 	// TODO: p2 functions, add tenant and cloud name, i.e. support soverign clouds
-	//lgCmd.PersistentFlags().StringVar(&logoutCmdArgs.tenantID, "tenantid", "microsoft.com", "Filter: tenant id to use for OAuth device logout")
 }
 
-type logoutCmdArgs struct {
-	// OAuth logout arguments
-	//tenantID string
-}
+type logoutCmdArgs struct{}
 
 func (lca logoutCmdArgs) process() error {
 	userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
 	err := userOAuthTokenManager.RemoveCachedToken()
 	if err != nil {
 		return fmt.Errorf(
-			"fatal: logout failed due to error: %s",
+			"logout failed due to error: %s",
 			err.Error())
 	}
 

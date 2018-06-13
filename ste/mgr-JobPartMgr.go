@@ -328,32 +328,26 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
+// refreshToken is a delegate function for token refreshing.
 func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
-	//fmt.Println(time.Now(), "refresh token called")
-	//fmt.Println("refresh token before: ", tokenInfo)
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
-	// Otherwise, refresh the token.
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		common.ApplicationID,
-		common.Resource,
-		tokenInfo.Token)
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(*oauthConfig, common.ApplicationID, common.Resource, tokenInfo.Token)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
@@ -364,11 +358,8 @@ func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthT
 		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
 	}
 
-	//fmt.Println("refresh token, new token: ", newToken.AccessToken)
-
-	// Stop refresh, if job is in cancelled, completed, paused status.
-	// note: as there could be case when token should be refreshed before job is in progress.
-	// the method doesn't directly use InProgress status to check whether need to refresh further.
+	// Stop refresh if job is in cancelled, completed, paused status.
+	// note: There could be case when token should be refreshed before job is in progress.
 	jobStatus := jpm.Plan().JobStatus()
 	if jobStatus == common.EJobStatus.Cancelled() || jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Paused() {
 		jpm.Log(
@@ -392,9 +383,10 @@ func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthT
 	})
 }
 
+// createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
 func (jpm *jobPartMgr) createCredential(ctx context.Context) azblob.Credential {
 	credential := azblob.NewAnonymousCredential()
-	inMemoryJobState := jpm.jobMgr.getInMemoryTransitedJobState()
+	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
 	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
 
 	if inMemoryJobState.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
