@@ -46,13 +46,6 @@ var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
 const defaultTokenFileName = "AccessToken.json"
 
-var adEndpoints = map[string]string{
-	"AzureCloud":        "https://login.microsoftonline.com",
-	"AzureChinaCloud":   "https://login.chinacloudapi.cn",
-	"AzureUSGovernment": "https://login.microsoftonline.us",
-	"AzureGermanCloud":  "https://login.microsoftonline.de",
-}
-
 // UserOAuthTokenManager for token manager
 // TODO: add testing for non-microsoft.com tenantID
 type UserOAuthTokenManager struct {
@@ -276,9 +269,27 @@ func (uotm *UserOAuthTokenManager) saveTokenInfoInternal(path string, mode os.Fi
 	return nil
 }
 
-func (uotm *UserOAuthTokenManager) encrypt(token adal.Token) (string, error) {
-	panic("not implemented")
+// func (uotm *UserOAuthTokenManager) encrypt(token adal.Token) (string, error) {
+// 	panic("not implemented")
+// }
+// func (uotm *UserOAuthTokenManager) decrypt(string) (adal.Token, error) {
+// 	panic("not implemented")
+// }
+
+// ====================================================================================
+
+// OAuthTokenInfo contains info necessary for azcopy to get/refresh OAuth credentials.
+type OAuthTokenInfo struct {
+	adal.Token
+	Tenant                  string `json:"_tenant"`
+	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 }
-func (uotm *UserOAuthTokenManager) decrypt(string) (adal.Token, error) {
-	panic("not implemented")
+
+// IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
+func (credInfo OAuthTokenInfo) IsEmpty() bool {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() {
+		return true
+	}
+
+	return false
 }
