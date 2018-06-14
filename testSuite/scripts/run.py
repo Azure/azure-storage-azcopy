@@ -8,7 +8,8 @@ import glob, os
 import configparser
 import platform
 
-def execute_user_scenario_blob_1() :
+
+def execute_user_scenario_blob_1():
     test_1kb_blob_upload()
     test_63mb_blob_upload()
     test_n_1kb_blob_upload(5)
@@ -28,20 +29,24 @@ def execute_user_scenario_blob_1() :
     test_page_range_for_complete_sparse_file()
     test_page_blob_upload_partial_sparse_file()
 
-def temp_adhoc_scenario() :
-    #test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    #test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
+
+def temp_adhoc_scenario():
+    # test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
+    # test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
     test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    #test_upload_download_1kb_file_wildcard_several_files()
+    # test_upload_download_1kb_file_wildcard_several_files()
+
 
 def execute_user_scenario_wildcards_op():
     test_remove_files_with_Wildcard()
+
 
 def execute_sync_user_scenario():
     test_sync_local_to_blob_without_wildCards()
     test_sync_local_to_blob_with_wildCards()
     test_sync_blob_download_with_wildcards()
     test_sync_blob_download_without_wildcards()
+
 
 def execute_user_scenario_azcopy_op():
     test_download_blob_exclude_flag()
@@ -54,7 +59,8 @@ def execute_user_scenario_azcopy_op():
     test_force_flag_set_to_false_upload()
     test_force_flag_set_to_false_download()
 
-def execute_user_scenario_file_1() :
+
+def execute_user_scenario_file_1():
     ###
     # download
     ###
@@ -71,7 +77,7 @@ def execute_user_scenario_file_1() :
     # directory context
     test_6_1kb_file_in_dir_upload_download_share()
     test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    #test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
+    # test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
 
     # modified time
     test_download_perserve_last_modified_time()
@@ -80,7 +86,7 @@ def execute_user_scenario_file_1() :
     test_file_download_63mb_in_4mb()
 
     # directory context
-    #test_recursive_download_file()
+    # test_recursive_download_file()
 
     ###
     # upload
@@ -89,16 +95,16 @@ def execute_user_scenario_file_1() :
     test_file_upload_1mb_fullname()
 
     # wildcard context
-    #test_file_upload_1mb_wildcard()
+    # test_file_upload_1mb_wildcard()
 
     # single sparse file and range
     test_file_range_for_complete_sparse_file()
     test_file_upload_partial_sparse_file()
-    
+
     # directory context
-    #test_6_1kb_file_in_dir_upload_to_share()
-    #test_3_1kb_file_in_dir_upload_to_azure_directory_recursive()
-    #test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive()
+    # test_6_1kb_file_in_dir_upload_to_share()
+    # test_3_1kb_file_in_dir_upload_to_azure_directory_recursive()
+    # test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive()
 
     # metadata and mime-type
     test_metaData_content_encoding_content_type()
@@ -107,42 +113,45 @@ def execute_user_scenario_file_1() :
     # different sizes
     test_9mb_file_upload()
     test_1GB_file_upload()
-    
+
+
 def execute_user_scenario_2():
     test_blob_download_with_special_characters()
+
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
     files_read = config.read('../test_suite_config.ini')
     if len(files_read) != 1:
-        raise "Failed to find/open test_suite_config.ini file"
+        raise Exception("Failed to find/open test_suite_config.ini file")
 
     # get the platform type since config file has property for platform respectively.
-    osType = platform.system()
-    osType = osType.upper()
+    os_type = platform.system()
+    os_type = os_type.upper()
 
     # check if the config are defined for current os type.
-    platform_list =  config.sections()
+    platform_list = config.sections()
     try:
-        platform_list.index(osType)
+        platform_list.index(os_type)
     except:
-        raise "not able to find the config defined for ostype " + osType
+        raise Exception("not able to find the config defined for ostype " + os_type)
     # set all the environment variables
     # TEST_DIRECTORY_PATH is the location where test_data folder will be created and test files will be created further.
     # set the environment variable TEST_DIRECTORY_PATH
-    os.environ['TEST_DIRECTORY_PATH'] = config[osType]['TEST_DIRECTORY_PATH']
+    os.environ['TEST_DIRECTORY_PATH'] = config[os_type]['TEST_DIRECTORY_PATH']
 
     # AZCOPY_EXECUTABLE_PATH is the location of the azcopy executable
     # azcopy executable will be copied to test data folder.
     # set the environment variables
-    os.environ['AZCOPY_EXECUTABLE_PATH'] = config[osType]['AZCOPY_EXECUTABLE_PATH']
+    os.environ['AZCOPY_EXECUTABLE_PATH'] = config[os_type]['AZCOPY_EXECUTABLE_PATH']
 
     # TEST_SUITE_EXECUTABLE_LOCATION is the location of the test suite executable
     # test suite executable will be copied to test data folder.
     # set the environment variable TEST_SUITE_EXECUTABLE_LOCATION
-    os.environ['TEST_SUITE_EXECUTABLE_LOCATION'] = config[osType]['TEST_SUITE_EXECUTABLE_LOCATION']
+    os.environ['TEST_SUITE_EXECUTABLE_LOCATION'] = config[os_type]['TEST_SUITE_EXECUTABLE_LOCATION']
 
-    # CONTAINER_SAS_URL is the shared access signature of the container where test data will be uploaded to and downloaded from.
+    # CONTAINER_SAS_URL is the shared access signature of the container
+    # where test data will be uploaded to and downloaded from.
     os.environ['CONTAINER_SAS_URL'] = config['CREDENTIALS']['CONTAINER_SAS_URL']
 
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
@@ -151,8 +160,8 @@ def parse_config_file_set_env():
     # container sas of the premium storage account.
     os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
 
-def init():
 
+def init():
     # Check the environment variables.
     # If they are not set, then parse the config file and set
     # environment variables. If any of the env variable is not set
@@ -177,7 +186,8 @@ def init():
     # test suite executable will be copied to test data folder.
     test_suite_exec_location = os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION')
 
-    # container_sas is the shared access signature of the container where test data will be uploaded to and downloaded from.
+    # container_sas is the shared access signature of the container
+    # where test data will be uploaded to and downloaded from.
     container_sas = os.environ.get('CONTAINER_SAS_URL')
 
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
@@ -187,37 +197,36 @@ def init():
     premium_container_sas = os.environ.get('PREMIUM_CONTAINER_SAS_URL')
 
     # deleting the log files.
-    for f in glob.glob('*.log'):
-        try:
-            os.remove(f)
-        except OSError as e:
-            if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
-                raise
+    cleanup()
 
-    if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, azcopy_exec_location, test_suite_exec_location):
+    if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas,
+                                      azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
         test_dir_path += "\\test_data"
 
+
 def cleanup():
-    # deleting the log files.
+    # delete the log files
     for f in glob.glob('*.log'):
         try:
             os.remove(f)
-        except OSError as e:
-            if e.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
-                raise
+        except OSError:
+            pass
+
 
 def main():
     init()
     execute_sync_user_scenario()
-    # execute_user_scenario_wildcards_op()
-    # execute_user_scenario_azcopy_op()
-    # execute_user_scenario_blob_1()
-    # execute_user_scenario_2()
+    execute_user_scenario_wildcards_op()
+    execute_user_scenario_azcopy_op()
+    execute_user_scenario_blob_1()
+    execute_user_scenario_2()
     # execute_user_scenario_file_1()
     # temp_adhoc_scenario()
     cleanup()
 
-main()
+
+if __name__ == '__main__':
+    main()
