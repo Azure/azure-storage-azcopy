@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"strconv"
 )
 
 // TestBlobFSCommand represents the struct to get command
@@ -31,8 +32,8 @@ type TestBlobFSCommand struct {
 func init() {
 	cmdInput := TestBlobFSCommand{}
 	testBlobCmd := &cobra.Command{
-		Use:     "testBlob",
-		Aliases: []string{"tBlob"},
+		Use:     "testBlobFS",
+		Aliases: []string{"tBlobFS"},
 		Short:   "tests the blob created using AZCopy v2",
 
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -92,14 +93,12 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 		fmt.Println(fmt.Sprintf("error downloading the subject %s. Failed with error %s", fileUrl.String(), err.Error()))
 		os.Exit(1)
 	}
-	var downloadedBuffer []byte
-	// step 2: write the body into the memory mapped file directly
-	retryReader := dResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
-	_, err = io.ReadFull(retryReader, downloadedBuffer)
+	downloadedLength, err := strconv.ParseInt(dResp.ContentLength(), 10, 64)
 	if err != nil {
-		fmt.Println("error reading the downloaded body ", err.Error())
+		fmt.Println("error converting the content length to int64. failed with error ", err.Error())
 		os.Exit(1)
 	}
+
 	f, err := os.Open(tbfsc.Object)
 	if err != nil {
 		fmt.Println("error opening the object ", tbfsc.Object, " failed with error %", err.Error())
@@ -111,6 +110,27 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 		os.Exit(1)
 	}
 	defer f.Close()
+
+	// If the length of file is 0,
+	if downloadedLength != fInfo.Size() {
+		fmt.Println(fmt.Sprintf("validation failed because there is difference in the source size %d and destination size %s", fInfo.Size(), downloadedLength))
+		os.Exit(1)
+	}
+	// If the size of the file is 0 both locally and remote
+	// there is no need to download the file and memory map the file
+	// validation is passed.
+	if fInfo.Size() == 0 {
+		os.Exit(1)
+	}
+	downloadedBuffer := make([]byte, downloadedLength)
+	// step 2: write the body into the memory mapped file directly
+	retryReader := dResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
+	_, err = io.ReadFull(retryReader, downloadedBuffer)
+	if err != nil {
+		fmt.Println("error reading the downloaded body ", err.Error())
+		os.Exit(1)
+	}
+
 
 	mMap, err := NewMMF(f, false, 0, fInfo.Size())
 	if err != nil {
@@ -165,10 +185,12 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println(fmt.Sprintf("error listing the directory path defined by url %s. Failed with error %s", dirUrl.String(), err.Error()))
 		os.Exit(1)
 	}
+	numberOfFilesinSubject := int(0)
 	for continuationMarker != "" || firstListing == true {
 		firstListing = false
 		continuationMarker = dResp.XMsContinuation()
 		files := dResp.Files()
+		numberOfFilesinSubject += len(files)
 		for _, file := range files {
 			// Get the file path
 			// remove the directory path from the file path
@@ -217,14 +239,14 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			objMd5 := md5.Sum(fpMMf)
 			// Download the remote file and calculate md5
 			tempUrlParts := urlParts
-			tempUrlParts.DirectoryOrFilePath = filePath
+			tempUrlParts.DirectoryOrFilePath = *file.Name
 			fileUrl := azbfs.NewFileURL(tempUrlParts.URL(), p)
 			fResp, err := fileUrl.Download(context.Background(), 0, 0)
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error downloading the file %s. failed with error %s", fileUrl.String(), err.Error()))
 				os.Exit(1)
 			}
-			var downloadedBuffer []byte // byte buffer in which file will be downloaded to
+			downloadedBuffer := make([]byte, *file.ContentLength) // byte buffer in which file will be downloaded to
 			retryReader := fResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
 			_, err = io.ReadFull(retryReader, downloadedBuffer)
 			if err != nil {
@@ -239,4 +261,24 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			}
 		}
 	}
+	numberOFFilesInObject := int(0)
+	err = filepath.Walk(tbfsc.Object, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			numberOFFilesInObject ++
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Println(fmt.Sprintf("validation failed with error %s walking inside the source %s", err.Error(), tbfsc.Object))
+		os.Exit(1)
+	}
+
+	if numberOFFilesInObject != numberOfFilesinSubject {
+		fmt.Println(fmt.Sprintf("validation failed since there is difference in the number of files in source and destination"))
+		os.Exit(1)
+	}
+	fmt.Println(fmt.Sprintf("successfully validated the source %s and destination %s", tbfsc.Object, tbfsc.Subject))
 }

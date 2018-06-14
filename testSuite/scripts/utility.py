@@ -89,8 +89,8 @@ def clean_test_share():
 
 
 # initialize_test_suite initializes the setup for executing test cases.
-def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, azcopy_exec_location,
-                          test_suite_exec_location):
+def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, filesystem_url,
+                          azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -111,6 +111,9 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
 
     # holds the name of the test suite executable
     global test_suite_executable_name
+
+    # holds the filesystem url to perform the operations for blob fs service
+    global test_bfs_account_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -145,6 +148,9 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
 
     test_directory_path = new_dir_path
 
+    # set the filesystem url
+    test_bfs_account_url = filesystem_url
+
     # cleaning the test container provided
     # all blob inside the container will be deleted.
     test_container_url = container_sas
@@ -160,7 +166,6 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     test_share_url = share_sas_url
     if not clean_test_share():
         return False
-
     return True
 
 

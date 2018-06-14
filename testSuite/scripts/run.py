@@ -4,6 +4,8 @@ from test_upload_page_blob import *
 from test_file_download import *
 from test_file_upload import *
 from test_azcopy_operations import *
+from test_blobfs_upload import *
+from test_blobfs_download import *
 import glob, os
 import configparser
 import platform
@@ -40,6 +42,15 @@ def temp_adhoc_scenario():
 def execute_user_scenario_wildcards_op():
     test_remove_files_with_Wildcard()
 
+
+def execute_bfs_user_scenario():
+    # test_blobfs_upload_1Kb_file()
+    # #test_blobfs_upload_64MB_file()
+    # test_blobfs_upload_100_1Kb_file()
+    # test_blobfs_upload_2000_1Kb_file()
+    test_blobfs_download_1Kb_file()
+    #test_blobfs_download_64MB_file()
+    test_blobfs_download_100_1Kb_file()
 
 def execute_sync_user_scenario():
     test_sync_local_to_blob_without_wildCards()
@@ -160,6 +171,14 @@ def parse_config_file_set_env():
     # container sas of the premium storage account.
     os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
 
+    # set the account name for blob fs service operation
+    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
+
+    # set the account key for blob fs service operation
+    os.environ['ACCOUNT_KEy'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+
+    # set the filesystem url in the environment
+    os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
 
 def init():
     # Check the environment variables.
@@ -171,7 +190,10 @@ def init():
             os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
             os.environ.get('CONTAINER_SAS_URL', '-1') == '-1' or \
             os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1':
+            os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1' or \
+            os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
+            os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
+            os.environ.get('ACCOUNT_KEY', '-1') == '-1':
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -196,11 +218,14 @@ def init():
     # container sas of the premium storage account.
     premium_container_sas = os.environ.get('PREMIUM_CONTAINER_SAS_URL')
 
+    # get the filesystem url
+    filesystem_url = os.environ.get('FILESYSTEM_URL')
+
     # deleting the log files.
     cleanup()
 
     if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas,
-                                      azcopy_exec_location, test_suite_exec_location):
+                                      filesystem_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
@@ -218,11 +243,12 @@ def cleanup():
 
 def main():
     init()
-    execute_sync_user_scenario()
-    execute_user_scenario_wildcards_op()
-    execute_user_scenario_azcopy_op()
-    execute_user_scenario_blob_1()
-    execute_user_scenario_2()
+    execute_bfs_user_scenario()
+    # execute_sync_user_scenario()
+    # execute_user_scenario_wildcards_op()
+    # execute_user_scenario_azcopy_op()
+    # execute_user_scenario_blob_1()
+    # execute_user_scenario_2()
     # execute_user_scenario_file_1()
     # temp_adhoc_scenario()
     cleanup()
