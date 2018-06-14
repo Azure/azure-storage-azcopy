@@ -2,6 +2,7 @@ import utility as util
 import json
 import time
 from collections import namedtuple
+import sys
 
 
 # test_cancel_job verifies the cancel functionality of azcopy
@@ -17,7 +18,7 @@ def test_cancel_job():
     if output is None:
         print("error copy file ", file_name, " in background mode")
         print("test_cancel_job test failed")
-        return
+        sys.exit(1)
 
     # get the job Id of new job started by parsing the azcopy console output.
     output_split = output.split(" ")
@@ -27,7 +28,7 @@ def test_cancel_job():
     output = util.Command("cancel").add_arguments(jobId).execute_azcopy_operation_get_output()
     if output is None:
         print("error cancelling job with JobId ", jobId)
-        return
+        sys.exit(1)
 
     # execute list job progress summary.
     # expected behavior is it should fail.
@@ -35,7 +36,7 @@ def test_cancel_job():
     if output is not None:
         print("error cancelling the job")
         print("test_cancel_job test failed")
-        return
+        sys.exit(1)
     print("test_cancel_job test successfully passed")
 
 
@@ -52,7 +53,7 @@ def test_pause_resume_job_95Mb_file():
     if output is None:
         print("error copy file ", file_name, " in background mode")
         print("test_cancel_job test failed")
-        return
+        sys.exit(1)
 
     # get the job Id of new job started by parsing the azcopy console output.
     output_split = output.split(" ")
@@ -62,13 +63,13 @@ def test_pause_resume_job_95Mb_file():
     output = util.Command("pause").add_arguments(jobId).execute_azcopy_operation_get_output()
     if output is None:
         print("error while pausing job with JobId ", jobId)
-        return
+        sys.exit(1)
 
     # execute azcopy resume job with JobId.
     output = util.Command("resume").add_arguments(jobId).execute_azcopy_operation_get_output()
     if output is None:
         print("error while resuming job with JobId ", jobId)
-        return
+        sys.exit(1)
 
     # execute azcopy validator for the verifying the blob uploaded.
     # since blob upload will take time after it has resumed, it is
@@ -79,7 +80,7 @@ def test_pause_resume_job_95Mb_file():
         if not result:
             if x == (retry_count - 1):
                 print("the job could not resume successfully. test_pause_resume_job failed")
-                return
+                sys.exit(1)
             time.sleep(20)
         else:
             break
@@ -99,7 +100,7 @@ def test_pause_resume_job_200Mb_file():
     if output is None:
         print("error copy file ", file_name, " in background mode")
         print("test_cancel_job test failed")
-        return
+        sys.exit(1)
 
     # get the job Id of new job started by parsing the azcopy console output.
     output_split = output.split(" ")
@@ -109,13 +110,13 @@ def test_pause_resume_job_200Mb_file():
     output = util.Command("pause").add_arguments(jobId).execute_azcopy_operation_get_output()
     if output is None:
         print("error while pausing job with JobId ", jobId)
-        return
+        sys.exit(1)
 
     # execute azcopy resume job with JobId.
     output = util.Command("resume").add_arguments(jobId).execute_azcopy_operation_get_output()
     if output is None:
         print("error while resuming job with JobId ", jobId)
-        return
+        sys.exit(1)
 
     # execute azcopy validator for the verifying the blob uploaded.
     # since blob upload will take time after it has resumed, it is
@@ -126,7 +127,7 @@ def test_pause_resume_job_200Mb_file():
         if not result:
             if x == (retry_count - 1):
                 print("the job could not resume successfully. test_pause_resume_job failed")
-                return
+                sys.exit(1)
             time.sleep(20)
         else:
             break
@@ -145,18 +146,18 @@ def test_remove_virtual_directory():
         add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_remove_virtual_directory failed while uploading ", dir_n_files_path, " files to the container")
-        return
+        sys.exit(1)
 
     destination = util.get_resource_sas(dir_name)
     result = util.Command("rm").add_arguments(destination).add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("test_remove_virtual_directory failed while removing ", dir_n_files_path, " files to the container")
-        return
+        sys.exit(1)
 
     result = util.Command("list").add_arguments(destination).add_flags("resource-num", "0").execute_azcopy_verify()
     if not result:
         print("test_remove_virtual_directory failed while listing ", destination)
-        return
+        sys.exit(1)
     print("test_remove_virtual_directory passed")
 
 
@@ -172,7 +173,7 @@ def test_remove_files_with_Wildcard():
     if not result:
         print(
             "test_remove_files_with_Wildcard failed uploading directory dir_remove_files_with_wildcard to the container")
-        return
+        sys.exit(1)
 
     # destination is the remote URl of the uploaded dir
     destination = util.get_resource_sas(dir_name)
@@ -182,7 +183,7 @@ def test_remove_files_with_Wildcard():
         add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
         print("test_remove_files_with_Wildcard failed validating the uploaded dir dir_remove_files_with_wildcard")
-        return
+        sys.exit(1)
 
     # removes the files that ends with 4.txt
     destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "*4.txt")
@@ -194,7 +195,7 @@ def test_remove_files_with_Wildcard():
     x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
     if x.TransfersFailed is not 0 and x.TransfersCompleted is not 4:
         print("test_remove_files_with_Wildcard failed with difference in the number of failed and successful transfers")
-        return
+        sys.exit(1)
 
     # removes the files that starts with test
     destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "test*")
@@ -207,7 +208,7 @@ def test_remove_files_with_Wildcard():
     # Expected number of successful transfer will be 36 since 4 files have already been deleted
     if x.TransfersFailed is not 0 and x.TransfersCompleted is not 36:
         print("test_remove_files_with_Wildcard failed with difference in the number of failed and successful transfers")
-        return
+        sys.exit(1)
 
     # Create directory dir_remove_all_files_with_wildcard
     dir_name = "dir_remove_all_files_with_wildcard"
@@ -227,7 +228,7 @@ def test_remove_files_with_Wildcard():
         add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
         print("test_remove_files_with_Wildcard failed validating the uploaded dir dir_remove_files_with_wildcard")
-        return
+        sys.exit(1)
     # add * at the end of destination sas
     # destination_sas_with_wildcard = https://<container-name>/<dir-name>/*?<sig>
     destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "*")
@@ -240,7 +241,7 @@ def test_remove_files_with_Wildcard():
     # Expected number of successful transfer will be 40 since all files will be deleted
     if x.TransfersFailed is not 0 and x.TransfersCompleted is not 36:
         print("test_remove_files_with_Wildcard failed with difference in the number of failed and successful transfers")
-        return
+        sys.exit(1)
     # removing multiple directories with use of WildCards
     for i in range(1, 4):
         dir_name = "rdir" + str(i)
@@ -250,14 +251,14 @@ def test_remove_files_with_Wildcard():
             add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
         if not result:
             print("test_remove_files_with_Wildcard failed uploading ", dir_name, " to the container")
-            return
+            sys.exit(1)
         # execute the validator
         destination = util.get_resource_sas(dir_name)
         result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(destination). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         if not result:
             print("test_remove_files_with_Wildcard failed validating the uploaded dir ", dir_name)
-            return
+            sys.exit(1)
     destination_sas_with_wildcard = util.append_text_path_resource_sas(util.test_container_url, "rdir*")
     result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
         add_flags("output-json", "true").add_flags("recursive", "true").execute_azcopy_operation_get_output()
@@ -268,5 +269,5 @@ def test_remove_files_with_Wildcard():
     # Expected number of successful transfer will be 40 since all files will be deleted
     if x.TransfersFailed is not 0 and x.TransfersCompleted is not 90:
         print("test_remove_files_with_Wildcard failed with difference in the number of failed and successful transfers")
-        return
+        sys.exit(1) 
     print("test_remove_files_with_Wildcard passed successfully")

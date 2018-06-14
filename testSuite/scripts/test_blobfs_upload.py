@@ -3,6 +3,7 @@ import os
 import shutil
 from collections import namedtuple
 from stat import *
+import sys
 
 import utility as util
 
@@ -15,13 +16,13 @@ def test_blobfs_upload_1Kb_file():
                 add_flags("log-level", "Info").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_upload_1Kb_file failed uploading the 1kb file ", filename, " to the filesystem")
-        return
+        sys.exit(1)
     # Validate the file uploaded file
     fileUrl = util.test_bfs_account_url + filename
     result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
     if not result:
         print("test_blobfs_upload_1Kb_file failed while validating the 1kb file upload")
-        return
+        sys.exit(1)
     print("test_blobfs_upload_1Kb_file successfully passed")
 
 def test_blobfs_upload_64MB_file():
@@ -33,13 +34,13 @@ def test_blobfs_upload_64MB_file():
         add_flags("log-level", "Info").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_upload_64MB_file failed uploading the 64MB file ", filename, " to the filesystem")
-        return
+        sys.exit(1)
     # Validate the file uploaded
     fileUrl = util.test_bfs_account_url + filename
     result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
     if not result:
         print("test_blobfs_upload_64MB_file failed while validating the 63MB file upload")
-        return
+        sys.exit(1)
     print("test_blobfs_upload_64MB_file successfully passed")
 
 def test_blobfs_upload_100_1Kb_file():
@@ -52,7 +53,7 @@ def test_blobfs_upload_100_1Kb_file():
         add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_upload_100_1Kb_file failed uploading the dir ", dir_name, " to the filesystem")
-        return
+        sys.exit(1)
 
     # Validate the uploaded directory
     dirUrl = util.test_bfs_account_url + dir_name
@@ -60,7 +61,7 @@ def test_blobfs_upload_100_1Kb_file():
                 add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
         print("test_blobfs_upload_100_1Kb_file failed while validating the uploaded directory")
-        return
+        sys.exit(1)
     print("test_blobfs_upload_100_1Kb_file successfully passed")
 
 def test_blobfs_upload_2000_1Kb_file():
@@ -73,7 +74,7 @@ def test_blobfs_upload_2000_1Kb_file():
         add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_upload_2000_1Kb_file failed uploading the dir ", dir_name, " to the filesystem")
-        return
+        sys.exit(1)
 
     # Validate the uploaded directory
     dirUrl = util.test_bfs_account_url + dir_name
@@ -81,5 +82,5 @@ def test_blobfs_upload_2000_1Kb_file():
         add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
         print("test_blobfs_upload_2000_1Kb_file failed while validating the uploaded directory")
-        return
+        sys.exit(1)
     print("test_blobfs_upload_2000_1Kb_file successfully passed")
