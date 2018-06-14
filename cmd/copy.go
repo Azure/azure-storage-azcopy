@@ -620,5 +620,5 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 }
