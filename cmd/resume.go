@@ -166,7 +166,7 @@ func (rca resumeCmdArgs) process() error {
 		oAuthTokenInfo, err := userOAuthTokenManager.LoginWithDefaultADEndpoint(rca.tenantID, false)
 		if err != nil {
 			return fmt.Errorf(
-				"login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
+				"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
 				rca.tenantID,
 				err.Error())
 		}

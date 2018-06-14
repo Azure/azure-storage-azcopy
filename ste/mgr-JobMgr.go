@@ -35,7 +35,10 @@ var _ IJobMgr = &jobMgr{}
 type PartNumber = common.PartNumber
 
 // InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
-// Should be immutable after transfer from cmd(FE) module to STE module.
+// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
+// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
+// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
+// This can be optimized if FE would no more be another module vs STE module.
 type InMemoryTransitJobState struct {
 	credentialInfo common.CredentialInfo
 }
@@ -169,6 +172,8 @@ func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
 	return jm.inMemoryTransitJobState
 }
 
+// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
+// And the state should no more be changed inside STE module.
 func (jm *jobMgr) setInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }

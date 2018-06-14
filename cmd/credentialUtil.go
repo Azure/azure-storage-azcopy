@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sync"
@@ -66,8 +67,13 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
 func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
+
+	// TODO: Clean up user messages in errors.
+	// If error is due to a user error, make the error message user friendly.
+	// If error is due to a program bug, error should be logged in the general azcopy log (if the bug is not related to a job), or in the job-specific log if it is related to a job.
+	// and terminate the application.
 	if err != nil {
-		return common.ECredentialType.Unknown(), fmt.Errorf("illegal blobResourceURL, provided blobResourceURL is not in URL format")
+		return common.ECredentialType.Unknown(), errors.New("provided blob resource string is not in URL format")
 	}
 
 	sas := azblob.NewBlobURLParts(*resourceURL).SAS

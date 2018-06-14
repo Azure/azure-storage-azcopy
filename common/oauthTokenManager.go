@@ -35,7 +35,8 @@ import (
 
 // ApplicationID for azcopy-v2
 // TODO: azcopy-v2 need register a new 1st or 3rd party application, currently use powershell's application ID for testing
-const ApplicationID = "1950a258-227b-4e31-a9cf-717495945fc2"
+const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa" // powershell's application ID "1950a258-227b-4e31-a9cf-717495945fc2"
+// AzCopyV2Test application ID "a45c21f4-7066-40b4-97d8-14f4313c3caa"
 
 // Resource used in azure storage OAuth authentication
 const Resource = "https://storage.azure.com"
