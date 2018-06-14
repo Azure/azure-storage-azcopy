@@ -36,8 +36,7 @@ test: setup ## run go tests
 	$(call with_docker,go test -race -short -cover ./cmd)
 
 build: setup ## build binaries for the project
-	$(call with_docker,gox -osarch="$(GOX_ARCH)" ./pkg/...)
-	$(call with_docker,gox -output="bin/{{.Dir}}_{{.OS}}_{{.Arch}}" -osarch="$(GOX_ARCH)" ./cmd/...)
+	$(call with_docker,gox -osarch="$(GOX_ARCH)")
 
 all: setup test build ## run all tests and lints
 

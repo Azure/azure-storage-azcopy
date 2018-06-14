@@ -1,3 +1,6 @@
+#CI
+azure-storage-azcopy_*_amd64
+
 # Test env setup
 testSuite/scripts/setup_env_var.sh
 testSuite/test-workdir/
