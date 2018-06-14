@@ -11,7 +11,7 @@ def test_cancel_job():
     file_path = util.create_test_file(file_name, 1024 * 1024 * 1024)
 
     # execute the azcopy upload job in background.
-    output = util.Command("copy").add_arguments(file_path).add_flags("Logging", "info").add_flags("recursive",
+    output = util.Command("copy").add_arguments(file_path).add_flags("log-level", "info").add_flags("recursive",
                                                                                                   "true").add_flags(
         "background-op", "true").execute_azcopy_copy_command_get_output()
     if output is None:
@@ -46,7 +46,7 @@ def test_pause_resume_job_95Mb_file():
     file_path = util.create_test_file(file_name, 95 * 1024 * 1024)
 
     # execute azcopy file upload in background.
-    output = util.Command("copy").add_arguments(file_path).add_flags("Logging", "info").add_flags("recursive",
+    output = util.Command("copy").add_arguments(file_path).add_flags("log-level", "info").add_flags("recursive",
                                                                                                   "true").add_flags(
         "background-op", "true").execute_azcopy_copy_command_get_output()
     if output is None:
@@ -93,7 +93,7 @@ def test_pause_resume_job_200Mb_file():
     file_path = util.create_test_file(file_name, 200 * 1024 * 1024)
 
     # execute azcopy file upload in background.
-    output = util.Command("copy").add_arguments(file_path).add_flags("Logging", "info").add_flags("recursive",
+    output = util.Command("copy").add_arguments(file_path).add_flags("log-level", "info").add_flags("recursive",
                                                                                                   "true").add_flags(
         "background-op", "true").execute_azcopy_copy_command_get_output()
     if output is None:
@@ -142,7 +142,7 @@ def test_remove_virtual_directory():
 
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_remove_virtual_directory failed while uploading ", dir_n_files_path, " files to the container")
         return
@@ -168,7 +168,7 @@ def test_remove_files_with_Wildcard():
 
     # Upload the directory by azcopy
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("Logging", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print(
             "test_remove_files_with_Wildcard failed uploading directory dir_remove_files_with_wildcard to the container")
@@ -186,7 +186,7 @@ def test_remove_files_with_Wildcard():
 
     # removes the files that ends with 4.txt
     destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "*4.txt")
-    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("Logging", "Info"). \
+    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
         add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_operation_get_output()
     # Get the latest Job Summary
     result = util.parseAzcopyOutput(result)
@@ -198,7 +198,7 @@ def test_remove_files_with_Wildcard():
 
     # removes the files that starts with test
     destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "test*")
-    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("Logging", "Info"). \
+    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
         add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_operation_get_output()
     # Get the latest Job Summary
     result = util.parseAzcopyOutput(result)
@@ -215,7 +215,7 @@ def test_remove_files_with_Wildcard():
 
     # Upload the directory using Azcopy
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("Logging", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("test_remove_files_with_Wildcard failed uploading dir dir_remove_all_files_with_wildcard")
 
@@ -231,7 +231,7 @@ def test_remove_files_with_Wildcard():
     # add * at the end of destination sas
     # destination_sas_with_wildcard = https://<container-name>/<dir-name>/*?<sig>
     destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "*")
-    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("Logging", "Info"). \
+    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
         add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_operation_get_output()
     # Get the latest Job Summary
     result = util.parseAzcopyOutput(result)
@@ -247,7 +247,7 @@ def test_remove_files_with_Wildcard():
         dir_n_files_path = util.create_test_n_files(1024, 40, dir_name)
         # Upload the directory
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-            add_flags("Logging", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
         if not result:
             print("test_remove_files_with_Wildcard failed uploading ", dir_name, " to the container")
             return
@@ -259,7 +259,7 @@ def test_remove_files_with_Wildcard():
             print("test_remove_files_with_Wildcard failed validating the uploaded dir ", dir_name)
             return
     destination_sas_with_wildcard = util.append_text_path_resource_sas(util.test_container_url, "rdir*")
-    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("Logging", "Info"). \
+    result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
         add_flags("output-json", "true").add_flags("recursive", "true").execute_azcopy_operation_get_output()
     # Get the latest Job Summary
     result = util.parseAzcopyOutput(result)
