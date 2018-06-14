@@ -1,8 +1,9 @@
 import os
-import subprocess
-import shutil
-from pathlib import Path
 import platform
+import shutil
+import subprocess
+from pathlib import Path
+
 
 # Command Class is used to create azcopy commands and validator commands.
 class Command(object):
@@ -35,14 +36,14 @@ class Command(object):
             # iterating through all the values in dict and combining them.
         if len(self.flags) > 0:
             for key, value in self.flags.items():
-                command += " --" + key + "=" + '"' +value +'"'
+                command += " --" + key + "=" + '"' + value + '"'
         return command
 
     # this api is used to execute a azcopy copy command.
     # by default, command execute a upload command.
     # return true or false for success or failure of command.
     def execute_azcopy_copy_command(self):
-       return execute_azcopy_command(self.string())
+        return execute_azcopy_command(self.string())
 
     # this api is used to execute a azcopy copy command.
     # by default, command execute a upload command.
@@ -52,7 +53,7 @@ class Command(object):
 
     # api execute other azcopy commands like cancel, pause, resume or list.
     def execute_azcopy_operation_get_output(self):
-        return  execute_azcopy_command_get_output(self.string())
+        return execute_azcopy_command_get_output(self.string())
 
     # api executes the azcopy validator to verify the azcopy operation.
     def execute_azcopy_verify(self):
@@ -66,6 +67,7 @@ class Command(object):
     def execute_azcopy_create(self):
         return verify_operation(self.string())
 
+
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container(container_sas):
     # execute the clean command.
@@ -74,6 +76,7 @@ def clean_test_container(container_sas):
         print("error cleaning the container. please check the container sas provided")
         return False
     return True
+
 
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_share():
@@ -86,8 +89,8 @@ def clean_test_share():
 
 
 # initialize_test_suite initializes the setup for executing test cases.
-def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, azcopy_exec_location, test_suite_exec_location):
-
+def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, azcopy_exec_location,
+                          test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -103,12 +106,18 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # all files / directory are uploaded and downloaded to and from this share.
     global test_share_url
 
+    # holds the name of the azcopy executable
+    global azcopy_executable_name
+
+    # holds the name of the test suite executable
+    global test_suite_executable_name
+
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
     new_dir_path = os.path.join(test_dir_path, "test_data")
-    #todo finally
+    # todo finally
     try:
-        #removing the directory and its contents, if directory exists
+        # removing the directory and its contents, if directory exists
         shutil.rmtree(new_dir_path)
         os.mkdir(new_dir_path)
     except:
@@ -119,6 +128,7 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # while test suite is running.
     if os.path.isfile(azcopy_exec_location):
         shutil.copy2(azcopy_exec_location, new_dir_path)
+        azcopy_executable_name = parse_out_executable_name(azcopy_exec_location)
     else:
         print("please verify the azcopy executable location")
         return False
@@ -128,13 +138,14 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # while test suite is running.
     if os.path.isfile(test_suite_exec_location):
         shutil.copy2(test_suite_exec_location, new_dir_path)
+        test_suite_executable_name = parse_out_executable_name(test_suite_exec_location)
     else:
         print("please verify the test suite executable location")
         return False
 
     test_directory_path = new_dir_path
 
-    #cleaning the test container provided
+    # cleaning the test container provided
     # all blob inside the container will be deleted.
     test_container_url = container_sas
     if not clean_test_container(test_container_url):
@@ -152,12 +163,18 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
 
     return True
 
-#todo : find better way
+
+# given a path, parse out the name of the executable
+def parse_out_executable_name(full_path):
+    head, tail = os.path.split(full_path)
+    return tail
+
+# todo : find better way
 # create_test_file creates a file with given file name and of given size inside the test directory.
 # returns the local file path.
-def create_test_file(filename , size):
+def create_test_file(filename, size):
     # creating the file path
-    file_path = os.path.join(test_directory_path , filename)
+    file_path = os.path.join(test_directory_path, filename)
     # if file already exists, then removing the file.
     if os.path.isfile(file_path):
         os.remove(file_path)
@@ -178,11 +195,12 @@ def create_test_file(filename , size):
     f.close()
     return file_path
 
+
 # creates the a test html file inside the test directory.
 # returns the local file path.
 def create_test_html_file(filename):
     # creating the file path
-    file_path = os.path.join(test_directory_path , filename)
+    file_path = os.path.join(test_directory_path, filename)
     # if file already exists, then removing the file.
     if os.path.isfile(file_path):
         os.remove(file_path)
@@ -196,6 +214,7 @@ def create_test_html_file(filename):
     f.close()
     return file_path
 
+
 # creates a dir with given inside test directory
 def create_test_dir(dir_name):
     dir_path = os.path.join(test_directory_path, dir_name)
@@ -204,6 +223,7 @@ def create_test_dir(dir_name):
     except:
         raise Exception("error creating directory ", dir_path)
     return dir_path
+
 
 # create_test_n_files creates given number of files for given size
 # inside directory inside test directory.
@@ -223,7 +243,7 @@ def create_test_n_files(size, n, dir_name):
     for index in range(0, n):
         filename = filesprefix + '_' + str(index) + ".txt"
         # creating the file path
-        file_path = os.path.join(dir_n_files_path , filename)
+        file_path = os.path.join(dir_n_files_path, filename)
         # if file already exists, then removing the file.
         if os.path.isfile(file_path):
             os.remove(file_path)
@@ -244,33 +264,35 @@ def create_test_n_files(size, n, dir_name):
         f.close()
     return dir_n_files_path
 
+
 # create_complete_sparse_file creates an empty used to
 # test the page blob operations of azcopy
 def create_complete_sparse_file(filename, filesize):
-    file_path = os.path.join(test_directory_path , filename)
+    file_path = os.path.join(test_directory_path, filename)
     sparse = Path(file_path)
     sparse.touch()
     os.truncate(str(sparse), filesize)
     return file_path
+
 
 # create_partial_sparse_file create a sparse file in test directory
 # of size multiple of 8MB. for each 8MB, first 4MB is '0'
 # and next 4MB is '\0'.
 # return the local file path of created file.
 def create_partial_sparse_file(filename, filesize):
-    file_path = os.path.join(test_directory_path , filename)
+    file_path = os.path.join(test_directory_path, filename)
     if os.path.isfile(file_path):
         os.remove(file_path)
     f = open(file_path, 'w')
     # file size is less than 8MB or given size is not multiple of 8MB,
     # no file is created.
-    if filesize < 8*1024*1024 or filesize % (8 * 1024 * 1024) != 0:
+    if filesize < 8 * 1024 * 1024 or filesize % (8 * 1024 * 1024) != 0:
         return None
     else:
         total_size = filesize
         while total_size > 0:
-            num_chars = 4* 1024 * 1024
-            f.write('0' *  num_chars)
+            num_chars = 4 * 1024 * 1024
+            f.write('0' * num_chars)
             total_size = total_size - num_chars
             if total_size <= 0:
                 break
@@ -278,31 +300,31 @@ def create_partial_sparse_file(filename, filesize):
             total_size = total_size - num_chars
     return file_path
 
+
 # execute_azcopy_command executes the given azcopy command.
 # returns true / false on success / failure of command.
 def execute_azcopy_command(command):
     # azcopy executable path location.
-    azs_exec_name = get_azcopy_executable_name()
-    azspath = os.path.join(test_directory_path, azs_exec_name)
+    azspath = os.path.join(test_directory_path, azcopy_executable_name)
     cmnd = azspath + " " + command
     try:
         # executing the command with timeout to set 3 minutes / 180 sec.
         subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=360,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        #print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        # print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True
 
+
 # execute_azcopy_command_get_output executes the given azcopy command in "inproc" mode.
 # returns azcopy console output or none on success / failure of command.
 def execute_azcopy_command_get_output(command):
-    azs_exec_name = get_azcopy_executable_name()
     # azcopy executable path location concatenated with inproc keyword.
-    azspath = os.path.join(test_directory_path, azs_exec_name)
+    azspath = os.path.join(test_directory_path, azcopy_executable_name)
     cmnd = azspath + " " + command
     output = ""
     try:
@@ -311,17 +333,17 @@ def execute_azcopy_command_get_output(command):
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return None
     else:
         return output
 
+
 # verify_operation executes the validator command to verify the azcopy operations.
 # return true / false on success / failure of command.
 def verify_operation(command):
-    testSuite_exec_name = get_suite_executable_name()
     # testSuite executable local path inside the test directory.
-    test_suite_path = os.path.join(test_directory_path, testSuite_exec_name)
+    test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
         # executing the command with timeout set to 3 minutes / 180 sec.
@@ -329,10 +351,11 @@ def verify_operation(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return False
     else:
         return True
+
 
 # get_resource_sas return the shared access signature for the given resource
 # using the container url.
@@ -340,8 +363,9 @@ def get_resource_sas(resource_name):
     # Splitting the container URL to add the uploaded blob name to the SAS
     url_parts = test_container_url.split("?")
     # adding the blob name after the container name
-    resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
+    resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
     return resource_sas
+
 
 def append_text_path_resource_sas(resource_sas, text):
     # Splitting the resource sas to add the text to the SAS
@@ -356,6 +380,7 @@ def append_text_path_resource_sas(resource_sas, text):
         resource_sas = url_parts[0] + "/" + text + '?' + url_parts[1]
     return resource_sas
 
+
 # get_resource_sas_from_share return the shared access signature for the given resource
 # based on the share url.
 def get_resource_sas_from_share(resource_name):
@@ -365,40 +390,16 @@ def get_resource_sas_from_share(resource_name):
     resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
     return resource_sas
 
+
 # get_resource_sas return the shared access signature for the given resource
 # using the premium storage account container url.
 def get_resource_sas_from_premium_container_sas(resource_name):
     # Splitting the container URL to add the uploaded blob name to the SAS
     url_parts = test_premium_account_contaier_url.split("?")
     # adding the blob name after the container name
-    resource_sas = url_parts[0] + "/" +resource_name + '?' + url_parts[1]
+    resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
     return resource_sas
 
-# get_azcopy_executable_name returns the executable name specific to platform.
-# for example, executable for windows will be "azs.exe"
-# for example, executable for linux will "azs"
-def get_azcopy_executable_name():
-    # get the platform type since executable is different for different platforms.
-    osType = platform.system()
-    osType = osType.upper()
-    if osType == "WINDOWS":
-        return "azs.exe"
-    if osType == "LINUX":
-        return "azs"
-    return ""
-
-# get_suite_executable_name returns the executable specific to platform.
-# for example, executable for windows will be in "testSuite.exe".
-# for example, executable for linux will be "testSuite"
-def get_suite_executable_name():
-    # get the platform type since executable is different for different platforms.
-    osType = platform.system()
-    osType = osType.upper()
-    if osType == "WINDOWS":
-        return "testSuite.exe"
-    if osType == "LINUX":
-        return "testSuite"
-    return ""
 
 # parseAzcopyOutput parses the Azcopy Output in JSON format to give the final Azcopy Output in JSON Format
 # Final Azcopy Output is the last JobSummary for the Job
@@ -434,7 +435,7 @@ def parseAzcopyOutput(s):
     # Since the lines were iterated in reverse order revering them again and
     # concatenating the lines to get the final JobSummary
     for line in reversed(lines):
-        if len(final_output) > 0 :
+        if len(final_output) > 0:
             final_output = final_output + '\n' + line
         else:
             final_output = line

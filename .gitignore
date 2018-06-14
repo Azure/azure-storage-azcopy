@@ -1,3 +1,8 @@
+# Test env setup
+testSuite/scripts/setup_env_var.sh
+testSuite/test-workdir/
+testSuite/testSuite
+
 ## Ignore deps
 vendor/
 
@@ -7,6 +12,7 @@ vendor/
 azcopy
 azcopy-linux
 azcopy-windows
+azcopy-mac
 
 ## Dep tool
 vendor/
