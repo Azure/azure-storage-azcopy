@@ -31,9 +31,35 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"sort"
 )
 
 var JobsAdminInitialized = make(chan bool, 1)
+
+// sortPlanFiles is struct that implements len, swap and less than functions
+// this struct is used to sort the JobPartPlan files of the same job on the basis
+// of Part number
+// TODO: can use the same struct to sort job part plan files on the basis of job number and part number
+type sortPlanFiles struct { Files []os.FileInfo }
+
+// Less determines the comparison between two fileInfo's
+// compares the part number of the Job Part files
+func (spf sortPlanFiles) Less(i, j int) bool{
+	_, parti, err := JobPartPlanFileName(spf.Files[i].Name()).Parse()
+	if err != nil {
+		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[i].Name(), err.Error()))
+	}
+	_, partj, err :=  JobPartPlanFileName(spf.Files[j].Name()).Parse()
+	if err != nil {
+		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[j].Name(), err.Error()))
+	}
+	return parti < partj
+}
+
+// Len determines the length of number of files
+func (spf sortPlanFiles) Len() int { return len(spf.Files)}
+
+func (spf sortPlanFiles) Swap(i, j int) { spf.Files[i], spf.Files[j] = spf.Files[j], spf.Files[i] }
 
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
 var JobsAdmin interface {
@@ -50,6 +76,9 @@ var JobsAdmin interface {
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
 	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
+
+	ResurrectJob(jobId common.JobID) bool
+
 	ResurrectJobParts()
 
 	// AppPathFolder returns the Azcopy application path folder.
@@ -253,6 +282,39 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return atomic.LoadInt64(&ja.pacer.bytesTransferred)
+}
+
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID) bool{
+	// Search the existing plan files for the PartPlans for the given jobId
+	// only the files which have JobId has prefix and DataSchemaVersion as Suffix
+	// are include in the result
+	files := func(prefix, ext string) []os.FileInfo {
+		var files []os.FileInfo
+		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+			if !fileInfo.IsDir() && strings.HasPrefix(fileInfo.Name(), prefix) &&strings.HasSuffix(fileInfo.Name(), ext) {
+				files = append(files, fileInfo)
+			}
+			return nil
+		})
+		return files
+	}(jobId.String(), fmt.Sprintf(".steV%d", DataSchemaVersion))
+	// If no files with JobId exists then return false
+	if len(files) == 0 {
+		return false
+	}
+	// sort the JobPartPlan files with respect to Part Number
+	sort.Sort(sortPlanFiles{Files:files})
+	for f:= 0; f < len(files); f++ {
+		planFile := JobPartPlanFileName(files[f].Name())
+		jobID, partNum, err := planFile.Parse()
+		if err != nil {
+			continue
+		}
+		mmf := planFile.Map()
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel)
+		jm.AddJobPart(partNum, planFile, false)
+	}
+	return true
 }
 
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
