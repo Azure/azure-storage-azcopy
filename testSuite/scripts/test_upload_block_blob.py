@@ -17,7 +17,7 @@ def test_1kb_blob_upload():
     src = file_path
     dest = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the container")
         return
@@ -41,7 +41,7 @@ def test_63mb_blob_upload():
     # execute azcopy copy upload.
     dest = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(dest) \
-        .add_flags("Logging", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
+        .add_flags("log-level", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
         execute_azcopy_copy_command()
     if not result:
         print("failed uploading file", filename, " to the container")
@@ -64,7 +64,7 @@ def test_n_1kb_blob_upload(number_of_files):
 
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_n_1kb_blob_upload failed while uploading ", number_of_files, " files to the container")
         return
@@ -89,7 +89,7 @@ def test_blob_metaData_content_encoding_content_type():
     # execute azcopy upload command.
     destination_sas = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("metadata",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("metadata",
                                                                               "author=prjain;viewport=width;description=test file"). \
         add_flags("content-type", "testctype").add_flags("content-encoding", "testenc").add_flags("no-guess-mime-type",
                                                                                                   "true").execute_azcopy_copy_command()
@@ -118,7 +118,7 @@ def test_1GB_blob_upload():
 
     # execute azcopy upload.
     destination_sas = util.get_resource_sas(filename)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1G file", filename, " to the container")
@@ -144,7 +144,7 @@ def test_block_size(block_size):
 
     # execute azcopy upload of 63 Mb file.
     destination_sas = util.get_resource_sas(filename)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("block-size", str(block_size)).add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading file", filename, " with block size 4MB to the container")
@@ -172,14 +172,14 @@ def test_guess_mime_type():
 
     # execute azcopy upload of html file.
     destination_sas = util.get_resource_sas(filename)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", filename, " failed")
         return
 
     # execute the validator to verify the content-type.
-    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging",
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level",
                                                                                                         "info"). \
         add_flags("recursive", "true")
     if not result:
@@ -196,7 +196,7 @@ def test_set_block_blob_tier():
     # uploading the file file_hot_block_blob_tier using azcopy and setting the block-blob-tier to Hot
     destination_sas = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("block-blob-tier", "Hot").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("block-blob-tier", "Hot").execute_azcopy_copy_command()
     if not result:
         print("uploading file with block-blob-tier set to Hot failed. ")
         return
@@ -215,7 +215,7 @@ def test_set_block_blob_tier():
     # uploading the file file_cool_block_blob_tier using azcopy and setting the block-blob-tier to Cool.
     destination_sas = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("block-blob-tier", "Cool").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("block-blob-tier", "Cool").execute_azcopy_copy_command()
     if not result:
         print("uploading file with block-blob-tier set to Cool failed.")
         return
@@ -234,7 +234,7 @@ def test_set_block_blob_tier():
     # uploading the file file_archive_block_blob_tier using azcopy and setting the block-blob-tier to Archive.
     destination_sas = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("block-blob-tier", "archive").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("block-blob-tier", "archive").execute_azcopy_copy_command()
     if not result:
         print("uploading file with block-blob-tier set to Cool failed.")
         return
@@ -254,7 +254,7 @@ def test_force_flag_set_to_false_upload():
     dir_n_files_path = util.create_test_n_files(1024, 20, dir_name)
     # uploading the directory with 20 files in it.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_force_flag_set_to_false_upload failed while uploading ", 20,
               "files in to dir_force_flag_set_upload the container")
@@ -268,7 +268,7 @@ def test_force_flag_set_to_false_upload():
 
     # uploading the directory again with force flag set to false.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("force", "false").add_flags("Logging", "info"). \
+        add_flags("recursive", "true").add_flags("force", "false").add_flags("log-level", "info"). \
         add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
     if not result:
         print("test_force_flag_set_to_false_upload failed while uploading ", 20,
@@ -288,7 +288,7 @@ def test_force_flag_set_to_false_upload():
     sub_dir_n_files_path = util.create_test_n_files(1024, 20, sub_dir_name)
 
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_force_flag_set_to_false_upload failed while uploading ", 20, "files in " + sub_dir_force_flag_set)
         return
@@ -303,14 +303,14 @@ def test_force_flag_set_to_false_upload():
 
     # removing the sub directory.
     result = util.Command("rm").add_arguments(sub_directory_resource_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("test_force_flag_set_to_false_upload failed removing ", sub_dir_n_files_path)
         return
 
     # uploading the directory again with force flag set to false.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("force", "false").add_flags("Logging", "info"). \
+        add_flags("recursive", "true").add_flags("force", "false").add_flags("log-level", "info"). \
         add_flags("output-json", "true").execute_azcopy_copy_command_get_output()
     if not result:
         print("test_force_flag_set_to_false_upload failed while uploading ", 20,
@@ -334,7 +334,7 @@ def test_force_flag_set_to_false_download():
     dir_n_files_path = util.create_test_n_files(1024, 20, dir_name)
     # uploading the directory with 20 files in it.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_force_flag_set_to_false_download failed while uploading ", 20,
               "files in to dir_force_flag_set_download the container")
@@ -355,7 +355,7 @@ def test_force_flag_set_to_false_download():
 
     # downloading the directory created from container through azcopy with recursive flag to true.
     result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path).add_flags(
-        "Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        "log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("test_force_flag_set_to_false_download failed downloading dir ", dir_name)
         return
@@ -369,7 +369,7 @@ def test_force_flag_set_to_false_download():
 
     # downloading the directory created from container through azcopy with recursive flag to true and force flag set to false.
     result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path).add_flags(
-        "Logging", "info"). \
+        "log-level", "info"). \
         add_flags("recursive", "true").add_flags("force", "false").add_flags("output-json",
                                                                              "true").execute_azcopy_copy_command_get_output()
     result = util.parseAzcopyOutput(result)
@@ -391,7 +391,7 @@ def test_force_flag_set_to_false_download():
     # downloading the directory created from container through azcopy with recursive flag to true and force flag set to false.
     # 5 deleted files should be downloaded. Number of failed transfer should be 15 and number of completed transfer should be 5
     result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path).add_flags(
-        "Logging", "info"). \
+        "log-level", "info"). \
         add_flags("recursive", "true").add_flags("force", "false").add_flags("output-json",
                                                                              "true").execute_azcopy_copy_command_get_output()
     result = util.parseAzcopyOutput(result)
@@ -416,7 +416,7 @@ def test_upload_block_blob_include_flag():
 
     # uploading the directory with 2 files in the include flag.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info") \
+        add_flags("recursive", "true").add_flags("log-level", "info") \
         .add_flags("include", "test101024_2.txt;test101024_3.txt").add_flags("output-json",
                                                                              "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -431,7 +431,7 @@ def test_upload_block_blob_include_flag():
 
     # uploading the directory with sub-dir in the include flag.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info") \
+        add_flags("recursive", "true").add_flags("log-level", "info") \
         .add_flags("include", "sub_dir_include_flag_set_upload").add_flags("output-json",
                                                                            "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -459,7 +459,7 @@ def test_upload_block_blob_exclude_flag():
 
     # uploading the directory with 2 files in the exclude flag.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info") \
+        add_flags("recursive", "true").add_flags("log-level", "info") \
         .add_flags("exclude", "test101024_2.txt;test101024_3.txt").add_flags("output-json",
                                                                              "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -476,7 +476,7 @@ def test_upload_block_blob_exclude_flag():
 
     # uploading the directory with sub-dir in the exclude flag.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info") \
+        add_flags("recursive", "true").add_flags("log-level", "info") \
         .add_flags("exclude", "sub_dir_exclude_flag_set_upload").add_flags("output-json",
                                                                            "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -505,7 +505,7 @@ def test_download_blob_include_flag():
 
     # uploading the directory with 20 files in it.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_download_blob_include_flag failed while uploading ", 20,
               "files in dir_include_flag_set_download in the container")
@@ -520,7 +520,7 @@ def test_download_blob_include_flag():
     # download from container with include flags
     destination_sas = util.get_resource_sas(dir_name)
     result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
-        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-json", "true"). \
         add_flags("include", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
         execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -535,7 +535,7 @@ def test_download_blob_include_flag():
     # download from container with sub-dir in include flags
     destination_sas = util.get_resource_sas(dir_name)
     result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
-        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-json", "true"). \
         add_flags("include", "sub_dir_include_flag_set_download/"). \
         execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -561,7 +561,7 @@ def test_download_blob_exclude_flag():
 
     # uploading the directory with 20 files in it.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_download_blob_exclude_flag failed while uploading ", 20,
               "files in dir_exclude_flag_set_download in the container")
@@ -576,7 +576,7 @@ def test_download_blob_exclude_flag():
     # download from container with exclude flags
     destination_sas = util.get_resource_sas(dir_name)
     result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
-        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-json", "true"). \
         add_flags("exclude", "test101024_1.txt;test101024_2.txt;test101024_3.txt"). \
         execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -592,7 +592,7 @@ def test_download_blob_exclude_flag():
     # download from container with sub-dir in exclude flags
     destination_sas = util.get_resource_sas(dir_name)
     result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
-        add_flags("recursive", "true").add_flags("Logging", "info").add_flags("output-json", "true"). \
+        add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-json", "true"). \
         add_flags("exclude", "sub_dir_include_flag_set_download/"). \
         execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
@@ -619,7 +619,7 @@ def test_sync_local_to_blob_without_wildCards():
 
     # uploading the directory with 20 files in it.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_sync_local_to_blob_without_wildCards failed while uploading ", 20,
               "files in sync_local_blob to the container")
@@ -635,7 +635,7 @@ def test_sync_local_to_blob_without_wildCards():
 
     # download the destination to the source to match the last modified time
     result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
         add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
     if not result:
         print("test_sync_local_to_blob_without_wildCards failed downloading the source ", destination,
@@ -645,7 +645,7 @@ def test_sync_local_to_blob_without_wildCards():
     # execute a sync command
     dir_sas = util.get_resource_sas(dir_name)
     result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
     if result:
         print("test_sync_local_to_blob_without_wildCards failed while performing a sync of ", dir_name, " and ",
@@ -660,7 +660,7 @@ def test_sync_local_to_blob_without_wildCards():
     # sync between source and destination should delete the sub-dir on container
     # number of successful transfer should be equal to 10
     result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json",
                                                                               "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
     result = util.parseAzcopyOutput(result)
@@ -685,7 +685,7 @@ def test_sync_local_to_blob_without_wildCards():
     # sync between source and destination should delete the deleted files on container
     # number of successful transfer should be equal to 5
     result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json",
                                                                               "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
     result = util.parseAzcopyOutput(result)
@@ -708,7 +708,7 @@ def test_sync_local_to_blob_without_wildCards():
     os.utime(filepath, (atime, new_mtime))
     # sync source to destination
     result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json",
                                                                               "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
     result = util.parseAzcopyOutput(result)
@@ -738,7 +738,7 @@ def test_sync_local_to_blob_with_wildCards():
 
     # uploading the directory with 30 files in it.
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_sync_local_to_blob_with_wildCards failed while uploading ", 30,
               "files in sync_local_blob_wc to the container")
@@ -755,7 +755,7 @@ def test_sync_local_to_blob_with_wildCards():
 
     # download the destination to the source to match the last modified time
     result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
         add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
     if not result:
         print("test_sync_local_to_blob_with_wildCards failed downloading the source ", destination,
@@ -767,7 +767,7 @@ def test_sync_local_to_blob_with_wildCards():
     # execute a sync command
     dir_sas = util.get_resource_sas(dir_name)
     result = util.Command("sync").add_arguments(dir_n_files_path_wcard).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
     if result:
         print("test_sync_local_to_blob_with_wildCards failed while performing a sync of ", dir_n_files_path_wcard,
@@ -778,7 +778,7 @@ def test_sync_local_to_blob_with_wildCards():
     # sd_dir_n_files_path_wcard is in format dir/*/*.txt
     sd_dir_n_files_path_wcard = os.path.join(dir_n_files_path_wcard, "*.txt")
     result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
     if result:
         print("test_sync_local_to_blob_with_wildCards failed while performing a sync of ", sd_dir_n_files_path_wcard,
@@ -805,7 +805,7 @@ def test_sync_local_to_blob_with_wildCards():
     # 10 files will deleted from container
     sd_dir_n_files_path_wcard = os.path.join(dir_n_files_path_wcard, "*.txt")
     result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json",
                                                                               "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
     result = util.parseAzcopyOutput(result)

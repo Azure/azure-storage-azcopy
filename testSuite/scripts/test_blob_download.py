@@ -18,7 +18,7 @@ def test_download_1kb_blob():
     src = file_path
     dest = util.test_container_url
     result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the container")
         return
@@ -37,7 +37,7 @@ def test_download_1kb_blob():
     # downloading the uploaded file
     src = util.get_resource_sas(filename)
     dest = util.test_directory_path + "/test_1kb_blob_download.txt"
-    result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("Logging",
+    result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level",
                                                                                    "info").execute_azcopy_copy_command()
 
     if not result:
@@ -63,7 +63,7 @@ def test_blob_download_preserve_last_modified_time():
     # upload file through azcopy.
     destination_sas = util.get_resource_sas(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the container")
         return
@@ -78,7 +78,7 @@ def test_blob_download_preserve_last_modified_time():
 
     # download file through azcopy with flag preserve-last-modified-time set to true
     download_file_name = util.test_directory_path + "/test_download_preserve_last_mtime.txt"
-    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file_name).add_flags("Logging",
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file_name).add_flags("log-level",
                                                                                                              "info").add_flags(
         "preserve-last-modified-time", "true").execute_azcopy_copy_command()
     if not result:
@@ -103,7 +103,7 @@ def test_blob_download_63mb_in_4mb():
 
     # uploading file through azcopy with flag block-size set to 4194304 i.e 4mb
     destination_sas = util.get_resource_sas(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging",
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level",
                                                                                                     "info").add_flags(
         "block-size", "4194304").execute_azcopy_copy_command()
     if not result:
@@ -118,7 +118,7 @@ def test_blob_download_63mb_in_4mb():
 
     # downloading the created parallely in blocks of 4mb file through azcopy.
     download_file = util.test_directory_path + "/test_63mb_in4mb_download.txt"
-    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file).add_flags("Logging",
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file).add_flags("log-level",
                                                                                                         "info").add_flags(
         "block-size", "4194304").execute_azcopy_copy_command()
     if not result:
@@ -142,7 +142,7 @@ def test_recursive_download_blob():
     dir1_path = util.create_test_n_files(1024, 5, dir_name)
 
     # upload the directory to container through azcopy with recursive set to true.
-    result = util.Command("copy").add_arguments(dir1_path).add_arguments(util.test_container_url).add_flags("Logging",
+    result = util.Command("copy").add_arguments(dir1_path).add_arguments(util.test_container_url).add_flags("log-level",
                                                                                                             "info").add_flags(
         "recursive", "true").execute_azcopy_copy_command()
     if not result:
@@ -165,7 +165,7 @@ def test_recursive_download_blob():
 
     # downloading the directory created from container through azcopy with recursive flag to true.
     result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path).add_flags(
-        "Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        "log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("error download recursive dir ", dir1_path)
         return
@@ -190,7 +190,7 @@ def test_blob_download_with_special_characters():
         return
     # downloading the blob created above.
     result = util.Command("copy").add_arguments(resource_url).add_arguments(util.test_directory_path).add_flags(
-        "Logging", "info").execute_azcopy_copy_command()
+        "log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("error downloading the file with special characters ", filename_special_characters)
         return
@@ -216,7 +216,7 @@ def test_sync_blob_download_without_wildcards():
     # upload the directory
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_sync_blob_download_without_wildcards failed while uploading ", 10, " files to the container")
         return
@@ -231,7 +231,7 @@ def test_sync_blob_download_without_wildcards():
         return
     # download the destination to the source to match the last modified time
     result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
         add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
     if not result:
         print("test_sync_blob_download_without_wildcards failed downloading the source ", dir_sas,
@@ -246,7 +246,7 @@ def test_sync_blob_download_without_wildcards():
         return
     # sync the source and destination
     result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if result:
         print("test_sync_blob_download_without_wildcards failed performing a sync between source ", dir_sas, " and ",
               dir_n_files_path)
@@ -262,7 +262,7 @@ def test_sync_blob_download_with_wildcards():
     # upload the directory
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_sync_blob_download_with_wildcards failed while uploading ", 10, " files to the container")
         return
@@ -277,7 +277,7 @@ def test_sync_blob_download_with_wildcards():
         return
     # download the destination to the source to match the last modified time
     result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
         add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
     if not result:
         print("test_sync_blob_download_with_wildcards failed downloading the source ", dir_sas, " to the destination ",
@@ -296,7 +296,7 @@ def test_sync_blob_download_with_wildcards():
     dir_sas = util.append_text_path_resource_sas(dir_sas, "*")
     # sync the source and destination
     result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if result:
         print("test_sync_blob_download_without_wildcards failed performing a sync between source ", dir_sas, " and ",
               dir_n_files_path)
@@ -310,7 +310,7 @@ def test_sync_blob_download_with_wildcards():
     # upload the directory
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_sync_blob_download_with_wildcards failed while uploading ", 30, " files to the container")
         return
@@ -326,7 +326,7 @@ def test_sync_blob_download_with_wildcards():
 
     # Download the directory to match the blob modified time
     result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("execute_azcopy_copy_command failed downloading the directory ", dir_sas, " locally")
         return
@@ -334,7 +334,7 @@ def test_sync_blob_download_with_wildcards():
     # add extra wildcards
     dir_sas = util.append_text_path_resource_sas(dir_sas, "*/*.txt")
     result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if result:
         print("test_sync_blob_download_without_wildcards failed performing a sync between source ", dir_sas, " and ",
               dir_n_files_path)
@@ -359,7 +359,7 @@ def test_sync_blob_download_with_wildcards():
     # sync remote to local
     # 10 files will be downloaded
     result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("output-json",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json",
                                                                               "true").execute_azcopy_copy_command_get_output()
     # parse the result to get the last job progress summary
     result = util.parseAzcopyOutput(result)
