@@ -174,7 +174,7 @@ def parse_config_file_set_env():
     os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
 
     # set the account key for blob fs service operation
-    os.environ['ACCOUNT_KEy'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
 
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
@@ -243,11 +243,11 @@ def cleanup():
 def main():
     init()
     execute_bfs_user_scenario()
-    # execute_sync_user_scenario()
-    # execute_user_scenario_wildcards_op()
-    # execute_user_scenario_azcopy_op()
-    # execute_user_scenario_blob_1()
-    # execute_user_scenario_2()
+    execute_sync_user_scenario()
+    execute_user_scenario_wildcards_op()
+    execute_user_scenario_azcopy_op()
+    execute_user_scenario_blob_1()
+    execute_user_scenario_2()
     # execute_user_scenario_file_1()
     # temp_adhoc_scenario()
     cleanup()
