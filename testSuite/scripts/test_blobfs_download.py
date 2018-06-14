@@ -12,7 +12,7 @@ def test_blobfs_download_1Kb_file():
     file_path = util.create_test_file(filename, 1024)
     # upload the file using Azcopy
     result = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("Logging", "Info").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_1Kb_file failed uploading the 1kb file ", filename, " to the filesystem")
         return
@@ -31,7 +31,7 @@ def test_blobfs_download_1Kb_file():
 
     # download the file using Azcopy
     result = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "Info").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_1Kb_file failed while downloading the 1kb file")
         return
@@ -48,7 +48,7 @@ def test_blobfs_download_64MB_file():
     file_path = util.create_test_file(filename, 64*1024*1024)
     # Upload the file using Azcopy
     result = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("Logging", "Info").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_64MB_file failed uploading the 64MB file ", filename, " to the filesystem")
         return
@@ -68,7 +68,7 @@ def test_blobfs_download_64MB_file():
 
     # download the file using azcopy
     result = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
-        add_flags("Logging", "Info").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_64MB_file failed downloading the 64MB file ", filename)
         return
@@ -87,7 +87,7 @@ def test_blobfs_download_100_1Kb_file():
 
     # Upload the directory with 100 files inside it
     result = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("Logging", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_100_1Kb_file failed uploading the dir ", dir_name, " to the filesystem")
         return
@@ -109,7 +109,7 @@ def test_blobfs_download_100_1Kb_file():
 
     # download the directory
     result = util.Command("copy").add_arguments(dirUrl).add_arguments(util.test_directory_path).\
-        add_flags("Logging", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_100_1Kb_file failed while downloading the directory")
         return
@@ -129,7 +129,7 @@ def test_blobfs_download_2000_1Kb_file():
 
     # Upload the directory with 2000 files inside it
     result = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("Logging", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
+        add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_upload_2000_1Kb_file failed uploading the dir ", dir_name, " to the filesystem")
         return

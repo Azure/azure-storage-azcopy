@@ -44,12 +44,11 @@ def execute_user_scenario_wildcards_op():
 
 
 def execute_bfs_user_scenario():
-    # test_blobfs_upload_1Kb_file()
-    # #test_blobfs_upload_64MB_file()
-    # test_blobfs_upload_100_1Kb_file()
-    # test_blobfs_upload_2000_1Kb_file()
+    test_blobfs_upload_1Kb_file()
+    test_blobfs_upload_64MB_file()
+    test_blobfs_upload_100_1Kb_file()
     test_blobfs_download_1Kb_file()
-    #test_blobfs_download_64MB_file()
+    test_blobfs_download_64MB_file()
     test_blobfs_download_100_1Kb_file()
 
 def execute_sync_user_scenario():
