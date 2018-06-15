@@ -41,6 +41,7 @@ type IJobMgr interface {
 	ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone() uint32
+	Context() context.Context
 	Cancel()
 	//Close()
 	common.ILoggerCloser
@@ -100,11 +101,14 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
+	jpm.planMMF = jpm.filename.Map()
 	if scheduleTransfers {
-		jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
-	} else {
-		// If the transfer not scheduled, then Map the part file.
-		jpm.planMMF = jpm.filename.Map()
+		// If the schedule transfer is set to true
+		// Instead of the scheduling the Transfer for given JobPart
+		// JobPart is put into the partChannel
+		// from where it is picked up and scheduled
+		//jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		JobsAdmin.QueueJobParts(jpm)
 	}
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
@@ -152,7 +156,7 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	}
 	return partsDone
 }
-
+func (jm *jobMgr) Context() context.Context					{ return jm.ctx}
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }

@@ -183,7 +183,8 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
 	jpm.atomicTransfersDone = 0      // Reset the # of transfers done back to 0
-	jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
+	// partplan file is opened and mapped when job part is added
+	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
 
 	// *** Open the job part: process any job part plan-setting used by all transfers ***

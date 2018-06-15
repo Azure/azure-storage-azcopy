@@ -81,6 +81,8 @@ var JobsAdmin interface {
 
 	ResurrectJobParts()
 
+	QueueJobParts(jpm IJobPartMgr)
+
 	// AppPathFolder returns the Azcopy application path folder.
 	// JobPartPlanFile will be created inside this folder.
 	AppPathFolder() string
@@ -98,6 +100,14 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	}
 
 	const channelSize = 100000
+	// partsCh is the channel in which all JobParts are put
+	// for scheduling transfers
+	// When the neb JobPart order arrives
+	// transfer engine creates the JobPartPlan file and
+	// Put the JobPartMgr in partchannel
+	// from which each part is picked up one by one
+	// and transfers are scheduled
+	partsCh := make(chan IJobPartMgr, 300)
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
@@ -112,10 +122,12 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
 		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
+			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
 			lowTransferCh:    lowTransferCh,
 		},
 		xferChannels: XferChannels{
+			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
@@ -127,9 +139,40 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, defaultServiceApiVersion)
 
 	JobsAdmin = ja
+
+	// One routine constantly monitors the partsChannel
+	// It takes the JobPartManager from the Channel
+	// schedule transfer of that JobPart
+	go ja.ScheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process transfers/chunks
 	for cc := 0; cc < concurrentConnections; cc++ {
 		go ja.transferAndChunkProcessor(cc)
+	}
+}
+
+// QueueJobParts puts the given JobPartManager into the partChannel
+// from where this JobPartMgr will be picked by a routine and its
+// transfer will be scheduled
+func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
+	ja.coordinatorChannels.partsChannel <-jpm
+}
+
+// ScheduleJobParts takes the JobParts from parts Channel
+// and schedule transfer of the specific JobPart
+func (ja *jobsAdmin) ScheduleJobParts() {
+	for {
+		jobPart := <- ja.xferChannels.partsChannel
+		// If the job manager is not found for the JobId of JobPart
+		// taken from partsChannel
+		// there is an error in our code
+		// this not should not happen since JobMgr is initialized before any
+		// job part is added
+		jobId := jobPart.Plan().JobID
+		jm, found := ja.JobMgr(jobId)
+		if !found {
+			panic(fmt.Errorf("no job manager found for JobId %s", jobId.String()))
+		}
+		jobPart.ScheduleTransfers(jm.Context(), make(map[string]int), make(map[string]int))
 	}
 }
 
@@ -203,11 +246,13 @@ type jobsAdmin struct {
 }
 
 type CoordinatorChannels struct {
+	partsChannel 	chan <- IJobPartMgr // Write Only
 	normalTransferCh chan<- IJobPartTransferMgr // Write-only
 	lowTransferCh    chan<- IJobPartTransferMgr // Write-only
 }
 
 type XferChannels struct {
+	partsChannel <- chan IJobPartMgr // Read only
 	normalTransferCh <-chan IJobPartTransferMgr // Read-only
 	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
 	normalChunckCh   chan chunkFunc             // Read-write
