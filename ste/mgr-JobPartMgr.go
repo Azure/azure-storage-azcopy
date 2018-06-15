@@ -80,34 +80,6 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
 }
 
-// NewPipeline creates a Pipeline using the specified credentials and options.
-func NewPipeline1(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
-	}
-	c := azbfs.NewSharedKeyCredential(name, key)
-
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
-		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewXferRetryPolicyFactory(r),
-	}
-
-	f = append(f, c)
-
-	f = append(f,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
-		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
-}
-
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
 // TODO: The shared key credentials authentication might be removed later in azcopy
@@ -336,7 +308,9 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 			jpm.pipeline = NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 				Log:       jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
+				Telemetry: azblob.TelemetryOptions{
+					Value: common.UserAgent,
+				},
 			},
 				XferRetryOptions{
 					Policy:        0,
@@ -351,7 +325,9 @@ func (jpm *jobPartMgr) createPipeline() {
 			jpm.pipeline = NewBlobFSPipeline(
 				azbfs.PipelineOptions{
 					Log:       jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{Value: "azcopy-V2"},
+					Telemetry: azbfs.TelemetryOptions{
+						Value: common.UserAgent,
+					},
 				},
 				XferRetryOptions{
 					Policy:        0,
@@ -369,7 +345,9 @@ func (jpm *jobPartMgr) createPipeline() {
 				azfile.NewAnonymousCredential(),
 				azfile.PipelineOptions{
 					Log:       jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azfile.TelemetryOptions{Value: "azcopy-V2"},
+					Telemetry: azfile.TelemetryOptions{
+						Value: common.UserAgent,
+					},
 				},
 				azfile.RetryOptions{
 					Policy:        azfile.RetryPolicyExponential,

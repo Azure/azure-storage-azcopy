@@ -40,6 +40,9 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
+		Telemetry: azbfs.TelemetryOptions{
+			Value: common.UserAgent,
+		},
 	})
 
 	// attempt to parse the source url

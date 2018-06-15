@@ -255,6 +255,9 @@ func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 			RetryDelay:    downloadRetryDelay,
 			MaxRetryDelay: downloadMaxRetryDelay,
 		},
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
 	})
 
 	// step 2: parse source url
@@ -297,6 +300,9 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 			TryTimeout:    uploadTryTimeout,
 			RetryDelay:    uploadRetryDelay,
 			MaxRetryDelay: uploadMaxRetryDelay,
+		},
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
 		},
 	})
 

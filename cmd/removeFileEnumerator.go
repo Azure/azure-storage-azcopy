@@ -37,6 +37,9 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
+			Telemetry: azfile.TelemetryOptions{
+				Value: common.UserAgent,
+			},
 		})
 	ctx := context.TODO()                                                    // Ensure correct context is used
 	cookedSourceURLString := util.replaceBackSlashWithSlash(sourceURLString) // Replace back slash with slash, otherwise url.Parse would encode the back slash.
