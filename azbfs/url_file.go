@@ -96,6 +96,9 @@ func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
 		o,
 		func(ctx context.Context, info HTTPGetterInfo) (*http.Response, error) {
 			resp, err := dr.f.Download(ctx, info.Offset, info.Count)
+			if resp == nil {
+				return nil, err
+			}
 			return resp.Response(), err
 		})
 }

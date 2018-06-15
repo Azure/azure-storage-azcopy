@@ -30,6 +30,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
 		})
 
 	// attempt to parse the source url
@@ -265,6 +268,9 @@ func (e *copyDownloadBlobEnumerator) enumerate1(sourceUrlString string, isRecurs
 				TryTimeout:    ste.UploadTryTimeout,
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
 			},
 		})
 

@@ -83,6 +83,9 @@ func HandleListContainerCommand(source string, jsonOutput bool) error {
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
 		})
 
 	// attempt to parse the source url
