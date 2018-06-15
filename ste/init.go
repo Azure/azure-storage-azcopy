@@ -443,6 +443,10 @@ func ListJobs() common.ListJobsResponse {
 	// Resurrect all the Jobs from the existing JobPart Plan files
 	JobsAdmin.ResurrectJobParts()
 	// building the ListJobsResponse for sending response back to front-end
+	jobIds := JobsAdmin.JobIDs()
+	if len(jobIds) == 0 {
+		return common.ListJobsResponse{ErrorMessage:"no Jobs exists in Azcopy history"}
+	}
 	return common.ListJobsResponse{ErrorMessage: "", JobIDs: JobsAdmin.JobIDs()}
 }
 

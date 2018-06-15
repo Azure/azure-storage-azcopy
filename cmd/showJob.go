@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 type ListReq struct {
@@ -31,72 +32,56 @@ type ListReq struct {
 	StatusOf common.TransferStatus
 }
 
-type ListResponse struct {
-	ErrorMsg string
-}
-
-type ListExistingJobResponse struct {
-}
-
-type ListProgressSummaryResponse struct {
-}
-
 func init() {
 	commandLineInput := common.ListRequest{}
 
-	// lsCmd represents the ls command
-	lsCmd := &cobra.Command{
-		Use:        "list",
-		Aliases:    []string{"ls"},
-		SuggestFor: []string{"lst", "lt", "ist"}, //TODO why does message appear twice on the console
-		Short:      "list(ls) lists the specifics of an existing job.",
-		Long: `list(ls) lists the specifics of an existing job. The most common cases are:
-  - lists all the existing jobs.
-  - lists all the part numbers of an existing jobs.
-  - lists all the transfers of an existing job.`,
+	// shJob represents the ls command
+	shJob := &cobra.Command{
+		Use:        "showJob",
+		Aliases:    []string{"showJob"},
+		SuggestFor: []string{"shwJob", "shJob", "showJb"},
+		Short:      "showJob shows the details for given JobID",
+		Long: `showJob shows the details of given JobID:
+		Parameter:
+		JobID - If only JobID is supplied with showJob, progress summmary of Job is returned
+		with-status - shows the lists of transfer in the Job with status equal to given transfer status`,
 		Args: func(cmd *cobra.Command, args []string) error {
-			// the list command does not require necessarily to have an argument
-			/*
-			* list -- lists all the existing jobs
-			* list jobId -- lists the progress summary of the job for given jobId
-			* list jobId --with-status -- lists all the transfers of an existing job which has the given status
-			 */
 
-			// if there is more than one argument passed, then it is taken as a jobId
-			if len(args) > 0 {
-				jobId, err := common.ParseJobID(args[0])
-				if err != nil {
-					fmt.Print("invalid job Id given ", args[0])
-					return nil
-				}
-				commandLineInput.JobID = jobId
+			// if there is any argument passed
+			// it is an error
+			if len(args) == 0 {
+				fmt.Println("showJob require atleast the JobID")
+				os.Exit(1)
 			}
-
+			// Parse the JobId
+			jobId, err := common.ParseJobID(args[0])
+			if err != nil {
+				fmt.Println("invalid jobId given ", args[0])
+				return nil
+			}
+			commandLineInput.JobID = jobId
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return HandleListCommand(commandLineInput)
+		Run: func(cmd *cobra.Command, args []string)  {
+			err := HandleShowCommand(commandLineInput)
+			if err != nil {
+				fmt.Println(err.Error())
+				os.Exit(1)
+			}
 		},
 	}
 
-	rootCmd.AddCommand(lsCmd)
-
-	// define the flags relevant to the ls command
+	rootCmd.AddCommand(shJob)
 
 	// filters
-	lsCmd.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "Filter: list transfers of job only with this status")
+	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "Filter: list transfers of job only with this status")
 }
 
 // handles the list command
-// dispatches the list order to theZiyi Wang storage engine
-func HandleListCommand(listRequest common.ListRequest) error {
+// dispatches the list order to the transfer engine
+func HandleShowCommand(listRequest common.ListRequest) error {
 	rpcCmd := common.ERpcCmd.None()
-	if listRequest.JobID.IsEmpty() {
-		resp := common.ListJobsResponse{}
-		rpcCmd = common.ERpcCmd.ListJobs()
-		Rpc(rpcCmd, listRequest, &resp)
-		PrintExistingJobIds(resp)
-	} else if listRequest.OfStatus == "" {
+	if listRequest.OfStatus == "" {
 		resp := common.ListJobSummaryResponse{}
 		rpcCmd = common.ERpcCmd.ListJobSummary()
 		Rpc(rpcCmd, &listRequest.JobID, &resp)
@@ -116,19 +101,6 @@ func HandleListCommand(listRequest common.ListRequest) error {
 		PrintJobTransfers(resp)
 	}
 	return nil
-}
-
-// PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(listJobResponse common.ListJobsResponse) {
-	if listJobResponse.ErrorMessage != "" {
-		fmt.Println(fmt.Sprintf("request failed with following error message %s", listJobResponse.ErrorMessage))
-		return
-	}
-
-	fmt.Println("Existing Jobs ")
-	for index := 0; index < len(listJobResponse.JobIDs); index++ {
-		fmt.Println(listJobResponse.JobIDs[index].String())
-	}
 }
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
@@ -156,6 +128,7 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 	fmt.Println("Total Number of Transfer Completed ", summary.TransfersCompleted)
 	fmt.Println("Total Number of Transfer Failed ", summary.TransfersFailed)
 	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
+	fmt.Println("Job Status ", summary.JobStatus)
 	//fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
 	for index := 0; index < len(summary.FailedTransfers); index++ {
 		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
