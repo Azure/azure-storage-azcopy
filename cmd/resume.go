@@ -97,9 +97,9 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(resumeCmd)
-	rootCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
+	resumeCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
 		"More than one file are separated by ';'")
-	rootCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
+	resumeCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
 		"More than one file are separated by ';'")
 }
 
