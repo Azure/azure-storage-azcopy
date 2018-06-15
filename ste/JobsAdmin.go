@@ -100,6 +100,11 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	}
 
 	const channelSize = 100000
+	// PartsChannelSize defines the number of JobParts which can be place into the
+	// parts channel. Any JobPart which comes from FE and partChannel is full,
+	// has to wait and enumeration of transfer gets blocked till then.
+	// TODO : PartsChannelSize Needs to be discussed and can change.
+	const PartsChannelSize = 400
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers
 	// When the neb JobPart order arrives
@@ -107,7 +112,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// Put the JobPartMgr in partchannel
 	// from which each part is picked up one by one
 	// and transfers are scheduled
-	partsCh := make(chan IJobPartMgr, 300)
+	partsCh := make(chan IJobPartMgr, PartsChannelSize)
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
