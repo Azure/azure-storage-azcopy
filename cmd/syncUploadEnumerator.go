@@ -383,6 +383,9 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 				RetryDelay:    time.Second * 1,
 				MaxRetryDelay: time.Second * 3,
 			},
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
 		})
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
