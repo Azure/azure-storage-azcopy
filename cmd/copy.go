@@ -434,6 +434,11 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		},
 	}
 
+	// print out the job id so that the user can note it down
+	if !cca.outputJson {
+		fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+	}
+
 	// wait group to monitor the go routines fetching the job progress summary
 	var wg sync.WaitGroup
 	// lastPartNumber determines the last part number order send for the Job.
@@ -482,9 +487,6 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
-		if !cca.outputJson {
-			fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-		}
 		wg.Add(1)
 		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
 	}

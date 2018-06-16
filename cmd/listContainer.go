@@ -39,7 +39,7 @@ func init() {
 	// listContainerCmd represents the list container command
 	// listContainer list the blobs inside the container or virtual directory inside the container
 	listContainerCmd := &cobra.Command{
-		Use:        "listcontainer",
+		Use:        "listContainer",
 		Aliases:    []string{"lsc"},
 		SuggestFor: []string{"lstcontainer", "listcntainer", "licontaier"},
 		Short:      "resume resumes the existing job for given JobId.",

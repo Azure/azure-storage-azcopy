@@ -503,15 +503,29 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		}
 		fmt.Println(string(jsonOutput))
 	} else {
-		fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
+		// compute the throughput
 		bytesInMb := float64(float64(summary.BytesOverWire-*bytesTransferredInLastInterval) / float64(1024*1024))
 		timeElapsed := time.Since(*startTime).Seconds()
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-		message := fmt.Sprintf("%v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
-			summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
+
+		// determine whether we are still scanning
+		scanning := "(scanning...)"
+		if summary.CompleteJobOrdered {
+			scanning = ""
+		}
+
+		// print out a one-liner as status update
+		message := fmt.Sprintf(
+			"%d complete, %d failed, %d pending, %d total%s, throughput: %v MB/s",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers,
+			scanning,
+			ste.ToFixed(throughPut, 4),
+		)
 		fmt.Println(message)
 	}
 	return summary.JobStatus

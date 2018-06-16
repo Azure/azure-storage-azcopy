@@ -163,7 +163,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
-	fmt.Println("")
 	eof += writeValue(file, &jpph)
 
 	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
