@@ -435,9 +435,9 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	// print out the job id so that the user can note it down
-	if !cca.outputJson {
-		fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-	}
+	//if !cca.outputJson {
+	//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+	//}
 
 	// wait group to monitor the go routines fetching the job progress summary
 	var wg sync.WaitGroup
@@ -505,11 +505,13 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
-	// added empty line to provide gap after the user given
-	fmt.Println("")
-	fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
-	// added empty line to provide gap between the above line and the Summary
-	fmt.Println("")
+	if !cca.outputJson {
+		// added empty line to provide gap after the user given
+		fmt.Println("")
+		fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
+		// added empty line to provide gap between the above line and the Summary
+		fmt.Println("")
+	}
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {

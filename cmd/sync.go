@@ -108,11 +108,13 @@ func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 
 	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-	// added empty line to provide gap after the user given
-	fmt.Println("")
-	fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
-	// added empty line to provide gap between the above line and the Summary
-	fmt.Println("")
+	if !cca.outputJson {
+		// added empty line to provide gap after the user given
+		fmt.Println("")
+		fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
+		// added empty line to provide gap between the above line and the Summary
+		fmt.Println("")
+	}
 	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
