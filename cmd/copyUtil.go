@@ -491,7 +491,16 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 	return bInfo.Metadata["hdi_isfolder"] == "true"
 }
 
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.JobStatus {
+// PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
+func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse){
+	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
+	fmt.Println("Total Number Of Transfers ", summary.TotalTransfers)
+	fmt.Println("Number of Transfer Completed ", summary.TransfersCompleted)
+	fmt.Println("Number of Tranfer Failed ", summary.TransfersFailed)
+	fmt.Println("Final Job Status ", summary.JobStatus)
+}
+
+func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.ListJobSummaryResponse {
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
@@ -503,18 +512,19 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		}
 		fmt.Println(string(jsonOutput))
 	} else {
-		fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
 		bytesInMb := float64(float64(summary.BytesOverWire-*bytesTransferredInLastInterval) / float64(1024*1024))
 		timeElapsed := time.Since(*startTime).Seconds()
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-		message := fmt.Sprintf("%v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
-			summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
-		fmt.Println(message)
+		fmt.Printf("\r %v Complete, %v Failed, %v Pending, %v Total, (Scanning InProgress...%v). 2-sec throughput: %v MB/s",
+			summary.TransfersCompleted, summary.TransfersFailed, summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers, !summary.CompleteJobOrdered, ste.ToFixed(throughPut, 4))
+		//fmt.Printf("\r %v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
+		//	summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
+		//	summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
 	}
-	return summary.JobStatus
+	return summary
 }
 
 func startsWith(s string, t string) bool {

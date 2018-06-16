@@ -278,12 +278,15 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 	}
 
 	jpp0 := jpm.Plan()
-	switch jpp0.JobStatus() { // Current status
-	case common.EJobStatus.InProgress(): // Changing to Resumed is OK
-		break // Nothing to do
+	switch jpp0.JobStatus() {
+	// Cannot resume a Job which is in Cancelling state
+	// Cancelling is an intermediary state
+	case common.EJobStatus.Cancelling():
+		break
 
 	// Resume all the failed / In Progress Transfers.
-	case common.EJobStatus.Completed(),
+	case common.EJobStatus.InProgress(),
+		common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())

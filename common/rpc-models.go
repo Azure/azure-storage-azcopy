@@ -113,7 +113,6 @@ type ListJobSummaryResponse struct {
 	JobProgressPercentage       float64
 	BytesOverWire               uint64
 	FailedTransfers             []TransferDetail
-	ThroughputInBytesPerSeconds float64
 }
 
 type ListJobTransfersRequest struct {
