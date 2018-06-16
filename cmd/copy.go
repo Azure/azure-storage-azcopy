@@ -526,7 +526,10 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			// happy ending to the front end
 			if summary.JobStatus == common.EJobStatus.Completed() ||
 				summary.JobStatus == common.EJobStatus.Cancelled() {
-				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+					// print final JobProgress summary if output-json flag is set to false
+					if !cca.outputJson {
+						copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+					}
 				os.Exit(0)
 			}
 

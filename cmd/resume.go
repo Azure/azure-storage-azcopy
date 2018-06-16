@@ -126,7 +126,6 @@ func waitUntilJobCompletion(jobID common.JobID) {
 			}
 		default:
 			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
-
 			// happy ending to the front end
 			if summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled() {
 				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
