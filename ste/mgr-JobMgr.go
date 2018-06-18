@@ -102,6 +102,8 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
 	jpm.planMMF = jpm.filename.Map()
+	jm.jobPartMgrs.Set(partNum, jpm)
+	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
 	if scheduleTransfers {
 		// If the schedule transfer is set to true
 		// Instead of the scheduling the Transfer for given JobPart
@@ -110,8 +112,6 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 		//jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
 		JobsAdmin.QueueJobParts(jpm)
 	}
-	jm.jobPartMgrs.Set(partNum, jpm)
-	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
 	return jpm
 }
 

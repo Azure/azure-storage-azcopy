@@ -100,18 +100,18 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	}
 
 	const channelSize = 100000
-	// PartsChannelSize defines the number of JobParts which can be place into the
+	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
 	// has to wait and enumeration of transfer gets blocked till then.
 	// TODO : PartsChannelSize Needs to be discussed and can change.
 	const PartsChannelSize = 400
+
 	// partsCh is the channel in which all JobParts are put
-	// for scheduling transfers
-	// When the neb JobPart order arrives
+	// for scheduling transfers. When the next JobPart order arrives
 	// transfer engine creates the JobPartPlan file and
-	// Put the JobPartMgr in partchannel
+	// puts the JobPartMgr in partchannel
 	// from which each part is picked up one by one
-	// and transfers are scheduled
+	// and transfers of that JobPart are scheduled
 	partsCh := make(chan IJobPartMgr, PartsChannelSize)
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
@@ -145,10 +145,9 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 
 	JobsAdmin = ja
 
-	// One routine constantly monitors the partsChannel
-	// It takes the JobPartManager from the Channel
-	// schedule transfer of that JobPart
-	go ja.ScheduleJobParts()
+	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
+	// the Channel and schedules the transfers of that JobPart.
+	go ja.scheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process transfers/chunks
 	for cc := 0; cc < concurrentConnections; cc++ {
 		go ja.transferAndChunkProcessor(cc)
@@ -156,15 +155,14 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 }
 
 // QueueJobParts puts the given JobPartManager into the partChannel
-// from where this JobPartMgr will be picked by a routine and its
-// transfer will be scheduled
+// from where this JobPartMgr will be picked by a routine and
+// its transfers will be scheduled
 func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
 	ja.coordinatorChannels.partsChannel <-jpm
 }
 
-// ScheduleJobParts takes the JobParts from parts Channel
-// and schedule transfer of the specific JobPart
-func (ja *jobsAdmin) ScheduleJobParts() {
+// 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
+func (ja *jobsAdmin) scheduleJobParts() {
 	for {
 		jobPart := <- ja.xferChannels.partsChannel
 		// If the job manager is not found for the JobId of JobPart
@@ -177,7 +175,7 @@ func (ja *jobsAdmin) ScheduleJobParts() {
 		if !found {
 			panic(fmt.Errorf("no job manager found for JobId %s", jobId.String()))
 		}
-		jobPart.ScheduleTransfers(jm.Context(), make(map[string]int), make(map[string]int))
+		jobPart.ScheduleTransfers(jm.Context(), map[string]int{}, map[string]int{})
 	}
 }
 
