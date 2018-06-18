@@ -128,7 +128,10 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
-		srcMmf.Unmap()
+		// Unmap only if the source size is > 0
+		if info.SourceSize > 0 {
+			srcMmf.Unmap()
+		}
 		err = srcFile.Close()
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -149,7 +152,10 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
-		srcMmf.Unmap()
+		// Unmap only if the source size > 0
+		if info.SourceSize > 0 {
+			srcMmf.Unmap()
+		}
 		err = srcFile.Close()
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
