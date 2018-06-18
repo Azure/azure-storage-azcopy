@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	NumOfFilesPerDispatchJobPart = 10000
+	NumOfFilesPerDispatchJobPart = 10
 )
 
 type copyHandlerUtil struct{}
@@ -501,10 +501,15 @@ func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobS
 }
 
 func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.ListJobSummaryResponse {
+	var scanningString = ""
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
-
+	if !summary.CompleteJobOrdered {
+		scanningString = "(Scanning ...)"
+	}else{
+		scanningString = ""
+	}
 	if outputJson {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
@@ -517,9 +522,9 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-		fmt.Printf("\r %v Complete, %v Failed, %v Pending, %v Total, (Scanning InProgress...%v). 2-sec throughput: %v MB/s",
+		fmt.Printf("\r %v Complete, %v Failed, %v Pending, %v Total, %s 2-sec throughput: %v MB/s",
 			summary.TransfersCompleted, summary.TransfersFailed, summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-			summary.TotalTransfers, !summary.CompleteJobOrdered, ste.ToFixed(throughPut, 4))
+			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4))
 		//fmt.Printf("\r %v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
 		//	summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
 		//	summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
