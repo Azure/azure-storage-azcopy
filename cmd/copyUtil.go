@@ -493,6 +493,8 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 
 // PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
 func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse){
+	// added an empty line to provide gap between the last Job progress status and final job summary
+	fmt.Println("")
 	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
 	fmt.Println("Total Number Of Transfers ", summary.TotalTransfers)
 	fmt.Println("Number of Transfer Completed ", summary.TransfersCompleted)
