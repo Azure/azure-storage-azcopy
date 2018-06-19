@@ -817,3 +817,26 @@ def test_sync_local_to_blob_with_wildCards():
             "test_sync_local_to_blob_with_wildCards failed with difference in the number of failed and successful transfers")
         sys.exit(1)
     print("test_sync_local_to_blob_with_wildCards successfully passed")
+
+def test_0KB_blob_upload():
+    # Creating a single File Of size 0 KB
+    filename = "test0KB.txt"
+    file_path = util.create_test_file(filename, 0)
+
+    # executing the azcopy command to upload the 0KB file.
+    src = file_path
+    dest = util.get_resource_sas(filename)
+    result = util.Command("copy").add_arguments(src).add_arguments(dest). \
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    if not result:
+        print("test_0KB_blob_upload failed uploading 0KB file to the container")
+        sys.exit(1)
+
+    # Verifying the uploaded blob.
+    # the resource local path should be the first argument for the azcopy validator.
+    # the resource sas should be the second argument for azcopy validator.
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest).execute_azcopy_verify()
+    if not result:
+        print("test_0KB_blob_upload test failed")
+    else:
+        print("test_0KB_blob_upload successfully passed")

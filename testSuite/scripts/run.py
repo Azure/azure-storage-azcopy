@@ -12,6 +12,7 @@ import platform
 
 
 def execute_user_scenario_blob_1():
+    test_0KB_blob_upload()
     test_1kb_blob_upload()
     test_63mb_blob_upload()
     test_n_1kb_blob_upload(5)
