@@ -22,12 +22,14 @@ package common
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -71,6 +73,21 @@ func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string, p
 // LoginWithADEndpoint interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
+	if !gEncryptionUtil.IsEncryptionRobust() {
+		fmt.Println("In non-Windows platform, Azcopy relies on ACL to protect unencrypted access token. " +
+			"This could be unsafe if ACL is compromised, e.g. hard disk is plugged out and used in another computer. " +
+			"Please acknowledge the potential risk caused by ACL before continuing. " +
+			"Please enter No to stop, and Yes to continue. No is used by default. (No/Yes) ")
+		var input string
+		_, err := fmt.Scan(&input)
+		if err != nil {
+			return nil, fmt.Errorf("stop login as failed to get user's input, %s", err.Error())
+		}
+		if !strings.EqualFold(input, "yes") {
+			return nil, errors.New("stop login according to user's instruction")
+		}
+	}
+
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
 		return nil, err
@@ -166,6 +183,7 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error)
 
 // HasCachedToken returns if there is cached token in token manager.
 func (uotm *UserOAuthTokenManager) HasCachedToken() bool {
+	fmt.Println("uotm", "HasCachedToken", uotm.tokenFilePath())
 	if _, err := os.Stat(uotm.tokenFilePath()); err == nil {
 		return true
 	}
@@ -211,19 +229,29 @@ func (uotm *UserOAuthTokenManager) loadTokenInfo() (*OAuthTokenInfo, error) {
 
 // LoadToken restores a Token object from a file located at 'path'.
 func (uotm *UserOAuthTokenManager) loadTokenInfoInternal(path string) (*OAuthTokenInfo, error) {
-	file, err := os.Open(path)
+	b, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file (%s) while loading token: %v", path, err)
+		return nil, fmt.Errorf("failed to read token file (%s) while loading token: %v", path, err)
 	}
-	defer file.Close()
 
-	var token OAuthTokenInfo
+	// var token OAuthTokenInfo
 
-	dec := json.NewDecoder(file)
-	if err = dec.Decode(&token); err != nil {
-		return nil, fmt.Errorf("failed to decode contents of file (%s) into Token representation: %v", path, err)
+	// dec := json.NewDecoder(file)
+	// if err = dec.Decode(&token); err != nil {
+	// 	return nil, fmt.Errorf("failed to decode contents of file (%s) into Token representation: %v", path, err)
+	// }
+
+	decryptedB, err := gEncryptionUtil.Decrypt(b)
+	if err != nil {
+		return nil, fmt.Errorf("fail to decrypt bytes: %s", err.Error())
 	}
-	return &token, nil
+
+	token, err := JSONToTokenInfo(decryptedB)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal token, due to error: %s", err.Error())
+	}
+
+	return token, nil
 }
 
 func (uotm *UserOAuthTokenManager) saveTokenInfo(token OAuthTokenInfo) error {
@@ -251,9 +279,23 @@ func (uotm *UserOAuthTokenManager) saveTokenInfoInternal(path string, mode os.Fi
 	}
 	tempPath := newFile.Name()
 
-	if err := json.NewEncoder(newFile).Encode(token); err != nil {
+	json, err := token.ToJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal token, due to error: %s", err.Error())
+	}
+
+	b, err := gEncryptionUtil.Encrypt(json)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt token: %v", err)
+	}
+
+	if _, err = newFile.Write(b); err != nil {
 		return fmt.Errorf("failed to encode token to file (%s) while saving token: %v", tempPath, err)
 	}
+
+	// if err := json.NewEncoder(newFile).Encode(token); err != nil {
+	// 	return fmt.Errorf("failed to encode token to file (%s) while saving token: %v", tempPath, err)
+	// }
 	if err := newFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp file %s: %v", tempPath, err)
 	}
@@ -291,4 +333,18 @@ func (credInfo OAuthTokenInfo) IsEmpty() bool {
 	}
 
 	return false
+}
+
+// ToJSON converts OAuthTokenInfo to json format.
+func (credInfo OAuthTokenInfo) ToJSON() ([]byte, error) {
+	return json.Marshal(credInfo)
+}
+
+// JSONToTokenInfo converts bytes to OAuthTokenInfo
+func JSONToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
+	var OAuthTokenInfo OAuthTokenInfo
+	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
+		return nil, err
+	}
+	return &OAuthTokenInfo, nil
 }
