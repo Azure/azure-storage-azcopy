@@ -339,7 +339,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
 		listBlob, err := containerBlobUrl.ListBlobsFlatSegment(context.TODO(), marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix, MaxResults:MaxEntriesinListBlobResponse})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 		}
