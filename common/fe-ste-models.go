@@ -346,6 +346,7 @@ type CredentialType uint8
 func (CredentialType) Unknown() CredentialType    { return CredentialType(0) }
 func (CredentialType) OAuthToken() CredentialType { return CredentialType(1) }
 func (CredentialType) Anonymous() CredentialType  { return CredentialType(2) } // For SAS or public.
+func (CredentialType) SharedKey() CredentialType  { return CredentialType(3) }
 
 func (ct CredentialType) String() string {
 	return EnumHelper{}.StringInteger(ct, reflect.TypeOf(ct))

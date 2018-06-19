@@ -7,12 +7,11 @@ import (
 	"net/url"
 	"sync"
 
+	"net/http"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"net/http"
-	"os"
-	"time"
 )
 
 type copyDownloadBlobFSEnumerator common.CopyJobPartOrderRequest
@@ -20,27 +19,12 @@ type copyDownloadBlobFSEnumerator common.CopyJobPartOrderRequest
 func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
+	ctx := context.Background()
 
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+	p, err := createBlobFSPipeline(ctx, e.CredentialInfo)
+	if err != nil {
+		return err
 	}
-	// create the shared key credentials
-	c := azbfs.NewSharedKeyCredential(name, key)
-
-	// Create Pipeline to List the directory / fileSystem
-	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{
-		Retry: azbfs.RetryOptions{
-			Policy:        azbfs.RetryPolicyExponential,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-	})
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(sourceUrlString)
@@ -63,13 +47,13 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	// so add this bool flag which doesn't terminates the loop on first listing.
 	firstListing := true
 
-	dListResp, err := directoryUrl.ListDirectory(context.Background(), &continuationMarker, true)
+	dListResp, err := directoryUrl.ListDirectory(ctx, &continuationMarker, true)
 	if err != nil {
 		return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
 	}
 
 	// Loop will continue unless the continuationMarker received in the response is empty
-	for continuationMarker != "" || firstListing{
+	for continuationMarker != "" || firstListing {
 		firstListing = false
 		continuationMarker = dListResp.XMsContinuation()
 		// Get only the files inside the given path
@@ -98,10 +82,10 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 			}
 			// Queue the transfer
 			e.addTransfer(common.CopyTransfer{
-				Source:               directoryUrl.FileSystemUrl().NewDirectoryURL(*path.Name).String(),
-				Destination:          destination,
-				LastModifiedTime:     lModifiedTime,
-				SourceSize:           *path.ContentLength,
+				Source:           directoryUrl.FileSystemUrl().NewDirectoryURL(*path.Name).String(),
+				Destination:      destination,
+				LastModifiedTime: lModifiedTime,
+				SourceSize:       *path.ContentLength,
 			}, wg, waitUntilJobCompletion)
 		}
 		dListResp, err = directoryUrl.ListDirectory(context.Background(), &continuationMarker, true)

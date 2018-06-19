@@ -2,6 +2,7 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -112,17 +113,10 @@ func NewPipeline1(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipelin
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-// TODO: The shared key credentials authentication might be removed later in azcopy
-func NewBlobFSPipeline(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+	if c == nil {
+		panic("c can't be nil")
 	}
-	c := azbfs.NewSharedKeyCredential(name, key)
-
 	// Closest to API goes first; closest to the wire goes last
 	f := []pipeline.Factory{
 		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
@@ -329,7 +323,7 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 }
 
 // refreshToken is a delegate function for token refreshing.
-func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
+func (jpm *jobPartMgr) refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
@@ -375,7 +369,7 @@ func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthT
 	//waitDuration = time.Second * 1 //TODO: mock testing
 
 	_ = time.AfterFunc(waitDuration, func() {
-		jpm.refreshToken(ctx, common.OAuthTokenInfo{
+		jpm.refreshBlobToken(ctx, common.OAuthTokenInfo{
 			Token:                   newToken,
 			Tenant:                  tokenInfo.Tenant,
 			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
@@ -384,10 +378,13 @@ func (jpm *jobPartMgr) refreshToken(ctx context.Context, tokenInfo common.OAuthT
 }
 
 // createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
-func (jpm *jobPartMgr) createCredential(ctx context.Context) azblob.Credential {
+func (jpm *jobPartMgr) createBlobCredential(ctx context.Context) azblob.Credential {
 	credential := azblob.NewAnonymousCredential()
 	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
 	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
+
+	jpm.Log(pipeline.LogInfo, 
+		fmt.Sprintf("jpm credential type: %v, token info: %v", inMemoryJobState.credentialInfo.CredentialType, inMemoryTokenInfo))
 
 	if inMemoryJobState.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		if inMemoryTokenInfo.IsEmpty() {
@@ -398,7 +395,7 @@ func (jpm *jobPartMgr) createCredential(ctx context.Context) azblob.Credential {
 		tokenCredential := azblob.NewTokenCredential(inMemoryTokenInfo.AccessToken)
 
 		if inMemoryTokenInfo.IsExpired() || inMemoryTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
-			jpm.refreshToken(ctx, inMemoryTokenInfo, tokenCredential)
+			jpm.refreshBlobToken(ctx, inMemoryTokenInfo, tokenCredential)
 		} else {
 			waitDuration := inMemoryTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
 
@@ -408,7 +405,7 @@ func (jpm *jobPartMgr) createCredential(ctx context.Context) azblob.Credential {
 			//waitDuration = time.Nanosecond * 1 // TODO: mock testing
 
 			_ = time.AfterFunc(waitDuration, func() {
-				jpm.refreshToken(ctx, inMemoryTokenInfo, tokenCredential)
+				jpm.refreshBlobToken(ctx, inMemoryTokenInfo, tokenCredential)
 			})
 		}
 
@@ -418,11 +415,112 @@ func (jpm *jobPartMgr) createCredential(ctx context.Context) azblob.Credential {
 	return credential
 }
 
+// refreshToken is a delegate function for token refreshing.
+func (jpm *jobPartMgr) refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azbfs.TokenCredential) {
+	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(*oauthConfig, common.ApplicationID, common.Resource, tokenInfo.Token)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	err = spt.RefreshWithContext(ctx)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	newToken := spt.Token()
+	tokenCredential.SetToken(newToken.AccessToken)
+
+	if jpm.ShouldLog(pipeline.LogDebug) {
+		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
+	}
+
+	// Stop refresh if job is in cancelled, completed, paused status.
+	// note: There could be case when token should be refreshed before job is in progress.
+	jobStatus := jpm.Plan().JobStatus()
+	if jobStatus == common.EJobStatus.Cancelled() || jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Paused() {
+		jpm.Log(
+			pipeline.LogDebug,
+			fmt.Sprintf("JobID=%v, Part#=%d, stop token refresh, as job is in status=%v.", jpm.Plan().JobID, jpm.Plan().PartNum, jobStatus))
+		return
+	}
+
+	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+	if waitDuration < time.Second {
+		waitDuration = time.Nanosecond
+	}
+	//waitDuration = time.Second * 1 //TODO: mock testing
+
+	_ = time.AfterFunc(waitDuration, func() {
+		jpm.refreshBlobFSToken(ctx, common.OAuthTokenInfo{
+			Token:                   newToken,
+			Tenant:                  tokenInfo.Tenant,
+			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+		}, tokenCredential)
+	})
+}
+
+// createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
+func (jpm *jobPartMgr) createBlobFSCredential(ctx context.Context) azbfs.Credential {
+	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
+	inMemoryCredType := inMemoryJobState.credentialInfo.CredentialType
+	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
+
+	switch inMemoryCredType {
+	case common.ECredentialType.SharedKey(): // For testing
+		// Get the Account Name and Key variables from environment
+		name := os.Getenv("ACCOUNT_NAME")
+		key := os.Getenv("ACCOUNT_KEY")
+		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+		if name == "" || key == "" {
+			jpm.Panic(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline"))
+		}
+		return azbfs.NewSharedKeyCredential(name, key)
+	case common.ECredentialType.OAuthToken():
+		if inMemoryTokenInfo.IsEmpty() {
+			jpm.Panic(errors.New("invalid state, cannot get valid token info for OAuthToken credential"))
+		}
+
+		// Create TokenCredential and set access token into it.
+		tokenCredential := azbfs.NewTokenCredential(inMemoryTokenInfo.AccessToken)
+
+		if inMemoryTokenInfo.IsExpired() || inMemoryTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
+			jpm.refreshBlobFSToken(ctx, inMemoryTokenInfo, tokenCredential)
+		} else {
+			waitDuration := inMemoryTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+
+			if waitDuration < time.Second {
+				waitDuration = time.Nanosecond
+			}
+			//waitDuration = time.Nanosecond * 1 // TODO: mock testing
+
+			_ = time.AfterFunc(waitDuration, func() {
+				jpm.refreshBlobFSToken(ctx, inMemoryTokenInfo, tokenCredential)
+			})
+		}
+
+		return tokenCredential
+	default:
+		jpm.Panic(fmt.Errorf("invalid state, credential type %v is not supported", inMemoryCredType))
+
+		// Suppress compiler warning
+		return nil
+	}
+}
+
 func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 	if jpm.pipeline == nil {
 		fromTo := jpm.planMMF.Plan().FromTo
-
-		credential := jpm.createCredential(ctx)
 
 		switch fromTo {
 		case common.EFromTo.BlobTrash():
@@ -430,6 +528,7 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
+			credential := jpm.createBlobCredential(ctx)
 			jpm.pipeline = NewBlobPipeline(
 				credential,
 				azblob.PipelineOptions{
@@ -446,7 +545,9 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 		case common.EFromTo.BlobFSLocal():
 			fallthrough
 		case common.EFromTo.LocalBlobFS():
+			credential := jpm.createBlobFSCredential(ctx)
 			jpm.pipeline = NewBlobFSPipeline(
+				credential,
 				azbfs.PipelineOptions{
 					Log:       jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{Value: "azcopy-V2"},

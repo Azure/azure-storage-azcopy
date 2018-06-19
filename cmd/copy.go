@@ -219,10 +219,11 @@ type cookedCopyCmdArgs struct {
 
 func (cca cookedCopyCmdArgs) isRedirection() bool {
 	switch cca.fromTo {
-	case common.EFromTo.PipeFile():
-		fallthrough
-	case common.EFromTo.FilePipe():
-		fallthrough
+	// File's piping is not supported temporarily.
+	// case common.EFromTo.PipeFile():
+	// 	fallthrough
+	// case common.EFromTo.FilePipe():
+	// 	fallthrough
 	case common.EFromTo.BlobPipe():
 		fallthrough
 	case common.EFromTo.PipeBlob():
@@ -415,6 +416,18 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 	}
 }
 
+// validateCredentialType validate if given credential type is supported with specific copy scenario
+func (cca cookedCopyCmdArgs) validateCredentialType(credentialType common.CredentialType) error {
+	// oAuthToken is only supported by Blob/BlobFS.
+	if credentialType == common.ECredentialType.OAuthToken() &&
+		!(cca.fromTo == common.EFromTo.LocalBlob() || cca.fromTo == common.EFromTo.BlobLocal() ||
+			cca.fromTo == common.EFromTo.LocalBlobFS() || cca.fromTo == common.EFromTo.BlobFSLocal()) {
+		return fmt.Errorf("OAuthToken is not supported for FromTo: %v", cca.fromTo)
+	}
+
+	return nil
+}
+
 // getCredentialType checks user provided commandline switches, and gets the proper credential type
 // for current copy command.
 func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
@@ -436,7 +449,19 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
+		case common.EFromTo.LocalBlobFS():
+			fallthrough
+		case common.EFromTo.BlobFSLocal():
+			credentialType, err = getBlobFSCredentialType()
+			if err != nil {
+				return common.ECredentialType.Unknown(), err
+			}
+
 		}
+	}
+
+	if cca.validateCredentialType(credentialType) != err {
+		return common.ECredentialType.Unknown(), err
 	}
 
 	return credentialType, nil
@@ -477,7 +502,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	// fmt.Println("credentialType", jobPartOrder.CredentialInfo.CredentialType) // Comment out for debug purpose
+	fmt.Println("credentialType", jobPartOrder.CredentialInfo.CredentialType) // Comment out for debug purpose
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
