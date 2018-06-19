@@ -86,8 +86,12 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 	}
 
 	uotm := GetUserOAuthTokenManagerInstance()
+	hasCachedToken, err := uotm.HasCachedToken()
+	if err != nil {
+		return common.ECredentialType.Unknown(), nil
+	}
 
-	if !uotm.HasCachedToken() {
+	if !hasCachedToken {
 		return common.ECredentialType.Anonymous(), nil
 	} else if !isSource {
 		return common.ECredentialType.OAuthToken(), nil
@@ -135,7 +139,12 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 func getBlobFSCredentialType() (common.CredentialType, error) {
 	uotm := GetUserOAuthTokenManagerInstance()
 
-	if uotm.HasCachedToken() {
+	hasCachedToken, err := uotm.HasCachedToken()
+	if err != nil {
+		return common.ECredentialType.Unknown(), nil
+	}
+
+	if !hasCachedToken {
 		return common.ECredentialType.OAuthToken(), nil
 	} else {
 		return common.ECredentialType.SharedKey(), nil // For internal testing, SharedKey is not supported from commandline

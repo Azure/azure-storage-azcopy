@@ -24,12 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -53,6 +48,7 @@ const defaultTokenFileName = "AccessToken.json"
 type UserOAuthTokenManager struct {
 	oauthClient        *http.Client
 	userTokenCachePath string
+	credCache          *credCache
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
@@ -61,6 +57,7 @@ func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthToken
 	return &UserOAuthTokenManager{
 		oauthClient:        &http.Client{},
 		userTokenCachePath: userTokenCachePath,
+		credCache:          &credCache{},
 	}
 }
 
@@ -73,20 +70,20 @@ func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string, p
 // LoginWithADEndpoint interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
-	if !gEncryptionUtil.IsEncryptionRobust() {
-		fmt.Println("In non-Windows platform, Azcopy relies on ACL to protect unencrypted access token. " +
-			"This could be unsafe if ACL is compromised, e.g. hard disk is plugged out and used in another computer. " +
-			"Please acknowledge the potential risk caused by ACL before continuing. " +
-			"Please enter No to stop, and Yes to continue. No is used by default. (No/Yes) ")
-		var input string
-		_, err := fmt.Scan(&input)
-		if err != nil {
-			return nil, fmt.Errorf("stop login as failed to get user's input, %s", err.Error())
-		}
-		if !strings.EqualFold(input, "yes") {
-			return nil, errors.New("stop login according to user's instruction")
-		}
-	}
+	// if !gEncryptionUtil.IsEncryptionRobust() {
+	// 	fmt.Println("In non-Windows platform, Azcopy relies on ACL to protect unencrypted access token. " +
+	// 		"This could be unsafe if ACL is compromised, e.g. hard disk is plugged out and used in another computer. " +
+	// 		"Please acknowledge the potential risk caused by ACL before continuing. " +
+	// 		"Please enter No to stop, and Yes to continue. No is used by default. (No/Yes) ")
+	// 	var input string
+	// 	_, err := fmt.Scan(&input)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("stop login as failed to get user's input, %s", err.Error())
+	// 	}
+	// 	if !strings.EqualFold(input, "yes") {
+	// 		return nil, errors.New("stop login according to user's instruction")
+	// 	}
+	// }
 
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
@@ -118,7 +115,7 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
 	if persist {
-		err = uotm.saveTokenInfo(oAuthTokenInfo)
+		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %s", err.Error())
 		}
@@ -132,11 +129,15 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 // If refresh token is expired, the method will fail and return failure reason.
 // Fresh token is persisted if acces token or refresh token is changed.
 func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error) {
-	if !uotm.HasCachedToken() {
-		return nil, fmt.Errorf("No cached token found, please use login command first before getToken")
+	hasToken, err := uotm.credCache.HasCachedToken()
+	if err != nil {
+		return nil, fmt.Errorf("No cached token found, due to error: %s", err)
+	}
+	if !hasToken {
+		return nil, errors.New("No cached token found, please use login command first before getToken")
 	}
 
-	tokenInfo, err := uotm.loadTokenInfo()
+	tokenInfo, err := uotm.credCache.LoadToken()
 	if err != nil {
 		return nil, fmt.Errorf("Get cached token failed due to error: %v", err.Error())
 	}
@@ -172,7 +173,7 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error)
 			Tenant:                  tokenInfo.Tenant,
 			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
 		}
-		if err := uotm.saveTokenInfo(tokenInfoToPersist); err != nil {
+		if err := uotm.credCache.SaveToken(tokenInfoToPersist); err != nil {
 			return nil, err
 		}
 		return &tokenInfoToPersist, nil
@@ -182,140 +183,14 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error)
 }
 
 // HasCachedToken returns if there is cached token in token manager.
-func (uotm *UserOAuthTokenManager) HasCachedToken() bool {
-	fmt.Println("uotm", "HasCachedToken", uotm.tokenFilePath())
-	if _, err := os.Stat(uotm.tokenFilePath()); err == nil {
-		return true
-	}
-	return false
+func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
+	return uotm.credCache.HasCachedToken()
 }
 
 // RemoveCachedToken delete all the cached token.
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
-	tokenFilePath := uotm.tokenFilePath()
-
-	if _, err := os.Stat(tokenFilePath); err == nil {
-		// Cached token file existed
-		err = os.Remove(tokenFilePath)
-		if err != nil { // remove failed
-			return fmt.Errorf("failed to remove cached token file with path: %s, due to error: %v", tokenFilePath, err.Error())
-		}
-
-		// remove succeeded
-	} else {
-		if !os.IsNotExist(err) { // Failed to stat cached token file
-			return fmt.Errorf("fail to stat cached token file with path: %s, due to error: %v", tokenFilePath, err.Error())
-		}
-
-		//token doesn't exist
-		fmt.Println("no cached token found for current user.")
-	}
-
-	return nil
+	return uotm.credCache.RemoveCachedToken()
 }
-
-func (uotm *UserOAuthTokenManager) tokenFilePath() string {
-	return path.Join(uotm.userTokenCachePath, "/", defaultTokenFileName)
-}
-
-func (uotm *UserOAuthTokenManager) loadTokenInfo() (*OAuthTokenInfo, error) {
-	token, err := uotm.loadTokenInfoInternal(uotm.tokenFilePath())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load token from cache: %v", err)
-	}
-
-	return token, nil
-}
-
-// LoadToken restores a Token object from a file located at 'path'.
-func (uotm *UserOAuthTokenManager) loadTokenInfoInternal(path string) (*OAuthTokenInfo, error) {
-	b, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read token file (%s) while loading token: %v", path, err)
-	}
-
-	// var token OAuthTokenInfo
-
-	// dec := json.NewDecoder(file)
-	// if err = dec.Decode(&token); err != nil {
-	// 	return nil, fmt.Errorf("failed to decode contents of file (%s) into Token representation: %v", path, err)
-	// }
-
-	decryptedB, err := gEncryptionUtil.Decrypt(b)
-	if err != nil {
-		return nil, fmt.Errorf("fail to decrypt bytes: %s", err.Error())
-	}
-
-	token, err := JSONToTokenInfo(decryptedB)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token, due to error: %s", err.Error())
-	}
-
-	return token, nil
-}
-
-func (uotm *UserOAuthTokenManager) saveTokenInfo(token OAuthTokenInfo) error {
-	err := uotm.saveTokenInfoInternal(uotm.tokenFilePath(), 0600, token) // Save token with read/write permissions for the owner of the file.
-	if err != nil {
-		return fmt.Errorf("failed to save token to cache: %v", err)
-	}
-	return nil
-}
-
-// saveTokenInternal persists an oauth token at the given location on disk.
-// It moves the new file into place so it can safely be used to replace an existing file
-// that maybe accessed by multiple processes.
-// get from adal and optimzied to involve more token info.
-func (uotm *UserOAuthTokenManager) saveTokenInfoInternal(path string, mode os.FileMode, token OAuthTokenInfo) error {
-	dir := filepath.Dir(path)
-	err := os.MkdirAll(dir, os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create directory (%s) to store token in: %v", dir, err)
-	}
-
-	newFile, err := ioutil.TempFile(dir, "token")
-	if err != nil {
-		return fmt.Errorf("failed to create the temp file to write the token: %v", err)
-	}
-	tempPath := newFile.Name()
-
-	json, err := token.ToJSON()
-	if err != nil {
-		return fmt.Errorf("failed to marshal token, due to error: %s", err.Error())
-	}
-
-	b, err := gEncryptionUtil.Encrypt(json)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt token: %v", err)
-	}
-
-	if _, err = newFile.Write(b); err != nil {
-		return fmt.Errorf("failed to encode token to file (%s) while saving token: %v", tempPath, err)
-	}
-
-	// if err := json.NewEncoder(newFile).Encode(token); err != nil {
-	// 	return fmt.Errorf("failed to encode token to file (%s) while saving token: %v", tempPath, err)
-	// }
-	if err := newFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file %s: %v", tempPath, err)
-	}
-
-	// Atomic replace to avoid multi-writer file corruptions
-	if err := os.Rename(tempPath, path); err != nil {
-		return fmt.Errorf("failed to move temporary token to desired output location. src=%s dst=%s: %v", tempPath, path, err)
-	}
-	if err := os.Chmod(path, mode); err != nil {
-		return fmt.Errorf("failed to chmod the token file %s: %v", path, err)
-	}
-	return nil
-}
-
-// func (uotm *UserOAuthTokenManager) encrypt(token adal.Token) (string, error) {
-// 	panic("not implemented")
-// }
-// func (uotm *UserOAuthTokenManager) decrypt(string) (adal.Token, error) {
-// 	panic("not implemented")
-// }
 
 //====================================================================================
 
