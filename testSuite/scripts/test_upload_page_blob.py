@@ -3,21 +3,27 @@ import utility as util
 
 # test_page_blob_upload_1mb verifies the azcopy upload of 1mb file
 # as a page blob.
-def test_page_blob_upload_1mb():
+def test_page_blob_upload_1mb(use_oauth=False):
     # create the test gile.
     file_name = "test_page_blob_1mb.vhd"
     file_path = util.create_test_file(file_name, 1024 * 1024)
 
     # execute azcopy upload.
-    destination = util.get_resource_sas(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("Logging", "info"). \
+    if not use_oauth:
+        dest = util.get_resource_sas(file_name)
+        dest_validate = dest
+    else:
+        dest = util.get_resource_from_oauth_container(file_name)
+        dest_validate = util.get_resource_from_oauth_container_validate(file_name)
+
+    result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("Logging", "info"). \
         add_flags("block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
         return
 
     # execute validator.
-    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination).add_flags("blob-type",
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).add_flags("blob-type",
                                                                                                     "PageBlob").execute_azcopy_verify()
     if not result:
         print("test_page_blob_upload_512B test case failed")

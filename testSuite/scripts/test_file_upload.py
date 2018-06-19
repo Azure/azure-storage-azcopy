@@ -1,3 +1,6 @@
+import os
+import shutil
+import time
 import utility as util
 
 
@@ -224,7 +227,7 @@ def test_9mb_file_upload():
     file_path = util.create_test_file(filename, 9 * 1024 * 1024)
 
     # execute azcopy copy upload.
-    dest = util.get_resource_sas(filename)
+    dest = util.get_resource_sas_from_share(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(dest) \
         .add_flags("Logging", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
         execute_azcopy_copy_command()

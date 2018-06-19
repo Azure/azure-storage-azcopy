@@ -8,14 +8,20 @@ import utility as util
 
 
 # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
-def test_1kb_blob_upload():
+def test_1kb_blob_upload(use_oauth=False):
     # Creating a single File Of size 1 KB
     filename = "test1KB.txt"
     file_path = util.create_test_file(filename, 1024)
 
     # executing the azcopy command to upload the 1KB file.
     src = file_path
-    dest = util.get_resource_sas(filename)
+    if not use_oauth:
+        dest = util.get_resource_sas(filename)
+        dest_validate = dest
+    else:
+        dest = util.get_resource_from_oauth_container(filename)
+        dest_validate = util.get_resource_from_oauth_container_validate(filename)
+        
     result = util.Command("copy").add_arguments(src).add_arguments(dest). \
         add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
@@ -25,7 +31,7 @@ def test_1kb_blob_upload():
     # Verifying the uploaded blob.
     # the resource local path should be the first argument for the azcopy validator.
     # the resource sas should be the second argument for azcopy validator.
-    result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest).execute_azcopy_verify()
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
     if not result:
         print("test_1kb_file test failed")
     else:
@@ -57,21 +63,27 @@ def test_63mb_blob_upload():
 
 
 # test_n_1kb_blob_upload verifies the upload of n 1kb blob to the container.
-def test_n_1kb_blob_upload(number_of_files):
+def test_n_1kb_blob_upload(number_of_files, use_oauth=False):
     # create dir dir_n_files and 1 kb files inside the dir.
     dir_name = "dir_" + str(number_of_files) + "_files"
     dir_n_files_path = util.create_test_n_files(1024, number_of_files, dir_name)
 
+    if not use_oauth:
+        dest = util.test_container_url
+        dest_validate = util.get_resource_sas(dir_name)
+    else:
+        dest = util.test_oauth_container_url
+        dest_validate = util.get_resource_from_oauth_container_validate(dir_name)
+
     # execute azcopy command
-    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
+    result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(dest). \
         add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
     if not result:
         print("test_n_1kb_blob_upload failed while uploading ", number_of_files, " files to the container")
         return
 
     # execute the validator.
-    destination = util.get_resource_sas(dir_name)
-    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(destination). \
+    result = util.Command("testBlob").add_arguments(dir_n_files_path).add_arguments(dest_validate). \
         add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
         print("test_n_1kb_blob_upload test case failed")
@@ -111,14 +123,20 @@ def test_blob_metaData_content_encoding_content_type():
 
 
 # test_1G_blob_upload verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb
-def test_1GB_blob_upload():
+def test_1GB_blob_upload(use_oauth=False):
     # create 1Gb file
     filename = "test_1G_blob.txt"
     file_path = util.create_test_file(filename, 1 * 1024 * 1024 * 1024)
 
     # execute azcopy upload.
-    destination_sas = util.get_resource_sas(filename)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    if not use_oauth:
+        dest = util.get_resource_sas(filename)
+        dest_validate = dest
+    else:
+        dest = util.get_resource_from_oauth_container(filename)
+        dest_validate = util.get_resource_from_oauth_container_validate(filename)
+
+    result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("Logging", "info"). \
         add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1G file", filename, " to the container")
@@ -128,7 +146,8 @@ def test_1GB_blob_upload():
     # adding local file path as first argument.
     # adding file sas as local argument.
     # calling the testBlob validator to verify whether blob has been successfully uploaded or not.
-    result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).execute_azcopy_verify()
+    result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
+
     if not result:
         print("test_1GB_blob_upload test failed")
         return

@@ -1,4 +1,5 @@
 from test_blob_download import *
+from test_blob_download_oauth import *
 from test_upload_block_blob import *
 from test_upload_page_blob import *
 from test_file_download import *
@@ -30,83 +31,24 @@ def execute_user_scenario_blob_1():
     test_page_range_for_complete_sparse_file()
     test_page_blob_upload_partial_sparse_file()
 
-def execute_interactively_user_scenario_blob_1_oauth_session():
+def execute_interactively_copy_blob_with_oauth_session_1():
     #login to get session
     test_login_default_tenant()
+
     #execute copy commands
+    test_1kb_blob_upload(True)
+    test_n_1kb_blob_upload(5, True)
+    test_1GB_blob_upload(True)
+    test_download_1kb_blob_oauth()
+    test_recursive_download_blob_oauth()
+    test_page_blob_upload_1mb(True)
 
     #logout
+    test_logout()
 
 def execute_interactively_user_scenario_blob_1_oauth_per_commandline():
     #hello
     test_login_default_tenant()
-
-def execute_user_scenario_wildcards_op():
-    test_remove_files_with_Wildcard()
-
-
-def execute_sync_user_scenario():
-    test_sync_local_to_blob_without_wildCards()
-    test_sync_local_to_blob_with_wildCards()
-    test_sync_blob_download_with_wildcards()
-    test_sync_blob_download_without_wildcards()
-
-
-def execute_user_scenario_azcopy_op():
-    test_download_blob_exclude_flag()
-    test_download_blob_include_flag()
-    test_upload_block_blob_include_flag()
-    test_upload_block_blob_exclude_flag()
-    test_remove_virtual_directory()
-    test_set_block_blob_tier()
-    test_set_page_blob_tier()
-    test_force_flag_set_to_false_upload()
-    test_force_flag_set_to_false_download()
-
-
-def execute_user_scenario_file_1():
-    #########################
-    # download
-    #########################
-    # single file download scenario
-    test_upload_download_1kb_file_fullname()
-    # single file download with wildcard scenarios
-    # Using /*, which actually upload/download everything in a directory
-    test_upload_download_1kb_file_wildcard_all_files()
-    # Using /pattern*, which actually upload/download matched files in specific directory
-    test_upload_download_1kb_file_wildcard_several_files()
-    # directory download scenario
-    test_6_1kb_file_in_dir_upload_download_share()
-    test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
-    # modified time
-    test_download_perserve_last_modified_time()
-    # different sizes
-    test_file_download_63mb_in_4mb()
-    # directory transfer scenarios
-    # test_recursive_download_file()
-
-    #########################
-    # upload
-    #########################
-    # single file upload scenario
-    test_file_upload_1mb_fullname()
-    # wildcard scenario, already coverred in download scenario, as file would be uploaded first
-    # test_file_upload_1mb_wildcard()
-    # single sparse file and range
-    test_file_range_for_complete_sparse_file()
-    test_file_upload_partial_sparse_file()
-    # directory transfer scenarios, already covered during download
-    # test_6_1kb_file_in_dir_upload_to_share()
-    # test_3_1kb_file_in_dir_upload_to_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive()
-    # metadata and mime-type
-    test_metaData_content_encoding_content_type()
-    test_guess_mime_type()
-    # different sizes
-    test_9mb_file_upload()
-    test_1GB_file_upload()
-
 
 def execute_user_scenario_2():
     test_blob_download_with_special_characters()
@@ -143,15 +85,11 @@ def parse_config_file_set_env():
     # set the environment variable TEST_SUITE_EXECUTABLE_LOCATION
     os.environ['TEST_SUITE_EXECUTABLE_LOCATION'] = config[os_type]['TEST_SUITE_EXECUTABLE_LOCATION']
 
-    # CONTAINER_SAS_URL is the shared access signature of the container
-    # where test data will be uploaded to and downloaded from.
-    os.environ['CONTAINER_SAS_URL'] = config['CREDENTIALS']['CONTAINER_SAS_URL']
+    # container whose storage account has been configured properly for the interactive testing user.
+    os.environ['CONTAINER_OAUTH_URL'] = config['INTERACTIVE']['CONTAINER_OAUTH_URL']
 
-    # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
-    os.environ['SHARE_SAS_URL'] = config['CREDENTIALS']['SHARE_SAS_URL']
-
-    # container sas of the premium storage account.
-    # os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
+    # container which should be same to CONTAINER_OAUTH_URL, while with SAS for validation purpose.
+    os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['INTERACTIVE']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
 
 
 def init():
@@ -162,9 +100,6 @@ def init():
     if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
             os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
             os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
-            os.environ.get('CONTAINER_SAS_URL', '-1') == '-1' or \
-            os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1' or \
             os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1':
         parse_config_file_set_env()
 
@@ -180,22 +115,17 @@ def init():
     # test suite executable will be copied to test data folder.
     test_suite_exec_location = os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION')
 
-    # container_sas is the shared access signature of the container
-    # where test data will be uploaded to and downloaded from.
-    container_sas = os.environ.get('CONTAINER_SAS_URL')
+    # container_oauth is container for oauth testing.
+    container_oauth = os.environ.get('CONTAINER_OAUTH_URL')
 
-    # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
-    share_sas_url = os.environ.get('SHARE_SAS_URL')
-
-    # container sas of the premium storage account.
-    premium_container_sas = os.environ.get('PREMIUM_CONTAINER_SAS_URL')
+    # container_oauth_validate is the URL with SAS for oauth validation.
+    container_oauth_validate = os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL')
 
     # deleting the log files.
     cleanup()
 
-    if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas,
-                                      azcopy_exec_location, test_suite_exec_location):
-        print("failed to initialize the test suite with given user input")
+    if not util.initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, azcopy_exec_location, test_suite_exec_location):
+        print("failed to initialize the interactive test suite with given user input")
         return
     else:
         test_dir_path += "\\test_data"
@@ -212,12 +142,7 @@ def cleanup():
 
 def main():
     init()
-    #execute_sync_user_scenario()
-    #execute_user_scenario_wildcards_op()
-    #execute_user_scenario_azcopy_op()
-    #execute_user_scenario_blob_1()
-    #execute_user_scenario_2()
-    execute_user_scenario_file_1()
+    execute_interactively_copy_blob_with_oauth_session_1()
     #cleanup()
 
 
