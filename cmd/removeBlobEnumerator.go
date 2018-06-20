@@ -84,7 +84,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
-			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix, MaxResults:MaxEntriesinListBlobResponse})
+			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
 		}

@@ -43,7 +43,6 @@ import (
 
 const (
 	NumOfFilesPerDispatchJobPart = 10000
-	MaxEntriesinListBlobResponse = 5000
 )
 
 type copyHandlerUtil struct{}
