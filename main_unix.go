@@ -50,9 +50,7 @@ func ProcessOSSpecificInitialization() (uint64, error){
 		return 0, err
 	}
 	set := rlimit
-	// since the hard limit specifies a value one greater than the maximum file descriptor number
-	// set the current to 1 less than max
-	set.Cur = set.Max - 1
+	
 	// set the soft limit to above rlimit
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
 	if err != nil {
