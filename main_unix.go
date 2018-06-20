@@ -34,19 +34,21 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 	return cmd
 }
 
-// ChangeRLimits changes the filedescriptor limit for Azcopy
-// It get the hard limit for process file descriptor
-// and set the soft limit for process file descriptor to above hard limit
-func ChangeRLimits() {
+// ProcessOSSpecificInitialization changes the soft limit for file descriptor for process
+// and returns the file descriptor limit for process. If the function fails with some error
+// it returns the error.
+// Api gets the hard limit for process file descriptor
+// and sets the soft limit for process file descriptor to above hard limit
+func ProcessOSSpecificInitialization() (int, error){
 	var rlimit, zero syscall.Rlimit
 	// get the hard limit
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit)
 	if err != nil {
-		panic(fmt.Errorf("error getting the rlimit. Failed with error %s", err.Error()))
+		return 0, err
 	}
 	// If the hard limit is 0, then raise the exception
 	if zero == rlimit {
-		panic(fmt.Errorf("hard rlimit is 0 for the process"))
+		return 0, err
 	}
 	set := rlimit
 	// since the hard limit specifies a value one greater than the maximum file descriptor number
@@ -55,17 +57,14 @@ func ChangeRLimits() {
 	// set the soft limit to above rlimit
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
 	if err != nil {
-		panic(fmt.Errorf("Setrlimit: set failed: %#v %v", set, err.Error()))
+		return 0, err
 	}
+	return set.Max, nil
 }
 
 // GetAzCopyAppPath returns the path of Azcopy folder in local appdata.
 // Azcopy folder in local appdata contains all the files created by azcopy locally.
 func GetAzCopyAppPath() string {
-	// call the changeRLimit api.
-	// calling this api internally from GetAzcopyPath api since this api needs to be called
-	// only for linux platform
-	ChangeRLimits()
 	localAppData := os.Getenv("HOME")
 	azcopyAppDataFolder := path.Join(localAppData, "/.azcopy")
 	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {

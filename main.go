@@ -47,6 +47,11 @@ func mainWithExitCode() exitCode {
 		cmd.Execute()
 		return eexitCode.success()
 	}
+	// Perform os specific initialization
+	_, err := ProcessOSSpecificInitialization()
+	if err != nil {
+		panic(err)
+	}
 	azcopyAppPathFolder := GetAzCopyAppPath()
 	go ste.MainSTE(300, 2400, azcopyAppPathFolder)
 	cmd.Execute()
