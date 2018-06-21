@@ -545,13 +545,14 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 }
 
 // PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
-func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse){
+func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse, duration time.Duration){
 	// added an empty line to provide gap between the last Job progress status and final job summary
 	fmt.Println("")
 	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
+	fmt.Println("Elapsed Time (Minutes)", ste.ToFixed(duration.Minutes(), 4))
 	fmt.Println("Total Number Of Transfers ", summary.TotalTransfers)
-	fmt.Println("Number of Transfer Completed ", summary.TransfersCompleted)
-	fmt.Println("Number of Tranfer Failed ", summary.TransfersFailed)
+	fmt.Println("Number of Transfers Completed ", summary.TransfersCompleted)
+	fmt.Println("Number of Transfers Failed ", summary.TransfersFailed)
 	fmt.Println("Final Job Status ", summary.JobStatus)
 }
 

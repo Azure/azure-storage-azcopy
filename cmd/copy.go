@@ -503,11 +503,17 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
 
 	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-
 	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
-	startTime := time.Now()
+	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
+
+	// throughputIntervalTime holds the last time value when the progress summary was fetched
+	// The value of this variable is used to calculate the throughput
+	// It gets updated every time the progress summary is fetched
+	throughputIntervalTime := time.Now()
+	// jobStartTime holds the time when Job was started
+	// The value of this variable is used to calculate the elapsed time
+	jobStartTime := throughputIntervalTime
 	if !cca.outputJson {
 		// added empty line to provide gap after the user given
 		fmt.Println("")
@@ -525,13 +531,13 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 				os.Exit(1)
 			}
 		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
+			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, cca.outputJson)
 			// happy ending to the front end
 			if summary.JobStatus == common.EJobStatus.Completed() ||
 				summary.JobStatus == common.EJobStatus.Cancelled() {
 					// print final JobProgress summary if output-json flag is set to false
 					if !cca.outputJson {
-						copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+						copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
 					}
 				os.Exit(0)
 			}

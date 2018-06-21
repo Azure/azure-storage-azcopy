@@ -106,14 +106,20 @@ func init() {
 func waitUntilJobCompletion(jobID common.JobID) {
 
 	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	// waiting for signals from either CancelChannel or timeOut Channel.
+	// if no signal received, will fetch/display a job status update then sleep for a bit
 	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
 
 	// added an empty to provide a gap between the user given command and progress
 	fmt.Println("")
 
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	startTime := time.Now()
+	// throughputIntervalTime holds the last time value when the progress summary was fetched
+	// The value of this variable is used to calculate the throughput
+	// It gets updated every time the progress summary is fetched
+	throughputIntervalTime := time.Now()
+	// jobStartTime holds the time when Job was started
+	// The value of this variable is used to calculate the elapsed time
+	jobStartTime := throughputIntervalTime
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
@@ -125,10 +131,10 @@ func waitUntilJobCompletion(jobID common.JobID) {
 				os.Exit(1)
 			}
 		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
+			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, false)
 			// happy ending to the front end
 			if summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled() {
-				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
 				os.Exit(0)
 			}
 
