@@ -38,6 +38,8 @@ type syncCommandArguments struct {
 	blockSize    uint32
 	logVerbosity string
 	outputJson	bool
+	// commandString hold the user given command which is logged to the Job log file
+	commandString string
 }
 
 // validates and transform raw input into cooked input
@@ -75,6 +77,8 @@ type cookedSyncCmdArgs struct {
 	blockSize    uint32
 	logVerbosity common.LogLevel
 	outputJson   bool
+	// commandString hold the user given command which is logged to the Job log file
+	commandString string
 }
 
 func (cca cookedSyncCmdArgs) process() (err error) {
@@ -84,6 +88,7 @@ func (cca cookedSyncCmdArgs) process() (err error) {
 		FromTo:           cca.fromTo,
 		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
+		CommandString:cca.commandString,
 	}
 	// wait group to monitor the go routines fetching the job progress summary
 	var wg sync.WaitGroup
@@ -168,7 +173,7 @@ func init() {
 				fmt.Println("error parsing the input given by the user. Failed with error ", err.Error())
 				os.Exit(1)
 			}
-
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs(os.Args[1:])
 			err = cooked.process()
 			if err != nil {
 				fmt.Println("error performing the sync between source and destination. Failed with error ", err.Error())

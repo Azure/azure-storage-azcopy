@@ -65,6 +65,56 @@ func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	return false
 }
 
+func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) {
+	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
+	sigFound := strings.Contains(rawQuery, "?sig=")
+	if !sigFound {
+		sigFound = strings.Contains(rawQuery, "&sig=")
+		if !sigFound {
+			return sigFound, rawQuery // [?|&]sig= not found; return same rawQuery passed in (no memory allocation)
+		}
+	}
+	// [?|&]sig= found, redact its value
+	values, _ := url.ParseQuery(rawQuery)
+	for name := range values {
+		if strings.EqualFold(name, "sig") {
+			values[name] = []string{"REDACTED"}
+		}
+	}
+	return sigFound, values.Encode()
+}
+
+// redactSigQueryParam creates the user given commandString from the os Arguments
+// If any argument passed is an http Url and contains the signature, then the signature is redacted
+func (util copyHandlerUtil) ConstructCommandStringFromArgs(args []string) string{
+	if len(args) == 0 {
+		return ""
+	}
+	s := strings.Builder{}
+	for _, arg := range args {
+		// If the argument starts with https, it is either the remote source or remote destination
+		// If there exists a signature in the argument string it needs to be redacted
+		if startsWith(arg, "https") {
+			// parse the url
+			argUrl, err := url.Parse(arg)
+			// If there is an error parsing the url, then throw the error
+			if err != nil {
+				panic(err)
+			}
+			// Check for the signature query parameter
+			if sigFound, rawQuery := util.redactSigQueryParam(argUrl.RawQuery); sigFound {
+				argUrl.RawQuery = rawQuery
+			}
+			s.WriteString(argUrl.String())
+			s.WriteString(" ")
+		}else {
+			s.WriteString(arg)
+			s.WriteString(" ")
+		}
+	}
+	return s.String()
+}
+
 func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential {
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")

@@ -403,6 +403,10 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	// Set the force flag to true
 	e.CopyJobRequest.ForceWrite = true
 
+	// Copy the sync Command String to the CopyJobPartRequest and DeleteJobRequest
+	e.CopyJobRequest.CommandString = e.CommandString
+	e.DeleteJobRequest.CommandString = e.CommandString
+
 	err, isSourceAFile := e.compareLocalAgainstRemote(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
 	if err != nil {
 		return err

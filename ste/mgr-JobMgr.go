@@ -49,14 +49,20 @@ type IJobMgr interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel) IJobMgr {
+func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string) IJobMgr {
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), logger: common.NewJobLogger(jobID, level, appLogger) /*Other fields remain zero-value until this job is scheduled */}
-	jm.reset(appCtx)
+	jm.reset(appCtx, commandString)
 	return &jm
 }
 
-func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
+func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 	jm.logger.OpenLog()
+	// log the user given command to the job log file.
+	// since the log file is opened in case of resume, list and many other operations
+	// for which commandString passed is empty, the length check is added
+	if len(commandString) > 0 {
+		jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Job-Command %s", commandString))
+	}
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
@@ -117,7 +123,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
-	jm.reset(appCtx)
+	jm.reset(appCtx, "")
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})

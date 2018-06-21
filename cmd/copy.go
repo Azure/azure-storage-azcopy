@@ -204,6 +204,8 @@ type cookedCopyCmdArgs struct {
 	outputJson               bool
 	acl                      string
 	logVerbosity             common.LogLevel
+	// commandString hold the user given command which is logged to the Job log file
+	commandString			string
 }
 
 func (cca cookedCopyCmdArgs) isRedirection() bool {
@@ -432,6 +434,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 		},
+		CommandString:cca.commandString,
 	}
 
 	// print out the job id so that the user can note it down
@@ -609,6 +612,7 @@ Usage:
 			if raw.stdInEnable {
 				go ReadStandardInputToCancelJob(CancelChannel)
 			}
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs(os.Args[1:])
 			err = cooked.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform copy command due to error: %s", err)

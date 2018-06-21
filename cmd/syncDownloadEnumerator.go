@@ -619,6 +619,10 @@ func (e *syncDownloadEnumerator) enumerate(src string, isRecursiveOn bool, dst s
 	e.CopyJobRequest.LogLevel = e.LogLevel
 	e.DeleteJobRequest.LogLevel = e.LogLevel
 
+	// Copy the sync Command String to the CopyJobPartRequest and DeleteJobRequest
+	e.CopyJobRequest.CommandString = e.CommandString
+	e.DeleteJobRequest.CommandString = e.CommandString
+
 	err, isSourceABlob := e.compareLocalAgainstRemote(dst, isRecursiveOn, src, wg, p, waitUntilJobCompletion)
 	if err != nil {
 		return err

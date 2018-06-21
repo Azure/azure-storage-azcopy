@@ -70,7 +70,7 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel) IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
@@ -298,10 +298,10 @@ func (ja *jobsAdmin) AppPathFolder() string {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel) IJobMgr {
+	level common.LogLevel, commandString string) IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
-		func() IJobMgr { return newJobMgr(ja.logger, jobID, ja.appCtx, level) }) // Return existing or new IJobMgr to caller
+		func() IJobMgr { return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString) }) // Return existing or new IJobMgr to caller
 }
 
 func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
@@ -359,7 +359,7 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID) bool{
 			continue
 		}
 		mmf := planFile.Map()
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, false)
 	}
 	return true
@@ -388,7 +388,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		}
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, false)
 	}
 }

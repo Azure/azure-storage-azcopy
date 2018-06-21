@@ -48,6 +48,8 @@ type CopyJobPartOrderRequest struct {
 	Transfers      []CopyTransfer
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
+	// commandString hold the user given command which is logged to the Job log file
+	CommandString  string
 }
 
 type SyncJobPartOrderRequest struct {
@@ -62,6 +64,8 @@ type SyncJobPartOrderRequest struct {
 	// Since local files to delete are not sent as transfer to STE
 	// the count of the local files deletion is tracked using it.
 	FilesDeletedLocally int
+	// commandString hold the user given command which is logged to the Job log file
+	CommandString       string
 }
 
 type CopyJobPartOrderResponse struct {
