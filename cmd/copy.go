@@ -91,6 +91,7 @@ type rawCopyCmdArgs struct {
 	// oauth options
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
+	aadEndpoint                       string
 }
 
 // validates and transform raw input into cooked input
@@ -180,6 +181,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	cooked.useInteractiveOAuthUserCredential = raw.useInteractiveOAuthUserCredential
 	cooked.tenantID = raw.tenantID
+	cooked.aadEndpoint = raw.aadEndpoint
 
 	return cooked, nil
 }
@@ -215,6 +217,7 @@ type cookedCopyCmdArgs struct {
 	// oauth options
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
+	aadEndpoint                       string
 }
 
 func (cca cookedCopyCmdArgs) isRedirection() bool {
@@ -510,7 +513,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		var tokenInfo *common.OAuthTokenInfo
 		if cca.useInteractiveOAuthUserCredential { // Scenario-1: interactive login per copy command
-			tokenInfo, err = uotm.LoginWithDefaultADEndpoint(cca.tenantID, false)
+			tokenInfo, err = uotm.LoginWithADEndpoint(cca.tenantID, cca.aadEndpoint, false)
 			if err != nil {
 				return err
 			}
@@ -717,4 +720,5 @@ Usage:
 	// oauth options
 	cpCmd.PersistentFlags().BoolVar(&raw.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
 	cpCmd.PersistentFlags().StringVar(&raw.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
+	cpCmd.PersistentFlags().StringVar(&raw.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 }

@@ -53,18 +53,19 @@ func init() {
 
 	rootCmd.AddCommand(lgCmd)
 
-	// TODO: add cloud name, i.e. support other cloud, e.g.: fairfax, mooncake, blackforest and etc.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Filter: tenant id to use for OAuth device login")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth device interactive login")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 }
 
 type loginCmdArgs struct {
 	// OAuth login arguments
-	tenantID string
+	tenantID    string
+	aadEndpoint string
 }
 
 func (lca loginCmdArgs) process() error {
 	userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-	_, err := userOAuthTokenManager.LoginWithDefaultADEndpoint(lca.tenantID, true) // persist token = true
+	_, err := userOAuthTokenManager.LoginWithADEndpoint(lca.tenantID, lca.aadEndpoint, true) // persist token = true
 	if err != nil {
 		return fmt.Errorf(
 			"login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",

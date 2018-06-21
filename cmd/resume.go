@@ -70,6 +70,7 @@ func init() {
 	// oauth options
 	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 }
 
 type resumeCmdArgs struct {
@@ -80,6 +81,7 @@ type resumeCmdArgs struct {
 	// oauth options
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
+	aadEndpoint                       string
 }
 
 func waitUntilJobCompletion(jobID common.JobID) {
@@ -163,7 +165,7 @@ func (rca resumeCmdArgs) process() error {
 		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
 
 		userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-		oAuthTokenInfo, err := userOAuthTokenManager.LoginWithDefaultADEndpoint(rca.tenantID, false)
+		oAuthTokenInfo, err := userOAuthTokenManager.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
 		if err != nil {
 			return fmt.Errorf(
 				"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
