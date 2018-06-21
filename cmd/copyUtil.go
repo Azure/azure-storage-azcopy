@@ -27,6 +27,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -53,14 +54,26 @@ func (copyHandlerUtil) numOfStarInUrl(url string) int {
 	return strings.Count(url, "*")
 }
 
-// checks if a given url points to a container, as opposed to a blob or prefix match
-func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
-	// if the path contains more than one "/", then it means it points to a blob, and not a container
-	numOfSlashes := strings.Count(url.Path[1:], "/")
-
-	if numOfSlashes == 0 {
+// isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
+// http(s)://IP(:port)/storageaccount/share(||container||etc)/...
+func (util copyHandlerUtil) isIPEndpointStyle(url url.URL) bool {
+	if net.ParseIP(url.Host) != nil {
 		return true
-	} else if numOfSlashes == 1 && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
+	}
+
+	return false
+}
+
+// checks if a given url points to a container, as opposed to a blob or prefix match
+func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
+	// When it's IP endpoint style, if the path contains more than two "/", then it means it points to a blob, and not a container.
+	// When it's not IP endpoint style, if the path contains more than one "/", then it means it points to a blob, and not a container.
+	numOfSlashes := strings.Count(url.Path[1:], "/")
+	isIPEndpointStyle := util.isIPEndpointStyle(*url)
+
+	if (!isIPEndpointStyle && numOfSlashes == 0) || (isIPEndpointStyle && numOfSlashes == 1) {
+		return true
+	} else if ((!isIPEndpointStyle && numOfSlashes == 1) || (isIPEndpointStyle && numOfSlashes == 2)) && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
 		return true
 	}
 	return false

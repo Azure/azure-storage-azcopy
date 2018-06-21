@@ -60,13 +60,11 @@ func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
 	srcLocation := inferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
-		fmt.Printf("Can't infer source location of %q. Please specify the --FromTo switch", src)
 		return common.EFromTo.Unknown()
 	}
 
 	dstLocation := inferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
-		fmt.Printf("Can't infer destination location of %q. Please specify the --FromTo switch", dst)
 		return common.EFromTo.Unknown()
 	}
 
