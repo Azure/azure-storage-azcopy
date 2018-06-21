@@ -42,22 +42,18 @@ const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
-const defaultTokenFileName = "AccessToken.json"
-
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
-	oauthClient        *http.Client
-	userTokenCachePath string
-	credCache          *credCache
+	oauthClient *http.Client
+	credCache   *CredCache
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
 // TODO: userTokenCachePath can be optimized to cache manager
 func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthTokenManager {
 	return &UserOAuthTokenManager{
-		oauthClient:        &http.Client{},
-		userTokenCachePath: userTokenCachePath,
-		credCache:          &credCache{},
+		oauthClient: &http.Client{},
+		credCache:   NewCredCache(userTokenCachePath),
 	}
 }
 
@@ -114,6 +110,7 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 		Tenant:                  tenantID,
 		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
 	}
+
 	if persist {
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {

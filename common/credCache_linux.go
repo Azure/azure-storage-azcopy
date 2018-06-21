@@ -21,21 +21,60 @@
 package common
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"sync"
 	// todo: make a fork on this repo, and use the forked repo
 	"github.com/jsipprell/keyctl"
 )
 
-type credCache struct{}
+// CredCache manages credential caches.
+type CredCache struct {
+	state          string
+	cachedTokenKey string
+	lock           sync.Mutex
 
-const cachedTokenKey = "AzCopyOAuthTokenCache"
+	key       *keyctl.Key
+	isPermSet bool
+}
 
-// HasCachedToken returns if there is cached token in token manager for current executing user.
-func (c *credCache) HasCachedToken() (bool, error) {
+const cachedTokenKeySuffix = "AzCopyOAuthTokenCache"
+
+// NewCredCache creates a cred cache.
+func NewCredCache(state string) *CredCache {
+	c := &CredCache{
+		state:          state,
+		cachedTokenKey: strconv.Itoa(os.Geteuid()) + cachedTokenKeySuffix,
+	}
+
+	runtime.SetFinalizer(c, func(CredCache *CredCache) {
+		if CredCache.isPermSet == false && CredCache.key != nil {
+			// which indicates Permission is by default ProcessAll, try to recycle the key
+			unlinkErr := CredCache.key.Unlink()
+			if unlinkErr != nil {
+				panic(errors.New("Fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
+			}
+		}
+	})
+
+	return c
+}
+
+// HasCachedToken returns if there is cached token in session key ring for current login session.
+func (c *CredCache) HasCachedToken() (bool, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return false, err
 	}
-	key, err := keyring.Search(cachedTokenKey)
+	_, err = keyring.Search(c.cachedTokenKey)
+	// TODO: better logging what's cause the has cache token failure
+	// e.g. Error message: "required key not available"
 	if err != nil {
 		return false, err
 	} else {
@@ -43,56 +82,88 @@ func (c *credCache) HasCachedToken() (bool, error) {
 	}
 }
 
-// RemoveCachedToken delete the cached token.
-func (c *credCache) RemoveCachedToken() error {
+// RemoveCachedToken delete the cached token in session key ring.
+func (c *CredCache) RemoveCachedToken() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to get keyring during removing cached token, %v", err)
 	}
-	key, err := keyring.Search(cachedTokenKey)
+	key, err := keyring.Search(c.cachedTokenKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to find cached token, %v", err)
 	}
-	err := key.Unlink()
+	err = key.Unlink()
 	if err != nil {
-		return err
+		return fmt.Errof("fail to remove cached token, %v", err)
 	}
+
+	c.isPermSet = false
+	c.key = nil
 
 	return nil
 }
 
-func (c *credCache) SaveToken(token OAuthTokenInfo) error {
+// SaveToken saves an oauth token in session key ring.
+func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.isPermSet = false
+	c.key = nil
+
 	b, err := token.ToJSON()
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to marshal during save token, %v", err)
 	}
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to get keyring during save token, %v", err)
 	}
-	_, err := keyring.Add(cachedTokenKey, b)
+	k, err := keyring.Add(c.cachedTokenKey, b)
 	if err != nil {
-		return err
+		return fmt.Errorf("fail to save key, %v", err)
 	}
+	c.key = k
+
+	// Set permissions to user.
+	err = keyctl.SetPerm(k, keyctl.PermUserAll)
+	if err != nil {
+		// which indicates Permission is by default ProcessAll
+		unlinkErr := k.Unlink()
+		if unlinkErr != nil {
+			panic(errors.New("Fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
+		}
+		return fmt.Errorf("fail to set permission for key, %v", err)
+	}
+
+	c.isPermSet = true
+
 	return nil
 }
 
-func (credCache) LoadToken() (*OAuthTokenInfo, error) {
+// LoadToken gets an oauth token from session key ring.
+func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fail to get key, %v", err)
 	}
-	key, err := keyring.Search(cachedTokenKey)
+	key, err := keyring.Search(c.cachedTokenKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fail to get key, %v", err)
 	}
 	data, err := key.Get()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fail to get key, %v", err)
 	}
 	token, err := JSONToTokenInfo(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fail to unmarshal token during get key, %v", err)
 	}
 	return token, nil
 }
