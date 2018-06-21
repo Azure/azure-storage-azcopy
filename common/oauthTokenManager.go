@@ -30,10 +30,8 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 )
 
-// ApplicationID for azcopy-v2
-// TODO: azcopy-v2 need register a new 1st or 3rd party application, currently use powershell's application ID for testing
-const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa" // powershell's application ID "1950a258-227b-4e31-a9cf-717495945fc2"
-// AzCopyV2Test application ID "a45c21f4-7066-40b4-97d8-14f4313c3caa"
+// ApplicationID represents 3rd party ApplicationID for AzCopy.
+const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa"
 
 // Resource used in azure storage OAuth authentication
 const Resource = "https://storage.azure.com"
@@ -49,7 +47,6 @@ type UserOAuthTokenManager struct {
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
-// TODO: userTokenCachePath can be optimized to cache manager
 func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthTokenManager {
 	return &UserOAuthTokenManager{
 		oauthClient: &http.Client{},
@@ -66,21 +63,7 @@ func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string, p
 // LoginWithADEndpoint interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
-	// if !gEncryptionUtil.IsEncryptionRobust() {
-	// 	fmt.Println("In non-Windows platform, Azcopy relies on ACL to protect unencrypted access token. " +
-	// 		"This could be unsafe if ACL is compromised, e.g. hard disk is plugged out and used in another computer. " +
-	// 		"Please acknowledge the potential risk caused by ACL before continuing. " +
-	// 		"Please enter No to stop, and Yes to continue. No is used by default. (No/Yes) ")
-	// 	var input string
-	// 	_, err := fmt.Scan(&input)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("stop login as failed to get user's input, %s", err.Error())
-	// 	}
-	// 	if !strings.EqualFold(input, "yes") {
-	// 		return nil, errors.New("stop login according to user's instruction")
-	// 	}
-	// }
-
+	// Init OAuth config
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
 		return nil, err
