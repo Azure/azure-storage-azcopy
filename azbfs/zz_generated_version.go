@@ -5,7 +5,7 @@ package azbfs
 
 // UserAgent returns the UserAgent string to use when sending http.Requests.
 func UserAgent() string {
-	return "Azure-SDK-For-Go/0.0.0 azbfs/2018-03-28"
+	return "Azure-SDK-For-Go/0.0.0 azbfs/2018-06-17"
 }
 
 // Version returns the semantic version (see http://semver.org) of the client.

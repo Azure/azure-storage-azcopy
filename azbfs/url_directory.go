@@ -87,7 +87,7 @@ func (d DirectoryURL) Delete(ctx context.Context, continuationString *string, re
 // GetProperties returns the directory's metadata and system properties.
 func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertiesResponse, error) {
 	resp, err := d.directoryClient.GetPathProperties(ctx, d.filesystem, d.pathParameter, nil, nil, nil,
-		nil, nil, nil, nil)
+		nil, nil, nil, nil, nil)
 	return (*DirectoryGetPropertiesResponse)(resp), err
 }
 

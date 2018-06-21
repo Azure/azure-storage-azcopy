@@ -17,6 +17,7 @@ import (
 const (
 	// ServiceVersion specifies the version of the operations used in this package.
 	ServiceVersion = "2018-03-28"
+	//ServiceVersion = "2018-06-17" //TODO uncomment when service is ready
 )
 
 // managementClient is the base client for Azbfs.
@@ -116,38 +117,41 @@ func (client managementClient) createFilesystemResponder(resp pipeline.Response)
 // destination already exists and has a lease the lease is broken.  This operation supports conditional HTTP requests.
 // For more information, see [Specifying Conditional Headers for Blob Service
 // Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).
-// To fail if the destination already exists, use a conditional request with If-Nome-Match: "*".
+// To fail if the destination already exists, use a conditional request with If-None-Match: "*".
 //
 // filesystem is the filesystem identifier. pathParameter is the file or directory path. resource is required only for
 // Create File and Create Directory. The value must be "file" or "directory". continuation is optional.  When renaming
 // a directory, the number of paths that are renamed with each invocation is limited.  If the number of paths to be
 // renamed exceeds this limit, a continuation token is returned in this response header.  When a continuation token is
 // returned in the response, it must be specified in a subsequent invocation of the rename operation to continue
-// renaming the directory. cacheControl is optional.  The service stores this value and includes it in the
-// "Cache-Control" response header for "Read File" operations for "Read File" operations. contentEncoding is optional.
-// Specifies which content encodings have been applied to the file. This value is returned to the client when the "Read
-// File" operation is performed. contentLanguage is optional.  Specifies the natural language used by the intended
-// audience for the file. contentDisposition is optional.  The service stores this value and includes it in the
-// "Content-Disposition" response header for "Read File" operations. xMsCacheControl is optional.  The service stores
-// this value and includes it in the "Cache-Control" response header for "Read File" operations. xMsContentType is
-// optional.  The service stores this value and includes it in the "Content-Type" response header for "Read File"
-// operations. xMsContentEncoding is optional.  The service stores this value and includes it in the "Content-Encoding"
-// response header for "Read File" operations. xMsContentLanguage is optional.  The service stores this value and
-// includes it in the "Content-Language" response header for "Read File" operations. xMsContentDisposition is optional.
-// The service stores this value and includes it in the "Content-Disposition" response header for "Read File"
-// operations. xMsRenameSource is an optional file or directory to be renamed.  The value must have the following
-// format: "/{filesysystem}/{path}".  If "x-ms-properties" is specified, the properties will overwrite the existing
-// properties; otherwise, the existing properties will be preserved. xMsLeaseAction is optional for create operations.
-// The value must be "acquire" to acquire a lease on the path after creation.  The lease ID is returned in the response
-// headers and can be used with append and flush operations. xMsLeaseID is optional.  A lease ID for the path specified
-// in the URI.  The path to be overwritten must have an active lease and the lease ID must match. xMsProposedLeaseID is
-// optional for create operations.  Required when "x-ms-lease-action" is used.  A lease will be acquired using the
-// proposed ID when the resource is created. xMsSourceLeaseID is optional for rename operations.  A lease ID for the
-// source path.  The source path must have an active lease and the lease ID must match. xMsProperties is optional.
-// User-defined properties to be stored with the file or directory, in the format of a comma-separated list of name and
-// value pairs "n1=v1, n2=v2, ...", where each value is base64 encoded. ifMatch is optional.  An ETag value. Specify
-// this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be
-// specified in quotes. ifNoneMatch is optional.  An ETag value or the special wildcard ("*") value. Specify this
+// renaming the directory. mode is optional. Valid only when namespace is enabled. This parameter determines the
+// behavior of the rename operation. The value must be "legacy" or "posix", and the default value will be "posix".
+// cacheControl is optional.  The service stores this value and includes it in the "Cache-Control" response header for
+// "Read File" operations for "Read File" operations. contentEncoding is optional.  Specifies which content encodings
+// have been applied to the file. This value is returned to the client when the "Read File" operation is performed.
+// contentLanguage is optional.  Specifies the natural language used by the intended audience for the file.
+// contentDisposition is optional.  The service stores this value and includes it in the "Content-Disposition" response
+// header for "Read File" operations. xMsCacheControl is optional.  The service stores this value and includes it in
+// the "Cache-Control" response header for "Read File" operations. xMsContentType is optional.  The service stores this
+// value and includes it in the "Content-Type" response header for "Read File" operations. xMsContentEncoding is
+// optional.  The service stores this value and includes it in the "Content-Encoding" response header for "Read File"
+// operations. xMsContentLanguage is optional.  The service stores this value and includes it in the "Content-Language"
+// response header for "Read File" operations. xMsContentDisposition is optional.  The service stores this value and
+// includes it in the "Content-Disposition" response header for "Read File" operations. xMsRenameSource is an optional
+// file or directory to be renamed.  The value must have the following format: "/{filesysystem}/{path}".  If
+// "x-ms-properties" is specified, the properties will overwrite the existing properties; otherwise, the existing
+// properties will be preserved. xMsLeaseID is optional.  A lease ID for the path specified in the URI.  The path to be
+// overwritten must have an active lease and the lease ID must match. xMsProposedLeaseID is optional for create
+// operations.  Required when "x-ms-lease-action" is used.  A lease will be acquired using the proposed ID when the
+// resource is created. xMsSourceLeaseID is optional for rename operations.  A lease ID for the source path.  The
+// source path must have an active lease and the lease ID must match. xMsProperties is optional.  User-defined
+// properties to be stored with the file or directory, in the format of a comma-separated list of name and value pairs
+// "n1=v1, n2=v2, ...", where each value is base64 encoded. xMsPermissions is optional and only valid if Hierarchical
+// Namespace is enabled for the account. Sets POSIX access permissions for the file owner, the file owning group, and
+// others. Each class may be granted read, write, or execute permission.  The sticky bit is also supported.  Both
+// symbolic (rwxrw-rw-) and 4-digit octal notation (e.g. 0766) are supported. ifMatch is optional.  An ETag value.
+// Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must
+// be specified in quotes. ifNoneMatch is optional.  An ETag value or the special wildcard ("*") value. Specify this
 // header to perform the operation only if the resource's ETag does not match the value specified. The ETag must be
 // specified in quotes. ifModifiedSince is optional. A date and time value. Specify this header to perform the
 // operation only if the resource has been modified since the specified date and time. ifUnmodifiedSince is optional. A
@@ -158,14 +162,13 @@ func (client managementClient) createFilesystemResponder(resp pipeline.Response)
 // the rename operation only if the source's ETag does not match the value specified. The ETag must be specified in
 // quotes. xMsSourceIfModifiedSince is optional. A date and time value. Specify this header to perform the rename
 // operation only if the source has been modified since the specified date and time. xMsSourceIfUnmodifiedSince is
-// optional. A date and time value. Specify this header to perform the rename operation only if the soruce has not been
-// modified since the specified date and time. requestBody is optional.  The content of the file to be created.
-// requestBody will be closed upon successful return. Callers should ensure closure when receiving an
-// error.xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation. timeout is an
-// optional operation timeout value in seconds. The period begins when the request is received by the service. If the
-// timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
-// Universal Time (UTC) for the request.  This is required when using shared key authorization.
-func (client managementClient) CreatePath(ctx context.Context, filesystem string, pathParameter string, resource *string, continuation *string, cacheControl *string, contentEncoding *string, contentLanguage *string, contentDisposition *string, xMsCacheControl *string, xMsContentType *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsContentDisposition *string, xMsRenameSource *string, xMsLeaseAction *string, xMsLeaseID *string, xMsProposedLeaseID *string, xMsSourceLeaseID *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsSourceIfMatch *string, xMsSourceIfNoneMatch *string, xMsSourceIfModifiedSince *string, xMsSourceIfUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*CreatePathResponse, error) {
+// optional. A date and time value. Specify this header to perform the rename operation only if the source has not been
+// modified since the specified date and time. xMsClientRequestID is a UUID recorded in the analytics logs for
+// troubleshooting and correlation. timeout is an optional operation timeout value in seconds. The period begins when
+// the request is received by the service. If the timeout value elapses before the operation completes, the operation
+// fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is required when using
+// shared key authorization.
+func (client managementClient) CreatePath(ctx context.Context, filesystem string, pathParameter string, resource *string, continuation *string, mode *string, cacheControl *string, contentEncoding *string, contentLanguage *string, contentDisposition *string, xMsCacheControl *string, xMsContentType *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsContentDisposition *string, xMsRenameSource *string, xMsLeaseID *string, xMsProposedLeaseID *string, xMsSourceLeaseID *string, xMsProperties *string, xMsPermissions *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsSourceIfMatch *string, xMsSourceIfNoneMatch *string, xMsSourceIfModifiedSince *string, xMsSourceIfUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*CreatePathResponse, error) {
 	if err := validate([]validation{
 		{targetValue: xMsLeaseID,
 			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
@@ -187,7 +190,7 @@ func (client managementClient) CreatePath(ctx context.Context, filesystem string
 				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
 		return nil, err
 	}
-	req, err := client.createPathPreparer(filesystem, pathParameter, resource, continuation, cacheControl, contentEncoding, contentLanguage, contentDisposition, xMsCacheControl, xMsContentType, xMsContentEncoding, xMsContentLanguage, xMsContentDisposition, xMsRenameSource, xMsLeaseAction, xMsLeaseID, xMsProposedLeaseID, xMsSourceLeaseID, xMsProperties, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsSourceIfMatch, xMsSourceIfNoneMatch, xMsSourceIfModifiedSince, xMsSourceIfUnmodifiedSince, body, xMsClientRequestID, timeout, xMsDate)
+	req, err := client.createPathPreparer(filesystem, pathParameter, resource, continuation, mode, cacheControl, contentEncoding, contentLanguage, contentDisposition, xMsCacheControl, xMsContentType, xMsContentEncoding, xMsContentLanguage, xMsContentDisposition, xMsRenameSource, xMsLeaseID, xMsProposedLeaseID, xMsSourceLeaseID, xMsProperties, xMsPermissions, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsSourceIfMatch, xMsSourceIfNoneMatch, xMsSourceIfModifiedSince, xMsSourceIfUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +202,8 @@ func (client managementClient) CreatePath(ctx context.Context, filesystem string
 }
 
 // createPathPreparer prepares the CreatePath request.
-func (client managementClient) createPathPreparer(filesystem string, pathParameter string, resource *string, continuation *string, cacheControl *string, contentEncoding *string, contentLanguage *string, contentDisposition *string, xMsCacheControl *string, xMsContentType *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsContentDisposition *string, xMsRenameSource *string, xMsLeaseAction *string, xMsLeaseID *string, xMsProposedLeaseID *string, xMsSourceLeaseID *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsSourceIfMatch *string, xMsSourceIfNoneMatch *string, xMsSourceIfModifiedSince *string, xMsSourceIfUnmodifiedSince *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
-	req, err := pipeline.NewRequest("PUT", client.url, body)
+func (client managementClient) createPathPreparer(filesystem string, pathParameter string, resource *string, continuation *string, mode *string, cacheControl *string, contentEncoding *string, contentLanguage *string, contentDisposition *string, xMsCacheControl *string, xMsContentType *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsContentDisposition *string, xMsRenameSource *string, xMsLeaseID *string, xMsProposedLeaseID *string, xMsSourceLeaseID *string, xMsProperties *string, xMsPermissions *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsSourceIfMatch *string, xMsSourceIfNoneMatch *string, xMsSourceIfModifiedSince *string, xMsSourceIfUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
+	req, err := pipeline.NewRequest("PUT", client.url, nil)
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
@@ -210,6 +213,9 @@ func (client managementClient) createPathPreparer(filesystem string, pathParamet
 	}
 	if continuation != nil && len(*continuation) > 0 {
 		params.Set("continuation", *continuation)
+	}
+	if mode != nil && len(*mode) > 0 {
+		params.Set("mode", *mode)
 	}
 	if timeout != nil {
 		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
@@ -245,9 +251,6 @@ func (client managementClient) createPathPreparer(filesystem string, pathParamet
 	if xMsRenameSource != nil {
 		req.Header.Set("x-ms-rename-source", *xMsRenameSource)
 	}
-	if xMsLeaseAction != nil {
-		req.Header.Set("x-ms-lease-action", *xMsLeaseAction)
-	}
 	if xMsLeaseID != nil {
 		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
 	}
@@ -259,6 +262,9 @@ func (client managementClient) createPathPreparer(filesystem string, pathParamet
 	}
 	if xMsProperties != nil {
 		req.Header.Set("x-ms-properties", *xMsProperties)
+	}
+	if xMsPermissions != nil {
+		req.Header.Set("x-ms-permissions", *xMsPermissions)
 	}
 	if ifMatch != nil {
 		req.Header.Set("If-Match", *ifMatch)
@@ -548,23 +554,25 @@ func (client managementClient) getFilesystemPropertiesResponder(resp pipeline.Re
 	return &GetFilesystemPropertiesResponse{rawResponse: resp.Response()}, err
 }
 
-// GetPathProperties get the properties for a file or directory. This operation supports conditional HTTP requests.
-// For more information, see [Specifying Conditional Headers for Blob Service
+// GetPathProperties get the properties for a file or directory, and optionally include the access control list.  This
+// operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob
+// Service
 // Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).
 //
-// filesystem is the filesystem identifier. pathParameter is the file or directory path. ifMatch is optional.  An ETag
-// value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The
-// ETag must be specified in quotes. ifNoneMatch is optional.  An ETag value or the special wildcard ("*") value.
-// Specify this header to perform the operation only if the resource's ETag does not match the value specified. The
-// ETag must be specified in quotes. ifModifiedSince is optional. A date and time value. Specify this header to perform
-// the operation only if the resource has been modified since the specified date and time. ifUnmodifiedSince is
-// optional. A date and time value. Specify this header to perform the operation only if the resource has not been
-// modified since the specified date and time. xMsClientRequestID is a UUID recorded in the analytics logs for
-// troubleshooting and correlation. timeout is an optional operation timeout value in seconds. The period begins when
-// the request is received by the service. If the timeout value elapses before the operation completes, the operation
-// fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is required when using
-// shared key authorization.
-func (client managementClient) GetPathProperties(ctx context.Context, filesystem string, pathParameter string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*GetPathPropertiesResponse, error) {
+// filesystem is the filesystem identifier. pathParameter is the file or directory path. action is optional. If the
+// value is "getAccessControl" the access control list is returned in the response headers (Hierarchical Namespace must
+// be enabled for the account). ifMatch is optional.  An ETag value. Specify this header to perform the operation only
+// if the resource's ETag matches the value specified. The ETag must be specified in quotes. ifNoneMatch is optional.
+// An ETag value or the special wildcard ("*") value. Specify this header to perform the operation only if the
+// resource's ETag does not match the value specified. The ETag must be specified in quotes. ifModifiedSince is
+// optional. A date and time value. Specify this header to perform the operation only if the resource has been modified
+// since the specified date and time. ifUnmodifiedSince is optional. A date and time value. Specify this header to
+// perform the operation only if the resource has not been modified since the specified date and time.
+// xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation. timeout is an
+// optional operation timeout value in seconds. The period begins when the request is received by the service. If the
+// timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
+// Universal Time (UTC) for the request.  This is required when using shared key authorization.
+func (client managementClient) GetPathProperties(ctx context.Context, filesystem string, pathParameter string, action *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*GetPathPropertiesResponse, error) {
 	if err := validate([]validation{
 		{targetValue: filesystem,
 			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
@@ -577,7 +585,7 @@ func (client managementClient) GetPathProperties(ctx context.Context, filesystem
 				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
 		return nil, err
 	}
-	req, err := client.getPathPropertiesPreparer(filesystem, pathParameter, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
+	req, err := client.getPathPropertiesPreparer(filesystem, pathParameter, action, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
@@ -589,12 +597,15 @@ func (client managementClient) GetPathProperties(ctx context.Context, filesystem
 }
 
 // getPathPropertiesPreparer prepares the GetPathProperties request.
-func (client managementClient) getPathPropertiesPreparer(filesystem string, pathParameter string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
+func (client managementClient) getPathPropertiesPreparer(filesystem string, pathParameter string, action *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
 	req, err := pipeline.NewRequest("HEAD", client.url, nil)
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
 	params := req.URL.Query()
+	if action != nil && len(*action) > 0 {
+		params.Set("action", *action)
+	}
 	if timeout != nil {
 		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
 	}
@@ -639,7 +650,7 @@ func (client managementClient) getPathPropertiesResponder(resp pipeline.Response
 // xMsLeaseAction is there are five lease actions: "acquire", "break", "change", "renew", and "release". Use "acquire"
 // and specify the "x-ms-proposed-lease-id" and "x-ms-lease-duration" to acquire a new lease. Use "break" to break an
 // existing lease. When a lease is broken, the lease break period is allowed to elapse, during which time no lease
-// operation except break and release can be performed on the blob. When a lease is successfully broken, the response
+// operation except break and release can be performed on the file. When a lease is successfully broken, the response
 // indicates the interval in seconds until a new lease can be acquired. Use "change" and specify the current lease ID
 // in "x-ms-lease-id" and the new lease ID in "x-ms-proposed-lease-id" to change the lease ID of an active lease. Use
 // "renew" and specify the "x-ms-lease-id" to renew an existing lease. Use "release" and specify the "x-ms-lease-id" to
@@ -746,6 +757,98 @@ func (client managementClient) leasePathResponder(resp pipeline.Response) (pipel
 	io.Copy(ioutil.Discard, resp.Response().Body)
 	resp.Response().Body.Close()
 	return &LeasePathResponse{rawResponse: resp.Response()}, err
+}
+
+// ListFilesystems list filesystems and their properties in given account.
+//
+// resource is the value must be "account" for all account operations. prefix is filters results to filesystems within
+// the specified prefix. continuation is the number of filesystems returned with each invocation is limited. If the
+// number of filesystems to be returned exceeds this limit, a continuation token is returned in the response header
+// x-ms-continuation. When a continuation token is  returned in the response, it must be specified in a subsequent
+// invocation of the list operation to continue listing the filesystems. maxResults is an optional value that specifies
+// the maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000
+// items. xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation. timeout is
+// an optional operation timeout value in seconds. The period begins when the request is received by the service. If
+// the timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
+// Universal Time (UTC) for the request.  This is required when using shared key authorization.
+func (client managementClient) ListFilesystems(ctx context.Context, resource string, prefix *string, continuation *string, maxResults *int32, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*ListFilesystemSchema, error) {
+	if err := validate([]validation{
+		{targetValue: maxResults,
+			constraints: []constraint{{target: "maxResults", name: null, rule: false,
+				chain: []constraint{{target: "maxResults", name: inclusiveMinimum, rule: 1, chain: nil}}}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
+	req, err := client.listFilesystemsPreparer(resource, prefix, continuation, maxResults, xMsClientRequestID, timeout, xMsDate)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.listFilesystemsResponder}, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*ListFilesystemSchema), err
+}
+
+// listFilesystemsPreparer prepares the ListFilesystems request.
+func (client managementClient) listFilesystemsPreparer(resource string, prefix *string, continuation *string, maxResults *int32, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
+	req, err := pipeline.NewRequest("GET", client.url, nil)
+	if err != nil {
+		return req, pipeline.NewError(err, "failed to create request")
+	}
+	params := req.URL.Query()
+	params.Set("resource", resource)
+	if prefix != nil && len(*prefix) > 0 {
+		params.Set("prefix", *prefix)
+	}
+	if continuation != nil && len(*continuation) > 0 {
+		params.Set("continuation", *continuation)
+	}
+	if maxResults != nil {
+		params.Set("maxResults", strconv.FormatInt(int64(*maxResults), 10))
+	}
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
+	return req, nil
+}
+
+// listFilesystemsResponder handles the response to the ListFilesystems request.
+func (client managementClient) listFilesystemsResponder(resp pipeline.Response) (pipeline.Response, error) {
+	err := validateResponse(resp, http.StatusOK)
+	if resp == nil {
+		return nil, err
+	}
+	result := &ListFilesystemSchema{rawResponse: resp.Response()}
+	if err != nil {
+		return result, err
+	}
+	defer resp.Response().Body.Close()
+	b, err := ioutil.ReadAll(resp.Response().Body)
+	if err != nil {
+		return result, NewResponseError(err, resp.Response(), "failed to read response body")
+	}
+	if len(b) > 0 {
+		b = removeBOM(b)
+		err = json.Unmarshal(b, result)
+		if err != nil {
+			return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
+		}
+	}
+	return result, nil
 }
 
 // ListPaths list filesystem paths and their properties.
@@ -1014,16 +1117,19 @@ func (client managementClient) setFilesystemPropertiesResponder(resp pipeline.Re
 	return &SetFilesystemPropertiesResponse{rawResponse: resp.Response()}, err
 }
 
-// UpdatePath uploads data to be appended to a file, flushes (writes) previously uploaded data to a file, or sets
-// properties for a file or directory.  Data can only be appended to a file.  This operation supports conditional HTTP
-// requests.  For more information, see [Specifying Conditional Headers for Blob Service
+// UpdatePath uploads data to be appended to a file, flushes (writes) previously uploaded data to a file, sets
+// properties for a file or directory, or sets access control for a file or directory. Data can only be appended to a
+// file. This operation supports conditional HTTP requests. For more information, see [Specifying Conditional Headers
+// for Blob Service
 // Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).
 //
 // action is the action must be "append" to upload data to be appended to a file, "flush" to flush previously uploaded
-// data to a file, or "setProperties" to set the properties of a file or directory. contentLength is required for
-// "Append Data" and "Flush Data".  Must be 0 for "Flush Data".  Must be the length of the request content in bytes for
-// "Append Data". filesystem is the filesystem identifier. pathParameter is the file or directory path. position is
-// this parameter allows the caller to upload data in parallel and control the order in which it is appended to the
+// data to a file, "setProperties" to set the properties of a file or directory, or "setAccessControl" to set the
+// owner, group, permissions, or access control list for a file or directory.  Note that Hierarchical Namespace must be
+// enabled for the account in order to use access control.  Also note that the Access Control List (ACL) includes
+// permissions for the owner, owning group, and others, so the x-ms-permissions and x-ms-acl request headers are
+// mutually exclusive. filesystem is the filesystem identifier. pathParameter is the file or directory path. position
+// is this parameter allows the caller to upload data in parallel and control the order in which it is appended to the
 // file.  It is required when uploading data to be appended to the file and when flushing previously uploaded data to
 // the file.  The value must be the position where the data is to be appended.  Uploaded data is not immediately
 // flushed, or written, to the file.  To flush, the previously uploaded data must be contiguous, the position parameter
@@ -1032,39 +1138,60 @@ func (client managementClient) setFilesystemPropertiesResponder(resp pipeline.Re
 // uncommitted data is retained after the flush operation completes; otherwise, the uncommitted data is deleted after
 // the flush operation.  The default is false.  Data at offsets less than the specified position are written to the
 // file when flush succeeds, but this optional parameter allows data after the flush position to be retained for a
-// future flush operation. xMsLeaseAction is optional.  The lease action can be "renew" to renew an existing lease or
-// "release" to release a lease. xMsLeaseID is the lease ID must be specified if there is an active lease.
-// xMsCacheControl is optional and only valid for flush and set properties operations.  The service stores this value
-// and includes it in the "Cache-Control" response header for "Read File" operations. xMsContentType is optional and
-// only valid for flush and set properties operations.  The service stores this value and includes it in the
-// "Content-Type" response header for "Read File" operations. xMsContentDisposition is optional and only valid for
-// flush and set properties operations.  The service stores this value and includes it in the "Content-Disposition"
-// response header for "Read File" operations. xMsContentEncoding is optional and only valid for flush and set
-// properties operations.  The service stores this value and includes it in the "Content-Encoding" response header for
-// "Read File" operations. xMsContentLanguage is optional and only valid for flush and set properties operations.  The
-// service stores this value and includes it in the "Content-Language" response header for "Read File" operations.
-// xMsProperties is optional.  User-defined properties to be stored with the file or directory, in the format of a
-// comma-separated list of name and value pairs "n1=v1, n2=v2, ...", where each value is base64 encoded.  Valid only
-// for the "Set File Properties" and "Set Directory Properties" operations.  If the file or directory exists, any
+// future flush operation. contentLength is required for "Append Data" and "Flush Data".  Must be 0 for "Flush Data".
+// Must be the length of the request content in bytes for "Append Data". xMsLeaseAction is optional.  The lease action
+// can be "renew" to renew an existing lease or "release" to release a lease. xMsLeaseID is the lease ID must be
+// specified if there is an active lease. xMsCacheControl is optional and only valid for flush and set properties
+// operations.  The service stores this value and includes it in the "Cache-Control" response header for "Read File"
+// operations. xMsContentType is optional and only valid for flush and set properties operations.  The service stores
+// this value and includes it in the "Content-Type" response header for "Read File" operations. xMsContentDisposition
+// is optional and only valid for flush and set properties operations.  The service stores this value and includes it
+// in the "Content-Disposition" response header for "Read File" operations. xMsContentEncoding is optional and only
+// valid for flush and set properties operations.  The service stores this value and includes it in the
+// "Content-Encoding" response header for "Read File" operations. xMsContentLanguage is optional and only valid for
+// flush and set properties operations.  The service stores this value and includes it in the "Content-Language"
+// response header for "Read File" operations. xMsProperties is optional.  User-defined properties to be stored with
+// the file or directory, in the format of a comma-separated list of name and value pairs "n1=v1, n2=v2, ...", where
+// each value is base64 encoded.  Valid only for the setProperties operation.  If the file or directory exists, any
 // properties not included in the list will be removed.  All properties are removed if the header is omitted.  To merge
 // new and existing properties, first get all existing properties and the current E-Tag, then make a conditional
-// request with the E-Tag and include values for all properties. ifMatch is optional for Flush Data and Set Properties,
-// but invalid for Append Data.  An ETag value. Specify this header to perform the operation only if the resource's
-// ETag matches the value specified. The ETag must be specified in quotes. ifNoneMatch is optional for Flush Data and
-// Set Properties, but invalid for Append Data.  An ETag value or the special wildcard ("*") value. Specify this header
-// to perform the operation only if the resource's ETag does not match the value specified. The ETag must be specified
-// in quotes. ifModifiedSince is optional for Flush Data and Set Properties, but invalid for Append Data. A date and
-// time value. Specify this header to perform the operation only if the resource has been modified since the specified
-// date and time. ifUnmodifiedSince is optional for Flush Data and Set Properties, but invalid for Append Data. A date
-// and time value. Specify this header to perform the operation only if the resource has not been modified since the
-// specified date and time. xHTTPMethodOverride is optional.  Override the http verb on the service side. Some older
-// http clients do not support PATCH requestBody is valid only for append operations.  The data to be uploaded and
-// appended to the file. requestBody will be closed upon successful return. Callers should ensure closure when
-// receiving an error.xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation.
-// timeout is an optional operation timeout value in seconds. The period begins when the request is received by the
-// service. If the timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the
-// Coordinated Universal Time (UTC) for the request.  This is required when using shared key authorization.
-func (client managementClient) UpdatePath(ctx context.Context, action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*UpdatePathResponse, error) {
+// request with the E-Tag and include values for all properties. xMsOwner is optional and valid only for the
+// setAccessControl operation. Sets the owner of the file or directory. xMsGroup is optional and valid only for the
+// setAccessControl operation. Sets the owning group of the file or directory. xMsPermissions is optional and only
+// valid if Hierarchical Namespace is enabled for the account. Sets POSIX access permissions for the file owner, the
+// file owning group, and others. Each class may be granted read, write, or execute permission.  The sticky bit is also
+// supported.  Both symbolic (rwxrw-rw-) and 4-digit octal notation (e.g. 0766) are supported. Invalid in conjunction
+// with x-ms-acl. xMsACL is optional and valid only for the setAccessControl operation. Sets POSIX access control
+// rights on files and directories. The value is a comma-separated list of access control entries that fully replaces
+// the existing access control list (ACL).  Each access control entry (ACE) consists of a scope, a type, a user or
+// group identifier, and permissions in the format "[scope:][type]:[id]:[permissions]". The scope must be "default" to
+// indicate the ACE belongs to the default ACL for a directory; otherwise scope is implicit and the ACE belongs to the
+// access ACL.  There are four ACE types: "user" grants rights to the owner or a named user, "group" grants rights to
+// the owning group or a named group, "mask" restricts rights granted to named users and the members of groups, and
+// "other" grants rights to all users not found in any of the other entries. The user or group identifier is omitted
+// for entries of type "mask" and "other".  The user or group identifier is also omitted for the owner and owning
+// group.  The permission field is a 3-character sequence where the first character is 'r' to grant read access, the
+// second character is 'w' to grant write access, and the third character is 'x' to grant execute permission.  If
+// access is not granted, the '-' character is used to denote that the permission is denied. For example, the following
+// ACL grants read, write, and execute rights to the file owner and john.doe@contoso, the read right to the owning
+// group, and nothing to everyone else: "user::rwx,user:john.doe@contoso:rwx,group::r--,other::---,mask=rwx". Invalid
+// in conjunction with x-ms-permissions. ifMatch is optional for Flush Data and Set Properties, but invalid for Append
+// Data.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value
+// specified. The ETag must be specified in quotes. ifNoneMatch is optional for Flush Data and Set Properties, but
+// invalid for Append Data.  An ETag value or the special wildcard ("*") value. Specify this header to perform the
+// operation only if the resource's ETag does not match the value specified. The ETag must be specified in quotes.
+// ifModifiedSince is optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value.
+// Specify this header to perform the operation only if the resource has been modified since the specified date and
+// time. ifUnmodifiedSince is optional for Flush Data and Set Properties, but invalid for Append Data. A date and time
+// value. Specify this header to perform the operation only if the resource has not been modified since the specified
+// date and time. xHTTPMethodOverride is optional.  Override the http verb on the service side. Some older http clients
+// do not support PATCH requestBody is valid only for append operations.  The data to be uploaded and appended to the
+// file. requestBody will be closed upon successful return. Callers should ensure closure when receiving an
+// error.xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and correlation. timeout is an
+// optional operation timeout value in seconds. The period begins when the request is received by the service. If the
+// timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
+// Universal Time (UTC) for the request.  This is required when using shared key authorization.
+func (client managementClient) UpdatePath(ctx context.Context, action string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, contentLength *string, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, xMsOwner *string, xMsGroup *string, xMsPermissions *string, xMsACL *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*UpdatePathResponse, error) {
 	if err := validate([]validation{
 		{targetValue: xMsLeaseID,
 			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
@@ -1080,7 +1207,7 @@ func (client managementClient) UpdatePath(ctx context.Context, action string, co
 				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
 		return nil, err
 	}
-	req, err := client.updatePathPreparer(action, contentLength, filesystem, pathParameter, position, retainUncommittedData, xMsLeaseAction, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsProperties, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xHTTPMethodOverride, body, xMsClientRequestID, timeout, xMsDate)
+	req, err := client.updatePathPreparer(action, filesystem, pathParameter, position, retainUncommittedData, contentLength, xMsLeaseAction, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsProperties, xMsOwner, xMsGroup, xMsPermissions, xMsACL, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xHTTPMethodOverride, body, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
@@ -1092,9 +1219,7 @@ func (client managementClient) UpdatePath(ctx context.Context, action string, co
 }
 
 // updatePathPreparer prepares the UpdatePath request.
-func (client managementClient) updatePathPreparer(action string, contentLength string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
-	// TODO changing PATCH to PUT is a hack to make content-length=0 go over the wire
-	// TODO this is a Go issue, so we have to manually change the generated code here instead of modifying the swagger
+func (client managementClient) updatePathPreparer(action string, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, contentLength *string, xMsLeaseAction *string, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsProperties *string, xMsOwner *string, xMsGroup *string, xMsPermissions *string, xMsACL *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
 	req, err := pipeline.NewRequest("PUT", client.url, body)
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
@@ -1111,7 +1236,9 @@ func (client managementClient) updatePathPreparer(action string, contentLength s
 		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
 	}
 	req.URL.RawQuery = params.Encode()
-	req.Header.Set("Content-Length", contentLength)
+	if contentLength != nil {
+		req.Header.Set("Content-Length", *contentLength)
+	}
 	if xMsLeaseAction != nil {
 		req.Header.Set("x-ms-lease-action", *xMsLeaseAction)
 	}
@@ -1135,6 +1262,18 @@ func (client managementClient) updatePathPreparer(action string, contentLength s
 	}
 	if xMsProperties != nil {
 		req.Header.Set("x-ms-properties", *xMsProperties)
+	}
+	if xMsOwner != nil {
+		req.Header.Set("x-ms-owner", *xMsOwner)
+	}
+	if xMsGroup != nil {
+		req.Header.Set("x-ms-group", *xMsGroup)
+	}
+	if xMsPermissions != nil {
+		req.Header.Set("x-ms-permissions", *xMsPermissions)
+	}
+	if xMsACL != nil {
+		req.Header.Set("x-ms-acl", *xMsACL)
 	}
 	if ifMatch != nil {
 		req.Header.Set("If-Match", *ifMatch)

@@ -6,7 +6,7 @@ package azbfs
 import (
 	"bytes"
 	"context"
-	"encoding/xml"
+	"encoding/json"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io/ioutil"
 )
@@ -60,7 +60,7 @@ func validateResponse(resp pipeline.Response, successStatusCodes ...int) error {
 	// the service code, description and details will be populated during unmarshalling
 	responseError := NewResponseError(nil, resp.Response(), resp.Response().Status)
 	if len(b) > 0 {
-		if err = xml.Unmarshal(b, &responseError); err != nil {
+		if err = json.Unmarshal(b, &responseError); err != nil {
 			return NewResponseError(err, resp.Response(), "failed to unmarshal response body")
 		}
 	}

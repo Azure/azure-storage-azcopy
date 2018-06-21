@@ -58,6 +58,11 @@ func (cfr CreateFilesystemResponse) LastModified() string {
 	return cfr.rawResponse.Header.Get("Last-Modified")
 }
 
+// XMsNamespaceEnabled returns the value for header x-ms-namespace-enabled.
+func (cfr CreateFilesystemResponse) XMsNamespaceEnabled() string {
+	return cfr.rawResponse.Header.Get("x-ms-namespace-enabled")
+}
+
 // XMsRequestID returns the value for header x-ms-request-id.
 func (cfr CreateFilesystemResponse) XMsRequestID() string {
 	return cfr.rawResponse.Header.Get("x-ms-request-id")
@@ -247,6 +252,11 @@ func (gfpr GetFilesystemPropertiesResponse) LastModified() string {
 	return gfpr.rawResponse.Header.Get("Last-Modified")
 }
 
+// XMsNamespaceEnabled returns the value for header x-ms-namespace-enabled.
+func (gfpr GetFilesystemPropertiesResponse) XMsNamespaceEnabled() string {
+	return gfpr.rawResponse.Header.Get("x-ms-namespace-enabled")
+}
+
 // XMsProperties returns the value for header x-ms-properties.
 func (gfpr GetFilesystemPropertiesResponse) XMsProperties() string {
 	return gfpr.rawResponse.Header.Get("x-ms-properties")
@@ -337,6 +347,16 @@ func (gppr GetPathPropertiesResponse) LastModified() string {
 	return gppr.rawResponse.Header.Get("Last-Modified")
 }
 
+// XMsACL returns the value for header x-ms-acl.
+func (gppr GetPathPropertiesResponse) XMsACL() string {
+	return gppr.rawResponse.Header.Get("x-ms-acl")
+}
+
+// XMsGroup returns the value for header x-ms-group.
+func (gppr GetPathPropertiesResponse) XMsGroup() string {
+	return gppr.rawResponse.Header.Get("x-ms-group")
+}
+
 // XMsLeaseDuration returns the value for header x-ms-lease-duration.
 func (gppr GetPathPropertiesResponse) XMsLeaseDuration() string {
 	return gppr.rawResponse.Header.Get("x-ms-lease-duration")
@@ -350,6 +370,16 @@ func (gppr GetPathPropertiesResponse) XMsLeaseState() string {
 // XMsLeaseStatus returns the value for header x-ms-lease-status.
 func (gppr GetPathPropertiesResponse) XMsLeaseStatus() string {
 	return gppr.rawResponse.Header.Get("x-ms-lease-status")
+}
+
+// XMsOwner returns the value for header x-ms-owner.
+func (gppr GetPathPropertiesResponse) XMsOwner() string {
+	return gppr.rawResponse.Header.Get("x-ms-owner")
+}
+
+// XMsPermissions returns the value for header x-ms-permissions.
+func (gppr GetPathPropertiesResponse) XMsPermissions() string {
+	return gppr.rawResponse.Header.Get("x-ms-permissions")
 }
 
 // XMsProperties returns the value for header x-ms-properties.
@@ -434,6 +464,62 @@ type ListEntrySchema struct {
 	LastModified  *string `json:"lastModified,omitempty"`
 	ETag          *string `json:"eTag,omitempty"`
 	ContentLength *int64  `json:"contentLength,string,omitempty"`
+	Owner         *string `json:"owner,omitempty"`
+	Group         *string `json:"group,omitempty"`
+	Permissions   *string `json:"permissions,omitempty"`
+}
+
+// ListFilesystemEntry ...
+type ListFilesystemEntry struct {
+	Name         *string `json:"name,omitempty"`
+	LastModified *string `json:"lastModified,omitempty"`
+	ETag         *string `json:"eTag,omitempty"`
+}
+
+// ListFilesystemSchema ...
+type ListFilesystemSchema struct {
+	rawResponse *http.Response
+	Filesystems []ListFilesystemEntry `json:"filesystems,omitempty"`
+}
+
+// Response returns the raw HTTP response object.
+func (lfs ListFilesystemSchema) Response() *http.Response {
+	return lfs.rawResponse
+}
+
+// StatusCode returns the HTTP status code of the response, e.g. 200.
+func (lfs ListFilesystemSchema) StatusCode() int {
+	return lfs.rawResponse.StatusCode
+}
+
+// Status returns the HTTP status message of the response, e.g. "200 OK".
+func (lfs ListFilesystemSchema) Status() string {
+	return lfs.rawResponse.Status
+}
+
+// ContentType returns the value for header Content-Type.
+func (lfs ListFilesystemSchema) ContentType() string {
+	return lfs.rawResponse.Header.Get("Content-Type")
+}
+
+// Date returns the value for header Date.
+func (lfs ListFilesystemSchema) Date() string {
+	return lfs.rawResponse.Header.Get("Date")
+}
+
+// XMsContinuation returns the value for header x-ms-continuation.
+func (lfs ListFilesystemSchema) XMsContinuation() string {
+	return lfs.rawResponse.Header.Get("x-ms-continuation")
+}
+
+// XMsRequestID returns the value for header x-ms-request-id.
+func (lfs ListFilesystemSchema) XMsRequestID() string {
+	return lfs.rawResponse.Header.Get("x-ms-request-id")
+}
+
+// XMsVersion returns the value for header x-ms-version.
+func (lfs ListFilesystemSchema) XMsVersion() string {
+	return lfs.rawResponse.Header.Get("x-ms-version")
 }
 
 // ListSchema ...
