@@ -612,7 +612,7 @@ Usage:
 			if raw.stdInEnable {
 				go ReadStandardInputToCancelJob(CancelChannel)
 			}
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs(os.Args[1:])
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform copy command due to error: %s", err)

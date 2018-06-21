@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 func init() {
@@ -58,7 +57,7 @@ func init() {
 			if err != nil {
 				return fmt.Errorf("failed to parse user input due to error %s", err)
 			}
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs(os.Args[1:])
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform copy command due to error %s", err)

@@ -173,7 +173,7 @@ func init() {
 				fmt.Println("error parsing the input given by the user. Failed with error ", err.Error())
 				os.Exit(1)
 			}
-			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs(os.Args[1:])
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				fmt.Println("error performing the sync between source and destination. Failed with error ", err.Error())

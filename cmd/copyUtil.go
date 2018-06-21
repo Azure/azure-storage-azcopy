@@ -65,6 +65,9 @@ func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	return false
 }
 
+// redactSigQueryParam checks for the signature in the given rawquery part of the url
+// If the signature exists, it replaces the value of the signature with "REDACTED"
+// This api is used when SAS is written to log file to avoid exposing the user given SAS
 func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
 	sigFound := strings.Contains(rawQuery, "?sig=")
@@ -84,9 +87,11 @@ func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) 
 	return sigFound, values.Encode()
 }
 
-// redactSigQueryParam creates the user given commandString from the os Arguments
+// ConstructCommandStringFromArgs creates the user given commandString from the os Arguments
 // If any argument passed is an http Url and contains the signature, then the signature is redacted
-func (util copyHandlerUtil) ConstructCommandStringFromArgs(args []string) string{
+func (util copyHandlerUtil) ConstructCommandStringFromArgs() string{
+	// Get the os Args and strip away the first argument since it will be the path of Azcopy executable
+	args := os.Args[1:]
 	if len(args) == 0 {
 		return ""
 	}
@@ -99,18 +104,16 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs(args []string) string
 			argUrl, err := url.Parse(arg)
 			// If there is an error parsing the url, then throw the error
 			if err != nil {
-				panic(err)
+				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", argUrl.String(), err.Error()))
 			}
 			// Check for the signature query parameter
-			if sigFound, rawQuery := util.redactSigQueryParam(argUrl.RawQuery); sigFound {
-				argUrl.RawQuery = rawQuery
-			}
+			 _, rawQuery  := util.redactSigQueryParam(argUrl.RawQuery)
+			argUrl.RawQuery = rawQuery
 			s.WriteString(argUrl.String())
-			s.WriteString(" ")
 		}else {
 			s.WriteString(arg)
-			s.WriteString(" ")
 		}
+		s.WriteString(" ")
 	}
 	return s.String()
 }
