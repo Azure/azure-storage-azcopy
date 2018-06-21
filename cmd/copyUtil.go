@@ -79,6 +79,59 @@ func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	return false
 }
 
+// redactSigQueryParam checks for the signature in the given rawquery part of the url
+// If the signature exists, it replaces the value of the signature with "REDACTED"
+// This api is used when SAS is written to log file to avoid exposing the user given SAS
+func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) {
+	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
+	sigFound := strings.Contains(rawQuery, "?sig=")
+	if !sigFound {
+		sigFound = strings.Contains(rawQuery, "&sig=")
+		if !sigFound {
+			return sigFound, rawQuery // [?|&]sig= not found; return same rawQuery passed in (no memory allocation)
+		}
+	}
+	// [?|&]sig= found, redact its value
+	values, _ := url.ParseQuery(rawQuery)
+	for name := range values {
+		if strings.EqualFold(name, "sig") {
+			values[name] = []string{"REDACTED"}
+		}
+	}
+	return sigFound, values.Encode()
+}
+
+// ConstructCommandStringFromArgs creates the user given commandString from the os Arguments
+// If any argument passed is an http Url and contains the signature, then the signature is redacted
+func (util copyHandlerUtil) ConstructCommandStringFromArgs() string{
+	// Get the os Args and strip away the first argument since it will be the path of Azcopy executable
+	args := os.Args[1:]
+	if len(args) == 0 {
+		return ""
+	}
+	s := strings.Builder{}
+	for _, arg := range args {
+		// If the argument starts with https, it is either the remote source or remote destination
+		// If there exists a signature in the argument string it needs to be redacted
+		if startsWith(arg, "https") {
+			// parse the url
+			argUrl, err := url.Parse(arg)
+			// If there is an error parsing the url, then throw the error
+			if err != nil {
+				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", argUrl.String(), err.Error()))
+			}
+			// Check for the signature query parameter
+			 _, rawQuery  := util.redactSigQueryParam(argUrl.RawQuery)
+			argUrl.RawQuery = rawQuery
+			s.WriteString(argUrl.String())
+		}else {
+			s.WriteString(arg)
+		}
+		s.WriteString(" ")
+	}
+	return s.String()
+}
+
 func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential {
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
@@ -509,11 +562,27 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 	return bInfo.Metadata["hdi_isfolder"] == "true"
 }
 
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.JobStatus {
+// PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
+func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse){
+	// added an empty line to provide gap between the last Job progress status and final job summary
+	fmt.Println("")
+	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
+	fmt.Println("Total Number Of Transfers ", summary.TotalTransfers)
+	fmt.Println("Number of Transfer Completed ", summary.TransfersCompleted)
+	fmt.Println("Number of Tranfer Failed ", summary.TransfersFailed)
+	fmt.Println("Final Job Status ", summary.JobStatus)
+}
+
+func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.ListJobSummaryResponse {
+	var scanningString = ""
 	//lsCommand := common.ListRequest{JobID: jobID}
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
-
+	if !summary.CompleteJobOrdered {
+		scanningString = "(Scanning ...)"
+	}else{
+		scanningString = ""
+	}
 	if outputJson {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
@@ -521,18 +590,19 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		}
 		fmt.Println(string(jsonOutput))
 	} else {
-		fmt.Println("----------------- Progress Summary for JobId ", jobID, "------------------")
 		bytesInMb := float64(float64(summary.BytesOverWire-*bytesTransferredInLastInterval) / float64(1024*1024))
 		timeElapsed := time.Since(*startTime).Seconds()
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-		message := fmt.Sprintf("%v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
-			summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
-		fmt.Println(message)
+		fmt.Printf("\r %v Complete, %v Failed, %v Pending, %v Total, %s 2-sec throughput: %v MB/s",
+			summary.TransfersCompleted, summary.TransfersFailed, summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4))
+		//fmt.Printf("\r %v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
+		//	summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
+		//	summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
 	}
-	return summary.JobStatus
+	return summary
 }
 
 func startsWith(s string, t string) bool {

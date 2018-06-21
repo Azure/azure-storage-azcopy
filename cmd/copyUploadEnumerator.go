@@ -118,22 +118,23 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						// For Blob and Azure Files, empty directories are not uploaded
 						// For BlobFs, empty directories are to be uploaded as well
 						// If the directory is not empty, then uploading a file inside the directory path
-						// will create the parent directory of file, so transfe is not required to create
+						// will create the parent directory of file, so transfer is not required to create
 						// a directory
 						// For Example: Dst := FSystem/dir1/a.txt If dir1 doesn't exists
-						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
-							currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
-								util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
-							err = e.addTransfer(common.CopyTransfer{
-								Source:           pathToFile,
-								Destination:      currentDestinationUrl.String(),
-								LastModifiedTime: f.ModTime(),
-								SourceSize:       f.Size(),
-							}, wg, waitUntilJobCompletion)
-							if err != nil {
-								return err
-							}
-						}
+						// TODO: Currently disabling the upload of empty directories
+						//if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
+						//	currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
+						//		util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
+						//	err = e.addTransfer(common.CopyTransfer{
+						//		Source:           pathToFile,
+						//		Destination:      currentDestinationUrl.String(),
+						//		LastModifiedTime: f.ModTime(),
+						//		SourceSize:       f.Size(),
+						//	}, wg, waitUntilJobCompletion)
+						//	if err != nil {
+						//		return err
+						//	}
+						//}
 						// If the file inside sub-dir is again a sub-dir
 						// then skip it, since files inside sub-dir will be
 						// considered by walk func
@@ -225,19 +226,20 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						// will create the parent directory of file, so transfe is not required to create
 						// a directory
 						// For Example: Dst := FSystem/dir1/a.txt If dir1 doesn't exists
-						if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
-							destinationURL.Path = util.generateObjectPath(cleanContainerPath,
-								util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
-							err = e.addTransfer(common.CopyTransfer{
-								Source:           pathToFile,
-								Destination:      destinationURL.String(),
-								LastModifiedTime: f.ModTime(),
-								SourceSize:       f.Size(),
-							}, wg, waitUntilJobCompletion)
-							if err != nil {
-								return err
-							}
-						}
+						// TODO: Currently disabling the upload of empty directories
+						//if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
+						//	destinationURL.Path = util.generateObjectPath(cleanContainerPath,
+						//		util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
+						//	err = e.addTransfer(common.CopyTransfer{
+						//		Source:           pathToFile,
+						//		Destination:      destinationURL.String(),
+						//		LastModifiedTime: f.ModTime(),
+						//		SourceSize:       f.Size(),
+						//	}, wg, waitUntilJobCompletion)
+						//	if err != nil {
+						//		return err
+						//	}
+						//}
 						// If the file inside sub-dir is again a sub-dir
 						// then skip it, since files inside sub-dir will be
 						// considered by walk func

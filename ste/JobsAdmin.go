@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,31 @@ import (
 
 var JobsAdminInitialized = make(chan bool, 1)
 
+// sortPlanFiles is struct that implements len, swap and less than functions
+// this struct is used to sort the JobPartPlan files of the same job on the basis
+// of Part number
+// TODO: can use the same struct to sort job part plan files on the basis of job number and part number
+type sortPlanFiles struct{ Files []os.FileInfo }
+
+// Less determines the comparison between two fileInfo's
+// compares the part number of the Job Part files
+func (spf sortPlanFiles) Less(i, j int) bool {
+	_, parti, err := JobPartPlanFileName(spf.Files[i].Name()).Parse()
+	if err != nil {
+		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[i].Name(), err.Error()))
+	}
+	_, partj, err := JobPartPlanFileName(spf.Files[j].Name()).Parse()
+	if err != nil {
+		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[j].Name(), err.Error()))
+	}
+	return parti < partj
+}
+
+// Len determines the length of number of files
+func (spf sortPlanFiles) Len() int { return len(spf.Files) }
+
+func (spf sortPlanFiles) Swap(i, j int) { spf.Files[i], spf.Files[j] = spf.Files[j], spf.Files[i] }
+
 // JobAdmin is the singleton that manages ALL running Jobs, their parts, & their transfers
 var JobsAdmin interface {
 	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName
@@ -45,13 +71,18 @@ var JobsAdmin interface {
 
 	// JobMgr returns the specified JobID's JobMgr
 	JobMgr(jobID common.JobID) (IJobMgr, bool)
-	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel) IJobMgr
+	JobMgrEnsureExists(jobID common.JobID, level common.LogLevel, commandString string) IJobMgr
 
 	// AddJobPartMgr associates the specified JobPartMgr with the Jobs Administrator
 	//AddJobPartMgr(appContext context.Context, planFile JobPartPlanFileName) IJobPartMgr
 	/*ScheduleTransfer(jptm IJobPartTransferMgr)*/
 	ScheduleChunk(priority common.JobPriority, chunkFunc chunkFunc)
+
+	ResurrectJob(jobId common.JobID) bool
+
 	ResurrectJobParts()
+
+	QueueJobParts(jpm IJobPartMgr)
 
 	// AppPathFolder returns the Azcopy application path folder.
 	// JobPartPlanFile will be created inside this folder.
@@ -70,6 +101,19 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	}
 
 	const channelSize = 100000
+	// PartsChannelSize defines the number of JobParts which can be placed into the
+	// parts channel. Any JobPart which comes from FE and partChannel is full,
+	// has to wait and enumeration of transfer gets blocked till then.
+	// TODO : PartsChannelSize Needs to be discussed and can change.
+	const PartsChannelSize = 400
+
+	// partsCh is the channel in which all JobParts are put
+	// for scheduling transfers. When the next JobPart order arrives
+	// transfer engine creates the JobPartPlan file and
+	// puts the JobPartMgr in partchannel
+	// from which each part is picked up one by one
+	// and transfers of that JobPart are scheduled
+	partsCh := make(chan IJobPartMgr, PartsChannelSize)
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
@@ -84,10 +128,12 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
 		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
+			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
 			lowTransferCh:    lowTransferCh,
 		},
 		xferChannels: XferChannels{
+			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
@@ -99,9 +145,38 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, defaultServiceApiVersion)
 
 	JobsAdmin = ja
+
+	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
+	// the Channel and schedules the transfers of that JobPart.
+	go ja.scheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process transfers/chunks
 	for cc := 0; cc < concurrentConnections; cc++ {
 		go ja.transferAndChunkProcessor(cc)
+	}
+}
+
+// QueueJobParts puts the given JobPartManager into the partChannel
+// from where this JobPartMgr will be picked by a routine and
+// its transfers will be scheduled
+func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
+	ja.coordinatorChannels.partsChannel <- jpm
+}
+
+// 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
+func (ja *jobsAdmin) scheduleJobParts() {
+	for {
+		jobPart := <-ja.xferChannels.partsChannel
+		// If the job manager is not found for the JobId of JobPart
+		// taken from partsChannel
+		// there is an error in our code
+		// this not should not happen since JobMgr is initialized before any
+		// job part is added
+		jobId := jobPart.Plan().JobID
+		jm, found := ja.JobMgr(jobId)
+		if !found {
+			panic(fmt.Errorf("no job manager found for JobId %s", jobId.String()))
+		}
+		jobPart.ScheduleTransfers(jm.Context(), map[string]int{}, map[string]int{})
 	}
 }
 
@@ -175,11 +250,13 @@ type jobsAdmin struct {
 }
 
 type CoordinatorChannels struct {
+	partsChannel     chan<- IJobPartMgr         // Write Only
 	normalTransferCh chan<- IJobPartTransferMgr // Write-only
 	lowTransferCh    chan<- IJobPartTransferMgr // Write-only
 }
 
 type XferChannels struct {
+	partsChannel     <-chan IJobPartMgr         // Read only
 	normalTransferCh <-chan IJobPartTransferMgr // Read-only
 	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
 	normalChunckCh   chan chunkFunc             // Read-write
@@ -222,10 +299,10 @@ func (ja *jobsAdmin) AppPathFolder() string {
 // JobMgrEnsureExists returns the specified JobID's IJobMgr if it exists or creates it if it doesn't already exit
 // If it does exist, then the appCtx argument is ignored.
 func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
-	level common.LogLevel) IJobMgr {
+	level common.LogLevel, commandString string) IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
-		func() IJobMgr { return newJobMgr(ja.logger, jobID, ja.appCtx, level) }) // Return existing or new IJobMgr to caller
+		func() IJobMgr { return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString) }) // Return existing or new IJobMgr to caller
 }
 
 func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {
@@ -256,6 +333,39 @@ func (ja *jobsAdmin) BytesOverWire() int64 {
 	return atomic.LoadInt64(&ja.pacer.bytesTransferred)
 }
 
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID) bool {
+	// Search the existing plan files for the PartPlans for the given jobId
+	// only the files which have JobId has prefix and DataSchemaVersion as Suffix
+	// are include in the result
+	files := func(prefix, ext string) []os.FileInfo {
+		var files []os.FileInfo
+		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
+			if !fileInfo.IsDir() && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
+				files = append(files, fileInfo)
+			}
+			return nil
+		})
+		return files
+	}(jobId.String(), fmt.Sprintf(".steV%d", DataSchemaVersion))
+	// If no files with JobId exists then return false
+	if len(files) == 0 {
+		return false
+	}
+	// sort the JobPartPlan files with respect to Part Number
+	sort.Sort(sortPlanFiles{Files: files})
+	for f := 0; f < len(files); f++ {
+		planFile := JobPartPlanFileName(files[f].Name())
+		jobID, partNum, err := planFile.Parse()
+		if err != nil {
+			continue
+		}
+		mmf := planFile.Map()
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
+		jm.AddJobPart(partNum, planFile, false)
+	}
+	return true
+}
+
 // reconstructTheExistingJobParts reconstructs the in memory JobPartPlanInfo for existing memory map JobFile
 func (ja *jobsAdmin) ResurrectJobParts() {
 	// Get all the Job part plan files in the plan directory
@@ -279,7 +389,7 @@ func (ja *jobsAdmin) ResurrectJobParts() {
 		}
 		mmf := planFile.Map()
 		//todo : call the compute transfer function here for each job.
-		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel)
+		jm := ja.JobMgrEnsureExists(jobID, mmf.Plan().LogLevel, "")
 		jm.AddJobPart(partNum, planFile, false)
 	}
 }

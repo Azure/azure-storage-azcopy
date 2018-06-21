@@ -28,6 +28,8 @@ import (
 	//"strconv"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	//"os/exec"
+	"fmt"
+	"strconv"
 )
 
 var eexitCode = exitCode(0)
@@ -50,8 +52,27 @@ func mainWithExitCode() exitCode {
 		return eexitCode.success()
 	}
 
-	go ste.MainSTE(300, 2400, azcopyAppPathFolder)
+	// Perform os specific initialization
+	_, err := ProcessOSSpecificInitialization()
+	if err != nil {
+		panic(err)
+	}
+	// Get the value of environment variable AZCOPY_CONCURRENCY_VALUE
+	// If the environment variable is set, it defines the number of concurrent connections
+	// transfer engine will spawn. If not set, transfer engine will spawn the default number
+	// of concurrent connections
+	defaultConcurrentConnections := 300
+	concurrencyValue := os.Getenv("AZCOPY_CONCURRENCY_VALUE")
+	if concurrencyValue != "" {
+		val, err := strconv.ParseInt(concurrencyValue, 10, 64)
+		if err != nil {
+			panic(fmt.Sprintf("error parsing the env azcopy_concurency_value %v. "+
+				"Failed with error %s", concurrencyValue, err.Error()))
+		}
+		defaultConcurrentConnections = int(val)
+	}
+	azcopyAppPathFolder := GetAzCopyAppPath()
+	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
 	cmd.Execute(azcopyAppPathFolder)
-
 	return eexitCode.success()
 }

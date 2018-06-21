@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"log"
 	"os"
+	"runtime"
 )
 
 type ILogger interface {
@@ -124,6 +125,11 @@ func (jl *jobLogger) OpenLog() {
 	}
 	jl.file = file
 	jl.logger = log.New(jl.file, "", log.LstdFlags|log.LUTC)
+	// Log the Azcopy Version
+	jl.logger.Println("AzcopVersion ", AzcopyVersion)
+	// Log the OS Environment and OS Architecture
+	jl.logger.Println("OS-Environment ", runtime.GOOS)
+	jl.logger.Println("OS-Architecture ", runtime.GOARCH)
 }
 
 func (jl *jobLogger) MinimumLogLevel() pipeline.LogLevel {

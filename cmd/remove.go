@@ -57,7 +57,7 @@ func init() {
 			if err != nil {
 				return fmt.Errorf("failed to parse user input due to error %s", err)
 			}
-
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform copy command due to error %s", err)
@@ -68,6 +68,6 @@ func init() {
 	rootCmd.AddCommand(deleteCmd)
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when deleting from container.")
-	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
+	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 	deleteCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 }

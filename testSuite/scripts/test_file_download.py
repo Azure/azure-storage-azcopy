@@ -3,7 +3,7 @@ import shutil
 import time
 
 import utility as util
-
+import sys
 
 # test_upload_download_1kb_file_fullname verifies the upload/download of 1Kb file with fullname using azcopy.
 def test_upload_download_1kb_file_fullname():
@@ -15,10 +15,10 @@ def test_upload_download_1kb_file_fullname():
     src = file_path
     dest = util.test_share_url
     result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-        add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the share")
-        return
+        sys.exit(1)
 
     # Verifying the uploaded file.
     # the resource local path should be the first argument for the azcopy validator.
@@ -27,25 +27,25 @@ def test_upload_download_1kb_file_fullname():
     result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
     if not result:
         print("test_upload_download_1kb_file_fullname test failed")
-        return
+        sys.exit(1)
 
     time.sleep(5)
 
     # downloading the uploaded file
     src = util.get_resource_sas_from_share(filename)
     dest = util.test_directory_path + "/test_1kb_file_download.txt"
-    result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("Logging",
+    result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level",
                                                                                    "info").execute_azcopy_copy_command()
 
     if not result:
         print("test_upload_download_1kb_file_fullname test case failed")
-        return
+        sys.exit(1)
 
     # Verifying the downloaded file
     result = util.Command("testFile").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
     if not result:
         print("test_upload_download_1kb_file_fullname test case failed")
-        return
+        sys.exit(1)
 
     print("test_upload_download_1kb_file_fullname successfully passed")
 
@@ -60,10 +60,10 @@ def test_upload_download_1kb_file_wildcard_all_files():
 
     # Upload 1KB file using azcopy.
     result = util.Command("copy").add_arguments(wildcard_path).add_arguments(util.test_share_url). \
-        add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the share")
-        return
+        sys.exit(1)
 
     # Verifying the uploaded file.
     # the resource local path should be the first argument for the azcopy validator.
@@ -72,7 +72,7 @@ def test_upload_download_1kb_file_wildcard_all_files():
     result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
     if not result:
         print("test_upload_download_1kb_file_wildcard_all_files test failed")
-        return
+        sys.exit(1)
 
     time.sleep(5)
 
@@ -88,19 +88,19 @@ def test_upload_download_1kb_file_wildcard_all_files():
     finally:
         os.makedirs(dest)
 
-    result = util.Command("copy").add_arguments(wildcardSrc).add_arguments(dest).add_flags("Logging",
+    result = util.Command("copy").add_arguments(wildcardSrc).add_arguments(dest).add_flags("log-level",
                                                                                            "info").execute_azcopy_copy_command()
 
     if not result:
         print("test_upload_download_1kb_file_wildcard_all_files test case failed")
-        return
+        sys.exit(1)
 
     # Verifying the downloaded file
     result = util.Command("testFile").add_arguments(os.path.join(dest, filename)).add_arguments(
         src).execute_azcopy_verify()
     if not result:
         print("test_upload_download_1kb_file_wildcard_all_files test case failed")
-        return
+        sys.exit(1)
 
     print("test_upload_download_1kb_file_wildcard_all_files successfully passed")
 
@@ -116,10 +116,10 @@ def test_upload_download_1kb_file_wildcard_several_files():
 
     # Upload 1KB file using azcopy.
     result = util.Command("copy").add_arguments(wildcard_path).add_arguments(util.test_share_url). \
-        add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the share")
-        return
+        sys.exit(1)
 
     # Verifying the uploaded file.
     # the resource local path should be the first argument for the azcopy validator.
@@ -128,7 +128,7 @@ def test_upload_download_1kb_file_wildcard_several_files():
     result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
     if not result:
         print("test_upload_download_1kb_file_wildcard_several_files test failed")
-        return
+        sys.exit(1)
 
     time.sleep(5)
 
@@ -144,19 +144,19 @@ def test_upload_download_1kb_file_wildcard_several_files():
     finally:
         os.makedirs(dest)
 
-    result = util.Command("copy").add_arguments(wildcardSrc).add_arguments(dest).add_flags("Logging",
+    result = util.Command("copy").add_arguments(wildcardSrc).add_arguments(dest).add_flags("log-level",
                                                                                            "info").execute_azcopy_copy_command()
 
     if not result:
         print("test_upload_download_1kb_file_wildcard_several_files test case failed")
-        return
+        sys.exit(1)
 
     # Verifying the downloaded file
     result = util.Command("testFile").add_arguments(os.path.join(dest, filename)).add_arguments(
         src).execute_azcopy_verify()
     if not result:
         print("test_upload_download_1kb_file_wildcard_several_files test case failed")
-        return
+        sys.exit(1)
 
     print("test_upload_download_1kb_file_wildcard_several_files successfully passed")
 
@@ -180,11 +180,11 @@ def test_n_1kb_file_in_dir_upload_download_share(number_of_files):
     # execute azcopy command
     dest_share = util.test_share_url
     result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_share). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_n_1kb_file_in_dir_upload_download_share failed while uploading ", number_of_files,
               " files to the share")
-        return
+        sys.exit(1)
 
     # execute the validator.
     dest_azure_dir = util.get_resource_sas_from_share(dir_name)
@@ -206,18 +206,18 @@ def test_n_1kb_file_in_dir_upload_download_share(number_of_files):
 
     # downloading the directory created from azure file share through azcopy with recursive flag to true.
     result = util.Command("copy").add_arguments(download_azure_src_dir).add_arguments(
-        download_local_dest_dir).add_flags("Logging", "info").add_flags("recursive",
+        download_local_dest_dir).add_flags("log-level", "info").add_flags("recursive",
                                                                         "true").execute_azcopy_copy_command()
     if not result:
         print("error download recursive dir ", download_azure_src_dir)
-        return
+        sys.exit(1)
 
     # verify downloaded file.
     result = util.Command("testFile").add_arguments(os.path.join(download_local_dest_dir, dir_name)).add_arguments(
         download_azure_src_dir).add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
         print("error verifying the recursive download ")
-        return
+        sys.exit(1)
     print("test_n_1kb_file_in_dir_upload_download_share successfully passed")
 
 
@@ -251,15 +251,15 @@ def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recu
         add_flags("isResourceABucket", "true").execute_azcopy_create()
     if not result:
         print("test_n_1kb_file_in_dir_upload_download_azure_directory failed while creating directory for test.")
-        return False
+        sys.exit(1)
 
     # execute azcopy command
     result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_azure_dir). \
-        add_flags("recursive", recursive).add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_n_1kb_file_in_dir_upload_download_azure_directory failed while uploading ", number_of_files,
               " files to the share")
-        return
+        sys.exit(1)
 
     # execute the validator.
     dest_azure_dir_to_compare = util.get_resource_sas_from_share(dest_azure_dir_name + "/" + dir_name)
@@ -281,11 +281,11 @@ def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recu
 
     # downloading the directory created from azure file directory through azcopy with recursive flag to true.
     result = util.Command("copy").add_arguments(download_azure_src_dir).add_arguments(
-        download_local_dest_dir).add_flags("Logging", "info"). \
+        download_local_dest_dir).add_flags("log-level", "info"). \
         add_flags("recursive", recursive).execute_azcopy_copy_command()
     if not result:
         print("error download recursive dir ", download_azure_src_dir)
-        return
+        sys.exit(1)
 
     # verify downloaded file.
     # todo: ensure the comparing here
@@ -294,7 +294,7 @@ def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recu
         add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
     if not result:
         print("error verifying the recursive download ")
-        return
+        sys.exit(1)
     print("test_n_1kb_file_in_dir_upload_download_azure_directory successfully passed")
 
 
@@ -308,34 +308,34 @@ def test_download_perserve_last_modified_time():
     # upload file through azcopy.
     destination_sas = util.get_resource_sas_from_share(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the share")
-        return
+        sys.exit(1)
 
     # Verifying the uploaded file
     result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).execute_azcopy_verify()
     if not result:
         print("test_download_perserve_last_modified_time test failed")
-        return
+        sys.exit(1)
 
     time.sleep(5)
 
     # download file through azcopy with flag preserve-last-modified-time set to true
     download_file_name = util.test_directory_path + "/test_download_preserve_last_mtime.txt"
-    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file_name).add_flags("Logging",
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file_name).add_flags("log-level",
                                                                                                              "info").add_flags(
         "preserve-last-modified-time", "true").execute_azcopy_copy_command()
     if not result:
         print("test_download_perserve_last_modified_time test case failed")
-        return
+        sys.exit(1)
 
     # Verifying the downloaded file and its modified with the modified time of file.
     result = util.Command("testFile").add_arguments(download_file_name).add_arguments(destination_sas).add_flags(
         "preserve-last-modified-time", "true").execute_azcopy_verify()
     if not result:
         print("test_download_perserve_last_modified_time test case failed")
-        return
+        sys.exit(1)
 
     print("test_download_perserve_last_modified_time successfully passed")
 
@@ -348,34 +348,34 @@ def test_file_download_63mb_in_4mb():
 
     # uploading file through azcopy with flag block-size set to 4194304 i.e 4mb
     destination_sas = util.get_resource_sas_from_share(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging",
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level",
                                                                                                     "info").add_flags(
         "block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("error uploading 63 mb file. test_file_download_63mb_in_4mb test case failed")
-        return
+        sys.exit(1)
 
     # verify the uploaded file.
     result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).execute_azcopy_verify()
     if not result:
         print("error verifying the 63mb upload. test_file_download_63mb_in_4mb test case failed")
-        return
+        sys.exit(1)
 
     # downloading the created parallely in blocks of 4mb file through azcopy.
     download_file = util.test_directory_path + "/test_63mb_in4mb_download.txt"
-    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file).add_flags("Logging",
+    result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file).add_flags("log-level",
                                                                                                         "info").add_flags(
         "block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("error downloading the 63mb file. test_file_download_63mb_in_4mb test case failed")
-        return
+        sys.exit(1)
 
     # verify the downloaded file
     result = util.Command("testFile").add_arguments(download_file).add_arguments(
         destination_sas).execute_azcopy_verify()
     if not result:
         print("test_file_download_63mb_in_4mb test case failed.")
-        return
+        sys.exit(1)
 
     print("test_file_download_63mb_in_4mb test case successfully passed")
 
@@ -387,12 +387,12 @@ def test_recursive_download_file():
     dir1_path = util.create_test_n_files(1024, 5, dir_name)
 
     # upload the directory to share through azcopy with recursive set to true.
-    result = util.Command("copy").add_arguments(dir1_path).add_arguments(util.test_share_url).add_flags("Logging",
+    result = util.Command("copy").add_arguments(dir1_path).add_arguments(util.test_share_url).add_flags("log-level",
                                                                                                         "info").add_flags(
         "recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("error uploading recursive dir ", dir1_path)
-        return
+        sys.exit(1)
 
     # verify the uploaded file.
     destination_sas = util.get_resource_sas_from_share(dir_name)
@@ -400,25 +400,25 @@ def test_recursive_download_file():
                                                                                                         "true").execute_azcopy_verify()
     if not result:
         print("error verify the recursive dir ", dir1_path, " upload")
-        return
+        sys.exit(1)
 
     try:
         shutil.rmtree(dir1_path)
     except OSError as e:
         print("error removing the uploaded files. ", e)
-        return
+        sys.exit(1)
 
     # downloading the directory created from share through azcopy with recursive flag to true.
     result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path).add_flags(
-        "Logging", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        "log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("error download recursive dir ", dir1_path)
-        return
+        sys.exit(1)
 
     # verify downloaded file.
     result = util.Command("testFile").add_arguments(dir1_path).add_arguments(destination_sas).add_flags("is-object-dir",
                                                                                                         "true").execute_azcopy_verify()
     if not result:
         print("error verifying the recursive download ")
-        return
+        sys.exit(1)
     print("test_recursive_download_file successfully passed")

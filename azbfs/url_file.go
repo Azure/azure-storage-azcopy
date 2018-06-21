@@ -52,14 +52,14 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
-func (f FileURL) Create(ctx context.Context, body io.ReadSeeker) (*CreatePathResponse, error) {
+func (f FileURL) Create(ctx context.Context) (*CreatePathResponse, error) {
 	fileType := fileType
 	return f.fileClient.CreatePath(ctx, f.fileSystemName, f.path, &fileType,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, body, nil, nil,
+		nil, nil, nil, nil, nil,
 		nil)
 }
 
@@ -96,6 +96,9 @@ func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
 		o,
 		func(ctx context.Context, info HTTPGetterInfo) (*http.Response, error) {
 			resp, err := dr.f.Download(ctx, info.Offset, info.Count)
+			if resp == nil {
+				return nil, err
+			}
 			return resp.Response(), err
 		})
 }
@@ -112,7 +115,8 @@ func (f FileURL) Delete(ctx context.Context) (*DeletePathResponse, error) {
 // GetProperties returns the file's metadata and properties.
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
 func (f FileURL) GetProperties(ctx context.Context) (*GetPathPropertiesResponse, error) {
-	return f.fileClient.GetPathProperties(ctx, f.fileSystemName, f.path, nil, nil, nil, nil,
+	return f.fileClient.GetPathProperties(ctx, f.fileSystemName, f.path, nil, nil,
+		nil, nil, nil,
 		nil, nil, nil)
 }
 
@@ -130,16 +134,17 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 	if count == 0 {
 		panic("body must contain readable data whose size is > 0")
 	}
+	countAsStr := strconv.FormatInt(count, 10)
 
 	// TODO the go http client has a problem with PATCH and content-length header
 	// TODO we should investigate and report the issue
 	overrideHttpVerb := "PATCH"
 
 	// TransactionalContentMD5 isn't supported currently.
-	return f.fileClient.UpdatePath(ctx, "append", strconv.FormatInt(count, 10), f.fileSystemName, f.path, &offset,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
-		nil, nil, nil, &overrideHttpVerb, body, nil, nil, nil)
+	return f.fileClient.UpdatePath(ctx, "append", f.fileSystemName, f.path, &offset,
+		nil, &countAsStr, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, &overrideHttpVerb, body, nil, nil, nil)
 }
 
 // flushes writes previously uploaded data to a file
@@ -157,8 +162,9 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResp
 	overrideHttpVerb := "PATCH"
 
 	// TransactionalContentMD5 isn't supported currently.
-	return f.fileClient.UpdatePath(ctx, "flush", "0", f.fileSystemName, f.path, &fileSize,
-		&retainUncommittedData, nil, nil, nil, nil,
+	return f.fileClient.UpdatePath(ctx, "flush", f.fileSystemName, f.path, &fileSize,
+		&retainUncommittedData, nil,nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
-		nil, nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, nil,
+		&overrideHttpVerb, nil, nil, nil, nil)
 }

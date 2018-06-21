@@ -75,38 +75,10 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		NewXferRetryPolicyFactory(r),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
+		//NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
-}
-
-// NewPipeline creates a Pipeline using the specified credentials and options.
-func NewPipeline1(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
-	}
-	c := azbfs.NewSharedKeyCredential(name, key)
-
-	// Closest to API goes first; closest to the wire goes last
-	f := []pipeline.Factory{
-		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
-		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewXferRetryPolicyFactory(r),
-	}
-
-	f = append(f, c)
-
-	f = append(f,
-		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
-		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
 }
@@ -206,8 +178,9 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
-	jpm.atomicTransfersDone = 0      // Reset the # of transfers done back to 0
-	jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
+	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
+	// partplan file is opened and mapped when job part is added
+	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
 
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
@@ -383,7 +356,7 @@ func (jpm *jobPartMgr) createBlobCredential(ctx context.Context) azblob.Credenti
 	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
 	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
 
-	jpm.Log(pipeline.LogInfo, 
+	jpm.Log(pipeline.LogInfo,
 		fmt.Sprintf("jpm credential type: %v, token info: %v", inMemoryJobState.credentialInfo.CredentialType, inMemoryTokenInfo))
 
 	if inMemoryJobState.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -532,8 +505,10 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 			jpm.pipeline = NewBlobPipeline(
 				credential,
 				azblob.PipelineOptions{
-					Log:       jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azblob.TelemetryOptions{
+						Value: common.UserAgent,
+					},
 				},
 				XferRetryOptions{
 					Policy:        0,
@@ -549,8 +524,10 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 			jpm.pipeline = NewBlobFSPipeline(
 				credential,
 				azbfs.PipelineOptions{
-					Log:       jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{Value: "azcopy-V2"},
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azbfs.TelemetryOptions{
+						Value: common.UserAgent,
+					},
 				},
 				XferRetryOptions{
 					Policy:        0,
@@ -567,8 +544,10 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 			jpm.pipeline = newFilePipeline(
 				azfile.NewAnonymousCredential(),
 				azfile.PipelineOptions{
-					Log:       jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azfile.TelemetryOptions{Value: "azcopy-V2"},
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azfile.TelemetryOptions{
+						Value: common.UserAgent,
+					},
 				},
 				azfile.RetryOptions{
 					Policy:        azfile.RetryPolicyExponential,

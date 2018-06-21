@@ -27,6 +27,7 @@ import (
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 var cfgFile string
@@ -37,10 +38,13 @@ var azcopyAppPathFolder string
 var rootCmd = &cobra.Command{
 	Use:   "AzCopy",
 	Short: "AzCopy is a CLI tool that moves data into/out of Azure Storage.",
-	Long:  `AzCopy is a CLI tool that moves data into/out of Azure Storage. Please refer to the Github README for more info.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	//	Run: func(cmd *cobra.Command, args []string) { },
+	Long: fmt.Sprintf("\nWelcome to the AzCopy tool! \nVersion: %s", common.AzcopyVersion) +
+		`
+Project Home Page: github.com/Azure/azure-storage-azcopy
+
+AzCopy is a CLI tool that moves data into/out of Azure Storage. 
+Please refer to the Github README for more information.
+If you encounter any issue, please report it on Github.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -60,11 +64,8 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.azs.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// TODO consider supporting config file
+	//rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.azs.yaml)")
 }
 
 // initConfig reads in config file and ENV variables if set.

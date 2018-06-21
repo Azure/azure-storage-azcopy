@@ -26,10 +26,37 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"syscall"
 )
 
 func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 	return cmd
+}
+
+// ProcessOSSpecificInitialization changes the soft limit for file descriptor for process
+// and returns the file descriptor limit for process. If the function fails with some error
+// it returns the error.
+// Api gets the hard limit for process file descriptor
+// and sets the soft limit for process file descriptor to above hard limit
+func ProcessOSSpecificInitialization() (uint64, error){
+	var rlimit, zero syscall.Rlimit
+	// get the hard limit
+	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit)
+	if err != nil {
+		return 0, err
+	}
+	// If the hard limit is 0, then raise the exception
+	if zero == rlimit {
+		return 0, err
+	}
+	set := rlimit
+	
+	// set the soft limit to above rlimit
+	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
+	if err != nil {
+		return 0, err
+	}
+	return set.Max, nil
 }
 
 // GetAzCopyAppPath returns the path of Azcopy folder in local appdata.

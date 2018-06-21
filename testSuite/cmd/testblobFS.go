@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"strconv"
 )
 
 // TestBlobFSCommand represents the struct to get command
@@ -31,8 +32,8 @@ type TestBlobFSCommand struct {
 func init() {
 	cmdInput := TestBlobFSCommand{}
 	testBlobCmd := &cobra.Command{
-		Use:     "testBlob",
-		Aliases: []string{"tBlob"},
+		Use:     "testBlobFS",
+		Aliases: []string{"tBlobFS"},
 		Short:   "tests the blob created using AZCopy v2",
 
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -65,7 +66,7 @@ func (tbfsc TestBlobFSCommand) processTest() {
 	}
 }
 
-// verifyBlockBlobDirUpload verifies the directory recursively uploaded to the container.
+// verifyRemoteFile verifies the local file (object) against the file on remote fileSystem (subject)
 func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	// parse the subject url.
 	subjectUrl, err := url.Parse(tbfsc.Subject)
@@ -82,24 +83,25 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test")
 		os.Exit(1)
 	}
+	// create the blob fs pipeline
 	c := azbfs.NewSharedKeyCredential(name, key)
 	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
 
+	// create the file url and download the file Url
 	fileUrl := azbfs.NewFileURL(*subjectUrl, p)
-
 	dResp, err := fileUrl.Download(context.Background(), 0, 0)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error downloading the subject %s. Failed with error %s", fileUrl.String(), err.Error()))
 		os.Exit(1)
 	}
-	var downloadedBuffer []byte
-	// step 2: write the body into the memory mapped file directly
-	retryReader := dResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
-	_, err = io.ReadFull(retryReader, downloadedBuffer)
+	// get the size of the downloaded file
+	downloadedLength, err := strconv.ParseInt(dResp.ContentLength(), 10, 64)
 	if err != nil {
-		fmt.Println("error reading the downloaded body ", err.Error())
+		fmt.Println("error converting the content length to int64. failed with error ", err.Error())
 		os.Exit(1)
 	}
+
+	// open the local file
 	f, err := os.Open(tbfsc.Object)
 	if err != nil {
 		fmt.Println("error opening the object ", tbfsc.Object, " failed with error %", err.Error())
@@ -112,6 +114,28 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	}
 	defer f.Close()
 
+	// If the length of file at two location is not same
+	// validation has failed
+	if downloadedLength != fInfo.Size() {
+		fmt.Println(fmt.Sprintf("validation failed because there is difference in the source size %d and destination size %s", fInfo.Size(), downloadedLength))
+		os.Exit(1)
+	}
+	// If the size of the file is 0 both locally and remote
+	// there is no need to download the file and memory map the file
+	// validation is passed.
+	if fInfo.Size() == 0 {
+		os.Exit(1)
+	}
+
+	// read the downloaded content into the buffer
+	downloadedBuffer := make([]byte, downloadedLength)
+	retryReader := dResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
+	_, err = io.ReadFull(retryReader, downloadedBuffer)
+	if err != nil {
+		fmt.Println("error reading the downloaded body ", err.Error())
+		os.Exit(1)
+	}
+	// memory map the local file
 	mMap, err := NewMMF(f, false, 0, fInfo.Size())
 	if err != nil {
 		fmt.Println("error memory mapping the file ", tbfsc.Object, " failed with error ", err.Error())
@@ -119,15 +143,19 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	}
 
 	defer mMap.Unmap()
-	// calculate the md5Sum of object
+	// calculate the md5Sum of object and subject
 	objMd5 := md5.Sum(mMap)
 	subjMd5 := md5.Sum(downloadedBuffer)
+	// if the md5 of two doesn't match
+	// validation has failed
 	if objMd5 != subjMd5 {
 		fmt.Println("object md5 is not equal to the downloaded md5")
 		os.Exit(1)
 	}
 }
 
+// verifyRemoteDir validates the local directory (object) against the directory
+// on filesystem (subject)
 func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
@@ -137,6 +165,8 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test")
 		os.Exit(1)
 	}
+
+	// create the pipeline
 	c := azbfs.NewSharedKeyCredential(name, key)
 	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
 
@@ -145,6 +175,9 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println(fmt.Sprintf("Error parsing the url %s. failed with error %s", subjectUrl, err.Error()))
 		os.Exit(1)
 	}
+	// Get the object Info and If the object is not a directory
+	// validation fails since validation has two be done between directories
+	// local and remote
 	objectInfo, err := os.Stat(tbfsc.Object)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error getting the file info for dir %s. failed with error %s", tbfsc.Object, err.Error()))
@@ -154,9 +187,12 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println(fmt.Sprintf("the source provided %s is not a directory path", tbfsc.Object))
 		os.Exit(1)
 	}
+	// break the remote Url into parts
+	// and save the directory path
 	urlParts := azbfs.NewFileURLParts(*subjectUrl)
 	currentDirectoryPath := urlParts.DirectoryOrFilePath
 
+	// List the directory
 	dirUrl := azbfs.NewDirectoryURL(*subjectUrl, p)
 	continuationMarker := ""
 	var firstListing bool = true
@@ -165,10 +201,13 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 		fmt.Println(fmt.Sprintf("error listing the directory path defined by url %s. Failed with error %s", dirUrl.String(), err.Error()))
 		os.Exit(1)
 	}
+	// numberOfFilesinSubject keeps the count of number of files of at the destination
+	numberOfFilesinSubject := int(0)
 	for continuationMarker != "" || firstListing == true {
 		firstListing = false
 		continuationMarker = dResp.XMsContinuation()
 		files := dResp.Files()
+		numberOfFilesinSubject += len(files)
 		for _, file := range files {
 			// Get the file path
 			// remove the directory path from the file path
@@ -205,6 +244,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 
 			defer fpLocal.Close()
 
+			// memory map the file
 			fpMMf, err := NewMMF(fpLocal, false, 0, fpLocalInfo.Size())
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error memory mapping the file %s. failed with error %s", filepathLocal, err.Error()))
@@ -217,14 +257,14 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			objMd5 := md5.Sum(fpMMf)
 			// Download the remote file and calculate md5
 			tempUrlParts := urlParts
-			tempUrlParts.DirectoryOrFilePath = filePath
+			tempUrlParts.DirectoryOrFilePath = *file.Name
 			fileUrl := azbfs.NewFileURL(tempUrlParts.URL(), p)
 			fResp, err := fileUrl.Download(context.Background(), 0, 0)
 			if err != nil {
 				fmt.Println(fmt.Sprintf("error downloading the file %s. failed with error %s", fileUrl.String(), err.Error()))
 				os.Exit(1)
 			}
-			var downloadedBuffer []byte // byte buffer in which file will be downloaded to
+			downloadedBuffer := make([]byte, *file.ContentLength) // byte buffer in which file will be downloaded to
 			retryReader := fResp.Body(azbfs.RetryReaderOptions{MaxRetryRequests: 5})
 			_, err = io.ReadFull(retryReader, downloadedBuffer)
 			if err != nil {
@@ -239,4 +279,27 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			}
 		}
 	}
+	// walk through the directory and count the number of files inside the local directory
+	numberOFFilesInObject := int(0)
+	err = filepath.Walk(tbfsc.Object, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			numberOFFilesInObject ++
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Println(fmt.Sprintf("validation failed with error %s walking inside the source %s", err.Error(), tbfsc.Object))
+		os.Exit(1)
+	}
+
+	// If the number of files inside the directories locally and remote
+	// is not same, validation fails.
+	if numberOFFilesInObject != numberOfFilesinSubject {
+		fmt.Println(fmt.Sprintf("validation failed since there is difference in the number of files in source and destination"))
+		os.Exit(1)
+	}
+	fmt.Println(fmt.Sprintf("successfully validated the source %s and destination %s", tbfsc.Object, tbfsc.Subject))
 }

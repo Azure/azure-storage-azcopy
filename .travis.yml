@@ -1,8 +1,12 @@
-language: go
-go:
-- 1.10.x
-- master
+language: python
+python:
+  - 3.6
 services:
 - docker
 script:
 - make all
+- mkdir test-temp
+- export AZCOPY_EXECUTABLE_PATH=$(pwd)/azure-storage-azcopy_linux_amd64
+- export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+- export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+- python3 ./testSuite/scripts/run.py

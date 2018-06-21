@@ -78,7 +78,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// If the file Size is 0, there is no need to open the file and memory map it
 	if fInfo.Size() == 0 {
 		fileUrl := azbfs.NewFileURL(*dUrl, p)
-		_, err = fileUrl.Create(jptm.Context(), nil)
+		_, err = fileUrl.Create(jptm.Context())
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogError) {
 				jptm.Log(pipeline.LogError, fmt.Sprintf("error creating the file for destination url %s. failed with error %s", info.Destination, err.Error()))
@@ -118,7 +118,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// before the ranges are appended, file has to be created first and the ranges are scheduled to append
 	//Create the fileUrl and then create the file on FileSystem
 	fileUrl := azbfs.NewFileURL(*dUrl, p)
-	_, err = fileUrl.Create(jptm.Context(), nil)
+	_, err = fileUrl.Create(jptm.Context())
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogError) {
 			jptm.Log(pipeline.LogError, fmt.Sprintf("error creating the file for destination url %s. failed with error %s", info.Destination, err.Error()))

@@ -135,7 +135,10 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
-		srcMmf.Unmap()
+		// Unmap only if the source size is > 0
+		if info.SourceSize > 0 {
+			srcMmf.Unmap()
+		}
 		err = srcFile.Close()
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -156,7 +159,10 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
-		srcMmf.Unmap()
+		// Unmap only if the source size > 0
+		if info.SourceSize > 0 {
+			srcMmf.Unmap()
+		}
 		err = srcFile.Close()
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -167,6 +173,21 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		return
 	}
 
+	// If the file size is 0, scheduling chunk msgs for UploadRange is not required
+	if info.SourceSize == 0 {
+		// mark the transfer as successful
+		jptm.SetStatus(common.ETransferStatus.Success())
+		jptm.ReportTransferDone()
+		err = srcFile.Close()
+		if err != nil {
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo,
+					fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
+			}
+		}
+		return
+	}
+	
 	numChunks := uint32(0)
 	if rem := fileSize % chunkSize; rem == 0 {
 		numChunks = uint32(fileSize / chunkSize)

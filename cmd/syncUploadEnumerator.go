@@ -383,6 +383,9 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 				RetryDelay:    time.Second * 1,
 				MaxRetryDelay: time.Second * 3,
 			},
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
 		})
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
@@ -399,6 +402,10 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 
 	// Set the force flag to true
 	e.CopyJobRequest.ForceWrite = true
+
+	// Copy the sync Command String to the CopyJobPartRequest and DeleteJobRequest
+	e.CopyJobRequest.CommandString = e.CommandString
+	e.DeleteJobRequest.CommandString = e.CommandString
 
 	err, isSourceAFile := e.compareLocalAgainstRemote(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
 	if err != nil {

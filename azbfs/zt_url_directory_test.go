@@ -126,7 +126,7 @@ func (dus *DirectoryUrlSuite) TestCreateDirectoryAndFiles(c *chk.C) {
 
 	// Create fileUrl from directoryUrl and create file inside the directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	fresp, err := fileUrl.Create(context.Background(), nil)
+	fresp, err := fileUrl.Create(context.Background())
 	defer delFile(c, fileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -175,7 +175,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// Create a file inside directory
 	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
-	fresp, err := fileUrl.Create(context.Background(), nil)
+	fresp, err := fileUrl.Create(context.Background())
 	defer delFile(c, fileUrl)
 
 	c.Assert(err, chk.IsNil)
@@ -188,7 +188,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 
 	// create a file inside the sub-dir created above
 	subDirfileUrl, _ := getFileURLFromDirectory(c, subDirUrl)
-	fresp, err = subDirfileUrl.Create(context.Background(), nil)
+	fresp, err = subDirfileUrl.Create(context.Background())
 	defer delFile(c, subDirfileUrl)
 
 	c.Assert(err, chk.IsNil)

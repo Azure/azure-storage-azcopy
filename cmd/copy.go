@@ -218,6 +218,8 @@ type cookedCopyCmdArgs struct {
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
 	aadEndpoint                       string
+	// commandString hold the user given command which is logged to the Job log file
+	commandString string
 }
 
 func (cca cookedCopyCmdArgs) isRedirection() bool {
@@ -270,6 +272,9 @@ func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 			RetryDelay:    downloadRetryDelay,
 			MaxRetryDelay: downloadMaxRetryDelay,
 		},
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
 	})
 
 	// step 2: parse source url
@@ -312,6 +317,9 @@ func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize 
 			TryTimeout:    uploadTryTimeout,
 			RetryDelay:    uploadRetryDelay,
 			MaxRetryDelay: uploadMaxRetryDelay,
+		},
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
 		},
 	})
 
@@ -492,7 +500,13 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 		},
+		CommandString: cca.commandString,
 	}
+
+	// print out the job id so that the user can note it down
+	//if !cca.outputJson {
+	//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+	//}
 
 	// wait group to monitor the go routines fetching the job progress summary
 	var wg sync.WaitGroup
@@ -571,9 +585,9 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
-		if !cca.outputJson {
-			fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-		}
+		//if !cca.outputJson {
+		//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+		//}
 		wg.Add(1)
 		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
 	}
@@ -589,6 +603,13 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
+	if !cca.outputJson {
+		// added empty line to provide gap after the user given
+		fmt.Println("")
+		fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
+		// added empty line to provide gap between the above line and the Summary
+		fmt.Println("")
+	}
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
@@ -599,15 +620,20 @@ func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 				os.Exit(1)
 			}
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
+			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled() {
+			if summary.JobStatus == common.EJobStatus.Completed() ||
+				summary.JobStatus == common.EJobStatus.Cancelled() {
+				// print final JobProgress summary if output-json flag is set to false
+				if !cca.outputJson {
+					copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+				}
 				os.Exit(0)
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
 			//time.Sleep(2 * time.Second)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 		}
 	}
 	wg.Done()
@@ -681,6 +707,7 @@ Usage:
 			if raw.stdInEnable {
 				go ReadStandardInputToCancelJob(CancelChannel)
 			}
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform copy command due to error: %s", err)
@@ -715,8 +742,7 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
-
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 	// oauth options
 	cpCmd.PersistentFlags().BoolVar(&raw.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
 	cpCmd.PersistentFlags().StringVar(&raw.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")

@@ -89,6 +89,9 @@ func waitUntilJobCompletion(jobID common.JobID) {
 	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
 
+	// added an empty to provide a gap between the user given command and progress
+	fmt.Println("")
+
 	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
@@ -103,16 +106,16 @@ func waitUntilJobCompletion(jobID common.JobID) {
 				os.Exit(1)
 			}
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
-
+			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Cancelled() {
+			if summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled() {
+				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
 				os.Exit(0)
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
 			//time.Sleep(2 * time.Second)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 		}
 	}
 }

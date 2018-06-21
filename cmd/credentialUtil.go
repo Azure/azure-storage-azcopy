@@ -167,6 +167,9 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
 			},
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
 		}), nil
 }
 
@@ -256,6 +259,9 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (
 				TryTimeout:    ste.UploadTryTimeout,
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Telemetry: azbfs.TelemetryOptions{
+				Value: common.UserAgent,
 			},
 		}), nil
 }

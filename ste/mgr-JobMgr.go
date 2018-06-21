@@ -51,6 +51,7 @@ type IJobMgr interface {
 	ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone() uint32
+	Context() context.Context
 	Cancel()
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
@@ -61,14 +62,20 @@ type IJobMgr interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel) IJobMgr {
+func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string) IJobMgr {
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), logger: common.NewJobLogger(jobID, level, appLogger) /*Other fields remain zero-value until this job is scheduled */}
-	jm.reset(appCtx)
+	jm.reset(appCtx, commandString)
 	return &jm
 }
 
-func (jm *jobMgr) reset(appCtx context.Context) IJobMgr {
+func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 	jm.logger.OpenLog()
+	// log the user given command to the job log file.
+	// since the log file is opened in case of resume, list and many other operations
+	// for which commandString passed is empty, the length check is added
+	if len(commandString) > 0 {
+		jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Job-Command %s", commandString))
+	}
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
@@ -115,20 +122,23 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}
-	if scheduleTransfers {
-		jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
-	} else {
-		// If the transfer not scheduled, then Map the part file.
-		jpm.planMMF = jpm.filename.Map()
-	}
+	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
+	if scheduleTransfers {
+		// If the schedule transfer is set to true
+		// Instead of the scheduling the Transfer for given JobPart
+		// JobPart is put into the partChannel
+		// from where it is picked up and scheduled
+		//jpm.ScheduleTransfers(jm.ctx, make(map[string]int), make(map[string]int))
+		JobsAdmin.QueueJobParts(jpm)
+	}
 	return jpm
 }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
-	jm.reset(appCtx)
+	jm.reset(appCtx, "")
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
@@ -178,6 +188,7 @@ func (jm *jobMgr) setInMemoryTransitJobState(state InMemoryTransitJobState) {
 	jm.inMemoryTransitJobState = state
 }
 
+func (jm *jobMgr) Context() context.Context                { return jm.ctx }
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }
 func (jm *jobMgr) Log(level pipeline.LogLevel, msg string) { jm.logger.Log(level, msg) }

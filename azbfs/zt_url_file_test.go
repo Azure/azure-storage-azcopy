@@ -47,7 +47,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	// Create and delete file in root directory.
 	file, _ := getFileURLFromFileSystem(c, fsURL)
 
-	cResp, err := file.Create(context.Background(), nil)
+	cResp, err := file.Create(context.Background())
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -69,7 +69,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	// Create and delete file in named directory.
 	file, _ = getFileURLFromDirectory(c, dirURL)
 
-	cResp, err = file.Create(context.Background(), nil)
+	cResp, err = file.Create(context.Background())
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -96,7 +96,7 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	file, _ := getFileURLFromDirectory(c, dirNotExist)
 
 	// Verify that the file was created even though its parent directory does not exist yet
-	cResp, err := file.Create(context.Background(), nil)
+	cResp, err := file.Create(context.Background())
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")

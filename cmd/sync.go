@@ -38,6 +38,8 @@ type syncCommandArguments struct {
 	blockSize    uint32
 	logVerbosity string
 	outputJson	bool
+	// commandString hold the user given command which is logged to the Job log file
+	commandString string
 }
 
 // validates and transform raw input into cooked input
@@ -75,6 +77,8 @@ type cookedSyncCmdArgs struct {
 	blockSize    uint32
 	logVerbosity common.LogLevel
 	outputJson   bool
+	// commandString hold the user given command which is logged to the Job log file
+	commandString string
 }
 
 func (cca cookedSyncCmdArgs) process() (err error) {
@@ -84,6 +88,7 @@ func (cca cookedSyncCmdArgs) process() (err error) {
 		FromTo:           cca.fromTo,
 		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
+		CommandString:cca.commandString,
 	}
 	// wait group to monitor the go routines fetching the job progress summary
 	var wg sync.WaitGroup
@@ -108,7 +113,13 @@ func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 
 	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-
+	if !cca.outputJson {
+		// added empty line to provide gap after the user given
+		fmt.Println("")
+		fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
+		// added empty line to provide gap between the above line and the Summary
+		fmt.Println("")
+	}
 	// waiting for signals from either CancelChannel or timeOut Channel.
 	// if no signal received, will fetch/display a job status update then sleep for a bit
 	startTime := time.Now()
@@ -120,16 +131,21 @@ func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync
 			cookedCancelCmdArgs{jobID: jobID}.process()
 			os.Exit(1)
 		default:
-			jobStatus := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
+			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, cca.outputJson)
 
 			// happy ending to the front end
-			if jobStatus == common.EJobStatus.Completed() {
+			if summary.JobStatus == common.EJobStatus.Completed() ||
+				summary.JobStatus == common.EJobStatus.Cancelled(){
+					// print final JobSummary if output-json flag is set to false
+					if !cca.outputJson {
+						copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+					}
 				os.Exit(0)
 			}
 
 			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
 			//time.Sleep(2 * time.Second)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2 * time.Second)
 		}
 	}
 	wg.Done()
@@ -157,7 +173,7 @@ func init() {
 				fmt.Println("error parsing the input given by the user. Failed with error ", err.Error())
 				os.Exit(1)
 			}
-
+			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
 				fmt.Println("error performing the sync between source and destination. Failed with error ", err.Error())
@@ -169,7 +185,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 100*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
+	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
 	syncCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "Logging", "None", "defines the log verbosity to be saved to log file")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 }

@@ -2,7 +2,7 @@ import os
 import shutil
 import time
 import utility as util
-
+import sys
 
 # test_file_upload_1mb verifies the azcopy upload of 1mb file as an Azure file with full file name.
 def test_file_upload_1mb_fullname():
@@ -12,17 +12,17 @@ def test_file_upload_1mb_fullname():
 
     # execute azcopy upload.
     destination = util.get_resource_sas_from_share(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("log-level", "info"). \
         add_flags("block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
-        return
+        sys.exit(1)
 
     # execute validator.
     result = util.Command("testFile").add_arguments(file_path).add_arguments(destination).execute_azcopy_verify()
     if not result:
         print("test_file_upload_1mb_fullname test case failed")
-        return
+        sys.exit(1)
     print("test_file_upload_1mb_fullname test case passed successfully")
 
 
@@ -34,17 +34,17 @@ def test_file_upload_1mb_wildcard():
     # execute azcopy upload.
     destination = util.get_resource_sas_from_share(file_name)
     wildcard_path = file_path.replace(file_name, "*")
-    result = util.Command("copy").add_arguments(wildcard_path).add_arguments(destination).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(wildcard_path).add_arguments(destination).add_flags("log-level", "info"). \
         add_flags("block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
-        return
+        sys.exit(1)
 
     # execute validator.
     result = util.Command("testFile").add_arguments(file_path).add_arguments(destination).execute_azcopy_verify()
     if not result:
         print("test_file_upload_1mb_fullname test case failed")
-        return
+        sys.exit(1)
     print("test_file_upload_1mb_fullname test case passed successfully")
 
 
@@ -57,11 +57,11 @@ def test_file_range_for_complete_sparse_file():
 
     # execute azcopy file upload.
     destination_sas = util.get_resource_sas_from_share(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
-        return
+        sys.exit(1)
 
     # execute validator.
     # no of ranges should be 0 for the empty sparse file.
@@ -69,7 +69,7 @@ def test_file_range_for_complete_sparse_file():
         "verify-block-size", "true").add_flags("number-blocks-or-pages", "0").execute_azcopy_verify()
     if not result:
         print("test_page_range_for_sparse_file test case failed")
-        return
+        sys.exit(1)
     print("test_page_range_for_sparse_file test case passed successfully")
 
 
@@ -82,11 +82,11 @@ def test_file_upload_partial_sparse_file():
 
     # execute azcopy file upload.
     destination_sas = util.get_resource_sas_from_share(file_name)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("block-size", "4194304").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", file_name, " failed")
-        return
+        sys.exit(1)
 
     # number of range for partial sparse created above will be (size/2)
     number_of_ranges = int((16 * 1024 * 1024 / (4 * 1024 * 1024)) / 2)
@@ -96,7 +96,7 @@ def test_file_upload_partial_sparse_file():
         add_flags("number-blocks-or-pages", str(number_of_ranges)).execute_azcopy_verify()
     if not result:
         print("test_file_upload_partial_sparse_file test case failed")
-        return
+        sys.exit(1)
     print("test_file_upload_partial_sparse_file test case passed successfully")
 
 
@@ -114,10 +114,10 @@ def test_n_1kb_file_in_dir_upload_to_share(number_of_files):
 
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_share_url). \
-        add_flags("recursive", "true").add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_n_1kb_file_upload failed while uploading ", number_of_files, " files to the share")
-        return
+        sys.exit(1)
 
     # execute the validator.
     destination = util.get_resource_sas_from_share(dir_name)
@@ -150,10 +150,10 @@ def test_n_1kb_file_in_dir_upload_to_azure_directory(number_of_files, recursive)
 
     # execute azcopy command
     result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(directory_url). \
-        add_flags("recursive", recursive).add_flags("Logging", "info").execute_azcopy_copy_command()
+        add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
     if not result:
         print("test_n_1kb_file_upload failed while uploading ", number_of_files, " files to the share")
-        return
+        sys.exit(1)
 
     # execute the validator.
     destination = util.get_resource_sas_from_share(dir_name + "/" + dest_dir_name)
@@ -175,13 +175,13 @@ def test_metaData_content_encoding_content_type():
     # execute azcopy upload command.
     destination_sas = util.get_resource_sas_from_share(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-        add_flags("Logging", "info").add_flags("recursive", "true").add_flags("metadata",
+        add_flags("log-level", "info").add_flags("recursive", "true").add_flags("metadata",
                                                                               "author=jiac;viewport=width;description=test file"). \
         add_flags("content-type", "testctype").add_flags("content-encoding", "testenc").add_flags("no-guess-mime-type",
                                                                                                   "true").execute_azcopy_copy_command()
     if not result:
         print("uploading 2KB file with metadata, content type and content-encoding failed")
-        return
+        sys.exit(1)
 
     # execute azcopy validate order.
     # adding the source in validator as first argument.
@@ -204,14 +204,14 @@ def test_guess_mime_type():
 
     # execute azcopy upload of html file.
     destination_sas = util.get_resource_sas_from_share(filename)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("uploading file ", filename, " failed")
-        return
+        sys.exit(1)
 
     # execute the validator to verify the content-type.
-    result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging",
+    result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level",
                                                                                                         "info"). \
         add_flags("recursive", "true")
     if not result:
@@ -229,11 +229,11 @@ def test_9mb_file_upload():
     # execute azcopy copy upload.
     dest = util.get_resource_sas_from_share(filename)
     result = util.Command("copy").add_arguments(file_path).add_arguments(dest) \
-        .add_flags("Logging", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
+        .add_flags("log-level", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
         execute_azcopy_copy_command()
     if not result:
         print("failed uploading file", filename, " to the share")
-        return
+        sys.exit(1)
 
     # Verifying the uploaded file
     # calling the testFile validator to verify whether file has been successfully uploaded or not
@@ -252,11 +252,11 @@ def test_1GB_file_upload():
 
     # execute azcopy upload.
     destination_sas = util.get_resource_sas_from_share(filename)
-    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("Logging", "info"). \
+    result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
         add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1G file", filename, " to the share")
-        return
+        sys.exit(1)
 
     # Verifying the uploaded file.
     # adding local file path as first argument.
@@ -265,5 +265,5 @@ def test_1GB_file_upload():
     result = util.Command("testFile").add_arguments(file_path).add_arguments(destination_sas).execute_azcopy_verify()
     if not result:
         print("test_1GB_file_upload test failed")
-        return
+        sys.exit(1)
     print("test_1GB_file_upload successfully passed")

@@ -141,7 +141,7 @@ func createNewFileFromFileSystem(c *chk.C, fileSystem azbfs.FileSystemURL) (file
 
 	file, name = getFileURLFromDirectory(c, dir)
 
-	cResp, err := file.Create(ctx, nil)
+	cResp, err := file.Create(ctx)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 

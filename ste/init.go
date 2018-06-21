@@ -50,7 +50,8 @@ func ToFixed(num float64, precision int) float64 {
 func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
 	initJobsAdmin(steCtx, concurrentConnections, targetRateInMBps, azcopyAppPathFolder)
-	JobsAdmin.ResurrectJobParts()
+	// No need to read the existing JobPartPlan files since Azcopy is running in process
+	//JobsAdmin.ResurrectJobParts()
 	JobsAdminInitialized <- true
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
@@ -132,13 +133,14 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order) // Convert the order to a plan file
 
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel) // Get a this job part's job manager (create it if it doesn't exist)
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jm.setInMemoryTransitJobState(
 		InMemoryTransitJobState{
 			credentialInfo: order.CredentialInfo,
 		})
 	jm.AddJobPart(order.PartNum, jppfn, true) // Add this part to the Job and schedule its transfers
+
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -152,10 +154,15 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	verb := common.IffString(desiredJobStatus == common.EJobStatus.Paused(), "pause", "cancel")
 	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being paused/canceled
 	if !found {
-		return common.CancelPauseResumeResponse{
-			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
+		// If the Job is not found, search for Job Plan files in the existing plan file
+		// and resurrect the job
+		if !JobsAdmin.ResurrectJob(jobID) {
+			return common.CancelPauseResumeResponse{
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
+			}
 		}
+		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
 	completeJobOrdered := func(jm IJobMgr) bool {
@@ -179,13 +186,12 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		}
 	}
 
-	// It's OK to pause an already-paused job
-	// If all job parts are completed/failed, then job cannot be cancelled since it is already finished
+	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
 	if !found {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("job with JobId %s hasn't been ordered completely", jobID.String()),
+			ErrorMsg:              fmt.Sprintf("job with JobId %s has a missing 0th part", jobID.String()),
 		}
 	}
 
@@ -230,63 +236,41 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	return jr
 }
 
-// ResumeJobOrder resumes the JobOrder for given JobId
-/*
-	* Checks the current JobStatus of the Job and if it is in JobInProgress, then send the HTTP Response
-    * Iterate through each JobPartOrder of the Job and refresh the cancelled context of the JobPart Order
-	* Iterate through each transfer of JobPart order and refresh the cancelled context of the transfer
-    * Reschedule each transfer again into the transfer msg channel depending on the priority of the channel
-*/
-//func ResumeJobOrder(jobID common.JobID) common.CancelPauseResumeResponse {
-//	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
-//	if !found {
-//		return common.CancelPauseResumeResponse{
-//			CancelledPauseResumed: false,
-//			ErrorMsg:              fmt.Sprintf("no active job with JobId %v exists", jobID),
-//		}
-//	}
-//
-//	var jr common.CancelPauseResumeResponse
-//	jpm, found := jm.JobPartMgr(0)
-//	if !found {
-//		return common.CancelPauseResumeResponse{
-//			CancelledPauseResumed: false,
-//			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", jobID),
-//		}
-//	}
-//
-//	jpp0 := jpm.Plan()
-//	switch jpp0.JobStatus() { // Current status
-//	case common.EJobStatus.InProgress(): // Changing to Resumed is OK
-//		break // Nothing to do
-//
-//	case common.EJobStatus.Completed(): // You can't change state of a completed/canceled job
-//	case common.EJobStatus.Cancelled():
-//		jr = common.CancelPauseResumeResponse{
-//			CancelledPauseResumed: false,
-//			ErrorMsg:              fmt.Sprintf("Can't resume JobID=%v because it has already completed or been canceled", jobID),
-//		}
-//
-//	case common.EJobStatus.Paused(): // Resuming a paused job
-//		jpp0.SetJobStatus(common.EJobStatus.InProgress())
-//		msg := fmt.Sprintf("JobID=%v resumed", jobID)
-//		if jm.ShouldLog(pipeline.LogInfo) {
-//			jm.Log(pipeline.LogInfo, msg)
-//		}
-//		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
-//		jr = common.CancelPauseResumeResponse{
-//			CancelledPauseResumed: true,
-//			ErrorMsg:              msg,
-//		}
-//	}
-//	return jr
-//}
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
 	if !found {
+		// Job with JobId does not exists
+		// Search the plan files in Azcopy folder
+		// and resurrect the Job
+		if !JobsAdmin.ResurrectJob(req.JobID) {
+			return common.CancelPauseResumeResponse{
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
+			}
+		}
+		// If the job manager was not found, then Job was resurrected
+		// Get the Job manager again for given JobId
+		jm, _ = JobsAdmin.JobMgr(req.JobID)
+	}
+
+	// Check whether Job has been completely ordered or not
+	completeJobOrdered := func(jm IJobMgr) bool {
+		// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
+		completeJobOrdered := false
+		for p := PartNumber(0); true; p++ {
+			jpm, found := jm.JobPartMgr(p)
+			if !found {
+				break
+			}
+			completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
+		}
+		return completeJobOrdered
+	}
+	// If the job has not been ordered completely, then job cannot be resumed
+	if !completeJobOrdered(jm) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("no active job with JobId %v exists", req.JobID),
+			ErrorMsg:              fmt.Sprintf("cannot resumr job with JobId %s . It hasn't been ordered completely", req.JobID),
 		}
 	}
 
@@ -300,12 +284,15 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	}
 
 	jpp0 := jpm.Plan()
-	switch jpp0.JobStatus() { // Current status
-	case common.EJobStatus.InProgress(): // Changing to Resumed is OK
-		break // Nothing to do
+	switch jpp0.JobStatus() {
+	// Cannot resume a Job which is in Cancelling state
+	// Cancelling is an intermediary state
+	case common.EJobStatus.Cancelling():
+		break
 
 	// Resume all the failed / In Progress Transfers.
-	case common.EJobStatus.Completed(),
+	case common.EJobStatus.InProgress(),
+		common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
 
@@ -345,9 +332,17 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {
-		return common.ListJobSummaryResponse{
-			ErrorMsg: fmt.Sprintf("no active job with JobId %s exists", jobID),
+		// Job with JobId does not exists
+		// Search the plan files in Azcopy folder
+		// and resurrect the Job
+		if !JobsAdmin.ResurrectJob(jobID) {
+			return common.ListJobSummaryResponse{
+				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
+			}
 		}
+		// If the job manager was not found, then Job was resurrected
+		// Get the Job manager again for given JobId
+		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
 	js := common.ListJobSummaryResponse{
@@ -417,9 +412,17 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and partNumber
 	jm, found := JobsAdmin.JobMgr(r.JobID)
 	if !found {
-		return common.ListJobTransfersResponse{
-			ErrorMsg: fmt.Sprintf("there is no active Job with jobId %s", r.JobID),
+		// Job with JobId does not exists
+		// Search the plan files in Azcopy folder
+		// and resurrect the Job
+		if !JobsAdmin.ResurrectJob(r.JobID) {
+			return common.ListJobTransfersResponse{
+				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
+			}
 		}
+		// If the job manager was not found, then Job was resurrected
+		// Get the Job manager again for given JobId
+		jm, _ = JobsAdmin.JobMgr(r.JobID)
 	}
 
 	ljt := common.ListJobTransfersResponse{
@@ -453,7 +456,13 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 
 // listJobs returns the jobId of all the jobs existing in the current instance of azcopy
 func ListJobs() common.ListJobsResponse {
+	// Resurrect all the Jobs from the existing JobPart Plan files
+	JobsAdmin.ResurrectJobParts()
 	// building the ListJobsResponse for sending response back to front-end
+	jobIds := JobsAdmin.JobIDs()
+	if len(jobIds) == 0 {
+		return common.ListJobsResponse{ErrorMessage: "no Jobs exists in Azcopy history"}
+	}
 	return common.ListJobsResponse{ErrorMessage: "", JobIDs: JobsAdmin.JobIDs()}
 }
 

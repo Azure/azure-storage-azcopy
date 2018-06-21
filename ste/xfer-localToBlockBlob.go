@@ -398,7 +398,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 
 	// take care of empty blobs
 	if jptm.Info().SourceSize == 0 {
-		_, err = blockBlobUrl.Upload(jptm.Context(), nil, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		_, err = blockBlobUrl.Upload(jptm.Context(), bytes.NewReader(nil), blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	} else {
 		body := newRequestBodyPacer(bytes.NewReader(srcMmf), pacer)
 		_, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
