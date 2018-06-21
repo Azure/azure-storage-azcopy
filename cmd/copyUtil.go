@@ -75,7 +75,7 @@ func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential {
 	}
 	return azbfs.NewSharedKeyCredential(name, key)
 }
-func (util copyHandlerUtil) urlIsDFSFileSystemOrDirectory(ctx context.Context, url *url.URL) bool {
+func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL) bool {
 	if util.urlIsContainerOrShare(url) {
 		return true
 	}

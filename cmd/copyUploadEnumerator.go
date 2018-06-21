@@ -50,7 +50,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			// append file name as blob name in case the given URL is a container
 			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
 				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsDFSFileSystemOrDirectory(ctx, destinationURL)) {
+				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsBFSFileSystemOrDirectory(ctx, destinationURL)) {
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
 			}
 
