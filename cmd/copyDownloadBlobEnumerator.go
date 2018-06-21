@@ -246,6 +246,12 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		}
 		marker = listBlob.NextMarker
 	}
+	// If part number is 0 && number of transfer queued is 0
+	// it means that no job part has been dispatched and there are no
+	// transfer in Job to dispatch a JobPart. 
+	if e.PartNum == 0  && len(e.Transfers) == 0 {
+		return fmt.Errorf("no transfer queued to download. Please verify the source / destination")
+	}
 	// dispatch the JobPart as Final Part of the Job
 	err = e.dispatchFinalPart()
 	if err != nil {
