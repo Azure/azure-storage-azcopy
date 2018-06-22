@@ -7,9 +7,7 @@ import (
 	"strings"
 )
 
-var DirectoryResourceType = "directory"
-var DeleteDirectoryRecursively = true
-var MaxEntriesinListOperation = int32(1000)
+var directoryResourceName = "directory" // constant value for the resource query parameter
 
 // A DirectoryURL represents a URL to the Azure Storage directory allowing you to manipulate its directories and files.
 type DirectoryURL struct {
@@ -25,7 +23,7 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 	if p == nil {
 		panic("p can't be nil")
 	}
-	urlParts := NewFileURLParts(url)
+	urlParts := NewBfsURLParts(url)
 	directoryClient := newManagementClient(url, p)
 	return DirectoryURL{directoryClient: directoryClient, filesystem: urlParts.FileSystemName, pathParameter: urlParts.DirectoryOrFilePath}
 }
@@ -56,18 +54,18 @@ func (d DirectoryURL) NewFileURL(fileName string) FileURL {
 	return NewFileURL(fileURL, d.directoryClient.Pipeline())
 }
 
-// NewSubDirectoryUrl creates a new Directory Url for Sub directory inside the directory of given directory URL.
-// The new NewSubDirectoryUrl uses the same request policy pipeline as the DirectoryURL.
+// NewDirectoryURL creates a new Directory Url for Sub directory inside the directory of given directory URL.
+// The new NewDirectoryURL uses the same request policy pipeline as the DirectoryURL.
 // To change the pipeline, create the NewDirectoryUrl and then call its WithPipeline method passing in the
 // desired pipeline object.
-func (d DirectoryURL) NewSubDirectoryUrl(dirName string) DirectoryURL {
+func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 	subDirUrl := appendToURLPath(d.URL(), dirName)
 	return NewDirectoryURL(subDirUrl, d.directoryClient.Pipeline())
 }
 
 // Create creates a new directory within a File System
 func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, error) {
-	resp, err := d.directoryClient.CreatePath(ctx, d.filesystem, d.pathParameter, &DirectoryResourceType, nil,
+	resp, err := d.directoryClient.CreatePath(ctx, d.filesystem, d.pathParameter, &directoryResourceName, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
@@ -91,33 +89,36 @@ func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertie
 	return (*DirectoryGetPropertiesResponse)(resp), err
 }
 
-// FileSystemUrl returns the fileSystemUrl from the directoryUrl
-// FileSystemUrl is of the FS in which the current directory exists.
-func (d DirectoryURL) FileSystemUrl() FileSystemURL {
+// FileSystemURL returns the fileSystemUrl from the directoryUrl
+// FileSystemURL is of the FS in which the current directory exists.
+func (d DirectoryURL) FileSystemURL() FileSystemURL {
 	// Parse Url into FileUrlParts
 	// Set the DirectoryOrFilePath empty
 	// and generate the Url
-	urlParts := NewFileURLParts(d.URL())
+	urlParts := NewBfsURLParts(d.URL())
 	urlParts.DirectoryOrFilePath = ""
 	return NewFileSystemURL(urlParts.URL(), d.directoryClient.Pipeline())
 }
 
-// ListDirectory returns a files inside the directory. If recursive is set to true then ListDirectory will recursively
-// list all files inside the directory. Use an empty Marker to start enumeration from the beginning.
-// After getting a segment, process it, and then call ListDirectory again (passing the the previously-returned
+// ListDirectorySegment returns files/directories inside the directory. If recursive is set to true then ListDirectorySegment will recursively
+// list all files/directories inside the directory. Use an empty Marker to start enumeration from the beginning.
+// After getting a segment, process it, and then call ListDirectorySegment again (passing the the previously-returned
 // Marker) to get the next segment.
-func (d DirectoryURL) ListDirectory(ctx context.Context, marker *string, recursive bool) (*DirectoryListResponse, error) {
+func (d DirectoryURL) ListDirectorySegment(ctx context.Context, marker *string, recursive bool) (*DirectoryListResponse, error) {
 	// Since listPath is supported on filesystem Url
 	// covert the directory url to fileSystemUrl
 	// and listPath for filesystem with directory path set in the path parameter
-	resp , err := d.FileSystemUrl().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, FileSystemResourceName, &d.pathParameter, marker,
-					&MaxEntriesinListOperation, nil, nil, nil)
+	var maxEntriesInListOperation = int32(1000)
+
+	resp , err := d.FileSystemURL().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, fileSystemResourceName, &d.pathParameter, marker,
+					&maxEntriesInListOperation, nil, nil, nil)
 	return (*DirectoryListResponse)(resp), err
 }
 
 // IsDirectory determines whether the resource at given directoryUrl is a directory Url or not
 // It returns false if the directoryUrl is not able to get resource properties
 // It returns false if the url represent a file in the filesystem
+// TODO reconsider for SDK release
 func (d DirectoryURL) IsDirectory(ctx context.Context) bool {
 	grep, err := d.GetProperties(ctx)
 	// If the error occurs while getting resource properties return false
@@ -125,14 +126,14 @@ func (d DirectoryURL) IsDirectory(ctx context.Context) bool {
 		return false
 	}
 	// return false if the resource type is not
-	if !strings.EqualFold(grep.XMsResourceType(), DirectoryResourceType) {
+	if !strings.EqualFold(grep.XMsResourceType(), directoryResourceName) {
 		return false
 	}
 	return true
 }
 
-// FileUrl converts the current directory Url into the FileUrl
+// NewFileUrl converts the current directory Url into the NewFileUrl
 // This api is used when the directoryUrl is to represents a file
-func (d DirectoryURL) FileUrl() FileURL {
+func (d DirectoryURL) NewFileUrl() FileURL {
 	return NewFileURL(d.URL(), d.directoryClient.Pipeline())
 }

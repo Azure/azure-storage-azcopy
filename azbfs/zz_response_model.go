@@ -259,7 +259,7 @@ func (dlr DirectoryListResponse) XMsVersion() string {
 	return ListSchema(dlr).XMsVersion()
 }
 
-// Files returns the slice of all Files in ListDirectory Response.
+// Files returns the slice of all Files in ListDirectorySegment Response.
 // It does not include the sub-directory path
 func (dlr *DirectoryListResponse) Files() []ListEntrySchema {
 	files := []ListEntrySchema{}
@@ -273,7 +273,7 @@ func (dlr *DirectoryListResponse) Files() []ListEntrySchema {
 	return files
 }
 
-// Directories returns the slice of all directories in ListDirectory Response
+// Directories returns the slice of all directories in ListDirectorySegment Response
 // It does not include the files inside the directory only returns the sub-directories
 func (dlr *DirectoryListResponse) Directories() []string {
 	var dir []string

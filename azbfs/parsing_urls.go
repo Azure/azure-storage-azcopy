@@ -5,25 +5,20 @@ import (
 	"strings"
 )
 
-const (
-	shareSnapshot = "sharesnapshot"
-)
-
-// A FileURLParts object represents the components that make up an Azure Storage Share/Directory/File URL. You parse an
-// existing URL into its parts by calling NewFileURLParts(). You construct a URL from parts by calling URL().
-// NOTE: Changing any SAS-related field requires computing a new SAS signature.
-type FileURLParts struct {
+// A BfsURLParts object represents the components that make up an Azure Storage FileSystem/Directory/File URL. You parse an
+// existing URL into its parts by calling NewBfsURLParts(). You construct a URL from parts by calling URL().
+type BfsURLParts struct {
 	Scheme              string // Ex: "https://"
-	Host                string // Ex: "account.share.core.windows.net"
-	FileSystemName      string // Share name, Ex: "myshare"
+	Host                string // Ex: "account.dfs.core.windows.net"
+	FileSystemName      string // File System name, Ex: "myfilesystem"
 	DirectoryOrFilePath string // Path of directory or file, Ex: "mydirectory/myfile"
 	UnparsedParams      string
 }
 
-// NewFileURLParts parses a URL initializing FileURLParts' fields including any SAS-related & sharesnapshot query parameters. Any other
-// query parameters remain in the UnparsedParams field. This method overwrites all fields in the FileURLParts object.
-func NewFileURLParts(u url.URL) FileURLParts {
-	up := FileURLParts{
+// NewBfsURLParts parses a URL initializing BfsURLParts' fields. Any other
+// query parameters remain in the UnparsedParams field. This method overwrites all fields in the BfsURLParts object.
+func NewBfsURLParts(u url.URL) BfsURLParts {
+	up := BfsURLParts{
 		Scheme: u.Scheme,
 		Host:   u.Host,
 	}
@@ -36,12 +31,12 @@ func NewFileURLParts(u url.URL) FileURLParts {
 		}
 
 		// Find the next slash (if it exists)
-		shareEndIndex := strings.Index(path, "/")
-		if shareEndIndex == -1 { // Slash not found; path has share name & no path of directory or file
+		filesystemEndIndex := strings.Index(path, "/")
+		if filesystemEndIndex == -1 { // Slash not found; path has filesystem name & no path of directory or file
 			up.FileSystemName = path
-		} else { // Slash found; path has share name & path of directory or file
-			up.FileSystemName = path[:shareEndIndex]
-			up.DirectoryOrFilePath = path[shareEndIndex+1:]
+		} else { // Slash found; path has filesystem name & path of directory or file
+			up.FileSystemName = path[:filesystemEndIndex]
+			up.DirectoryOrFilePath = path[filesystemEndIndex+1:]
 		}
 	}
 
@@ -51,11 +46,10 @@ func NewFileURLParts(u url.URL) FileURLParts {
 	return up
 }
 
-// URL returns a URL object whose fields are initialized from the FileURLParts fields. The URL's RawQuery
-// field contains the SAS, snapshot, and unparsed query parameters.
-func (up FileURLParts) URL() url.URL {
+// URL returns a URL object whose fields are initialized from the BfsURLParts fields.
+func (up BfsURLParts) URL() url.URL {
 	path := ""
-	// Concatenate share & path of directory or file (if they exist)
+	// Concatenate filesystem & path of directory or file (if they exist)
 	if up.FileSystemName != "" {
 		path += "/" + up.FileSystemName
 		if up.DirectoryOrFilePath != "" {

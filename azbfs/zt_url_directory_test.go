@@ -100,7 +100,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryCreateAndGetProperties(c *chk.C) {
 	gResp, err := dirUrl.GetProperties(context.Background())
 	c.Assert(err, chk.IsNil)
 	c.Assert(gResp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(gResp.XMsResourceType(), chk.Equals, azbfs.DirectoryResourceType)
+	c.Assert(gResp.XMsResourceType(), chk.Equals, "directory")
 }
 
 // TestCreateDirectoryAndFiles tests the create directory and create file inside the directory
@@ -204,7 +204,7 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 	// inside the dir itself and one inside the sub-dir
 	// expected number of sub-dir inside the dir is 1
 	continuationMarker := ""
-	lresp, err := dirUrl.ListDirectory(context.Background(), &continuationMarker, true)
+	lresp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
 
 	c.Assert(err, chk.IsNil)
 	c.Assert(lresp.Response().StatusCode, chk.Equals, http.StatusOK)

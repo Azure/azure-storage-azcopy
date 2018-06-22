@@ -189,14 +189,14 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	}
 	// break the remote Url into parts
 	// and save the directory path
-	urlParts := azbfs.NewFileURLParts(*subjectUrl)
+	urlParts := azbfs.NewBfsURLParts(*subjectUrl)
 	currentDirectoryPath := urlParts.DirectoryOrFilePath
 
 	// List the directory
 	dirUrl := azbfs.NewDirectoryURL(*subjectUrl, p)
 	continuationMarker := ""
 	var firstListing bool = true
-	dResp, err := dirUrl.ListDirectory(context.Background(), &continuationMarker, true)
+	dResp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error listing the directory path defined by url %s. Failed with error %s", dirUrl.String(), err.Error()))
 		os.Exit(1)
