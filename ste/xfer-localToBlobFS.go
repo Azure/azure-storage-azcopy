@@ -155,6 +155,24 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 // fileRangeAppend is the api that is used to append the range to a file from range startRange to (startRange + calculatedRangeInterval)
 func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInterval int64) chunkFunc {
 	return func(workerId int) {
+
+		// This function allows routine to manage behavior of unexpected panics.
+		// The panic error along with transfer details are logged.
+		// The transfer is marked as failed and is reported as done.
+		defer func (jptm IJobPartTransferMgr) {
+			r := recover()
+			if r != nil {
+				// Get the transfer Info and log the details
+				info := jptm.Info()
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startRange %v calculatedRangeInterval %v sourceMMF size %v",
+						r, info.Source, info.Destination, info.SourceSize, startRange, calculatedRangeInterval, len(fru.srcMmf)))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
+		}(fru.jptm)
+
 		// transferDone is the internal function which called by the last range append
 		// it unmaps the source file and delete the file in case transfer failed
 		transferDone := func() {

@@ -166,7 +166,23 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 		jptm.OccupyAConnection()
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer jptm.ReleaseAConnection()
-		
+
+		// This function allows routine to manage behavior of unexpected panics.
+		// The panic error along with transfer details are logged.
+		// The transfer is marked as failed and is reported as done.
+		defer func (jptm IJobPartTransferMgr) {
+			r := recover()
+			if r != nil {
+				info := jptm.Info()
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
+							r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF)))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
+		}(jptm)
+
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
 			jptm.AddToBytesDone(adjustedChunkSize)

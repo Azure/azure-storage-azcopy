@@ -258,6 +258,22 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer bbu.jptm.ReleaseAConnection()
 
+		// This function allows routine to manage behavior of unexpected panics.
+		// The panic error along with transfer details are logged.
+		// The transfer is marked as failed and is reported as done.
+		defer func (jptm IJobPartTransferMgr) {
+			r := recover()
+			if r != nil {
+				info := jptm.Info()
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
+						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(bbu.srcMmf)))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
+		}(bbu.jptm)
+
 		// and the chunkFunc has been changed to the version without param workId
 		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
 		transferDone := func() {
@@ -404,6 +420,26 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 	// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 	defer jptm.ReleaseAConnection()
 
+	// This function allows routine to manage behavior of unexpected panics.
+	// The panic error along with transfer details are logged.
+	// The transfer is marked as failed and is reported as done.
+	defer func (jptm IJobPartTransferMgr) {
+		r := recover()
+		if r != nil {
+			info := jptm.Info()
+			lenSrcMmf := 0
+			if info.SourceSize != 0 {
+				lenSrcMmf = len(srcMmf)
+			}
+			if jptm.ShouldLog(pipeline.LogError) {
+				jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v sourceMMF size %v",
+					r, info.Source, info.Destination, info.SourceSize, lenSrcMmf))
+			}
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+		}
+	}(jptm)
+
 	// Get blob http headers and metadata.
 	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
@@ -478,6 +514,23 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 		pbu.jptm.OccupyAConnection()
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer pbu.jptm.ReleaseAConnection()
+
+		// This function allows routine to manage behavior of unexpected panics.
+		// The panic error along with transfer details are logged.
+		// The transfer is marked as failed and is reported as done.
+		defer func (jptm IJobPartTransferMgr) {
+			r := recover()
+			if r != nil {
+				info := jptm.Info()
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startPage %v calculatedPageSize %v sourceMMF size %v",
+						r, info.Source, info.Destination, info.SourceSize, startPage, calculatedPageSize, len(pbu.srcMmf)))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
+		}(pbu.jptm)
+
 		// pageDone is the function called after success / failure of each page.
 		// If the calling page is the last page of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.

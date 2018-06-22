@@ -154,6 +154,24 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 
 func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, startIndex int64, adjustedRangeSize int64) chunkFunc{
 	return func(workerId int){
+
+		// This function allows routine to manage behavior of unexpected panics.
+		// The panic error along with transfer details are logged.
+		// The transfer is marked as failed and is reported as done.
+		defer func (jptm IJobPartTransferMgr) {
+			r := recover()
+			if r != nil {
+				// Get the transfer Info and log the details
+				info := jptm.Info()
+				if jptm.ShouldLog(pipeline.LogError) {
+					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v adjustedRangeSize %v destinationMMF size %v",
+						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedRangeSize, len(bffd.destMMF)))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+			}
+		}(bffd.jptm)
+
 		info := bffd.jptm.Info()
 		// chunkDone is an internal function which marks a chunkDone
 		// Check if the current chunk is the last Chunk
