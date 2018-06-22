@@ -32,20 +32,8 @@ def execute_user_scenario_blob_1():
     test_page_range_for_complete_sparse_file()
     test_page_blob_upload_partial_sparse_file()
 
-def execute_interactively_user_scenario_blob_1_oauth_session():
-    #login to get session
-    test_login_default_tenant()
-    #execute copy commands
-
-    #logout
-
-def execute_interactively_user_scenario_blob_1_oauth_per_commandline():
-    #hello
-    test_login_default_tenant()
-
 def execute_user_scenario_wildcards_op():
     test_remove_files_with_Wildcard()
-
 
 def execute_bfs_user_scenario():
     test_blobfs_upload_1Kb_file()
@@ -161,7 +149,7 @@ def parse_config_file_set_env():
     os.environ['SHARE_SAS_URL'] = config['CREDENTIALS']['SHARE_SAS_URL']
 
     # container sas of the premium storage account.
-    # os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
+    os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
 
     # set the account name for blob fs service operation
     os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
