@@ -38,17 +38,17 @@ func init() {
 	rawResumeJobCommand := common.ResumeJob{}
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
-		Use:        "resume",
+		Use:        "resume jobID",
 		SuggestFor: []string{"resme", "esume", "resue"},
-		Short:      "resume resumes the existing job for given JobId.",
-		Long:       `resume resumes the existing job for given JobId.`,
+		Short:      "Resume the existing job with the given Job Id",
+		Long:       `Resume the existing job with the given Job Id`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the resume command requires necessarily to have an argument
 			// resume jobId -- resumes all the parts of an existing job for given jobId
 
 			// If no argument is passed then it is not valid
 			if len(args) != 1 {
-				return errors.New("this command only requires jobId")
+				return errors.New("this command requires jobId to be passed as argument")
 			}
 			commandLineInput = args[0]
 			return nil
@@ -97,10 +97,10 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
-		"More than one file are separated by ';'")
-	resumeCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
-		"More than one file are separated by ';'")
+	resumeCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
+		"Files should be separated by ';'.")
+	resumeCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
+		"Files should be separated by ';'.")
 }
 
 func waitUntilJobCompletion(jobID common.JobID) {

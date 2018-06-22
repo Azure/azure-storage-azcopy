@@ -40,10 +40,10 @@ func init() {
 		Use:        "showJob",
 		Aliases:    []string{"showJob"},
 		SuggestFor: []string{"shwJob", "shJob", "showJb"},
-		Short:      "showJob shows the details for given JobID",
-		Long: `showJob shows the details of given JobID:
+		Short:      "Show detailed information for the given Job ID",
+		Long: `Show detailed information for the given Job ID:
 		Parameter:
-		JobID - If only JobID is supplied with showJob, progress summmary of Job is returned
+		JobID - If only JobID is supplied with showJob, progress summary of Job is returned
 		with-status - shows the lists of transfer in the Job with status equal to given transfer status`,
 		Args: func(cmd *cobra.Command, args []string) error {
 

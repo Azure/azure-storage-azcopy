@@ -73,8 +73,8 @@ func init() {
 	cancelCmd := &cobra.Command{
 		Use:        "cancel",
 		SuggestFor: []string{"cancl", "ancl", "cacl"},
-		Short:      "cancels an existing job",
-		Long:       "cancels an existing job",
+		Short:      "Stops an ongoing job with the given Job ID",
+		Long:       "Stops an ongoing job with the given Job ID",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the cancel command requires a JobId argument
 			// it then cancels all parts of the specified job
@@ -99,6 +99,9 @@ func init() {
 
 			return nil
 		},
+		// hide features not relevant to BFS
+		// TODO remove after preview release
+		Hidden: true,
 	}
 	rootCmd.AddCommand(cancelCmd)
 }

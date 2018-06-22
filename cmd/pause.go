@@ -34,8 +34,8 @@ func init() {
 	pauseCmd := &cobra.Command{
 		Use:        "pause",
 		SuggestFor: []string{"pase", "ause", "paue"},
-		Short:      "pause pauses the existing job for given JobId.",
-		Long:       `pause pauses the existing job for given JobId.`,
+		Short:      "Pause the existing job with the given Job Id",
+		Long:       `Pause the existing job with the given Job Id`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the pause command requires necessarily to have an argument
 			// pause jobId -- pause all the parts of an existing job for given jobId
@@ -50,6 +50,9 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			HandlePauseCommand(commandLineInput)
 		},
+		// hide features not relevant to BFS
+		// TODO remove after preview release
+		Hidden: true,
 	}
 	rootCmd.AddCommand(pauseCmd)
 }

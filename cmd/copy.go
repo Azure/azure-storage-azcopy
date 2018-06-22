@@ -569,8 +569,8 @@ func init() {
 		Use:        "copy",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
-		Short:      "copy(cp) moves data between two places.",
-		Long: `copy(cp) moves data between two places. The most common cases are:
+		Short:      "Move data between two places",
+		Long: `Copy(cp) moves data between two places. The most common cases are:
   - Upload local files/directories into Azure Storage.
   - Download blobs/container from Azure Storage to local file system.
   - Coming soon: Transfer files from Amazon S3 to Azure Storage.
@@ -654,4 +654,21 @@ Usage:
 		"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
+
+	// hide flags not relevant to BFS
+	// TODO remove after preview release
+	cpCmd.PersistentFlags().MarkHidden("include")
+	cpCmd.PersistentFlags().MarkHidden("exclude")
+	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
+	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
+
+	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
+	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")
+	cpCmd.PersistentFlags().MarkHidden("metadata")
+	cpCmd.PersistentFlags().MarkHidden("content-type")
+	cpCmd.PersistentFlags().MarkHidden("content-encoding")
+	cpCmd.PersistentFlags().MarkHidden("no-guess-mime-type")
+	cpCmd.PersistentFlags().MarkHidden("preserve-last-modified-time")
+	cpCmd.PersistentFlags().MarkHidden("background-op")
+	cpCmd.PersistentFlags().MarkHidden("acl")
 }
