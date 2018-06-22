@@ -1,6 +1,7 @@
 package azbfs
 
 import (
+	"net"
 	"net/url"
 	"strings"
 )
@@ -18,14 +19,30 @@ type FileURLParts struct {
 	FileSystemName      string // Share name, Ex: "myshare"
 	DirectoryOrFilePath string // Path of directory or file, Ex: "mydirectory/myfile"
 	UnparsedParams      string
+
+	accountName       string // "" if not using IP endpoint style
+	isIPEndpointStyle bool   // Ex: "https://ip/accountname/filesystem"
+}
+
+// isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
+// http(s)://IP(:port)/storageaccount/share(||container||etc)/...
+func isIPEndpointStyle(url url.URL) bool {
+	if net.ParseIP(url.Host) != nil {
+		return true
+	}
+
+	return false
 }
 
 // NewFileURLParts parses a URL initializing FileURLParts' fields including any SAS-related & sharesnapshot query parameters. Any other
 // query parameters remain in the UnparsedParams field. This method overwrites all fields in the FileURLParts object.
 func NewFileURLParts(u url.URL) FileURLParts {
+	isIPEndpointStyle := isIPEndpointStyle(u)
+
 	up := FileURLParts{
-		Scheme: u.Scheme,
-		Host:   u.Host,
+		Scheme:            u.Scheme,
+		Host:              u.Host,
+		isIPEndpointStyle: isIPEndpointStyle,
 	}
 
 	if u.Path != "" {
@@ -35,13 +52,32 @@ func NewFileURLParts(u url.URL) FileURLParts {
 			path = path[1:]
 		}
 
-		// Find the next slash (if it exists)
-		shareEndIndex := strings.Index(path, "/")
-		if shareEndIndex == -1 { // Slash not found; path has share name & no path of directory or file
-			up.FileSystemName = path
-		} else { // Slash found; path has share name & path of directory or file
-			up.FileSystemName = path[:shareEndIndex]
-			up.DirectoryOrFilePath = path[shareEndIndex+1:]
+		if isIPEndpointStyle {
+			accountEndIndex := strings.Index(path, "/")
+			if accountEndIndex == -1 { // Slash not found; path has account name & no file system, path of directory or file
+				up.accountName = path
+			} else {
+				up.accountName = path[:accountEndIndex] // The account name is the part between the slashes
+
+				path = path[accountEndIndex+1:]
+				// Find the next slash (if it exists)
+				fsEndIndex := strings.Index(path, "/")
+				if fsEndIndex == -1 { // Slash not found; path has file system name & no path of directory or file
+					up.FileSystemName = path
+				} else { // Slash found; path has file system name & path of directory or file
+					up.FileSystemName = path[:fsEndIndex]
+					up.DirectoryOrFilePath = path[fsEndIndex+1:]
+				}
+			}
+		} else {
+			// Find the next slash (if it exists)
+			fsEndIndex := strings.Index(path, "/")
+			if fsEndIndex == -1 { // Slash not found; path has share name & no path of directory or file
+				up.FileSystemName = path
+			} else { // Slash found; path has share name & path of directory or file
+				up.FileSystemName = path[:fsEndIndex]
+				up.DirectoryOrFilePath = path[fsEndIndex+1:]
+			}
 		}
 	}
 
@@ -55,6 +91,11 @@ func NewFileURLParts(u url.URL) FileURLParts {
 // field contains the SAS, snapshot, and unparsed query parameters.
 func (up FileURLParts) URL() url.URL {
 	path := ""
+	// Concatenate account name for IP endpoint style URL
+	if up.isIPEndpointStyle && up.accountName != "" {
+		path += "/" + up.accountName
+	}
+
 	// Concatenate share & path of directory or file (if they exist)
 	if up.FileSystemName != "" {
 		path += "/" + up.FileSystemName
