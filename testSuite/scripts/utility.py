@@ -75,6 +75,21 @@ class Command(object):
     def execute_azcopy_info(self):
         return verify_operation_get_output(self.string())
 
+# processes oauth command according to swtiches
+def process_oauth_command(
+    cmd,
+    fromTo="",
+    forceOAuthLogin=False,
+    tenantID="",
+    aadEndpoint=""):
+    if fromTo!="":
+        cmd.add_flags("fromTo", fromTo)
+    if forceOAuthLogin:
+        cmd.add_flags("oauth-user","true")
+    if tenantID!="":
+        cmd.add_flags("tenant-id", tenantID)
+    if aadEndpoint!="":
+        cmd.add_flags("aad-endpoint", aadEndpoint)
 
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container(container):
@@ -162,12 +177,12 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # cleaning the test container provided
     # all blob inside the container will be deleted.
     test_container_url = container_sas
-    #if not clean_test_container(test_container_url):
-    #    return False
+    if not clean_test_container(test_container_url):
+        return False
 
     test_premium_account_contaier_url = premium_container_sas
-    #if not clean_test_container(test_premium_account_contaier_url):
-    #    return False
+    if not clean_test_container(test_premium_account_contaier_url):
+        return False
 
     # cleaning the test share provided
     # all files and directories inside the share will be deleted.
@@ -177,7 +192,8 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     return True
 
 # initialize_test_suite initializes the setup for executing test cases.
-def initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, azcopy_exec_location, test_suite_exec_location):
+def initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, 
+    filesystem_url, oauth_tenant_id, oauth_aad_endpoint, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -194,6 +210,15 @@ def initialize_interactive_test_suite(test_dir_path, container_oauth, container_
 
     # holds the name of the test suite executable
     global test_suite_executable_name
+
+    # holds the filesystem url to perform the operations for blob fs service
+    global test_bfs_account_url
+
+    # holds the oauth tenant id
+    global test_oauth_tenant_id
+
+    # holds the oauth aad encpoint
+    global test_oauth_aad_endpoint
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -228,11 +253,18 @@ def initialize_interactive_test_suite(test_dir_path, container_oauth, container_
 
     test_directory_path = new_dir_path
 
+    test_oauth_tenant_id = oauth_tenant_id
+    test_oauth_aad_endpoint = oauth_aad_endpoint
+
+    # set the filesystem url
+    test_bfs_account_url = filesystem_url
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+        test_bfs_account_url = test_bfs_account_url + "/"
+
     test_oauth_container_url = container_oauth
     if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
         test_oauth_container_url = test_oauth_container_url + "/"
-    # oauth cases are tested interactively, and not executed in normal automation flow, so no automated clean.
-
+    
     # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
     test_oauth_container_validate_sas_url = container_oauth_validate
     if not clean_test_container(test_oauth_container_validate_sas_url):
@@ -402,7 +434,10 @@ def execute_azcopy_command_interactive(command):
     # azcopy executable path location concatenated with inproc keyword.
     azspath = os.path.join(test_directory_path, azcopy_executable_name)
     cmnd = azspath + " " + command
-    process = subprocess.Popen(cmnd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if os.name == "nt":
+        process = subprocess.Popen(cmnd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    else:
+        process = subprocess.Popen(shlex.split(cmnd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     for line in iter(process.stdout.readline, b''):
         print(line.decode('utf-8'))
     process.wait()

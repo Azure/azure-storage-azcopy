@@ -2,39 +2,18 @@ from test_blob_download import *
 from test_blob_download_oauth import *
 from test_upload_block_blob import *
 from test_upload_page_blob import *
-from test_file_download import *
-from test_file_upload import *
 from test_azcopy_operations import *
+from test_blobfs_upload import *
+from test_blobfs_download import *
 from test_oauth import *
 import glob, os
 import configparser
 import platform
+import utility as util
 
-
-def execute_user_scenario_blob_1():
-    test_1kb_blob_upload()
-    test_63mb_blob_upload()
-    test_n_1kb_blob_upload(5)
-    test_1GB_blob_upload()
-    test_blob_metaData_content_encoding_content_type()
-    test_block_size(4 * 1024 * 1024)
-    test_guess_mime_type()
-    test_download_1kb_blob()
-    test_blob_download_preserve_last_modified_time()
-    test_blob_download_63mb_in_4mb()
-    test_recursive_download_blob()
-    # test_cancel_job()
-    # test_blob_download_63mb_in_4mb()
-    # #test_pause_resume_job_200Mb_file()
-    # #test_pause_resume_job_95Mb_file()
-    test_page_blob_upload_1mb()
-    test_page_range_for_complete_sparse_file()
-    test_page_blob_upload_partial_sparse_file()
-
-def execute_interactively_copy_blob_with_oauth_session_1():
+def execute_interactively_copy_blob_oauth_session_scenario():
     #login to get session
-    test_login_default_tenant()
-
+    test_login_with_default()
     #execute copy commands
     test_1kb_blob_upload(True)
     test_n_1kb_blob_upload(5, True)
@@ -42,17 +21,33 @@ def execute_interactively_copy_blob_with_oauth_session_1():
     test_download_1kb_blob_oauth()
     test_recursive_download_blob_oauth()
     test_page_blob_upload_1mb(True)
-
     #logout
     test_logout()
 
-def execute_interactively_user_scenario_blob_1_oauth_per_commandline():
-    #hello
-    test_login_default_tenant()
+def execute_interactively_copy_blob_oauth_login_percmd_scenario():
+    #execute copy commands
+    # download will test both upload/download scenarios
+    test_download_1kb_blob_oauth(True)
+    test_recursive_download_blob_oauth(True)
 
-def execute_user_scenario_2():
-    test_blob_download_with_special_characters()
+def execute_interactively_copy_bfs_oauth_session_scenario():
+    #login to get session
+    test_login(util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
+    #execute copy commands
+    test_blobfs_upload_1Kb_file(True)
+    test_blobfs_upload_64MB_file(True)
+    test_blobfs_upload_100_1Kb_file(True)
+    test_blobfs_download_1Kb_file(True)
+    test_blobfs_download_64MB_file(True)
+    test_blobfs_download_100_1Kb_file(True)
+    #logout
+    test_logout()
 
+def execute_interactively_copy_bfs_oauth_login_percmd_scenario():
+    #download will test both upload and download
+    test_blobfs_download_1Kb_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
+    test_blobfs_download_64MB_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
+    test_blobfs_download_100_1Kb_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
@@ -91,6 +86,21 @@ def parse_config_file_set_env():
     # container which should be same to CONTAINER_OAUTH_URL, while with SAS for validation purpose.
     os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['INTERACTIVE']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
 
+    # set the account name for blob fs service operation
+    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
+
+    # set the account key for blob fs service operation
+    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+
+    # set the filesystem url in the environment
+    os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
+
+    # set oauth tenant ID
+    os.environ['OAUTH_TENANT_ID'] = config['INTERACTIVE']['OAUTH_TENANT_ID']
+
+    # set oauth aad endpoint
+    os.environ['OAUTH_AAD_ENDPOINT'] = config['INTERACTIVE']['OAUTH_AAD_ENDPOINT']
+
 
 def init():
     # Check the environment variables.
@@ -100,7 +110,12 @@ def init():
     if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
             os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
             os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1':
+            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
+            os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
+            os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
+            os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
+            os.environ.get('OAUTH_TENANT_ID', '-1') == '-1' or \
+            os.environ.get('OAUTH_AAD_ENDPOINT', '-1') == '-1':
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -121,10 +136,20 @@ def init():
     # container_oauth_validate is the URL with SAS for oauth validation.
     container_oauth_validate = os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL')
 
+    # get the filesystem url
+    filesystem_url = os.environ.get('FILESYSTEM_URL')
+
+    # oauth tenant ID
+    oauth_tenant_id = os.environ.get('OAUTH_TENANT_ID')
+
+    # oauth aad encpoint
+    oauth_aad_endpoint = os.environ.get('OAUTH_AAD_ENDPOINT')
+
     # deleting the log files.
     cleanup()
 
-    if not util.initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, azcopy_exec_location, test_suite_exec_location):
+    if not util.initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, 
+        filesystem_url, oauth_tenant_id, oauth_aad_endpoint, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the interactive test suite with given user input")
         return
     else:
@@ -142,8 +167,11 @@ def cleanup():
 
 def main():
     init()
-    execute_interactively_copy_blob_with_oauth_session_1()
-    #cleanup()
+    execute_interactively_copy_blob_oauth_session_scenario()
+    execute_interactively_copy_blob_oauth_login_percmd_scenario()
+    execute_interactively_copy_bfs_oauth_session_scenario()
+    execute_interactively_copy_bfs_oauth_login_percmd_scenario()
+    cleanup()
 
 
 if __name__ == '__main__':

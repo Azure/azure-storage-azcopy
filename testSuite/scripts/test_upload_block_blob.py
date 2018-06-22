@@ -8,20 +8,20 @@ import utility as util
 
 
 # test_1kb_blob_upload verifies the 1KB blob upload by azcopy.
-def test_1kb_blob_upload(use_oauth=False):
+def test_1kb_blob_upload(use_oauth_session=False):
     # Creating a single File Of size 1 KB
     filename = "test1KB.txt"
     file_path = util.create_test_file(filename, 1024)
 
     # executing the azcopy command to upload the 1KB file.
     src = file_path
-    if not use_oauth:
+    if not use_oauth_session:
         dest = util.get_resource_sas(filename)
         dest_validate = dest
     else:
         dest = util.get_resource_from_oauth_container(filename)
         dest_validate = util.get_resource_from_oauth_container_validate(filename)
-        
+    
     result = util.Command("copy").add_arguments(src).add_arguments(dest). \
         add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
     if not result:
@@ -63,12 +63,12 @@ def test_63mb_blob_upload():
 
 
 # test_n_1kb_blob_upload verifies the upload of n 1kb blob to the container.
-def test_n_1kb_blob_upload(number_of_files, use_oauth=False):
+def test_n_1kb_blob_upload(number_of_files, use_oauth_session=False):
     # create dir dir_n_files and 1 kb files inside the dir.
     dir_name = "dir_" + str(number_of_files) + "_files"
     dir_n_files_path = util.create_test_n_files(1024, number_of_files, dir_name)
 
-    if not use_oauth:
+    if not use_oauth_session:
         dest = util.test_container_url
         dest_validate = util.get_resource_sas(dir_name)
     else:
@@ -124,13 +124,13 @@ def test_blob_metaData_content_encoding_content_type():
 
 
 # test_1G_blob_upload verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb
-def test_1GB_blob_upload(use_oauth=False):
+def test_1GB_blob_upload(use_oauth_session=False):
     # create 1Gb file
     filename = "test_1G_blob.txt"
     file_path = util.create_test_file(filename, 1 * 1024 * 1024 * 1024)
 
     # execute azcopy upload.
-    if not use_oauth:
+    if not use_oauth_session:
         dest = util.get_resource_sas(filename)
         dest_validate = dest
     else:

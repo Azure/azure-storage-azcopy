@@ -229,8 +229,7 @@ def main():
     execute_user_scenario_azcopy_op()
     execute_user_scenario_blob_1()
     execute_user_scenario_2()
-    # execute_user_scenario_file_1()
-    # temp_adhoc_scenario()
+    execute_user_scenario_file_1()
     cleanup()
 
 

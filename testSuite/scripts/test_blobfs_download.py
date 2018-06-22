@@ -6,13 +6,28 @@ from stat import *
 import sys
 import utility as util
 
-def test_blobfs_download_1Kb_file():
+def test_blobfs_download_1Kb_file(
+    explictFromTo=False,
+    forceOAuthLogin=False,
+    tenantID="",
+    aadEndpoint=""):
     # create file of size 1KB
     filename = "test_blob_d_1kb_file.txt"
     file_path = util.create_test_file(filename, 1024)
     # upload the file using Azcopy
-    result = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("log-level", "Info").execute_azcopy_copy_command()
+    cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
+        add_flags("log-level", "Info")
+    util.process_oauth_command(
+        cmd,
+        "LocalBlobFS" if explictFromTo else "",
+        forceOAuthLogin,
+        tenantID,
+        aadEndpoint)
+    if forceOAuthLogin:
+        result = cmd.execute_azcopy_command_interactive()
+    else:
+        result = cmd.execute_azcopy_copy_command()
+        
     if not result:
         print("test_blobfs_download_1Kb_file failed uploading the 1kb file ", filename, " to the filesystem")
         sys.exit(1)
@@ -30,8 +45,18 @@ def test_blobfs_download_1Kb_file():
         sys.exit(1)
 
     # download the file using Azcopy
-    result = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
-        add_flags("log-level", "Info").execute_azcopy_copy_command()
+    cmd = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
+        add_flags("log-level", "Info")
+    util.process_oauth_command(
+        cmd,
+        "BlobFSLocal" if explictFromTo else "",
+        forceOAuthLogin,
+        tenantID,
+        aadEndpoint)
+    if forceOAuthLogin:
+        result = cmd.execute_azcopy_command_interactive()
+    else:
+        result = cmd.execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_1Kb_file failed while downloading the 1kb file")
         sys.exit(1)
@@ -42,13 +67,27 @@ def test_blobfs_download_1Kb_file():
         sys.exit(1)
     print("test_blobfs_download_1Kb_file successfully passed")
 
-def test_blobfs_download_64MB_file():
+def test_blobfs_download_64MB_file(
+    explictFromTo=False,
+    forceOAuthLogin=False,
+    tenantID="",
+    aadEndpoint=""):
     # create test file of size 64MB
     filename = "test_blob_d_64MB_file.txt"
     file_path = util.create_test_file(filename, 64*1024*1024)
     # Upload the file using Azcopy
-    result = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("log-level", "Info").execute_azcopy_copy_command()
+    cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
+        add_flags("log-level", "Info")
+    util.process_oauth_command(
+        cmd,
+        "LocalBlobFS" if explictFromTo else "",
+        forceOAuthLogin,
+        tenantID,
+        aadEndpoint)
+    if forceOAuthLogin:
+        result = cmd.execute_azcopy_command_interactive()
+    else:
+        result = cmd.execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_64MB_file failed uploading the 64MB file ", filename, " to the filesystem")
         sys.exit(1)
@@ -67,8 +106,18 @@ def test_blobfs_download_64MB_file():
         sys.exit(1)
 
     # download the file using azcopy
-    result = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
-        add_flags("log-level", "Info").execute_azcopy_copy_command()
+    cmd = util.Command("copy").add_arguments(fileUrl).add_arguments(util.test_directory_path). \
+        add_flags("log-level", "Info")
+    util.process_oauth_command(
+        cmd,
+        "BlobFSLocal" if explictFromTo else "",
+        forceOAuthLogin,
+        tenantID,
+        aadEndpoint)
+    if forceOAuthLogin:
+        result = cmd.execute_azcopy_command_interactive()
+    else:
+        result = cmd.execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_64MB_file failed downloading the 64MB file ", filename)
         sys.exit(1)
@@ -80,14 +129,28 @@ def test_blobfs_download_64MB_file():
         sys.exit(1)
     print("test_blobfs_download_64MB_file successfully passed")
 
-def test_blobfs_download_100_1Kb_file():
+def test_blobfs_download_100_1Kb_file(
+    explictFromTo=False,
+    forceOAuthLogin=False,
+    tenantID="",
+    aadEndpoint=""):
     # create dir with 100 1KB files inside it
     dir_name = "dir_blobfs_d_100_1K"
     dir_n_file_path = util.create_test_n_files(1024, 100, dir_name)
 
     # Upload the directory with 100 files inside it
-    result = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
+    cmd = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
+        add_flags("log-level", "Info").add_flags("recursive","true")
+    util.process_oauth_command(
+        cmd,
+        "LocalBlobFS" if explictFromTo else "",
+        forceOAuthLogin,
+        tenantID,
+        aadEndpoint)
+    if forceOAuthLogin:
+        result = cmd.execute_azcopy_command_interactive()
+    else:
+        result = cmd.execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_100_1Kb_file failed uploading the dir ", dir_name, " to the filesystem")
         sys.exit(1)
@@ -108,8 +171,18 @@ def test_blobfs_download_100_1Kb_file():
         sys.exit(1)
 
     # download the directory
-    result = util.Command("copy").add_arguments(dirUrl).add_arguments(util.test_directory_path).\
-        add_flags("log-level", "Info").add_flags("recursive", "true").execute_azcopy_copy_command()
+    cmd = util.Command("copy").add_arguments(dirUrl).add_arguments(util.test_directory_path).\
+        add_flags("log-level", "Info").add_flags("recursive", "true")
+    util.process_oauth_command(
+        cmd,
+        "BlobFSLocal" if explictFromTo else "",
+        forceOAuthLogin,
+        tenantID,
+        aadEndpoint)
+    if forceOAuthLogin:
+        result = cmd.execute_azcopy_command_interactive()
+    else:
+        result = cmd.execute_azcopy_copy_command()
     if not result:
         print("test_blobfs_download_100_1Kb_file failed while downloading the directory")
         sys.exit(1)
