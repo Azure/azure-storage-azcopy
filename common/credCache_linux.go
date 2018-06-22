@@ -103,7 +103,7 @@ func (c *CredCache) RemoveCachedToken() error {
 	}
 	err = key.Unlink()
 	if err != nil {
-		return fmt.Errof("fail to remove cached token, %v", err)
+		return fmt.Errorf("fail to remove cached token, %v", err)
 	}
 
 	c.isPermSet = false
