@@ -251,6 +251,13 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 // This method blockBlobUploadFunc uploads the block of src data from given startIndex till the given chunkSize.
 func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
+
+		// TODO: added the two operations for debugging purpose. remove later
+		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
+		bbu.jptm.OccupyAConnection()
+		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
+		defer bbu.jptm.ReleaseAConnection()
+
 		// and the chunkFunc has been changed to the version without param workId
 		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
 		transferDone := func() {
@@ -391,6 +398,12 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl azblob.BlockBlobURL, pacer *pacer) {
 
+	// TODO: added the two operations for debugging purpose. remove later
+	// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
+	jptm.OccupyAConnection()
+	// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
+	defer jptm.ReleaseAConnection()
+
 	// Get blob http headers and metadata.
 	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
@@ -460,6 +473,11 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 
 func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSize int64) chunkFunc {
 	return func(workerId int) {
+		// TODO: added the two operations for debugging purpose. remove later
+		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
+		pbu.jptm.OccupyAConnection()
+		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
+		defer pbu.jptm.ReleaseAConnection()
 		// pageDone is the function called after success / failure of each page.
 		// If the calling page is the last page of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.

@@ -162,6 +162,13 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF common.MMF, destinationPath string, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
+
+			// TODO: added the two operations for debugging purpose. remove later
+			// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
+			jptm.OccupyAConnection()
+			// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
+			defer jptm.ReleaseAConnection()
+
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
 			jptm.AddToBytesDone(adjustedChunkSize)
 			lastChunk, _ := jptm.ReportChunkDone()

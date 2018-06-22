@@ -384,6 +384,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// calculating the progress of Job and rounding the progress upto 4 decimal.
 	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred*100)/float64(totalBytesToTransfer), 4)
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+	// Get the number of active go routines performing the transfer or executing the chunk Func
+	// TODO: added for debugging purpose. remove later
+	js.ActiveConnections = jm.ActiveConnections()
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
 	part0PlanStatus := jp0.Plan().JobStatus()

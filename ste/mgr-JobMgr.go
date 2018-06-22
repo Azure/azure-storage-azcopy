@@ -43,6 +43,12 @@ type IJobMgr interface {
 	ReportJobPartDone() uint32
 	Context() context.Context
 	Cancel()
+	// TODO: added for debugging purpose. remove later
+	OccupyAConnection()
+	// TODO: added for debugging purpose. remove later
+	ReleaseAConnection()
+	// TODO: added for debugging purpose. remove later
+	ActiveConnections() int64
 	//Close()
 	common.ILoggerCloser
 }
@@ -85,6 +91,9 @@ type jobMgr struct {
 	finalPartOrdered           bool
 	atomicNumberOfBytesCovered uint64
 	atomicTotalBytesToXfer     uint64
+	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
+	// TODO: added for debugging purpose. remove later
+	atomicCurrentConcurrentConnections int64
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -104,6 +113,23 @@ func (jm *jobMgr) JobPartMgr(partNumber PartNumber) (IJobPartMgr, bool) {
 	return jm.jobPartMgrs.Get(partNumber)
 }
 
+// Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
+// TODO: added for debugging purpose. remove later
+func (jm *jobMgr) OccupyAConnection() {
+	atomic.AddInt64(&jm.atomicCurrentConcurrentConnections, 1)
+}
+
+// Sub 1 from the active number of goroutine performing the transfer or executing the chunkFunc
+// TODO: added for debugging purpose. remove later
+func (jm *jobMgr) ReleaseAConnection() {
+	atomic.AddInt64(&jm.atomicCurrentConcurrentConnections, -1)
+}
+
+// returns the number of goroutines actively performing the transfer / executing the chunkFunc
+// TODO: added for debugging purpose. remove later
+func (jm *jobMgr) ActiveConnections() int64{
+	return atomic.LoadInt64(&jm.atomicCurrentConcurrentConnections)
+}
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}

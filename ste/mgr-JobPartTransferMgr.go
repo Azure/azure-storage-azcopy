@@ -33,6 +33,10 @@ type IJobPartTransferMgr interface {
 	AddToBytesDone(value int64) int64
 	Cancel()
 	WasCanceled() bool
+	// TODO: added for debugging purpose. remove later
+	OccupyAConnection()
+	// TODO: added for debugging purpose. remove later
+	ReleaseAConnection()
 	common.ILogger
 }
 
@@ -166,6 +170,18 @@ func (jptm *jobPartTransferMgr) Cancel()           { jptm.cancel() }
 func (jptm *jobPartTransferMgr) WasCanceled() bool { return jptm.ctx.Err() != nil }
 func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
+}
+
+// Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
+// TODO: added for debugging purpose. remove later
+func(jptm *jobPartTransferMgr) OccupyAConnection() {
+	jptm.jobPartMgr.OccupyAConnection()
+}
+
+// Sub 1 from the active number of goroutine performing the transfer or executing the chunkFunc
+// TODO: added for debugging purpose. remove later
+func(jptm *jobPartTransferMgr) ReleaseAConnection() {
+	jptm.jobPartMgr.ReleaseAConnection()
 }
 
 func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
