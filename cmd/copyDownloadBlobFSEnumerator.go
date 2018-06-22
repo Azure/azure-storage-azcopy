@@ -21,6 +21,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	util := copyHandlerUtil{}
 	ctx := context.Background()
 
+	// Create blob FS pipeline.
 	p, err := createBlobFSPipeline(ctx, e.CredentialInfo)
 	if err != nil {
 		return err

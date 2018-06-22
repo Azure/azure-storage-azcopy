@@ -103,7 +103,7 @@ func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) 
 
 // ConstructCommandStringFromArgs creates the user given commandString from the os Arguments
 // If any argument passed is an http Url and contains the signature, then the signature is redacted
-func (util copyHandlerUtil) ConstructCommandStringFromArgs() string{
+func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 	// Get the os Args and strip away the first argument since it will be the path of Azcopy executable
 	args := os.Args[1:]
 	if len(args) == 0 {
@@ -121,10 +121,10 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string{
 				panic(fmt.Errorf("error parsing the url %s. Failed with error %s", argUrl.String(), err.Error()))
 			}
 			// Check for the signature query parameter
-			 _, rawQuery  := util.redactSigQueryParam(argUrl.RawQuery)
+			_, rawQuery := util.redactSigQueryParam(argUrl.RawQuery)
 			argUrl.RawQuery = rawQuery
 			s.WriteString(argUrl.String())
-		}else {
+		} else {
 			s.WriteString(arg)
 		}
 		s.WriteString(" ")
@@ -132,24 +132,13 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string{
 	return s.String()
 }
 
-func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential {
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
-	}
-	return azbfs.NewSharedKeyCredential(name, key)
-}
-func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL) bool {
+func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
 	if util.urlIsContainerOrShare(url) {
 		return true
 	}
-	c := util.sharedKeyCreds()
 	// Need to get the resource properties and verify if it is a file or directory
-	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
-	dirUrl := azbfs.NewDirectoryURL(*url, p)
-	return dirUrl.IsDirectory(context.Background())
+	dirURL := azbfs.NewDirectoryURL(*url, p)
+	return dirURL.IsDirectory(context.Background())
 }
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
@@ -563,7 +552,7 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 }
 
 // PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
-func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse){
+func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse) {
 	// added an empty line to provide gap between the last Job progress status and final job summary
 	fmt.Println("")
 	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
@@ -580,7 +569,7 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
 	if !summary.CompleteJobOrdered {
 		scanningString = "(Scanning ...)"
-	}else{
+	} else {
 		scanningString = ""
 	}
 	if outputJson {

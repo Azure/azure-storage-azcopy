@@ -49,9 +49,21 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			}
 			// append file name as blob name in case the given URL is a container
 			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsBFSFileSystemOrDirectory(ctx, destinationURL)) {
+				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) {
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
+			}
+
+			// append file name as blob name in case the given URL is a blob FS directory.
+			if e.FromTo == common.EFromTo.LocalBlobFS() {
+				// Create blob FS pipeline.
+				p, err := createBlobFSPipeline(ctx, e.CredentialInfo)
+				if err != nil {
+					return err
+				}
+
+				if util.urlIsBFSFileSystemOrDirectory(ctx, destinationURL, p) {
+					destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
+				}
 			}
 
 			err = e.addTransfer(common.CopyTransfer{
