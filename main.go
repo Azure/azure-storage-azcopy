@@ -71,7 +71,6 @@ func mainWithExitCode() exitCode {
 		}
 		defaultConcurrentConnections = int(val)
 	}
-	azcopyAppPathFolder := GetAzCopyAppPath()
 	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
 	cmd.Execute(azcopyAppPathFolder)
 	return eexitCode.success()
