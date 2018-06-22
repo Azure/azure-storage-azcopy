@@ -50,7 +50,8 @@ func ProcessOSSpecificInitialization() (uint64, error){
 		return 0, err
 	}
 	set := rlimit
-	
+	// set the current limit to one less than max of the rlimit
+	set.Cur = set.Max - 1
 	// set the soft limit to above rlimit
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
 	if err != nil {
