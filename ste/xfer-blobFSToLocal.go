@@ -134,7 +134,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		jptm.SetNumberOfChunks(numChunks)
 		blockIdCount := int32(0)
 		bffd := &BlobFSFileDownload{jptm:jptm,
-									srcFileURL: srcBlobURL.FileUrl(),
+									srcFileURL: srcBlobURL.NewFileUrl(),
 									destMMF : dstMMF,
 									pacer: pacer}
 		// step 4: go through the blob range and schedule download chunk jobs

@@ -2,18 +2,12 @@ package azbfs
 
 import (
 	"context"
-	//"io"
-	//"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"net/http"
 	"strconv"
-)
-
-const (
-	fileType = "file"
 )
 
 // A FileURL represents a URL to an Azure Storage file.
@@ -30,7 +24,7 @@ func NewFileURL(url url.URL, p pipeline.Pipeline) FileURL {
 	}
 	fileClient := newManagementClient(url, p)
 
-	urlParts := NewFileURLParts(url)
+	urlParts := NewBfsURLParts(url)
 	return FileURL{fileClient: fileClient, fileSystemName: urlParts.FileSystemName, path: urlParts.DirectoryOrFilePath}
 }
 
@@ -53,7 +47,7 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
 func (f FileURL) Create(ctx context.Context) (*CreatePathResponse, error) {
-	fileType := fileType
+	fileType := "file"
 	return f.fileClient.CreatePath(ctx, f.fileSystemName, f.path, &fileType,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,

@@ -23,15 +23,6 @@ dep: docker-build #
 
 setup: clean docker-build dep ## setup environment for development
 
-clean: docker-clean ## clean environment and binaries
-	rm -rf bin
-
-vet: setup ## run go vet
-	$(call with_docker,go vet ./...)
-
-lint: setup ## run go lint
-	$(call with_docker,golint -set_exit_status ./...)
-
 test: setup ## run go tests
 	$(call with_docker,go test -race -short -cover ./cmd)
 
@@ -42,6 +33,16 @@ smoke: setup ## set up smoke test
 	$(call with_docker,go build -o test-validator ./testSuite/)
 
 all: setup test build smoke ## run all tests and lints
+
+## unused for now
+clean: docker-clean ## clean environment and binaries
+	rm -rf bin
+
+vet: setup ## run go vet
+	$(call with_docker,go vet ./...)
+
+lint: setup ## run go lint
+	$(call with_docker,golint -set_exit_status ./...)
 
 help: ## display this help screen
 	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

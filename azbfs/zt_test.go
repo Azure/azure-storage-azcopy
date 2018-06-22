@@ -98,7 +98,7 @@ func getDirectoryURLFromFileSystem(c *chk.C, fs azbfs.FileSystemURL) (directory 
 
 func getDirectoryURLFromDirectory(c *chk.C, parentDirectory azbfs.DirectoryURL) (directory azbfs.DirectoryURL, name string) {
 	name = generateDirectoryName()
-	directory = parentDirectory.NewSubDirectoryUrl(name)
+	directory = parentDirectory.NewDirectoryURL(name)
 	return directory, name
 }
 
