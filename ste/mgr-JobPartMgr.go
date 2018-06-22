@@ -356,8 +356,7 @@ func (jpm *jobPartMgr) createBlobCredential(ctx context.Context) azblob.Credenti
 	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
 	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
 
-	jpm.Log(pipeline.LogInfo,
-		fmt.Sprintf("jpm credential type: %v, token info: %v", inMemoryJobState.credentialInfo.CredentialType, inMemoryTokenInfo))
+	jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, inMemoryJobState.credentialInfo.CredentialType))
 
 	if inMemoryJobState.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		if inMemoryTokenInfo.IsEmpty() {
@@ -448,6 +447,8 @@ func (jpm *jobPartMgr) createBlobFSCredential(ctx context.Context) azbfs.Credent
 	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
 	inMemoryCredType := inMemoryJobState.credentialInfo.CredentialType
 	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
+
+	jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, inMemoryJobState.credentialInfo.CredentialType))
 
 	switch inMemoryCredType {
 	case common.ECredentialType.SharedKey(): // For testing

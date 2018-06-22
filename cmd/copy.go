@@ -519,7 +519,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	fmt.Println("credentialType", jobPartOrder.CredentialInfo.CredentialType) // Comment out for debug purpose
+	fmt.Printf("Copy using credential type %v\n", jobPartOrder.CredentialInfo.CredentialType) // TODO: use FE logging facility
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
