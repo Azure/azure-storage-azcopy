@@ -135,7 +135,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 // getBlobFSCredentialType is used to get BlobFS's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
 // 1. If there is cached session OAuth token, indicating using token credential.
-// 2. Otherwise use anonymous credential. TODO: ensure if blob FS supports any kind of anonymous credential.
+// 2. Otherwise use shared key.
 func getBlobFSCredentialType() (common.CredentialType, error) {
 	uotm := GetUserOAuthTokenManagerInstance()
 

@@ -65,7 +65,7 @@ func (c *CredCache) HasCachedToken() (bool, error) {
 	}
 }
 
-// RemoveCachedToken delete all the cached token.
+// RemoveCachedToken deletes all the cached token.
 func (c *CredCache) RemoveCachedToken() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()

@@ -32,13 +32,17 @@ import (
 )
 
 // CredCache manages credential caches.
+// Use keyring in Linux OS. Session keyring is choosed,
+// the session hooks key should be created since user first login (i.e. by pam).
+// So the session is inherited by processes created from login session.
+// When user logout, the session keyring is recycled.
 type CredCache struct {
-	state          string
-	cachedTokenKey string
+	state          string // reserved for use
+	cachedTokenKey string // the name of key would be cached in keyring, composed with current UID, in case user su
 	lock           sync.Mutex
 
 	key       *keyctl.Key
-	isPermSet bool
+	isPermSet bool // state used to ensure key has been set permission correctly
 }
 
 const cachedTokenKeySuffix = "AzCopyOAuthTokenCache"
@@ -52,7 +56,9 @@ func NewCredCache(state string) *CredCache {
 
 	runtime.SetFinalizer(c, func(CredCache *CredCache) {
 		if CredCache.isPermSet == false && CredCache.key != nil {
-			// which indicates Permission is by default ProcessAll, try to recycle the key
+			// Indicates Permission is by default ProcessAll, which is not safe and try to recycle the key.
+			// Note: there is no method to grant permission during adding key,
+			// this mechanism is added to ensure key exists only if its permission is set properly.
 			unlinkErr := CredCache.key.Unlink()
 			if unlinkErr != nil {
 				panic(errors.New("Fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
@@ -128,13 +134,13 @@ func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
 	}
 	c.key = k
 
-	// Set permissions to user.
+	// Set permissions to only current user.
 	err = keyctl.SetPerm(k, keyctl.PermUserAll)
 	if err != nil {
 		// which indicates Permission is by default ProcessAll
 		unlinkErr := k.Unlink()
 		if unlinkErr != nil {
-			panic(errors.New("Fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
+			panic(errors.New("fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
 		}
 		return fmt.Errorf("fail to set permission for key, %v", err)
 	}
