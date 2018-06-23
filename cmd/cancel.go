@@ -60,7 +60,8 @@ func (cca cookedCancelCmdArgs) process() error {
 	var cancelJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
 	if !cancelJobResponse.CancelledPauseResumed {
-		return fmt.Errorf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg)
+		fmt.Println(cancelJobResponse.ErrorMsg)
+		os.Exit(1)
 	}
 	//fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
 	return nil

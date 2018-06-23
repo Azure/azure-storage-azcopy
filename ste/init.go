@@ -31,6 +31,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"strings"
 )
 
 var steCtx = context.Background()
@@ -171,11 +172,35 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		return completeJobOrdered
 	}
 
-	// If the job has not been ordered completely, then job cannot be paused/cancelled
-	if !completeJobOrdered(jm) {
-		return common.CancelPauseResumeResponse{
-			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("job with JobId %s hasn't been ordered completely", jobID.String()),
+	jobCompletelyOrdered := completeJobOrdered(jm)
+	// If the job has not been ordered completely, then if cancelled, Job cannot be resumed later
+	// The user is asked for a Yes / No to cancel or not
+	if !jobCompletelyOrdered {
+		var confirmCancel string
+		// The message is displayed to the User and asked for Yes / No Input to cancel the Job
+		fmt.Println("")
+		fmt.Println("The Job is not completely ordered yet. Cancelling the Job " +
+			"now won't let the Job to be resumed later. Enter 'Yes' to cancel or 'No' to resume to the Job")
+		// The flow goes in to the Indefinite loop reading the standard Input
+		// The loop doesn't break unless the user provide Yes or No for Input
+		for {
+			// read the standard input
+			fmt.Scanln(&confirmCancel)
+			// If the user provides "Yes" to cancel the Job
+			// then Job is cancelled
+			if strings.EqualFold(confirmCancel, "Yes") {
+				break
+			}else if strings.EqualFold(confirmCancel, "No") {
+				// If the user provides "No" to cancel the Job
+				// then it returns CancelPauseResumeResponse
+				// and the Job is resumed
+				return common.CancelPauseResumeResponse{
+					CancelledPauseResumed: true,
+					ErrorMsg:              "",
+				}
+			}else {
+				fmt.Println("Provide Input as Yes / No")
+			}
 		}
 	}
 
@@ -211,6 +236,19 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 			ErrorMsg:              fmt.Sprintf("cannot cancel the job %s since it has already been requested for cancellation", jobID),
 		}
 	case common.EJobStatus.InProgress():
+		// If the Job status is in Progress and Job is not completely ordered
+		// Job cannot be resumed later, hence graceful cancellation is not required
+		// hence sending the response immediately. Response CancelPauseResumeResponse
+		// returned has CancelledPauseResumed set to false, because that will let
+		// Job immediately stop.
+		if !jobCompletelyOrdered {
+			jr = common.CancelPauseResumeResponse{
+				CancelledPauseResumed:false,
+				ErrorMsg:      fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
+			}
+			return jr
+		}
+		// If the job is completely ordered, then it follow the graceful cancellation of job path
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
