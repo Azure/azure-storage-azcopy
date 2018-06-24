@@ -566,24 +566,31 @@ func init() {
 
 	// cpCmd represents the cp command
 	cpCmd := &cobra.Command{
-		Use:        "copy",
+		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
 		Short:      "Move data between two places",
-		Long: `Copy(cp) moves data between two places. The most common cases are:
-  - Upload local files/directories into Azure Storage.
-  - Download blobs/container from Azure Storage to local file system.
-  - Coming soon: Transfer files from Amazon S3 to Azure Storage.
-  - Coming soon: Transfer files from Azure Storage to Amazon S3.
-  - Coming soon: Transfer files from Google Storage to Azure Storage.
-  - Coming soon: Transfer files from Azure Storage to Google Storage.
-Usage:
-  - azcopy cp <source> <destination> --flags
-    - source and destination can either be local file/directory path, or blob/container URL with a SAS token.
-  - <command which pumps data to stdout> | azcopy cp <blob_url> --flags
-    - This command accepts data from stdin and uploads it to a blob.
-  - azcopy cp <blob_url> --flags > <destination_file_path>
-    - This command downloads a blob and outputs it on stdout.
+		Long: `
+Copy(cp) moves data between two places. Local <=> Azure Data Lake Storage Gen2 are the only scenarios officially supported at the moment.
+Please refer to the examples for more information.
+`,
+		Example:`Upload a single file:
+  - azcopy cp "/local/path/to/file.txt" "https://[account-name].dfs.core.windows.net/[existing-filesystem-name]/[path/to/destination/directory/or/file]"
+
+Upload an entire directory:
+  - azcopy cp "/local/path/to/dir" "https://[account-name].dfs.core.windows.net/[existing-filesystem-name]/[path/to/destination/directory]" --recursive=true
+
+Upload files using wildcards:
+  - azcopy cp "/local/path/*foo/*bar/*.pdf" "https://[account-name].dfs.core.windows.net/[existing-filesystem-name]/[path/to/destination/directory]"
+
+Upload files and/or directories using wildcards:
+  - azcopy cp "/local/path/*foo/*bar*" "https://[account-name].dfs.core.windows.net/[existing-filesystem-name]/[path/to/destination/directory]" --recursive=true
+
+Download a single file:
+  - azcopy cp "https://[account-name].dfs.core.windows.net/[existing-filesystem-name]/[path/to/source/file]" "/local/path/to/file.txt"
+
+Download an entire directory:
+  - azcopy cp "https://[account-name].dfs.core.windows.net/[existing-filesystem-name]/[path/to/source/dir]" "/local/path/to/file.txt" --recursive=true
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
@@ -602,7 +609,7 @@ Usage:
 				raw.src = args[0]
 				raw.dst = args[1]
 			} else {
-				return errors.New("wrong number of arguments, please refer to help page on usage of this command")
+				return errors.New("wrong number of arguments, please refer to the help page on usage of this command")
 			}
 			return nil
 		},
@@ -629,17 +636,22 @@ Usage:
 	rootCmd.AddCommand(cpCmd)
 
 	// define the flags relevant to the cp command
-	// filters
+	// Visible flags
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "force", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
+	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
+	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "indicate that the output should be in JSON format")
+
+
+	// hidden filters
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
-	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "force", true, "Filter: Overwrite the existing blobs with flag is set to true")
 
-	// options
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when uploading to Azure Storage.")
+	// hidden options
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
@@ -649,11 +661,9 @@ Usage:
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
-	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
 	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 
 	// hide flags not relevant to BFS
 	// TODO remove after preview release
@@ -670,5 +680,7 @@ Usage:
 	cpCmd.PersistentFlags().MarkHidden("no-guess-mime-type")
 	cpCmd.PersistentFlags().MarkHidden("preserve-last-modified-time")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
+	cpCmd.PersistentFlags().MarkHidden("fromTo")
 	cpCmd.PersistentFlags().MarkHidden("acl")
+	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
 }

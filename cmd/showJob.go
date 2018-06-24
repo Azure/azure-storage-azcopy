@@ -37,14 +37,13 @@ func init() {
 
 	// shJob represents the ls command
 	shJob := &cobra.Command{
-		Use:        "showJob",
+		Use:        "showJob [jobID]",
 		Aliases:    []string{"showJob"},
 		SuggestFor: []string{"shwJob", "shJob", "showJb"},
 		Short:      "Show detailed information for the given Job ID",
-		Long: `Show detailed information for the given Job ID:
-		Parameter:
-		JobID - If only JobID is supplied with showJob, progress summary of Job is returned
-		with-status - shows the lists of transfer in the Job with status equal to given transfer status`,
+		Long: `
+Show detailed information for the given job ID: if only the job ID is supplied without flag, then the progress summary of the job is returned.
+If the with-status flag is set, then the list of transfers in the job with the given value will be shown.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 
 			// if there is any argument passed
@@ -74,7 +73,7 @@ func init() {
 	rootCmd.AddCommand(shJob)
 
 	// filters
-	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "Filter: list transfers of job only with this status")
+	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: NotStarted, Started, Success, Failed")
 }
 
 // handles the list command

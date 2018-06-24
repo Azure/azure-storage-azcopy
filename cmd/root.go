@@ -41,11 +41,12 @@ var rootCmd = &cobra.Command{
 Project Home Page: github.com/Azure/azure-storage-azcopy
 
 AzCopy is a CLI tool that moves data into/out of Azure Storage.
-For this preview release, only the BFS service is supported.
+For this preview release, only the Azure Data Lake Storage Gen2 service is supported.
 Please refer to the Github README for more information.
 If you encounter any issue, please report it on Github.
 
-Note: to learn more about each command, simply enter it without any argument.`,
+The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
+`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

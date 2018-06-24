@@ -39,7 +39,8 @@ func init() {
 		Aliases:    []string{"lsJobs", "lsjobs", "listjobs"},
 		SuggestFor: []string{"lsJbs", "lsJob", "lsobs"},
 		Short:      "Display information on all jobs",
-		Long: `Display information on all jobs`,
+		Long: `
+Display information on all jobs.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 
 			// if there is any argument passed
