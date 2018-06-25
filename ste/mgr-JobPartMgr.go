@@ -296,25 +296,25 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 }
 
 // refreshToken is a delegate function for token refreshing.
-func (jpm *jobPartMgr) refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
+func (jpm *jobPartMgr) refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azblob.TokenCredential) time.Duration {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(*oauthConfig, common.ApplicationID, common.Resource, tokenInfo.Token)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
@@ -325,29 +325,13 @@ func (jpm *jobPartMgr) refreshBlobToken(ctx context.Context, tokenInfo common.OA
 		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
 	}
 
-	// Stop refresh if job is in cancelled, completed, paused status.
-	// note: There could be case when token should be refreshed before job is in progress.
-	jobStatus := jpm.Plan().JobStatus()
-	if jobStatus == common.EJobStatus.Cancelled() || jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Paused() {
-		jpm.Log(
-			pipeline.LogDebug,
-			fmt.Sprintf("JobID=%v, Part#=%d, stop token refresh, as job is in status=%v.", jpm.Plan().JobID, jpm.Plan().PartNum, jobStatus))
-		return
-	}
-
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
 	if waitDuration < time.Second {
 		waitDuration = time.Nanosecond
 	}
-	//waitDuration = time.Second * 1 //TODO: mock testing
+	//waitDuration = time.Second * 2 //TODO: mock testing
 
-	_ = time.AfterFunc(waitDuration, func() {
-		jpm.refreshBlobToken(ctx, common.OAuthTokenInfo{
-			Token:                   newToken,
-			Tenant:                  tokenInfo.Tenant,
-			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
-		}, tokenCredential)
-	})
+	return waitDuration
 }
 
 // createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
@@ -363,50 +347,37 @@ func (jpm *jobPartMgr) createBlobCredential(ctx context.Context) azblob.Credenti
 			jpm.Panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
 		}
 
-		// Create TokenCredential and set access token into it.
-		tokenCredential := azblob.NewTokenCredential(inMemoryTokenInfo.AccessToken)
-
-		if inMemoryTokenInfo.IsExpired() || inMemoryTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
-			jpm.refreshBlobToken(ctx, inMemoryTokenInfo, tokenCredential)
-		} else {
-			waitDuration := inMemoryTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-
-			if waitDuration < time.Second {
-				waitDuration = time.Nanosecond
-			}
-			//waitDuration = time.Nanosecond * 1 // TODO: mock testing
-
-			_ = time.AfterFunc(waitDuration, func() {
-				jpm.refreshBlobToken(ctx, inMemoryTokenInfo, tokenCredential)
+		// Create TokenCredential with refresher.
+		return azblob.NewTokenCredential(
+			inMemoryTokenInfo.AccessToken,
+			func(credential azblob.TokenCredential) time.Duration {
+				return jpm.refreshBlobToken(ctx, inMemoryTokenInfo, credential)
 			})
-		}
-
-		credential = tokenCredential
 	}
 
 	return credential
 }
 
 // refreshToken is a delegate function for token refreshing.
-func (jpm *jobPartMgr) refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azbfs.TokenCredential) {
+func (jpm *jobPartMgr) refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(*oauthConfig, common.ApplicationID, common.Resource, tokenInfo.Token)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
 		if jpm.ShouldLog(pipeline.LogError) {
-			jpm.Log(pipeline.LogError, fmt.Sprintf("fail to refresh token, due to error: %v", err.Error()))
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
 		}
 	}
 
@@ -417,29 +388,13 @@ func (jpm *jobPartMgr) refreshBlobFSToken(ctx context.Context, tokenInfo common.
 		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
 	}
 
-	// Stop refresh if job is in cancelled, completed, paused status.
-	// note: There could be case when token should be refreshed before job is in progress.
-	jobStatus := jpm.Plan().JobStatus()
-	if jobStatus == common.EJobStatus.Cancelled() || jobStatus == common.EJobStatus.Completed() || jobStatus == common.EJobStatus.Paused() {
-		jpm.Log(
-			pipeline.LogDebug,
-			fmt.Sprintf("JobID=%v, Part#=%d, stop token refresh, as job is in status=%v.", jpm.Plan().JobID, jpm.Plan().PartNum, jobStatus))
-		return
-	}
-
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
 	if waitDuration < time.Second {
 		waitDuration = time.Nanosecond
 	}
-	//waitDuration = time.Second * 1 //TODO: mock testing
+	//waitDuration = time.Second * 2 //TODO: mock testing
 
-	_ = time.AfterFunc(waitDuration, func() {
-		jpm.refreshBlobFSToken(ctx, common.OAuthTokenInfo{
-			Token:                   newToken,
-			Tenant:                  tokenInfo.Tenant,
-			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
-		}, tokenCredential)
-	})
+	return waitDuration
 }
 
 // createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
@@ -465,25 +420,12 @@ func (jpm *jobPartMgr) createBlobFSCredential(ctx context.Context) azbfs.Credent
 			jpm.Panic(errors.New("invalid state, cannot get valid token info for OAuthToken credential"))
 		}
 
-		// Create TokenCredential and set access token into it.
-		tokenCredential := azbfs.NewTokenCredential(inMemoryTokenInfo.AccessToken)
-
-		if inMemoryTokenInfo.IsExpired() || inMemoryTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
-			jpm.refreshBlobFSToken(ctx, inMemoryTokenInfo, tokenCredential)
-		} else {
-			waitDuration := inMemoryTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-
-			if waitDuration < time.Second {
-				waitDuration = time.Nanosecond
-			}
-			//waitDuration = time.Nanosecond * 1 // TODO: mock testing
-
-			_ = time.AfterFunc(waitDuration, func() {
-				jpm.refreshBlobFSToken(ctx, inMemoryTokenInfo, tokenCredential)
+		// Create TokenCredential with refresher.
+		return azbfs.NewTokenCredential(
+			inMemoryTokenInfo.AccessToken,
+			func(credential azbfs.TokenCredential) time.Duration {
+				return jpm.refreshBlobFSToken(ctx, inMemoryTokenInfo, credential)
 			})
-		}
-
-		return tokenCredential
 	default:
 		jpm.Panic(fmt.Errorf("invalid state, credential type %v is not supported", inMemoryCredType))
 

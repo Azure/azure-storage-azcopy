@@ -181,36 +181,21 @@ func createBlobCredential(ctx context.Context, credInfo common.CredentialInfo) a
 			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
 		}
 
-		// Create TokenCredential and set access token into it.
-		tokenCredential := azblob.NewTokenCredential(credInfo.OAuthTokenInfo.AccessToken)
-
-		if credInfo.OAuthTokenInfo.IsExpired() || credInfo.OAuthTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
-			// If token is near expire, or already expired, refresh immediately before return token.
-			refreshBlobToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
-		} else {
-			// Otherwise, calculate the next refresh time, and schedule the refresh.
-			waitDuration := credInfo.OAuthTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-
-			//waitDuration = time.Second * 2 // TODO: Add mock testing
-			if waitDuration < time.Second {
-				waitDuration = time.Nanosecond
-			}
-
-			_ = time.AfterFunc(waitDuration, func() {
-				refreshBlobToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
+		// Create TokenCredential with refresher.
+		return azblob.NewTokenCredential(
+			credInfo.OAuthTokenInfo.AccessToken,
+			func(credential azblob.TokenCredential) time.Duration {
+				return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential)
 			})
-		}
-
-		credential = tokenCredential
 	}
 
 	return credential
 }
 
-func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azblob.TokenCredential) {
+func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azblob.TokenCredential) time.Duration {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
-		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+		fmt.Printf("failed to refresh token, due to error: %v\n", err)
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
@@ -219,18 +204,16 @@ func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, toke
 		common.Resource,
 		tokenInfo.Token)
 	if err != nil {
-		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+		fmt.Printf("failed to refresh token, due to error: %v\n", err)
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
-		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+		fmt.Printf("failed to refresh token, due to error: %v\n", err)
 	}
 
 	newToken := spt.Token()
 	tokenCredential.SetToken(newToken.AccessToken)
-
-	// For FE(commandline module), refreshing token until process exit.
 
 	// Calculate wait duration, and schedule next refresh.
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
@@ -238,13 +221,7 @@ func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, toke
 		waitDuration = time.Nanosecond
 	}
 
-	_ = time.AfterFunc(waitDuration, func() {
-		refreshBlobToken(ctx, common.OAuthTokenInfo{
-			Token:                   newToken,
-			Tenant:                  tokenInfo.Tenant,
-			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
-		}, tokenCredential)
-	})
+	return waitDuration
 }
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
@@ -273,27 +250,12 @@ func createBlobFSCredential(ctx context.Context, credInfo common.CredentialInfo)
 			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
 		}
 
-		// Create TokenCredential and set access token into it.
-		tokenCredential := azbfs.NewTokenCredential(credInfo.OAuthTokenInfo.AccessToken)
-
-		if credInfo.OAuthTokenInfo.IsExpired() || credInfo.OAuthTokenInfo.WillExpireIn(common.DefaultTokenExpiryWithinThreshold) {
-			// If token is near expire, or already expired, refresh immediately before return token.
-			refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
-		} else {
-			// Otherwise, calculate the next refresh time, and schedule the refresh.
-			waitDuration := credInfo.OAuthTokenInfo.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-
-			//waitDuration = time.Second * 2 // TODO: Add mock testing
-			if waitDuration < time.Second {
-				waitDuration = time.Nanosecond
-			}
-
-			_ = time.AfterFunc(waitDuration, func() {
-				refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, tokenCredential)
+		// Create TokenCredential with refresher.
+		return azbfs.NewTokenCredential(
+			credInfo.OAuthTokenInfo.AccessToken,
+			func(credential azbfs.TokenCredential) time.Duration {
+				return refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, credential)
 			})
-		}
-
-		return tokenCredential
 
 	case common.ECredentialType.SharedKey():
 		// Get the Account Name and Key variables from environment
@@ -311,10 +273,10 @@ func createBlobFSCredential(ctx context.Context, credInfo common.CredentialInfo)
 	}
 }
 
-func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential *azbfs.TokenCredential) {
+func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
-		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+		fmt.Printf("failed to refresh token, due to error: %v\n", err)
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
@@ -323,18 +285,16 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, to
 		common.Resource,
 		tokenInfo.Token)
 	if err != nil {
-		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+		fmt.Printf("failed to refresh token, due to error: %v\n", err)
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
-		fmt.Printf("fail to refresh token, due to error: %v\n", err)
+		fmt.Printf("failed to refresh token, due to error: %v\n", err)
 	}
 
 	newToken := spt.Token()
 	tokenCredential.SetToken(newToken.AccessToken)
-
-	// For FE(commandline module), refreshing token until process exit.
 
 	// Calculate wait duration, and schedule next refresh.
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
@@ -342,11 +302,5 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, to
 		waitDuration = time.Nanosecond
 	}
 
-	_ = time.AfterFunc(waitDuration, func() {
-		refreshBlobFSToken(ctx, common.OAuthTokenInfo{
-			Token:                   newToken,
-			Tenant:                  tokenInfo.Tenant,
-			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
-		}, tokenCredential)
-	})
+	return waitDuration
 }
