@@ -76,13 +76,13 @@ func (c *CredCache) RemoveCachedToken() error {
 		// Cached token file existed
 		err = os.Remove(tokenFilePath)
 		if err != nil { // remove failed
-			return fmt.Errorf("failed to remove cached token file with path: %s, %v", tokenFilePath, err)
+			return fmt.Errorf("failed to remove cached token file with path %q, %v", tokenFilePath, err)
 		}
 
 		// remove succeeded
 	} else {
 		if !os.IsNotExist(err) { // Failed to stat cached token file
-			return fmt.Errorf("fail to stat cached token file with path %q during removing, %v", tokenFilePath, err)
+			return fmt.Errorf("failed to stat cached token file with path %q during removing, %v", tokenFilePath, err)
 		}
 
 		// token doesn't exist
@@ -105,12 +105,12 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 
 	decryptedB, err := decrypt(b, c.entropy)
 	if err != nil {
-		return nil, fmt.Errorf("fail to decrypt bytes during loading token: %v", err)
+		return nil, fmt.Errorf("failed to decrypt bytes during loading token: %v", err)
 	}
 
 	token, err := JSONToTokenInfo(decryptedB)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token, due to error: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal token during loading token, %v", err)
 	}
 
 	return token, nil
@@ -128,39 +128,39 @@ func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
 
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
-		return fmt.Errorf("failed to create directory %q to store token in: %v", dir, err)
+		return fmt.Errorf("failed to create directory %q to store token in, %v", dir, err)
 	}
 
 	newFile, err := ioutil.TempFile(dir, "token")
 	if err != nil {
-		return fmt.Errorf("failed to create the temp file to write the token: %v", err)
+		return fmt.Errorf("failed to create the temp file to write the token, %v", err)
 	}
 	tempPath := newFile.Name()
 
 	json, err := token.ToJSON()
 	if err != nil {
-		return fmt.Errorf("failed to marshal token: %v", err)
+		return fmt.Errorf("failed to marshal token, %v", err)
 	}
 
 	b, err := encrypt(json, c.entropy)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt token: %v", err)
+		return fmt.Errorf("failed to encrypt token, %v", err)
 	}
 
 	if _, err = newFile.Write(b); err != nil {
-		return fmt.Errorf("failed to encode token to file %q while saving token: %v", tempPath, err)
+		return fmt.Errorf("failed to encode token to file %q while saving token, %v", tempPath, err)
 	}
 
 	if err := newFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temp file %q: %v", tempPath, err)
+		return fmt.Errorf("failed to close temp file %q, %v", tempPath, err)
 	}
 
 	// Atomic replace to avoid multi-writer file corruptions
 	if err := os.Rename(tempPath, tokenFilePath); err != nil {
-		return fmt.Errorf("failed to move temporary token to desired output location. src=%q dst=%q: %v", tempPath, tokenFilePath, err)
+		return fmt.Errorf("failed to move temporary token to desired output location. src=%q dst=%q, %v", tempPath, tokenFilePath, err)
 	}
 	if err := os.Chmod(tokenFilePath, 0600); err != nil { // read/write for current user
-		return fmt.Errorf("failed to chmod the token file %q: %v", tokenFilePath, err)
+		return fmt.Errorf("failed to chmod the token file %q, %v", tokenFilePath, err)
 	}
 	return nil
 }
@@ -171,6 +171,7 @@ func (c *CredCache) tokenFilePath() string {
 
 // ======================================================================================
 // DPAPI facilities
+// ======================================================================================
 
 var dCrypt32 = syscall.NewLazyDLL("Crypt32.dll")
 var dKernel32 = syscall.NewLazyDLL("Kernel32.dll")

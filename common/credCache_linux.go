@@ -23,12 +23,11 @@ package common
 import (
 	"errors"
 	"fmt"
+	"github.com/jiacfan/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
 	"os"
 	"runtime"
 	"strconv"
 	"sync"
-	// todo: make a fork on this repo, and use the forked repo
-	"github.com/jsipprell/keyctl"
 )
 
 // CredCache manages credential caches.
@@ -61,7 +60,7 @@ func NewCredCache(state string) *CredCache {
 			// this mechanism is added to ensure key exists only if its permission is set properly.
 			unlinkErr := CredCache.key.Unlink()
 			if unlinkErr != nil {
-				panic(errors.New("Fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
+				panic(errors.New("failed to set permission, and cannot unlink key, please logout current login session for safety consideration"))
 			}
 		}
 	})
@@ -79,7 +78,7 @@ func (c *CredCache) HasCachedToken() (bool, error) {
 		return false, err
 	}
 	_, err = keyring.Search(c.cachedTokenKey)
-	// TODO: better logging what's cause the has cache token failure
+	// TODO: better logging what's cause for token caching failure
 	// e.g. Error message: "required key not available"
 	if err != nil {
 		return false, err
@@ -88,22 +87,22 @@ func (c *CredCache) HasCachedToken() (bool, error) {
 	}
 }
 
-// RemoveCachedToken delete the cached token in session key ring.
+// RemoveCachedToken deletes the cached token in session key ring.
 func (c *CredCache) RemoveCachedToken() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
-		return fmt.Errorf("fail to get keyring during removing cached token, %v", err)
+		return fmt.Errorf("failed to get keyring during removing cached token, %v", err)
 	}
 	key, err := keyring.Search(c.cachedTokenKey)
 	if err != nil {
-		return fmt.Errorf("fail to find cached token, %v", err)
+		return fmt.Errorf("failed to find cached token during removing cached token, %v", err)
 	}
 	err = key.Unlink()
 	if err != nil {
-		return fmt.Errorf("fail to remove cached token, %v", err)
+		return fmt.Errorf("failed to remove cached token, %v", err)
 	}
 
 	c.isPermSet = false
@@ -122,15 +121,15 @@ func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
 
 	b, err := token.ToJSON()
 	if err != nil {
-		return fmt.Errorf("fail to marshal during save token, %v", err)
+		return fmt.Errorf("failed to marshal during saving token, %v", err)
 	}
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
-		return fmt.Errorf("fail to get keyring during save token, %v", err)
+		return fmt.Errorf("failed to get keyring during saving token, %v", err)
 	}
 	k, err := keyring.Add(c.cachedTokenKey, b)
 	if err != nil {
-		return fmt.Errorf("fail to save key, %v", err)
+		return fmt.Errorf("failed to save key, %v", err)
 	}
 	c.key = k
 
@@ -140,9 +139,9 @@ func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
 		// which indicates Permission is by default ProcessAll
 		unlinkErr := k.Unlink()
 		if unlinkErr != nil {
-			panic(errors.New("fail to set key permission, and cannot recycle key, please logout current session for safety consideration."))
+			panic(errors.New("failed to set permission, and cannot unlink key, please logout current login session for safety consideration"))
 		}
-		return fmt.Errorf("fail to set permission for key, %v", err)
+		return fmt.Errorf("failed to set permission for cached token, %v", err)
 	}
 
 	c.isPermSet = true
@@ -157,19 +156,19 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
-		return nil, fmt.Errorf("fail to get key, %v", err)
+		return nil, fmt.Errorf("failed to get keyring during loading token, %v", err)
 	}
 	key, err := keyring.Search(c.cachedTokenKey)
 	if err != nil {
-		return nil, fmt.Errorf("fail to get key, %v", err)
+		return nil, fmt.Errorf("failed to find cached token during loading token, %v", err)
 	}
 	data, err := key.Get()
 	if err != nil {
-		return nil, fmt.Errorf("fail to get key, %v", err)
+		return nil, fmt.Errorf("failed to load token, %v", err)
 	}
 	token, err := JSONToTokenInfo(data)
 	if err != nil {
-		return nil, fmt.Errorf("fail to unmarshal token during get key, %v", err)
+		return nil, fmt.Errorf("failed to unmarshal token during loading key, %v", err)
 	}
 	return token, nil
 }
