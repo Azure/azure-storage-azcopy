@@ -217,9 +217,9 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// then uploading the source as block Blob.
 		// calculating num of chunks using the source size and chunkSize.
 		numChunks := common.Iffuint32(
-			info.SourceSize%int64(info.BlockSize) == 0,
-			uint32(info.SourceSize/int64(info.BlockSize)),
-			uint32(info.SourceSize/int64(info.BlockSize))+1)
+			blobSize % chunkSize == 0,
+			uint32(blobSize/chunkSize),
+			uint32(blobSize/chunkSize)+1)
 
 		// Set the number of chunk for the current transfer.
 		jptm.SetNumberOfChunks(numChunks)
