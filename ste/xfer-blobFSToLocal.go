@@ -63,7 +63,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		err := createEmptyFile(info.Destination)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
+				jptm.Log(pipeline.LogInfo, "BlobFSDownloadFailed because dst file could not be created locally. Failed with error "+err.Error())
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -74,7 +74,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			err := os.Chtimes(jptm.Info().Destination, lMTime, lMTime)
 			if err != nil {
 				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" failed while preserving last modified time for destionation %s", info.Destination))
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSDownloadFailed while preserving last modified time for destionation %s", info.Destination))
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				// Since the transfer failed, the file created above should be deleted
@@ -87,7 +87,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 				}
 			}
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" successfully preserved the last modified time for destinaton %s", info.Destination))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSDownloadSuccessful. successfully preserved the last modified time for destinaton %s", info.Destination))
 			}
 		}
 
@@ -100,7 +100,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		dstFile, err := createFileOfSize(info.Destination, sourceSize)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
+				jptm.Log(pipeline.LogInfo, "BlobFSDownloadFailed failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -112,7 +112,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file did not memory mapped successfully")
+				jptm.Log(pipeline.LogInfo, "BlobFSDownloadFailed failed because dst file did not memory mapped successfully")
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// Since the transfer failed, the file created above should be deleted
@@ -211,7 +211,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				if !bffd.jptm.WasCanceled() {
 					bffd.jptm.Cancel()
 					if bffd.jptm.ShouldLog(pipeline.LogInfo) {
-						bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkID %d because writing to file for startIndex of %d has failed", workerId, blockIdCount, startIndex))
+						bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSDownloadFailed. worker %d is canceling job because downloading startIndex %v and rangeSize %v has failed with error %s", workerId, startIndex, adjustedRangeSize, err.Error()))
 					}
 					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -233,7 +233,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				if !bffd.jptm.WasCanceled() {
 					bffd.jptm.Cancel()
 					if bffd.jptm.ShouldLog(pipeline.LogInfo) {
-						bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkID %d because reading the downloaded chunk failed. Failed with error %s", workerId, blockIdCount, err.Error()))
+						bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSDownloadFailed. worker %d is canceling job and chunkID %d because reading the downloaded chunk failed. Failed with error %s", workerId, blockIdCount, err.Error()))
 					}
 					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -248,7 +248,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
 				if bffd.jptm.ShouldLog(pipeline.LogInfo) {
-					bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkID %d", workerId, blockIdCount))
+					bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSDownloadFailed. worker %d which is concluding download Transfer of job after processing chunkID %d", workerId, blockIdCount))
 				}
 				bffd.jptm.SetStatus(common.ETransferStatus.Success())
 				if bffd.jptm.ShouldLog(pipeline.LogInfo) {
