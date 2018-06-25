@@ -119,6 +119,12 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		}
 	}
 
+	// log the transfer details.
+	if jptm.ShouldLog(pipeline.LogInfo) {
+		jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Source %s Destination %s Source Size %v is picked for processing",
+			info.Source, info.Destination, info.SourceSize))
+	}
+
 	if EndsWith(info.Source, ".vhd") && (blobSize%azblob.PageBlobPageBytes == 0) {
 		// step 3.b: If the Source is vhd file and its size is multiple of 512,
 		// then upload the blob as a pageBlob.
@@ -140,7 +146,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("failed since PageCreate failed due to %s", err.Error()))
+					fmt.Sprintf(" BlobUploadFailed failed since PageCreate failed due to %s", err.Error()))
 			}
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Failed())
@@ -159,7 +165,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			if err != nil {
 				if jptm.ShouldLog(pipeline.LogInfo) {
 					jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("failed since set blob-tier failed due to %s", err.Error()))
+						fmt.Sprintf("BlobUploadFailed failed since set blob-tier failed due to %s", err.Error()))
 				}
 				jptm.Cancel()
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
@@ -277,6 +283,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// and the chunkFunc has been changed to the version without param workId
 		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
 		transferDone := func() {
+			bbu.jptm.Log(pipeline.LogInfo, "Reported Done. Unmapping and cleanup in progress")
 			bbu.srcMmf.Unmap()
 			// Get the Status of the transfer
 			// If the transfer status value < 0, then transfer failed with some failure
@@ -287,8 +294,8 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 					// Other errors report that uncommitted blocks are there
-					if bbu.jptm.ShouldLog(pipeline.LogInfo) {
-						bbu.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error occurred while deleting the uncommitted "+
+					if bbu.jptm.ShouldLog(pipeline.LogError) {
+						bbu.jptm.Log(pipeline.LogError, fmt.Sprintf("error occurred while deleting the uncommitted "+
 							"blocks of blob %s. Failed with error %s", bbu.blobURL.String(), err.Error()))
 					}
 				}
@@ -304,7 +311,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
 					bbu.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
+						fmt.Sprintf("has worker %d finalizing cancellation of transfer", workerId))
 				}
 				transferDone()
 			}
@@ -332,10 +339,10 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			} else {
 				// cancel entire transfer because this chunk has failed
 				bbu.jptm.Cancel()
-				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
-					bbu.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d which is canceling transfer because upload of chunkId %d because startIndex of %d has failed",
-							workerId, chunkId, startIndex))
+				if bbu.jptm.ShouldLog(pipeline.LogError) {
+					bbu.jptm.Log(pipeline.LogError,
+						fmt.Sprintf(" BlobUploadFailed. worker %d is canceling transfer because upload of chunkId %d with startIndex %v and chunkSize %v failed with error %s",
+							workerId, chunkId, startIndex, adjustedChunkSize, err.Error()))
 				}
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
@@ -347,7 +354,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
 					bbu.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d is finalizing cancellation of transfer", workerId))
+						fmt.Sprintf("has worker %d finalizing cancellation of transfer", workerId))
 				}
 				transferDone()
 			}
@@ -378,10 +385,10 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			// commit the blocks.
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 			if err != nil {
-				if bbu.jptm.ShouldLog(pipeline.LogInfo) {
-					bbu.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d which failed to conclude Transfer after processing chunkId %d due to error %s",
-							workerId, chunkId, string(err.Error())))
+				if bbu.jptm.ShouldLog(pipeline.LogError) {
+					bbu.jptm.Log(pipeline.LogError,
+						fmt.Sprintf("BlobUploadFailed. worker %d failed to commit blockList with error %s",
+							workerId, err.Error()))
 				}
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 				transferDone()
@@ -389,7 +396,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			}
 
 			if bbu.jptm.ShouldLog(pipeline.LogInfo) {
-				bbu.jptm.Log(pipeline.LogInfo, " commit block list completed successfully")
+				bbu.jptm.Log(pipeline.LogInfo, "BlobUploadSuccessful. Commit block list completed successfully")
 			}
 
 			blockBlobTier, _ := bbu.jptm.BlobTiers()
@@ -400,7 +407,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				if err != nil {
 					if bbu.jptm.ShouldLog(pipeline.LogError) {
 						bbu.jptm.Log(pipeline.LogError,
-							fmt.Sprintf("has worker %d which failed to set tier %s on blob and failed with error %s",
+							fmt.Sprintf("BlobUploadFailed. worker %d failed to set tier %s on blob and failed with error %s",
 								workerId, blockBlobTier, string(err.Error())))
 					}
 					bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
@@ -461,7 +468,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 			}
 		} else {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" put blob failed and cancelling the transfer. Failed with error %s", err.Error()))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobUploadFailed and cancelling the transfer. Failed with error %s", err.Error()))
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
@@ -479,7 +486,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf common.MMF, blockBlobUrl
 			if err != nil {
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError,
-						fmt.Sprintf(" failed to set tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
+						fmt.Sprintf("BlobUploadFailed while seting tier %s on blob and failed with error %s", blockBlobTier, string(err.Error())))
 				}
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				// since blob tier failed, the transfer failed
@@ -608,7 +615,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 				} else {
 					if pbu.jptm.ShouldLog(pipeline.LogInfo) {
 						pbu.jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d which failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage+calculatedPageSize, err.Error()))
+							fmt.Sprintf("BlobUploadFailed. worker %d failed to Put Page range from %d to %d because of following error %s", workerId, startPage, startPage+calculatedPageSize, err.Error()))
 					}
 					// cancelling the transfer
 					pbu.jptm.Cancel()

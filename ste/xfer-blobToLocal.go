@@ -73,7 +73,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
+				jptm.Log(pipeline.LogInfo, "BlobDownloadFailed. transfer failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -84,7 +84,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			err := os.Chtimes(jptm.Info().Destination, lMTime, lMTime)
 			if err != nil {
 				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" failed while preserving last modified time for destionation %s", info.Destination))
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobDownloadFailed. Failed while preserving last modified time for destionation %s", info.Destination))
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				// Since the transfer failed, the file created above should be deleted
@@ -102,7 +102,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 
 		// executing the epilogue.
-		jptm.Log(pipeline.LogInfo, " concluding the download Transfer of job after creating an empty file")
+		jptm.Log(pipeline.LogInfo, "BlobDownloadSuccessful. concluding the download Transfer of job after creating an empty file")
 		jptm.SetStatus(common.ETransferStatus.Success())
 		jptm.ReportTransferDone()
 
@@ -110,7 +110,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		dstFile, err := createFileOfSize(info.Destination, blobSize)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
+				jptm.Log(pipeline.LogInfo, "BlobDownloadFailed. transfer failed because dst file could not be created locally. Failed with error "+err.Error())
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -122,7 +122,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file did not memory mapped successfully")
+				jptm.Log(pipeline.LogInfo, "BlobDownloadFailed. transfer failed because dst file did not memory mapped successfully")
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// Since the transfer failed, the file created above should be deleted
@@ -216,7 +216,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because writing to file for startIndex of %d has failed", workerId, chunkId, startIndex))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobDownloadFailed. worker %d is canceling job because writing to file for startIndex of %d has failed", workerId, startIndex))
 					}
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -232,7 +232,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkId %d because reading the downloaded chunk failed. Failed with error %s", workerId, chunkId, err.Error()))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobDownloadFailed. worker %d is canceling job because reading the downloaded chunk failed. Failed with error %s", workerId, err.Error()))
 					}
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -247,7 +247,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
 				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobDownloadSuccessful. worker %d is concluding download Transfer of job after processing chunkId %d", workerId, chunkId))
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
 				if jptm.ShouldLog(pipeline.LogInfo) {
