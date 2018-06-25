@@ -40,7 +40,7 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 // return the filedescriptor limit for process. If the function fails with some, it returns
 // the error
 // TODO: this api is implemented for windows as well but not required.
-func ProcessOSSpecificInitialization() (int, error){
+func ProcessOSSpecificInitialization() (int, error) {
 	return 0, nil
 }
 

@@ -52,17 +52,18 @@ func init() {
 			}
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				return fmt.Errorf("failed to parse user input due to error %s", err)
+				glcm.ExitWithError("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform copy command due to error %s", err)
+				glcm.ExitWithError("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
 			}
-			return nil
+
+			glcm.SurrenderControl()
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release

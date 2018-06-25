@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
@@ -17,216 +16,8 @@ import (
 
 type syncDownloadEnumerator common.SyncJobPartOrderRequest
 
-/*
-//TODO: Deprecated Api's. Need to delete the api's after unit test cases for sync are Inplace
-func (e *syncDownloadEnumerator) compareRemoteAgainstLocal1(
-	sourcePath string, isRecursiveOn bool,
-	destinationUrlString string, p pipeline.Pipeline,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-
-	util := copyHandlerUtil{}
-
-	destinationUrl, err := url.Parse(destinationUrlString)
-	if err != nil {
-		return fmt.Errorf("error parsing the destinatio url")
-	}
-	var containerUrl url.URL
-	var searchPrefix string
-	if !util.urlIsContainerOrShare(destinationUrl) {
-		containerUrl = util.getContainerURLFromString(*destinationUrl)
-		// get the search prefix to query the service
-		searchPrefix = util.getBlobNameFromURL(destinationUrl.Path)
-		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
-	} else {
-		containerUrl = *destinationUrl
-		searchPrefix = ""
-	}
-
-	// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
-	if strings.LastIndex(searchPrefix, "/") != len(searchPrefix)-1 {
-		searchPrefix += "/"
-	}
-
-	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
-
-	closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
-	// strip away the leading / in the closest virtual directory
-	if len(closestVirtualDirectory) > 0 && closestVirtualDirectory[0:1] == "/" {
-		closestVirtualDirectory = closestVirtualDirectory[1:]
-	}
-
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		// look for all blobs that start with the prefix
-		listBlob, err := containerBlobUrl.ListBlobsFlatSegment(context.TODO(), marker,
-			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
-		if err != nil {
-			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
-		}
-
-		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
-			blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
-			// If there is a "/" at the start of blobName, then strip "/" separator.
-			if len(blobNameAfterPrefix) > 0 && blobNameAfterPrefix[0:1] == "/" {
-				blobNameAfterPrefix = blobNameAfterPrefix[1:]
-			}
-			if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
-				continue
-			}
-			blobLocalPath := util.generateLocalPath(sourcePath, blobNameAfterPrefix)
-			f, err := os.Stat(blobLocalPath)
-			if err == nil {
-				// if the blob exists locally and the modified time of local file is before
-				// the last modified time of the blob, then download the file.
-				if blobInfo.Properties.LastModified.After(f.ModTime()) {
-					e.addTransferToUpload(common.CopyTransfer{
-						Source:           util.generateBlobUrl(containerUrl, blobInfo.Name),
-						Destination:      blobLocalPath,
-						SourceSize:       *blobInfo.Properties.ContentLength,
-						LastModifiedTime: blobInfo.Properties.LastModified,
-					}, wg, waitUntilJobCompletion)
-				}
-			} else if err != nil && os.IsNotExist(err) {
-				// if the blob doesn't exits locally, then we need to download the blob.
-				// add transfer to download the blob.
-				e.addTransferToUpload(common.CopyTransfer{
-					Source:           util.generateBlobUrl(containerUrl, blobInfo.Name),
-					Destination:      blobLocalPath,
-					SourceSize:       *blobInfo.Properties.ContentLength,
-					LastModifiedTime: blobInfo.Properties.LastModified,
-				}, wg, waitUntilJobCompletion)
-			}
-		}
-		marker = listBlob.NextMarker
-		//err = e.dispatchPart(false)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (e *syncDownloadEnumerator) compareLocalAgainstRemote1(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	util := copyHandlerUtil{}
-
-	// attempt to parse the destination url
-	destinationUrl, err := url.Parse(dst)
-	if err != nil {
-		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
-		panic(err)
-	}
-	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
-	f, ferr := os.Stat(src)
-	bProperties, berr := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
-	if ferr != nil {
-		return fmt.Errorf("cannot access the source %s. Failed with error %s", src, err.Error())
-	}
-	if !f.IsDir() && berr != nil {
-		return fmt.Errorf("cannot perform sync since source is a file and destination "+
-			"is not a blob. Listing blob failed with error %s", berr.Error())
-	}
-	if berr == nil && f.IsDir() {
-		return fmt.Errorf("cannot perform the sync since source %s "+
-			"is a directory and destination %s is a blob", src, destinationUrl.String())
-	}
-	// If the source is a file and destination is a blob
-	if berr == nil && !f.IsDir() {
-		blobName := destinationUrl.Path[strings.LastIndex(destinationUrl.Path, "/"):]
-		if strings.Compare(blobName, f.Name()) != 0 {
-			return fmt.Errorf("sync cannot be done since blob %s and filename %s doesn't match", blobName, f.Name())
-		}
-		if bProperties.LastModified().After(f.ModTime()) {
-			e.addTransferToUpload(common.CopyTransfer{
-				Source:      destinationUrl.String(),
-				Destination: src,
-				SourceSize:  f.Size(),
-			}, wg, waitUntilJobCompletion)
-		}
-		return nil
-	}
-
-	// verify the source path provided is valid or not.
-	_, err = os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("cannot find source to sync")
-	}
-
-	var containerPath string
-	var destinationSuffixAfterContainer string
-
-	// If destination url is not container, then get container Url from destination string.
-	if !util.urlIsContainerOrShare(destinationUrl) {
-		containerPath, destinationSuffixAfterContainer = util.getConatinerUrlAndSuffix(*destinationUrl)
-	} else {
-		containerPath = util.getContainerURLFromString(*destinationUrl).Path
-		destinationSuffixAfterContainer = ""
-	}
-
-	var dirIterateFunction func(dirPath string, currentDirString string) error
-	dirIterateFunction = func(dirPath string, currentDirString string) error {
-		files, err := ioutil.ReadDir(dirPath)
-		if err != nil {
-			return err
-		}
-		// Iterate through all files and directories.
-		for i := 0; i < len(files); i++ {
-			if files[i].IsDir() {
-				dirIterateFunction(dirPath+string(os.PathSeparator)+files[i].Name(), currentDirString+files[i].Name()+"/")
-			} else {
-				// the path in the blob name started at the given fileOrDirectoryPath
-				// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
-				destinationUrl.Path = containerPath + destinationSuffixAfterContainer + currentDirString + files[i].Name()
-				localFilePath := dirPath + string(os.PathSeparator) + files[i].Name()
-				blobUrl := azblob.NewBlobURL(*destinationUrl, p)
-				blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
-
-				if err != nil {
-					if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
-						return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", localFilePath, err.Error())
-					}
-					// If the file existing locally doesn't exist as a blob, then delete the file locally
-					if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode == http.StatusNotFound) {
-						err := os.Remove(localFilePath)
-						if err != nil {
-							return fmt.Errorf("error deleting the file %s. Failed with error %s", localFilePath, err.Error())
-						}
-						//If the delete is successful, then continue to next file.
-						continue
-					}
-				}
-				// If the modified time of file locally is greater than file in container
-				// do not update the file.
-				if err == nil && !blobProperties.LastModified().After(files[i].ModTime()) {
-					continue
-				}
-
-				// If the local file exists as blob in container and modified time of file locally
-				// is less than the file on container, then download the file.
-				err = e.addTransferToUpload(common.CopyTransfer{
-					Source:           destinationUrl.String(),
-					Destination:      localFilePath,
-					LastModifiedTime: blobProperties.LastModified(),
-					SourceSize:       blobProperties.ContentLength(),
-				}, wg, waitUntilJobCompletion)
-				if err != nil {
-					return err
-				}
-				// Closing the blob Properties response body if not nil.
-				if blobProperties != nil && blobProperties.Response() != nil {
-					io.Copy(ioutil.Discard, blobProperties.Response().Body)
-					blobProperties.Response().Body.Close()
-				}
-			}
-		}
-		return nil
-	}
-	return dirIterateFunction(src, "/")
-}*/
-
 // accept a new transfer, if the threshold is reached, dispatch a job part order
-func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfer, cca *cookedSyncCmdArgs) error {
 
 	if len(e.CopyJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
 		resp := common.CopyJobPartOrderResponse{}
@@ -238,8 +29,7 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			wg.Add(1)
-			go waitUntilJobCompletion(e.JobID, wg)
+			go glcm.WaitUntilJobCompletion(cca)
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -306,16 +96,12 @@ func (e *syncDownloadEnumerator) dispatchFinalPart() error {
 // compareRemoteAgainstLocal api compares the blob at given destination Url and
 // compare with blobs locally. If the blobs locally doesn't exists, then destination
 // blobs are downloaded locally.
-func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
-	sourcePath string, isRecursiveOn bool,
-	destinationUrlString string, p pipeline.Pipeline,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-
+func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs, p pipeline.Pipeline) error {
 	util := copyHandlerUtil{}
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	destinationUrl, err := url.Parse(destinationUrlString)
+	destinationUrl, err := url.Parse(cca.src)
 	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
 	}
@@ -327,9 +113,9 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
 	// virtual directory is the entire virtual directory path before the blob name
 	// passed in the searchPrefix
-	// Example: dst = https://<container-name>/vd-1?<sig> searchPrefix = vd-1/
+	// Example: cca.dst = https://<container-name>/vd-1?<sig> searchPrefix = vd-1/
 	// virtualDirectory = vd-1
-	// Example: dst = https://<container-name>/vd-1/vd-2/fi*.txt?<sig> searchPrefix = vd-1/vd-2/fi*.txt
+	// Example: cca.dst = https://<container-name>/vd-1/vd-2/fi*.txt?<sig> searchPrefix = vd-1/vd-2/fi*.txt
 	// virtualDirectory = vd-1/vd-2/
 	virtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
 	// strip away the leading / in the closest virtual directory
@@ -355,13 +141,13 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 				continue
 			}
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
-			// Example: src ="C:\User1\user-1" dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
+			// Example: cca.src ="C:\User1\user-1" cca.dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
 			// remove the virtual directory from the realtivePathofBlobLocally
 			blobRootPath, _ := util.sourceRootPathWithoutWildCards(blobUrlParts.BlobName, '/')
 			realtivePathofBlobLocally := util.relativePathToRoot(blobRootPath, blobInfo.Name, '/')
 			realtivePathofBlobLocally = strings.Replace(realtivePathofBlobLocally, virtualDirectory, "", 1)
-			blobLocalPath := util.generateLocalPath(sourcePath, realtivePathofBlobLocally)
+			blobLocalPath := util.generateLocalPath(cca.dst, realtivePathofBlobLocally)
 			// Check if the blob exists locally or not
 			_, err := os.Stat(blobLocalPath)
 			if err == nil {
@@ -377,7 +163,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 					Destination:      blobLocalPath,
 					LastModifiedTime: blobInfo.Properties.LastModified,
 					SourceSize:       *blobInfo.Properties.ContentLength,
-				}, wg, waitUntilJobCompletion)
+				}, cca)
 				if err != nil {
 					return err
 				}
@@ -391,20 +177,19 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 // compareLocalAgainstRemote iterates through each files/dir inside the source and compares
 // them against blobs on container. If the blobs doesn't exists but exists locally, then delete
 // the files locally
-func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isRecursiveOn bool, srcString string, wg *sync.WaitGroup, p pipeline.Pipeline,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error, bool) {
+func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs, p pipeline.Pipeline) (error, bool) {
 	util := copyHandlerUtil{}
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// attempt to parse the destination url
-	sourceUrl, err := url.Parse(srcString)
+	sourceUrl, err := url.Parse(cca.src)
 	if err != nil {
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
 	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
 	// Get the local file Info
-	f, ferr := os.Stat(dstString)
+	f, ferr := os.Stat(cca.dst)
 	// Get the destination blob properties
 	bProperties, berr := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 	// get the blob url parts
@@ -412,7 +197,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 	// If the error occurs while fetching the fileInfo of the source
 	// return the error
 	if ferr != nil {
-		return fmt.Errorf("cannot access the source %s. Failed with error %s", dstString, err.Error()), false
+		return fmt.Errorf("cannot access the source %s. Failed with error %s", cca.dst, err.Error()), false
 	}
 	// If the destination is a file locally and source is not a blob
 	// it means that it could be a virtual directory / container
@@ -425,45 +210,45 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 	// need to check if the blob exists in the destination or not
 	if berr == nil && f.IsDir() {
 		// Get the blob name without the any virtual directory as path in the blobName
-		// for example: srcString = https://<container-name>/a1/a2/f1.txt blobName = f1.txt
+		// for example: cca.src = https://<container-name>/a1/a2/f1.txt blobName = f1.txt
 		bName := blobUrlParts.BlobName
 		// Find the Index of the last Separator
 		sepIndex := strings.LastIndex(bName, "/")
 		// If there is no separator in the blobName
 		// blobName is the complete blobName
-		// for example: srcString = https://<container-name>/f1.txt blobName = f1.txt
+		// for example: cca.src = https://<container-name>/f1.txt blobName = f1.txt
 		// If there exists a path separator in the blobName
 		// Get the lastIndex of Path Separator
 		// bName with blob name content from the last path separator till the end.
-		// for example: srcString = https://<container-name>/a1/f1.txt blobName = a1/f1.txt bName = f1.txt
-		if sepIndex != -1{
+		// for example: cca.src = https://<container-name>/a1/f1.txt blobName = a1/f1.txt bName = f1.txt
+		if sepIndex != -1 {
 			bName = bName[sepIndex+1:]
 		}
-		blobLocalPath := util.generateObjectPath(dstString, bName)
+		blobLocalPath := util.generateObjectPath(cca.dst, bName)
 		blobLocalInfo, err := os.Stat(blobLocalPath)
 		// If the blob does not exists locally ||
 		// If it exists and the blobModified time is after modified time of blob existing locally
 		// download is required.
 		if (err != nil && os.IsNotExist(err)) ||
-			(err == nil && bProperties.LastModified().After(blobLocalInfo.ModTime())){
+			(err == nil && bProperties.LastModified().After(blobLocalInfo.ModTime())) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:           sourceUrl.String(),
 				Destination:      blobLocalPath,
 				LastModifiedTime: bProperties.LastModified(),
 				SourceSize:       bProperties.ContentLength(),
-			}, wg, waitUntilJobCompletion)
+			}, cca)
 			return nil, true
 		}
 		return fmt.Errorf("cannot perform the sync since source %s "+
-			"is a directory and destination %s are already in sync", dstString, sourceUrl.String()), true
+			"is a directory and destination %s are already in sync", cca.dst, sourceUrl.String()), true
 	}
 	// If the source is a file and destination is a blob
-	// For Example: "dstString = C:\User\user-1\a.txt" && "srcString = https://<container-name>/vd-1/a.txt"
+	// For Example: "cca.dstString = C:\User\user-1\a.txt" && "cca.src = https://<container-name>/vd-1/a.txt"
 	if berr == nil && !f.IsDir() {
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
-		// Example1: "srcString = https://<container-name>/blob1?<sig>  blobName = blob1"
-		// Example1: "srcString = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
+		// Example1: "cca.src = https://<container-name>/blob1?<sig>  blobName = blob1"
+		// Example1: "cca.src = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
 		blobName := sourceUrl.Path[strings.LastIndex(sourceUrl.Path, "/")+1:]
 		// Compare the blob name and file name
 		// blobName and filename should be same for sync to happen
@@ -475,10 +260,10 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 		if f.ModTime().Before(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:           sourceUrl.String(),
-				Destination:      dstString,
+				Destination:      cca.dst,
 				SourceSize:       bProperties.ContentLength(),
 				LastModifiedTime: bProperties.LastModified(),
-			}, wg, waitUntilJobCompletion)
+			}, cca)
 		}
 		return nil, true
 	}
@@ -505,7 +290,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 		}
 
 		// Appending the fileRelativePath to the sourceUrl
-		// root = C:\User\user1\dir-1  srcString = https://<container-name>/<vir-d>?<sig>
+		// root = C:\User\user1\dir-1  cca.src = https://<container-name>/<vir-d>?<sig>
 		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
@@ -542,17 +327,17 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 			Destination:      pathToFile,
 			LastModifiedTime: blobProperties.LastModified(),
 			SourceSize:       blobProperties.ContentLength(),
-		}, wg, waitUntilJobCompletion)
+		}, cca)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 
-	listOfFilesAndDir, err := filepath.Glob(dstString)
+	listOfFilesAndDir, err := filepath.Glob(cca.dst)
 
 	if err != nil {
-		return fmt.Errorf("error listing the file name inside the source %s", dstString), false
+		return fmt.Errorf("error listing the file name inside the source %s", cca.dst), false
 	}
 
 	// Iterate through each file / dir inside the source
@@ -570,11 +355,11 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 					if f.IsDir() {
 						return nil
 					} else {
-						return checkAndQueue(dstString, pathToFile, f)
+						return checkAndQueue(cca.dst, pathToFile, f)
 					}
 				})
 			} else if !f.IsDir() {
-				err = checkAndQueue(dstString, fileOrDir, f)
+				err = checkAndQueue(cca.dst, fileOrDir, f)
 			}
 		}
 	}
@@ -582,9 +367,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 }
 
 // this function accepts the list of files/directories to transfer and processes them
-func (e *syncDownloadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-
+func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 			Telemetry: azblob.TelemetryOptions{
 				Value: common.UserAgent,
@@ -624,14 +407,14 @@ func (e *syncDownloadEnumerator) enumerate(src string, isRecursiveOn bool, dst s
 	e.CopyJobRequest.CommandString = e.CommandString
 	e.DeleteJobRequest.CommandString = e.CommandString
 
-	err, isSourceABlob := e.compareLocalAgainstRemote(dst, isRecursiveOn, src, wg, p, waitUntilJobCompletion)
+	err, isSourceABlob := e.compareLocalAgainstRemote(cca, p)
 	if err != nil {
 		return err
 	}
 	// If the source provided is a blob, then remote doesn't needs to be compared against the local
 	// since single blob already has been compared against the file
 	if !isSourceABlob {
-		err = e.compareRemoteAgainstLocal(dst, isRecursiveOn, src, p, wg, waitUntilJobCompletion)
+		err = e.compareRemoteAgainstLocal(cca, p)
 		if err != nil {
 			return err
 		}
@@ -644,8 +427,7 @@ func (e *syncDownloadEnumerator) enumerate(src string, isRecursiveOn bool, dst s
 		if err != nil {
 			return err
 		}
-		wg.Add(1)
-		waitUntilJobCompletion(e.JobID, wg)
+		glcm.WaitUntilJobCompletion(cca)
 	}
 	return nil
 }

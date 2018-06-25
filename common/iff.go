@@ -78,7 +78,7 @@ func Iffint64(test bool, trueVal, falseVal int64) int64 {
 	return falseVal
 }
 
-func Ifffloat64(test bool, trueVal, falseVal float64) float64 {
+func Iffloat64(test bool, trueVal, falseVal float64) float64 {
 	if test {
 		return trueVal
 	}

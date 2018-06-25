@@ -79,6 +79,13 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+var EExitCode = ExitCode(0)
+
+type ExitCode uint32
+
+func (ExitCode) Success() ExitCode { return ExitCode(0) }
+func (ExitCode) Error() ExitCode   { return ExitCode(1) }
+
 type LogLevel uint8
 
 var ELogLevel = LogLevel(pipeline.LogNone)
@@ -342,39 +349,6 @@ const (
 	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize = 4 * 1024 * 1024
 )
-
-////////////////////////////////////////////////
-
-// represents the raw copy command input from the user
-type CopyCmdArgsAndFlags struct {
-	// from arguments
-	Source                string
-	Destination           string
-	BlobUrlForRedirection string
-
-	// inferred from arguments
-	fromTo FromTo
-
-	// filters from flags
-	Include        string
-	Exclude        string
-	Recursive      bool
-	FollowSymlinks bool
-	WithSnapshots  bool
-
-	// options from flags
-	BlockSize                uint32
-	BlobType                 string //TODO: remeber to delete this
-	BlobTier                 string
-	Metadata                 string
-	ContentType              string
-	ContentEncoding          string
-	NoGuessMimeType          bool
-	PreserveLastModifiedTime bool
-	IsaBackgroundOp          bool
-	Acl                      string
-	LogVerbosity             byte
-}
 
 // This struct represent a single transfer entry with source and destination details
 type CopyTransfer struct {

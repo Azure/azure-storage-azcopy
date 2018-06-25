@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
@@ -18,8 +17,7 @@ import (
 type syncUploadEnumerator common.SyncJobPartOrderRequest
 
 // accepts a new transfer which is to delete the blob on container.
-func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer, cca *cookedSyncCmdArgs) error {
 	// If the existing transfers in DeleteJobRequest is equal to NumOfFilesPerDispatchJobPart,
 	// then send the JobPartOrder to transfer engine.
 	if len(e.DeleteJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
@@ -32,8 +30,7 @@ func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer,
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			wg.Add(1)
-			go waitUntilJobCompletion(e.JobID, wg)
+			go glcm.WaitUntilJobCompletion(cca)
 		}
 		e.DeleteJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -43,8 +40,7 @@ func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer,
 }
 
 // accept a new transfer, if the threshold is reached, dispatch a job part order
-func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer, cca *cookedSyncCmdArgs) error {
 
 	if len(e.CopyJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
 		resp := common.CopyJobPartOrderResponse{}
@@ -56,8 +52,7 @@ func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer,
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			wg.Add(1)
-			go waitUntilJobCompletion(e.JobID, wg)
+			go glcm.WaitUntilJobCompletion(cca)
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -110,26 +105,22 @@ func (e *syncUploadEnumerator) dispatchFinalPart() error {
 // compareRemoteAgainstLocal api compares the blob at given destination Url and
 // compare with blobs locally. If the blobs locally doesn't exists, then destination
 // blobs are deleted.
-func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
-	sourcePath string, isRecursiveOn bool,
-	destinationUrlString string, p pipeline.Pipeline,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-
+func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs, p pipeline.Pipeline) error {
 	util := copyHandlerUtil{}
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	// rootPath is the path of source without wildCards
 	// sourcePattern is the filePath pattern inside the source
-	// For Example: src = C:\a1\a* , so rootPath = C:\a1 and filePattern is a*
+	// For Example: cca.src = C:\a1\a* , so rootPath = C:\a1 and filePattern is a*
 	// This is to avoid enumerator to compare any file inside the destination directory
 	// that doesn't match the pattern
-	// For Example: src = C:\a1\a* des = https://<container-name>?<sig>
+	// For Example: cca.src = C:\a1\a* des = https://<container-name>?<sig>
 	// Only files that follow pattern a* will be compared
-	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(sourcePath, os.PathSeparator)
+	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(cca.src, os.PathSeparator)
 	//replace the os path separator  with path separator "/" which is path separator for blobs
-	sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/",-1)
-	destinationUrl, err := url.Parse(destinationUrlString)
+	sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/", -1)
+	destinationUrl, err := url.Parse(cca.dst)
 	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
 	}
@@ -159,7 +150,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 			}
 
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
-			// Example: src ="C:\User1\user-1" dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
+			// Example: cca.src ="C:\User1\user-1" cca.dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
 			realtivePathofBlobLocally := util.relativePathToRoot(searchPrefix, blobInfo.Name, '/')
 
@@ -181,7 +172,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 					Source:      util.generateBlobUrl(containerUrl, blobInfo.Name),
 					Destination: "", // no destination in case of Delete JobPartOrder
 					SourceSize:  *blobInfo.Properties.ContentLength,
-				}, wg, waitUntilJobCompletion)
+				}, cca)
 			}
 		}
 		marker = listBlob.NextMarker
@@ -189,23 +180,22 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	return nil
 }
 
-func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error, bool) {
+func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs, p pipeline.Pipeline) (error, bool) {
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	util := copyHandlerUtil{}
 
 	// attempt to parse the destination url
-	destinationUrl, err := url.Parse(dst)
+	destinationUrl, err := url.Parse(cca.dst)
 	if err != nil {
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
 	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
 	// Get the files and directories for the given source pattern
-	listOfFilesAndDir, lofaderr := filepath.Glob(src)
+	listOfFilesAndDir, lofaderr := filepath.Glob(cca.src)
 	if lofaderr != nil {
-		return fmt.Errorf("error getting the files and directories for source pattern %s", src), false
+		return fmt.Errorf("error getting the files and directories for source pattern %s", cca.src), false
 	}
 	// isSourceASingleFile is used to determine whether given source pattern represents single file or not
 	// If the source is a single file, this pointer will not be nil
@@ -231,15 +221,15 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 	// sync cannot happen between an existing blob and a local directory
 	if berr == nil && isSourceASingleFile != nil {
 		return fmt.Errorf("cannot perform the sync since source %s "+
-			"is a directory and destination %s is a blob", src, destinationUrl.String()), false
+			"is a directory and destination %s is a blob", cca.src, destinationUrl.String()), false
 	}
 	// If the source is a file and destination is a blob
-	// For Example: "src = C:\User\user-1\a.txt" && "dst = https://<container-name>/vd-1/a.txt"
+	// For Example: "cca.src = C:\User\user-1\a.txt" && "cca.dst = https://<container-name>/vd-1/a.txt"
 	if berr == nil && isSourceASingleFile != nil {
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
-		// Example1: "dst = https://<container-name>/blob1?<sig>  blobName = blob1"
-		// Example1: "dst = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
+		// Example1: "cca.dst = https://<container-name>/blob1?<sig>  blobName = blob1"
+		// Example1: "cca.dst = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
 		blobName := destinationUrl.Path[strings.LastIndex(destinationUrl.Path, "/")+1:]
 		// Compare the blob name and file name
 		// blobName and filename should be same for sync to happen
@@ -250,11 +240,11 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		// sync needs to happen. The transfer is queued
 		if isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:           src,
+				Source:           cca.src,
 				Destination:      destinationUrl.String(),
 				SourceSize:       isSourceASingleFile.Size(),
 				LastModifiedTime: isSourceASingleFile.ModTime(),
-			}, wg, waitUntilJobCompletion)
+			}, cca)
 		}
 		return nil, true
 	}
@@ -274,14 +264,14 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 			}
 		}
 		if err == nil && !isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
-			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", src, filedestinationUrl.String()), true
+			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", cca.src, filedestinationUrl.String()), true
 		}
 		e.addTransferToUpload(common.CopyTransfer{
-			Source:           src,
+			Source:           cca.src,
 			Destination:      filedestinationUrl.String(),
 			LastModifiedTime: isSourceASingleFile.ModTime(),
 			SourceSize:       isSourceASingleFile.Size(),
-		}, wg, waitUntilJobCompletion)
+		}, cca)
 		return nil, true
 	}
 
@@ -310,7 +300,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 			localfileRelativePath = localfileRelativePath[1:]
 		}
 		// Appending the fileRelativePath to the destinationUrl
-		// root = C:\User\user1\dir-1  dst = https://<container-name>/<vir-d>?<sig>
+		// root = C:\User\user1\dir-1  cca.dst = https://<container-name>/<vir-d>?<sig>
 		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
@@ -333,21 +323,21 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 			Destination:      filedestinationUrl.String(),
 			LastModifiedTime: f.ModTime(),
 			SourceSize:       f.Size(),
-		}, wg, waitUntilJobCompletion)
+		}, cca)
 		if err != nil {
 			return err
 		}
 		return nil
 	}
 	// rootPath will be the parent source directory before the first wildcard
-	// For Example: src = C:\a\b* rootPath = C:\a
-	// For Example: src = C:\*\a* rootPath = c:\
+	// For Example: cca.src = C:\a\b* rootPath = C:\a
+	// For Example: cca.src = C:\*\a* rootPath = c:\
 	// In case of no wildCard, rootPath is equal to the source directory
 	// This rootPath is effective when wildCards are provided
 	// Using this rootPath, path of file on blob is calculated
-	// for ex: src := C:\a*\f*.txt rootPath = C:\
+	// for ex: cca.src := C:\a*\f*.txt rootPath = C:\
 	// path of file C:\a1\f1.txt on the destination path will be destination/a1/f1.txt
-	rootPath, _ := util.sourceRootPathWithoutWildCards(src, os.PathSeparator)
+	rootPath, _ := util.sourceRootPathWithoutWildCards(cca.src, os.PathSeparator)
 	// Iterate through each file / dir inside the source
 	// and then checkAndQueue
 	for _, fileOrDir := range listOfFilesAndDir {
@@ -375,8 +365,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 }
 
 // this function accepts the list of files/directories to transfer and processes them
-func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	// Create the new azblob pipeline
 	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
 		Telemetry: azblob.TelemetryOptions{
@@ -410,14 +399,14 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	e.CopyJobRequest.CommandString = e.CommandString
 	e.DeleteJobRequest.CommandString = e.CommandString
 
-	err, isSourceAFile := e.compareLocalAgainstRemote(src, isRecursiveOn, dst, wg, p, waitUntilJobCompletion)
+	err, isSourceAFile := e.compareLocalAgainstRemote(cca, p)
 	if err != nil {
 		return err
 	}
 	// isSourceAFile defines whether source is a file or not.
 	// If source is a file and destination is a blob, then destination doesn't needs to be compared against local.
 	if !isSourceAFile {
-		err = e.compareRemoteAgainstLocal(src, isRecursiveOn, dst, p, wg, waitUntilJobCompletion)
+		err = e.compareRemoteAgainstLocal(cca, p)
 		if err != nil {
 			return err
 		}
@@ -430,8 +419,7 @@ func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 		if err != nil {
 			return err
 		}
-		wg.Add(1)
-		waitUntilJobCompletion(e.JobID, wg)
+		glcm.WaitUntilJobCompletion(cca)
 	}
 	return nil
 }

@@ -13,10 +13,9 @@ vendor/
 
 ## Ignore the STE job tracking files
 *.stev*
-azcopy
-azcopy-linux
-azcopy-windows
-azcopy-mac
+
+## Ignore the executables
+azcopy*
 
 ## Dep tool
 vendor/

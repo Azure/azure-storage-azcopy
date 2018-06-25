@@ -159,7 +159,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				// Get the transfer Info and log the details

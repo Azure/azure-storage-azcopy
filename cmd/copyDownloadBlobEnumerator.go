@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"strings"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -15,8 +13,7 @@ import (
 
 type copyDownloadBlobEnumerator common.CopyJobPartOrderRequest
 
-func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -34,7 +31,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil)
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(sourceUrlString)
+	sourceUrl, err := url.Parse(cca.src)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -60,13 +57,13 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 		// Example2: Downloading https://<container>/a?<query-params> to directory C:\\Users\\User1\\b
 		// (b is not a directory) will download blob as C:\\Users\\User1\\b
 		var blobLocalPath string
-		if util.isPathALocalDirectory(destinationPath) {
+		if util.isPathALocalDirectory(cca.dst) {
 			blobNameFromUrl := util.blobNameFromUrl(blobUrlParts)
 			// check for special characters and get blobName without special character.
 			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
-			blobLocalPath = util.generateLocalPath(destinationPath, blobNameFromUrl)
+			blobLocalPath = util.generateLocalPath(cca.dst, blobNameFromUrl)
 		} else {
-			blobLocalPath = destinationPath
+			blobLocalPath = cca.dst
 		}
 		// Add the transfer to CopyJobPartOrderRequest
 		e.addTransfer(common.CopyTransfer{
@@ -74,7 +71,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			Destination:      blobLocalPath,
 			LastModifiedTime: blobProperties.LastModified(),
 			SourceSize:       blobProperties.ContentLength(),
-		}, wg, waitUntilJobCompletion)
+		}, cca)
 		// only one transfer for this Job, dispatch the JobPart
 		err := e.dispatchFinalPart()
 		if err != nil {
@@ -86,7 +83,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// it is either a container or a virtual directory, so it need to be
 	// downloaded to an existing directory
 	// Check if the given destination path is a directory or not.
-	if !util.isPathALocalDirectory(destinationPath) {
+	if !util.isPathALocalDirectory(cca.dst) {
 		return errors.New("the destination must be an existing directory in this download scenario")
 	}
 
@@ -102,7 +99,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			blobUrl, blobName := util.appendBlobNameToUrl(blobUrlParts, blob)
 			if blob[len(blob)-1] != '/' {
 				// If there is no separator at the end of blobName, then it is consider to be a blob
-				// For Example src = https://<container-name>?<sig> include = "file1.txt"
+				// For Example cca.src = https://<container-name>?<sig> include = "file1.txt"
 				// blobUrl = https://<container-name>/file1.txt?<sig> ; blobName = file1.txt
 				bUrl := azblob.NewBlobURL(blobUrl, p)
 				bProperties, err := bUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
@@ -111,17 +108,17 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 				}
 				// check for special characters and get blobName without special character.
 				blobName = util.blobPathWOSpecialCharacters(blobName)
-				blobLocalPath := util.generateLocalPath(destinationPath, blobName)
+				blobLocalPath := util.generateLocalPath(cca.dst, blobName)
 				e.addTransfer(common.CopyTransfer{
 					Source:           blobUrl.String(),
 					Destination:      blobLocalPath,
 					LastModifiedTime: bProperties.LastModified(),
 					SourceSize:       bProperties.ContentLength(),
-				}, wg, waitUntilJobCompletion)
+				}, cca)
 			} else {
 				// If there is a separator at the end of blobName, then it is consider to be a virtual directory in the container
 				// all blobs inside this virtual directory needs to downloaded
-				// For Example: src = https://<container-name>?<sig> include = "dir1/"
+				// For Example: cca.src = https://<container-name>?<sig> include = "dir1/"
 				// blobName = dir1/  searchPrefix = dir1/
 				// all blob starting with dir1/ will be listed
 				searchPrefix := blobName
@@ -153,11 +150,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 						blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 						e.addTransfer(common.CopyTransfer{
 							Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
-							Destination:      util.generateLocalPath(destinationPath, blobRelativePath),
+							Destination:      util.generateLocalPath(cca.dst, blobRelativePath),
 							LastModifiedTime: blobInfo.Properties.LastModified,
-							SourceSize:       *blobInfo.Properties.ContentLength},
-							wg,
-							waitUntilJobCompletion)
+							SourceSize:       *blobInfo.Properties.ContentLength}, cca)
 					}
 					marker = listBlob.NextMarker
 				}
@@ -174,7 +169,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// If some blobs are mentioned with exclude flag
 	// Iterate through each blob and append to the source url passed.
 	// The blob name after appending to the source url is stored in the map
-	// For Example: src = https://<container-name/dir?<sig> exclude ="file.txt"
+	// For Example: cca.src = https://<container-name/dir?<sig> exclude ="file.txt"
 	// blobNameToExclude will be dir/file.txt
 	if len(e.Exclude) > 0 {
 		destinationBlobName := blobUrlParts.BlobName
@@ -186,7 +181,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			// If the blob name passed with the exclude flag is a virtual directory
 			// Append * at the end of the blobNameToExclude so blobNameToExclude matches
 			// the name of all blob inside the virtual dir
-			// For Example: src = https://<container-name/dir?<sig> exclude ="dir/"
+			// For Example: cca.src = https://<container-name/dir?<sig> exclude ="dir/"
 			// blobNameToExclude will be "dir/*"
 			if blobNameToExclude[len(blobNameToExclude)-1] == '/' {
 				blobNameToExclude += "*"
@@ -204,7 +199,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	if blobNamePattern == "*" && !isRecursiveOn {
+	if blobNamePattern == "*" && !cca.recursive {
 		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
 	}
 	// perform a list blob with search prefix
@@ -236,18 +231,16 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 			blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 			e.addTransfer(common.CopyTransfer{
 				Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
-				Destination:      util.generateLocalPath(destinationPath, blobRelativePath),
+				Destination:      util.generateLocalPath(cca.dst, blobRelativePath),
 				LastModifiedTime: blobInfo.Properties.LastModified,
-				SourceSize:       *blobInfo.Properties.ContentLength},
-				wg,
-				waitUntilJobCompletion)
+				SourceSize:       *blobInfo.Properties.ContentLength}, cca)
 		}
 		marker = listBlob.NextMarker
 	}
 	// If part number is 0 && number of transfer queued is 0
 	// it means that no job part has been dispatched and there are no
 	// transfer in Job to dispatch a JobPart.
-	if e.PartNum == 0  && len(e.Transfers) == 0 {
+	if e.PartNum == 0 && len(e.Transfers) == 0 {
 		return fmt.Errorf("no transfer queued to download. Please verify the source / destination")
 	}
 	// dispatch the JobPart as Final Part of the Job
@@ -258,211 +251,8 @@ func (e *copyDownloadBlobEnumerator) enumerate(sourceUrlString string, isRecursi
 	return nil
 }
 
-// this function accepts a url (with or without *) to blobs for download and processes them
-func (e *copyDownloadBlobEnumerator) enumerate1(sourceUrlString string, isRecursiveOn bool, destinationPath string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	util := copyHandlerUtil{}
-
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
-		})
-
-	// attempt to parse the source url
-	sourceUrl, err := url.Parse(sourceUrlString)
-	if err != nil {
-		return errors.New("cannot parse source URL")
-	}
-
-	// check if the given url is a container
-	if util.urlIsContainerOrShare(sourceUrl) {
-		// if path ends with a /, then append *
-		if strings.HasSuffix(sourceUrl.Path, "/") {
-			sourceUrl.Path += "*"
-		} else { // if path is just /container_name, '/*' needs to be appended
-			sourceUrl.Path += "/*"
-		}
-	}
-
-	// get the container url to be used later for listing
-	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl)
-	literalContainerUrl := util.getContainerUrl(blobUrlParts)
-	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
-
-	numOfStarInUrlPath := util.numOfStarInUrl(sourceUrl.Path)
-	if numOfStarInUrlPath == 1 { // prefix search
-
-		// the * must be at the end of the path
-		if strings.LastIndex(sourceUrl.Path, "*") != len(sourceUrl.Path)-1 {
-			return errors.New("the * in the source URL must be at the end of the path")
-		}
-
-		// the destination must be a directory, otherwise we don't know where to put the files
-		if !util.isPathALocalDirectory(destinationPath) {
-			return errors.New("the destination must be an existing directory in this download scenario")
-		}
-
-		// get the search prefix to query the service
-		searchPrefix := util.blobNameFromUrl(blobUrlParts)
-		searchPrefix = searchPrefix[:len(searchPrefix)-1] // strip away the * at the end
-
-		closestVirtualDirectory := util.getLastVirtualDirectoryFromPath(searchPrefix)
-
-		// strip away the leading / in the closest virtual directory
-		if len(closestVirtualDirectory) > 0 && closestVirtualDirectory[0:1] == "/" {
-			closestVirtualDirectory = closestVirtualDirectory[1:]
-		}
-
-		// perform a list blob
-		for marker := (azblob.Marker{}); marker.NotDone(); {
-			// look for all blobs that start with the prefix
-			listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
-				azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
-			if err != nil {
-				return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
-			}
-
-			// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-			for _, blobInfo := range listBlob.Blobs.Blob {
-				// If the blob is not valid as per the conditions mentioned in the
-				// api doesBlobRepresentAFolder, then skip the blob.
-				if !util.doesBlobRepresentAFolder(blobInfo) {
-					continue
-				}
-				blobNameAfterPrefix := blobInfo.Name[len(closestVirtualDirectory):]
-				if !isRecursiveOn && strings.Contains(blobNameAfterPrefix, "/") {
-					continue
-				}
-
-				// check for special characters and get the blob without special characters.
-				blobNameAfterPrefix = util.blobPathWOSpecialCharacters(blobNameAfterPrefix)
-				e.addTransfer(common.CopyTransfer{
-					Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
-					Destination:      util.generateLocalPath(destinationPath, blobNameAfterPrefix),
-					LastModifiedTime: blobInfo.Properties.LastModified,
-					SourceSize:       *blobInfo.Properties.ContentLength},
-					wg, waitUntilJobCompletion)
-			}
-
-			marker = listBlob.NextMarker
-			if err != nil {
-				return err
-			}
-		}
-
-		err = e.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-
-	} else if numOfStarInUrlPath == 0 { // no prefix search
-		// see if source blob exists
-		blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
-
-		// for a single blob, the destination can either be a file or a directory
-		var singleBlobDestinationPath string
-		if util.isPathALocalDirectory(destinationPath) {
-			blobNameFromUrl := util.blobNameFromUrl(blobUrlParts)
-			// check for special characters and get blobName without special character.
-			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
-			singleBlobDestinationPath = util.generateLocalPath(destinationPath, blobNameFromUrl)
-		} else {
-			singleBlobDestinationPath = destinationPath
-		}
-
-		// if the single blob exists, download it
-		if err == nil {
-			e.addTransfer(common.CopyTransfer{
-				Source:           sourceUrl.String(),
-				Destination:      singleBlobDestinationPath,
-				LastModifiedTime: blobProperties.LastModified(),
-				SourceSize:       blobProperties.ContentLength(),
-			}, wg, waitUntilJobCompletion)
-
-			//err = e.dispatchPart(false)
-			if err != nil {
-				return err
-			}
-		} else if err != nil && !isRecursiveOn {
-			return errors.New("cannot get source blob properties, make sure it exists, for virtual directory download please use --recursive")
-		}
-
-		// if recursive happens to be turned on, then we will attempt to download a virtual directory
-		if isRecursiveOn {
-			// recursively download everything that is under the given path, that is a virtual directory
-			searchPrefix := util.blobNameFromUrl(blobUrlParts)
-
-			// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
-			if strings.LastIndex(searchPrefix, "/") != len(searchPrefix)-1 {
-				searchPrefix += "/"
-			}
-
-			// the destination must be a directory, otherwise we don't know where to put the files
-			if !util.isPathALocalDirectory(destinationPath) {
-				return errors.New("the destination must be an existing directory in this download scenario")
-			}
-
-			// perform a list blob
-			for marker := (azblob.Marker{}); marker.NotDone(); {
-				// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-				listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
-					azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
-				if err != nil {
-					return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
-				}
-
-				// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-				for _, blobInfo := range listBlob.Blobs.Blob {
-					// If the blob is not valid as per the conditions mentioned in the
-					// api doesBlobRepresentAFolder, then skip the blob.
-					if !util.doesBlobRepresentAFolder(blobInfo) {
-						continue
-					}
-					blobRelativePath := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
-					// check for the special character in blob relative path and get path without special character.
-					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
-					e.addTransfer(common.CopyTransfer{
-						Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
-						Destination:      util.generateLocalPath(destinationPath, blobRelativePath),
-						LastModifiedTime: blobInfo.Properties.LastModified,
-						SourceSize:       *blobInfo.Properties.ContentLength},
-						wg,
-						waitUntilJobCompletion)
-				}
-
-				marker = listBlob.NextMarker
-				//err = e.dispatchPart(false)
-				if err != nil {
-					return err
-				}
-			}
-		}
-
-		err = e.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-
-	} else { // more than one * is not supported
-		return errors.New("only one * is allowed in the source URL")
-	}
-	return nil
-}
-
-func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {

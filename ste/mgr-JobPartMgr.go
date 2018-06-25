@@ -186,7 +186,7 @@ func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
-	jpm.atomicTransfersDone = 0      // Reset the # of transfers done back to 0
+	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
@@ -312,7 +312,7 @@ func (jpm *jobPartMgr) createPipeline() {
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 			jpm.pipeline = NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-				Log:       jpm.jobMgr.PipelineLogInfo(),
+				Log: jpm.jobMgr.PipelineLogInfo(),
 				Telemetry: azblob.TelemetryOptions{
 					Value: common.UserAgent,
 				},
@@ -329,7 +329,7 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.LocalBlobFS():
 			jpm.pipeline = NewBlobFSPipeline(
 				azbfs.PipelineOptions{
-					Log:       jpm.jobMgr.PipelineLogInfo(),
+					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{
 						Value: common.UserAgent,
 					},
@@ -349,7 +349,7 @@ func (jpm *jobPartMgr) createPipeline() {
 			jpm.pipeline = newFilePipeline(
 				azfile.NewAnonymousCredential(),
 				azfile.PipelineOptions{
-					Log:       jpm.jobMgr.PipelineLogInfo(),
+					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azfile.TelemetryOptions{
 						Value: common.UserAgent,
 					},
@@ -446,13 +446,13 @@ func (jpm *jobPartMgr) Close() {
 
 // TODO: added for debugging purpose. remove later
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
-func(jpm *jobPartMgr) OccupyAConnection() {
+func (jpm *jobPartMgr) OccupyAConnection() {
 	jpm.jobMgr.OccupyAConnection()
 }
 
 // Sub 1 from the active number of goroutine performing the transfer or executing the chunkFunc
 // TODO: added for debugging purpose. remove later
-func(jpm *jobPartMgr) ReleaseAConnection() {
+func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
 }
 

@@ -132,9 +132,9 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                              // Convert the order to a plan file
+	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
-	jpm.AddJobPart(order.PartNum, jppfn, true)                       // Add this part to the Job and schedule its transfers
+	jpm.AddJobPart(order.PartNum, jppfn, true)                                            // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -173,13 +173,13 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	}
 
 	jobCompletelyOrdered := completeJobOrdered(jm)
+	// TODO reconsider this functionality, as it conflicts with cancel from stdin
 	// If the job has not been ordered completely, then if cancelled, Job cannot be resumed later
 	// The user is asked for a Yes / No to cancel or not
 	if !jobCompletelyOrdered {
 		var confirmCancel string
 		// The message is displayed to the User and asked for Yes / No Input to cancel the Job
-		fmt.Println("")
-		fmt.Println("The Job is not completely ordered yet. Cancelling the Job " +
+		fmt.Println("\nThe Job is not completely ordered yet. Cancelling the Job " +
 			"now won't let the Job to be resumed later. Enter 'Yes' to cancel or 'No' to resume to the Job")
 		// The flow goes in to the Indefinite loop reading the standard Input
 		// The loop doesn't break unless the user provide Yes or No for Input
@@ -190,7 +190,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 			// then Job is cancelled
 			if strings.EqualFold(confirmCancel, "Yes") {
 				break
-			}else if strings.EqualFold(confirmCancel, "No") {
+			} else if strings.EqualFold(confirmCancel, "No") {
 				// If the user provides "No" to cancel the Job
 				// then it returns CancelPauseResumeResponse
 				// and the Job is resumed
@@ -198,7 +198,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 					CancelledPauseResumed: true,
 					ErrorMsg:              "",
 				}
-			}else {
+			} else {
 				fmt.Println("Provide Input as Yes / No")
 			}
 		}
@@ -243,8 +243,9 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// Job immediately stop.
 		if !jobCompletelyOrdered {
 			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed:false,
-				ErrorMsg:      fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
+				CancelledPauseResumed: false,
+				// TODO this causes a fatal error on the front end, it should exit gracefully since cancel is successful
+				ErrorMsg: fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
 			}
 			return jr
 		}
@@ -353,7 +354,6 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
 func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
-	//fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {
@@ -362,7 +362,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// and resurrect the Job
 		if !JobsAdmin.ResurrectJob(jobID) {
 			return common.ListJobSummaryResponse{
-				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", jobID),
+				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
 		}
 		// If the job manager was not found, then Job was resurrected
@@ -445,7 +445,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// and resurrect the Job
 		if !JobsAdmin.ResurrectJob(r.JobID) {
 			return common.ListJobTransfersResponse{
-				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", r.JobID),
+				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}
 		}
 		// If the job manager was not found, then Job was resurrected
@@ -489,7 +489,7 @@ func ListJobs() common.ListJobsResponse {
 	// building the ListJobsResponse for sending response back to front-end
 	jobIds := JobsAdmin.JobIDs()
 	if len(jobIds) == 0 {
-		return common.ListJobsResponse{ErrorMessage:"no Jobs exists in Azcopy history"}
+		return common.ListJobsResponse{ErrorMessage: "no Jobs exists in Azcopy history"}
 	}
 	return common.ListJobsResponse{ErrorMessage: "", JobIDs: JobsAdmin.JobIDs()}
 }
