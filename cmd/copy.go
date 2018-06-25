@@ -107,17 +107,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	cooked.fromTo = fromTo
 
-	// If fromTo is local to BlobFS or BlobFS to local then verify the
-	// ACCOUNT_NAME & ACCOUNT_KEY in environment variables
-	if fromTo == common.EFromTo.LocalBlobFS() ||
-		fromTo == common.EFromTo.BlobFSLocal() {
-		// Get the Account Name and Key variables from environment
-		name := os.Getenv("ACCOUNT_NAME")
-		key := os.Getenv("ACCOUNT_KEY")
-		if name == "" || key == "" {
-			return cooked, fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
-		}
-	}
 	// copy&transform flags to type-safety
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
