@@ -35,7 +35,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 
 	// parse the given into fileUrl Parts.
 	// fileUrl can be further used to get the filesystem name , directory path and other pieces of Info.
-	fsUrlParts := azbfs.NewFileURLParts(*sourceUrl)
+	fsUrlParts := azbfs.NewBfsURLParts(*sourceUrl)
 
 	// Create the directory Url and list the entities inside the path
 	directoryUrl := azbfs.NewDirectoryURL(*sourceUrl, p)
@@ -48,7 +48,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	// so add this bool flag which doesn't terminates the loop on first listing.
 	firstListing := true
 
-	dListResp, err := directoryUrl.ListDirectory(ctx, &continuationMarker, true)
+	dListResp, err := directoryUrl.ListDirectorySegment(ctx, &continuationMarker, true)
 	if err != nil {
 		return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
 	}
@@ -83,13 +83,13 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 			}
 			// Queue the transfer
 			e.addTransfer(common.CopyTransfer{
-				Source:           directoryUrl.FileSystemUrl().NewDirectoryURL(*path.Name).String(),
+				Source:           directoryUrl.FileSystemURL().NewDirectoryURL(*path.Name).String(),
 				Destination:      destination,
 				LastModifiedTime: lModifiedTime,
 				SourceSize:       *path.ContentLength,
 			}, wg, waitUntilJobCompletion)
 		}
-		dListResp, err = directoryUrl.ListDirectory(context.Background(), &continuationMarker, true)
+		dListResp, err = directoryUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
 		if err != nil {
 			return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
 		}

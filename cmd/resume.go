@@ -37,17 +37,18 @@ func init() {
 
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
-		Use:        "resume",
+		Use:        "resume jobID",
 		SuggestFor: []string{"resme", "esume", "resue"},
-		Short:      "resume resumes the existing job for given JobId.",
-		Long:       `resume resumes the existing job for given JobId.`,
+		Short:      "Resume the existing job with the given job ID",
+		Long: `
+Resume the existing job with the given job ID.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the resume command requires necessarily to have an argument
 			// resume jobId -- resumes all the parts of an existing job for given jobId
 
 			// If no argument is passed then it is not valid
 			if len(args) != 1 {
-				return errors.New("this command only requires jobId")
+				return errors.New("this command requires jobId to be passed as argument")
 			}
 			resumeCmdArgs.jobID = args[0]
 			return nil
@@ -63,10 +64,10 @@ func init() {
 	}
 
 	rootCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer will be resumed while resuming the job "+
-		"More than one file are separated by ';'")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer while resuming the job "+
-		"More than one file are separated by ';'")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
+		"Files should be separated by ';'.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
+		"Files should be separated by ';'.")
 	// oauth options
 	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
@@ -87,14 +88,20 @@ type resumeCmdArgs struct {
 func waitUntilJobCompletion(jobID common.JobID) {
 
 	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+	// waiting for signals from either CancelChannel or timeOut Channel.
+	// if no signal received, will fetch/display a job status update then sleep for a bit
 	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
 
 	// added an empty to provide a gap between the user given command and progress
 	fmt.Println("")
 
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	startTime := time.Now()
+	// throughputIntervalTime holds the last time value when the progress summary was fetched
+	// The value of this variable is used to calculate the throughput
+	// It gets updated every time the progress summary is fetched
+	throughputIntervalTime := time.Now()
+	// jobStartTime holds the time when Job was started
+	// The value of this variable is used to calculate the elapsed time
+	jobStartTime := throughputIntervalTime
 	bytesTransferredInLastInterval := uint64(0)
 	for {
 		select {
@@ -106,10 +113,10 @@ func waitUntilJobCompletion(jobID common.JobID) {
 				os.Exit(1)
 			}
 		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &startTime, &bytesTransferredInLastInterval, false)
+			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, false)
 			// happy ending to the front end
 			if summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled() {
-				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary)
+				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
 				os.Exit(0)
 			}
 

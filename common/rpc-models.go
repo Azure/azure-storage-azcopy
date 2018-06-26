@@ -116,6 +116,8 @@ type ListJobSummaryResponse struct {
 	ErrorMsg  string
 	Timestamp time.Time
 	JobID     JobID
+	// TODO: added for debugging purpose. remove later
+	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
 	CompleteJobOrdered    bool
 	JobStatus             JobStatus

@@ -35,6 +35,10 @@ type IJobPartMgr interface {
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//CancelJob()
 	Close()
+	// TODO: added for debugging purpose. remove later
+	OccupyAConnection()
+	// TODO: added for debugging purpose. remove later
+	ReleaseAConnection()
 	common.ILogger
 }
 
@@ -580,6 +584,18 @@ func (jpm *jobPartMgr) Close() {
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
 		jpm.Panic(fmt.Errorf("error removing Job Part Plan file %s. Error=%v", jpm.planFile.Name(), err))
 	}*/
+}
+
+// TODO: added for debugging purpose. remove later
+// Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
+func(jpm *jobPartMgr) OccupyAConnection() {
+	jpm.jobMgr.OccupyAConnection()
+}
+
+// Sub 1 from the active number of goroutine performing the transfer or executing the chunkFunc
+// TODO: added for debugging purpose. remove later
+func(jpm *jobPartMgr) ReleaseAConnection() {
+	jpm.jobMgr.ReleaseAConnection()
 }
 
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }

@@ -64,6 +64,9 @@ func init() {
 			}
 			return HandleListContainerCommand(sourcePath, jsonOutput)
 		},
+		// hide features not relevant to BFS
+		// TODO remove after preview release
+		Hidden: true,
 	}
 	rootCmd.AddCommand(listContainerCmd)
 	listContainerCmd.PersistentFlags().BoolVar(&jsonOutput, "output-json", false, "true if user wants the output in Json format")

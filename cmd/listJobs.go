@@ -36,10 +36,11 @@ func init() {
 	// lsCmd represents the listJob command
 	lsCmd := &cobra.Command{
 		Use:        "listJobs",
-		Aliases:    []string{"lsJobs"},
+		Aliases:    []string{"lsJobs", "lsjobs", "listjobs"},
 		SuggestFor: []string{"lsJbs", "lsJob", "lsobs"},
-		Short:      "listJobs lists the JobID's of jobs existing in the history of Azcopy",
-		Long: `listJobs lists the JobID's of jobs existing in the history of Azcopy`,
+		Short:      "Display information on all jobs",
+		Long: `
+Display information on all jobs.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 
 			// if there is any argument passed

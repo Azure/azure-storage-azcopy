@@ -60,7 +60,8 @@ func (cca cookedCancelCmdArgs) process() error {
 	var cancelJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.CancelJob(), cca.jobID, &cancelJobResponse)
 	if !cancelJobResponse.CancelledPauseResumed {
-		return fmt.Errorf("job cannot be cancelled because %s", cancelJobResponse.ErrorMsg)
+		fmt.Println(cancelJobResponse.ErrorMsg)
+		os.Exit(1)
 	}
 	//fmt.Println(fmt.Sprintf("Job %s cancelled successfully", cca.jobID))
 	return nil
@@ -73,8 +74,8 @@ func init() {
 	cancelCmd := &cobra.Command{
 		Use:        "cancel",
 		SuggestFor: []string{"cancl", "ancl", "cacl"},
-		Short:      "cancels an existing job",
-		Long:       "cancels an existing job",
+		Short:      "Stops an ongoing job with the given Job ID",
+		Long:       "Stops an ongoing job with the given Job ID",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the cancel command requires a JobId argument
 			// it then cancels all parts of the specified job
@@ -99,6 +100,9 @@ func init() {
 
 			return nil
 		},
+		// hide features not relevant to BFS
+		// TODO remove after preview release
+		Hidden: true,
 	}
 	rootCmd.AddCommand(cancelCmd)
 }

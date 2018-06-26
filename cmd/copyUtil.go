@@ -552,13 +552,14 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
 }
 
 // PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
-func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse) {
+func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse, duration time.Duration) {
 	// added an empty line to provide gap between the last Job progress status and final job summary
 	fmt.Println("")
 	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
+	fmt.Println("Elapsed Time (Minutes)", ste.ToFixed(duration.Minutes(), 4))
 	fmt.Println("Total Number Of Transfers ", summary.TotalTransfers)
-	fmt.Println("Number of Transfer Completed ", summary.TransfersCompleted)
-	fmt.Println("Number of Tranfer Failed ", summary.TransfersFailed)
+	fmt.Println("Number of Transfers Completed ", summary.TransfersCompleted)
+	fmt.Println("Number of Transfers Failed ", summary.TransfersFailed)
 	fmt.Println("Final Job Status ", summary.JobStatus)
 }
 
@@ -584,7 +585,8 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-		fmt.Printf("\r %v Complete, %v Failed, %v Pending, %v Total, %s 2-sec throughput: %v MB/s",
+		// TODO: add active connections in the Job Summary for debugging purpose. remove later
+		fmt.Printf("\r %v Active Connections, %v Done, %v Failed, %v Pending, %v Total, %s 2-sec Throughput (MB/s): %v", summary.ActiveConnections,
 			summary.TransfersCompleted, summary.TransfersFailed, summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
 			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4))
 		//fmt.Printf("\r %v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
