@@ -3,7 +3,6 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	//"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"math/rand"
