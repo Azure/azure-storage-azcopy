@@ -111,6 +111,9 @@ const (
 	// ServiceCodeResourceAlreadyExists means the specified resource already exists (409).
 	ServiceCodeResourceAlreadyExists ServiceCodeType = "ResourceAlreadyExists"
 
+	// ServiceCodeFileSystemAlreadyExists means the specified file system already exists (409).
+	ServiceCodeFileSystemAlreadyExists ServiceCodeType = "FilesystemAlreadyExists"
+
 	// ServiceCodeResourceNotFound means the specified resource does not exist (404).
 	ServiceCodeResourceNotFound ServiceCodeType = "ResourceNotFound"
 

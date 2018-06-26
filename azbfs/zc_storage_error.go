@@ -2,7 +2,6 @@ package azbfs
 
 import (
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"net/http"
 	"sort"
@@ -43,6 +42,7 @@ func newStorageError(cause error, response *http.Response, description string) e
 			response:    response,
 			description: description,
 		},
+		serviceCode: ServiceCodeType(response.Header.Get("X-Ms-Error-Code")),
 	}
 }
 
@@ -81,30 +81,4 @@ func (e *storageError) Temporary() bool {
 		}
 	}
 	return e.ErrorNode.Temporary()
-}
-
-// UnmarshalXML performs custom unmarshalling of XML-formatted Azure storage request errors.
-func (e *storageError) UnmarshalXML(d *xml.Decoder, start xml.StartElement) (err error) {
-	tokName := ""
-	var t xml.Token
-	for t, err = d.Token(); err == nil; t, err = d.Token() {
-		switch tt := t.(type) {
-		case xml.StartElement:
-			tokName = tt.Name.Local
-			break
-		case xml.CharData:
-			switch tokName {
-			case "Code":
-				e.serviceCode = ServiceCodeType(tt)
-			case "Message":
-				e.description = string(tt)
-			default:
-				if e.details == nil {
-					e.details = map[string]string{}
-				}
-				e.details[tokName] = string(tt)
-			}
-		}
-	}
-	return nil
 }
