@@ -3,7 +3,7 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	//"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 // XferRetryPolicy tells the pipeline what kind of retry policy to use. See the XferRetryPolicy* constants.
@@ -231,7 +232,9 @@ func NewXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					// zc_policy_retry perform the retries on Temporary and Timeout Errors only.
 					// some errors like 'connection reset by peer' or 'transport connection broken' does not implement the Temporary interface
 					// but they should be retried. So redefined the retry policy for azcopy to retry for such errors as well.
-					if stErr, ok := err.(azblob.StorageError); ok {
+
+					// TODO make sure Storage error can be cast to different package's error object
+					if stErr, ok := err.(azbfs.StorageError); ok {
 						// retry only in case of temporary storage errors.
 						if stErr.Temporary() {
 							action = "Retry: StorageError and Temporary()"

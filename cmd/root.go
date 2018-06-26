@@ -36,9 +36,9 @@ var cfgFile string
 var rootCmd = &cobra.Command{
 	Use:   "azcopy",
 	Short: "AzCopy is a CLI tool that moves data into/out of Azure Storage.",
-	Long: fmt.Sprintf("\nWelcome to the AzCopy tool! \nVersion: %s", common.AzcopyVersion) +
+	Long: "AzCopy " + common.AzcopyVersion +
 		`
-Project Home Page: github.com/Azure/azure-storage-azcopy
+Project: github.com/Azure/azure-storage-azcopy
 
 AzCopy is a CLI tool that moves data into/out of Azure Storage.
 For this preview release, only the Azure Data Lake Storage Gen2 service is supported.
