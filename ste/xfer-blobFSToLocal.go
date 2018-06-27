@@ -14,7 +14,7 @@ import (
 type  BlobFSFileDownload struct {
 	jptm IJobPartTransferMgr
 	srcFileURL azbfs.FileURL
-	destMMF common.MMF
+	destMMF *common.MMF
 	pacer *pacer
 }
 
@@ -165,7 +165,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				info := jptm.Info()
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v adjustedRangeSize %v destinationMMF size %v",
-						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedRangeSize, len(bffd.destMMF)))
+						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedRangeSize, len(bffd.destMMF.MMFSlice())))
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
@@ -221,8 +221,8 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 
 			// step 2: write the body into the memory mapped file directly
 			resp := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
-			body := newResponseBodyPacer(resp, bffd.pacer)
-			_, err = io.ReadFull(body, bffd.destMMF[startIndex:startIndex+adjustedRangeSize])
+			body := newResponseBodyPacer(resp, bffd.pacer, bffd.destMMF)
+			_, err = io.ReadFull(body, bffd.destMMF.MMFSlice()[startIndex:startIndex+adjustedRangeSize])
 			// reading the response and closing the resp body
 			if resp != nil {
 				io.Copy(ioutil.Discard, resp)

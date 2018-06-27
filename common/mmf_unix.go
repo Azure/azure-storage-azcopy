@@ -25,23 +25,42 @@ package common
 import (
 	"os"
 	"syscall"
+	"sync"
 )
 
-type MMF []byte
+type MMF struct {
+	slice []byte
+	isMapped bool
+	lock sync.Mutex
+}
 
-func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, error) {
+func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
 	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
 	if writable {
 		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
 	}
 	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
-	return MMF(addr), err
+	return &MMF{slice : (addr), isMapped:true, lock : sync.Mutex{}}, err
 }
 
 func (m *MMF) Unmap() {
-	err := syscall.Munmap(*m)
-	*m = nil
+	m.lock.Lock()
+	err := syscall.Munmap(m.slice)
+	m.slice = nil
 	if err != nil {
 		panic(err)
 	}
+	m.isMapped = false
+	m.lock.Unlock()
+}
+
+func (m *MMF) IsUnmapped() bool{
+	m.lock.Lock()
+	isUnmapped := !m.isMapped
+	m.lock.Unlock()
+	return isUnmapped
+}
+
+func (m* MMF) MMFSlice() []byte {
+	return m.slice
 }

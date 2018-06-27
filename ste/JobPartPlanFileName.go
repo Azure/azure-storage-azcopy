@@ -69,7 +69,7 @@ func (jpfn JobPartPlanFileName) Map() JobPartPlanMMF {
 	if err != nil {
 		panic(err)
 	}
-	return JobPartPlanMMF(mmf)
+	return JobPartPlanMMF(*mmf)
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData

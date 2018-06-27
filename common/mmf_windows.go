@@ -25,11 +25,16 @@ import (
 	"reflect"
 	"syscall"
 	"unsafe"
+	"sync"
 )
 
-type MMF []byte
+type MMF struct {
+	slice []byte
+	isMapped bool
+	lock sync.Mutex
+}
 
-func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, error) {
+func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
 	prot, access := uint32(syscall.PAGE_READONLY), uint32(syscall.FILE_MAP_READ) // Assume read-only
 	if writable {
 		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
@@ -40,19 +45,33 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (MMF, erro
 	}
 	defer syscall.CloseHandle(hMMF)
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
-	m := MMF{}
+	m := []byte{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr
 	h.Len = int(length)
 	h.Cap = h.Len
-	return m, nil
+	return &MMF{slice:m, isMapped:true, lock:sync.Mutex{}}, nil
 }
 
 func (m *MMF) Unmap() {
-	addr := uintptr(unsafe.Pointer(&(([]byte)(*m)[0])))
-	*m = MMF{}
+	m.lock.Lock()
+	addr := uintptr(unsafe.Pointer(&(([]byte)(m.slice)[0])))
+	m.slice = []byte{}
 	err := syscall.UnmapViewOfFile(addr)
 	if err != nil {
 		panic(err)
 	}
+	m.isMapped = false
+	m.lock.Unlock()
+}
+
+func (m *MMF) IsUnmapped() bool{
+	m.lock.Lock()
+	isUnmapped := !m.isMapped
+	m.lock.Unlock()
+	return isUnmapped
+}
+
+func (m* MMF) MMFSlice() []byte {
+	return m.slice
 }
