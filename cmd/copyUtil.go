@@ -57,11 +57,7 @@ func (copyHandlerUtil) numOfStarInUrl(url string) int {
 // isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
 // http(s)://IP(:port)/storageaccount/share(||container||etc)/...
 func (util copyHandlerUtil) isIPEndpointStyle(url url.URL) bool {
-	if net.ParseIP(url.Host) != nil {
-		return true
-	}
-
-	return false
+	return net.ParseIP(url.Host) != nil
 }
 
 // checks if a given url points to a container, as opposed to a blob or prefix match

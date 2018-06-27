@@ -68,11 +68,52 @@ func NewCredCache(state string) *CredCache {
 	return c
 }
 
-// HasCachedToken returns if there is cached token in session key ring for current login session.
+// HasCachedToken returns if there is cached token for current executing user.
 func (c *CredCache) HasCachedToken() (bool, error) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	has, err := c.hasCachedTokenInternal()
+	c.lock.Unlock()
+	return has, err
+}
 
+// RemoveCachedToken deletes the cached token.
+func (c *CredCache) RemoveCachedToken() error {
+	c.lock.Lock()
+	err := c.removeCachedTokenInternal()
+	c.lock.Unlock()
+	return err
+}
+
+// SaveToken saves an oauth token.
+func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
+	c.lock.Lock()
+	err := c.saveTokenInternal(token)
+	c.lock.Unlock()
+	return err
+}
+
+// LoadToken gets the cached oauth token.
+func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
+	c.lock.Lock()
+	token, err := c.loadTokenInternal()
+	c.lock.Unlock()
+	return token, err
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// This internal method pattern is applied to avoid defer locks.
+// The reason is:
+// We use locks to protect shared state from being accessed from multiple threads/goroutines at the same time.
+// If a bug is in this method that causes a panic,
+// then the defer will unlock another thread/goroutine allowing it to access the shared state.
+// BUT, if a panic happened, the shared state is hard to be decide whether in a good or corrupted state.
+// So currently let the other threads/goroutines hang forever instead of letting them access the potentially corrupted shared state.
+// Once having bad state, more bad state gets injected into app and figuring out how it happened and how to recover from it is near impossible.
+// On the other hand, hanging threads is MUCH easier to detect and devs can fix the bug in code to make sure that the panic doesn't happen in the first place.
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+// hasCachedTokenInternal returns if there is cached token in session key ring for current login session.
+func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return false, err
@@ -80,6 +121,7 @@ func (c *CredCache) HasCachedToken() (bool, error) {
 	_, err = keyring.Search(c.cachedTokenKey)
 	// TODO: better logging what's cause for token caching failure
 	// e.g. Error message: "required key not available"
+	// the source library could be updated to use keyctl_search
 	if err != nil {
 		return false, err
 	} else {
@@ -87,11 +129,8 @@ func (c *CredCache) HasCachedToken() (bool, error) {
 	}
 }
 
-// RemoveCachedToken deletes the cached token in session key ring.
-func (c *CredCache) RemoveCachedToken() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+// removeCachedTokenInternal deletes the cached token in session key ring.
+func (c *CredCache) removeCachedTokenInternal() error {
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return fmt.Errorf("failed to get keyring during removing cached token, %v", err)
@@ -111,11 +150,8 @@ func (c *CredCache) RemoveCachedToken() error {
 	return nil
 }
 
-// SaveToken saves an oauth token in session key ring.
-func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+// saveTokenInternal saves an oauth token in session key ring.
+func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	c.isPermSet = false
 	c.key = nil
 
@@ -149,11 +185,8 @@ func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
 	return nil
 }
 
-// LoadToken gets an oauth token from session key ring.
-func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+// loadTokenInternal gets an oauth token from session key ring.
+func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	keyring, err := keyctl.SessionKeyring()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get keyring during loading token, %v", err)

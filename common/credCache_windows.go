@@ -50,11 +50,52 @@ func NewCredCache(state string) *CredCache {
 	}
 }
 
-// HasCachedToken returns if there is cached token in token manager.
+// HasCachedToken returns if there is cached token for current executing user.
 func (c *CredCache) HasCachedToken() (bool, error) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
+	has, err := c.hasCachedTokenInternal()
+	c.lock.Unlock()
+	return has, err
+}
 
+// RemoveCachedToken deletes the cached token.
+func (c *CredCache) RemoveCachedToken() error {
+	c.lock.Lock()
+	err := c.removeCachedTokenInternal()
+	c.lock.Unlock()
+	return err
+}
+
+// SaveToken saves an oauth token.
+func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
+	c.lock.Lock()
+	err := c.saveTokenInternal(token)
+	c.lock.Unlock()
+	return err
+}
+
+// LoadToken gets the cached oauth token.
+func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
+	c.lock.Lock()
+	token, err := c.loadTokenInternal()
+	c.lock.Unlock()
+	return token, err
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+// This internal method pattern is applied to avoid defer locks.
+// The reason is:
+// We use locks to protect shared state from being accessed from multiple threads/goroutines at the same time.
+// If a bug is in this method that causes a panic,
+// then the defer will unlock another thread/goroutine allowing it to access the shared state.
+// BUT, if a panic happened, the shared state is hard to be decide whether in a good or corrupted state.
+// So currently let the other threads/goroutines hang forever instead of letting them access the potentially corrupted shared state.
+// Once having bad state, more bad state gets injected into app and figuring out how it happened and how to recover from it is near impossible.
+// On the other hand, hanging threads is MUCH easier to detect and devs can fix the bug in code to make sure that the panic doesn't happen in the first place.
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+// hasCachedTokenInternal returns if there is cached token in token manager.
+func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 	if _, err := os.Stat(c.tokenFilePath()); err == nil {
 		return true, nil
 	} else {
@@ -65,11 +106,8 @@ func (c *CredCache) HasCachedToken() (bool, error) {
 	}
 }
 
-// RemoveCachedToken deletes all the cached token.
-func (c *CredCache) RemoveCachedToken() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+// removeCachedTokenInternal deletes all the cached token.
+func (c *CredCache) removeCachedTokenInternal() error {
 	tokenFilePath := c.tokenFilePath()
 
 	if _, err := os.Stat(tokenFilePath); err == nil {
@@ -92,11 +130,8 @@ func (c *CredCache) RemoveCachedToken() error {
 	return nil
 }
 
-// LoadToken restores a Token object from file cache.
-func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+// loadTokenInternal restores a Token object from file cache.
+func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	tokenFilePath := c.tokenFilePath()
 	b, err := ioutil.ReadFile(tokenFilePath)
 	if err != nil {
@@ -116,13 +151,10 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 	return token, nil
 }
 
-// SaveToken persists an oauth token on disk.
+// saveTokenInternal persists an oauth token on disk.
 // It moves the new file into place so it can safely be used to replace an existing file
 // that maybe accessed by multiple processes.
-func (c *CredCache) SaveToken(token OAuthTokenInfo) error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
+func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	tokenFilePath := c.tokenFilePath()
 	dir := filepath.Dir(tokenFilePath)
 
