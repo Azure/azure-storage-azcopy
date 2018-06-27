@@ -562,7 +562,7 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
 	if !summary.CompleteJobOrdered {
-		scanningString = "(Scanning ...)"
+		scanningString = "(scanning ...)"
 	}else{
 		scanningString = ""
 	}
@@ -578,13 +578,14 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		*startTime = time.Now()
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-		// TODO: add active connections in the Job Summary for debugging purpose. remove later
-		fmt.Printf("\r %v Active Connections, %v Done, %v Failed, %v Pending, %v Total, %s 2-sec Throughput (MB/s): %v", summary.ActiveConnections,
-			summary.TransfersCompleted, summary.TransfersFailed, summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4))
-		//fmt.Printf("\r %v Complete, JobStatus %s , throughput : %v MB/s, ( %d transfers: %d successful, %d failed, %d pending. Job ordered completely %v)",
-		//	summary.JobProgressPercentage, summary.JobStatus, ste.ToFixed(throughPut, 4), summary.TotalTransfers, summary.TransfersCompleted, summary.TransfersFailed,
-		//	summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed), summary.CompleteJobOrdered)
+
+		fmt.Printf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v\n",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers,
+			scanningString,
+			ste.ToFixed(throughPut, 4))
 	}
 	return summary
 }
