@@ -76,7 +76,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 	f := []pipeline.Factory{
 		azblob.NewTelemetryPolicyFactory(o.Telemetry),
 		azblob.NewUniqueRequestIDPolicyFactory(),
-		NewXferRetryPolicyFactory(r),
+		NewBlobXferRetryPolicyFactory(r),
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		//NewPacerPolicyFactory(p),
@@ -97,7 +97,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 	f := []pipeline.Factory{
 		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
 		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewXferRetryPolicyFactory(r),
+		NewBFSXferRetryPolicyFactory(r),
 	}
 
 	f = append(f, c)
