@@ -248,7 +248,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 			rangeDone()
 		} else {
 			// rangeBytes is the byte slice of Page for the given range range
-			rangeBytes := srcMmf.MMFSlice()[startRange : startRange+pageSize]
+			rangeBytes := srcMmf.Slice()[startRange : startRange+pageSize]
 			// converted the bytes slice to int64 array.
 			// converting each of 8 bytes of byteSlice to an integer.
 			int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]

@@ -111,7 +111,7 @@ func (p *pacer) updateTargetRate(increase bool) {
 type bodyPacer struct {
 	body io.Reader // Seeking is required to support retries
 	p    *pacer
-	srcMMF *common.MMF
+	mmf  *common.MMF
 }
 
 // newRequestBodyPacer wraps a response body to the given pacer to control the upload speed and
@@ -120,7 +120,7 @@ func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &bodyPacer{body: requestBody, p: p, srcMMF:srcMMF}
+	return &bodyPacer{body: requestBody, p: p, mmf:srcMMF}
 }
 
 // newResponseBodyPacer wraps a response body to the given pacer to control the download speed and
@@ -129,17 +129,20 @@ func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer, srcMMF *common.M
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &bodyPacer{body: responseBody, p: p, srcMMF:srcMMF}
+	return &bodyPacer{body: responseBody, p: p, mmf:srcMMF}
 }
 
 // read blocks until tickets are obtained
 func (rbp *bodyPacer) Read(p []byte) (int, error) {
-	if rbp.srcMMF.IsUnmapped() {
+	rbp.mmf.RLock()
+	if rbp.mmf.IsUnmapped() {
+		rbp.mmf.RUnlock()
 		return 0, fmt.Errorf("src MMF Unmapped. Cannot read further")
 	}
 	//rbp.p.requestRightToSend(int64(len(p)))
 	n, err := rbp.body.Read(p)
 	atomic.AddInt64(&rbp.p.bytesTransferred, int64(n))
+	rbp.mmf.RUnlock()
 	return n, err
 }
 

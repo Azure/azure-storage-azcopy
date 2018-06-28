@@ -31,7 +31,7 @@ import (
 type MMF struct {
 	slice []byte
 	isMapped bool
-	lock sync.Mutex
+	lock sync.RWMutex
 }
 
 func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
@@ -54,13 +54,18 @@ func (m *MMF) Unmap() {
 	m.lock.Unlock()
 }
 
-func (m *MMF) IsUnmapped() bool{
-	m.lock.Lock()
-	isUnmapped := !m.isMapped
-	m.lock.Unlock()
-	return isUnmapped
+func (m *MMF) RLock() {
+	m.lock.RLock()
 }
 
-func (m* MMF) MMFSlice() []byte {
+func (m *MMF) RUnlock(){
+	m.lock.RUnlock()
+}
+
+func (m *MMF) IsUnmapped() bool{
+	return !m.isMapped
+}
+
+func (m* MMF) Slice() []byte {
 	return m.slice
 }

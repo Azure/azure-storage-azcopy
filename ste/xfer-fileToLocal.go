@@ -206,7 +206,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 
 			// step 2: write the body into the memory mapped file directly
 			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
-			_, err = io.ReadFull(retryReader, destinationMMF.MMFSlice()[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(retryReader, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
 			io.Copy(ioutil.Discard, retryReader)
 			retryReader.Close()
 			if err != nil {

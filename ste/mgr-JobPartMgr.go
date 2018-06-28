@@ -397,14 +397,14 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.Bl
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
-	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.MMFSlice())}, jpm.blobMetadata
+	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.blobMetadata
 }
 
 func (jpm *jobPartMgr) fileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
 		return jpm.fileHTTPHeaders, jpm.fileMetadata
 	}
-	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.MMFSlice())}, jpm.fileMetadata
+	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.fileMetadata
 }
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {

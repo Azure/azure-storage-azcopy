@@ -176,7 +176,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 		//		info := jptm.Info()
 		//		if jptm.ShouldLog(pipeline.LogError) {
 		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
-		//					r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF.MMFSlice())))
+		//					r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF.Slice())))
 		//		}
 		//		jptm.SetStatus(common.ETransferStatus.Failed())
 		//		jptm.ReportTransferDone()
@@ -226,7 +226,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 			// step 2: write the body into the memory mapped file directly
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body = newResponseBodyPacer(body, p, destinationMMF)
-			_, err = io.ReadFull(body, destinationMMF.MMFSlice()[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(body, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {

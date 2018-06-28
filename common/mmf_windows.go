@@ -29,9 +29,14 @@ import (
 )
 
 type MMF struct {
-	slice []byte
-	isMapped bool
-	lock sync.Mutex
+	slice []byte // slice represents the actual memory mapped buffer
+	isMapped bool // defines whether source has been mapped or not
+	// read-write is a reader/writer mutual exclusion lock which
+	// is used to provide thread safe access to memory map buffer.
+	// This lock is not exposed to the users of MMF.
+	// Consumer of MMF can only hold the lock for Read
+	lock sync.RWMutex
+
 }
 
 func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
@@ -50,9 +55,22 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	h.Data = addr
 	h.Len = int(length)
 	h.Cap = h.Len
-	return &MMF{slice:m, isMapped:true, lock:sync.Mutex{}}, nil
+	return &MMF{slice:m, isMapped:true, lock:sync.RWMutex{}}, nil
 }
 
+// RLock holds the lock for Read
+func (m *MMF) RLock() {
+	m.lock.RLock()
+}
+
+// RUnlock unlocks the held lock
+func (m *MMF) RUnlock(){
+	m.lock.RUnlock()
+}
+
+// Unmap holds the lock for writing
+// sets the isMapped bool to false
+// and release the lock
 func (m *MMF) Unmap() {
 	m.lock.Lock()
 	addr := uintptr(unsafe.Pointer(&(([]byte)(m.slice)[0])))
@@ -65,13 +83,13 @@ func (m *MMF) Unmap() {
 	m.lock.Unlock()
 }
 
+// IsUnmapped returns whether memory mapped buffer is
+// mapped or not
 func (m *MMF) IsUnmapped() bool{
-	m.lock.Lock()
-	isUnmapped := !m.isMapped
-	m.lock.Unlock()
-	return isUnmapped
+	return !m.isMapped
 }
 
-func (m* MMF) MMFSlice() []byte {
+// Slice() returns the memory mapped byte slice
+func (m* MMF) Slice() []byte {
 	return m.slice
 }

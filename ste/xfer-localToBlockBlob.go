@@ -277,7 +277,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				info := jptm.Info()
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
-						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(bbu.srcMmf.MMFSlice())))
+						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(bbu.srcMmf.Slice())))
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
@@ -330,7 +330,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 		// step 3: perform put block
 		blockBlobUrl := bbu.blobURL.ToBlockBlobURL()
-		body := newRequestBodyPacer(bytes.NewReader(bbu.srcMmf.MMFSlice()[startIndex:startIndex+adjustedChunkSize]), bbu.pacer, bbu.srcMmf)
+		body := newRequestBodyPacer(bytes.NewReader(bbu.srcMmf.Slice()[startIndex:startIndex+adjustedChunkSize]), bbu.pacer, bbu.srcMmf)
 		_, err := blockBlobUrl.StageBlock(bbu.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{})
 		if err != nil {
 			// check if the transfer was cancelled while Stage Block was in process.
@@ -440,7 +440,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 			info := jptm.Info()
 			lenSrcMmf := 0
 			if info.SourceSize != 0 {
-				lenSrcMmf = len(srcMmf.MMFSlice())
+				lenSrcMmf = len(srcMmf.Slice())
 			}
 			if jptm.ShouldLog(pipeline.LogError) {
 				jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v sourceMMF size %v",
@@ -460,7 +460,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 	if jptm.Info().SourceSize == 0 {
 		_, err = blockBlobUrl.Upload(jptm.Context(), bytes.NewReader(nil), blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	} else {
-		body := newRequestBodyPacer(bytes.NewReader(srcMmf.MMFSlice()), pacer, srcMmf)
+		body := newRequestBodyPacer(bytes.NewReader(srcMmf.Slice()), pacer, srcMmf)
 		_, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 	}
 
@@ -535,7 +535,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 				info := jptm.Info()
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startPage %v calculatedPageSize %v sourceMMF size %v",
-						r, info.Source, info.Destination, info.SourceSize, startPage, calculatedPageSize, len(pbu.srcMmf.MMFSlice())))
+						r, info.Source, info.Destination, info.SourceSize, startPage, calculatedPageSize, len(pbu.srcMmf.Slice())))
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
@@ -579,7 +579,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 			pageDone()
 		} else {
 			// pageBytes is the byte slice of Page for the given page range
-			pageBytes := pbu.srcMmf.MMFSlice()[startPage : startPage+calculatedPageSize]
+			pageBytes := pbu.srcMmf.Slice()[startPage : startPage+calculatedPageSize]
 			// converted the bytes slice to int64 array.
 			// converting each of 8 bytes of byteSlice to an integer.
 			int64Slice := (*(*[]int64)(unsafe.Pointer(&pageBytes)))[:len(pageBytes)/8]
