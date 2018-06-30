@@ -9,4 +9,9 @@ script:
 - export AZCOPY_EXECUTABLE_PATH=$(pwd)/azure-storage-azcopy_linux_amd64
 - export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
 - export TEST_DIRECTORY_PATH=$(pwd)/test-temp
-- travis_wait python3 ./testSuite/scripts/run.py
+- python3 ./testSuite/scripts/run.py part1
+- python3 ./testSuite/scripts/run.py part2
+- python3 ./testSuite/scripts/run.py part3
+- python3 ./testSuite/scripts/run.py part4
+- python3 ./testSuite/scripts/run.py part5
+- python3 ./testSuite/scripts/run.py part6

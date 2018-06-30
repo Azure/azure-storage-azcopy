@@ -9,6 +9,7 @@ from test_blobfs_download import *
 import glob, os
 import configparser
 import platform
+import sys
 
 
 def execute_user_scenario_blob_1():
@@ -242,17 +243,27 @@ def cleanup():
 
 
 def main():
+    if len(sys.argv) < 2:
+        print("Please enter a part number like so: part1")
+        sys.exit(1)
+
+    print("Smoke tests starting...")
     init()
-    execute_bfs_user_scenario()
-    execute_sync_user_scenario()
-    execute_user_scenario_wildcards_op()
-    execute_user_scenario_azcopy_op()
-    execute_user_scenario_blob_1()
-    execute_user_scenario_2()
-    # execute_user_scenario_file_1()
-    # temp_adhoc_scenario()
+    get_test_func(sys.argv[1])()
     cleanup()
 
+
+def get_test_func(x):
+    return {
+        'part1': execute_bfs_user_scenario,
+        'part2': execute_sync_user_scenario,
+        'part3': execute_user_scenario_wildcards_op,
+        'part4': execute_user_scenario_azcopy_op,
+        'part5': execute_user_scenario_blob_1,
+        'part6': execute_user_scenario_2,
+        'part7': execute_user_scenario_file_1,
+        'part8': temp_adhoc_scenario,
+    }[x]
 
 if __name__ == '__main__':
     main()
