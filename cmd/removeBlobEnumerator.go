@@ -90,7 +90,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If the blob represents a folder as per the conditions mentioned in the
 			// api doesBlobRepresentAFolder, then skip the blob.
 			if util.doesBlobRepresentAFolder(blobInfo) {

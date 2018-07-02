@@ -588,13 +588,13 @@ func (jpm *jobPartMgr) Close() {
 
 // TODO: added for debugging purpose. remove later
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
-func(jpm *jobPartMgr) OccupyAConnection() {
+func (jpm *jobPartMgr) OccupyAConnection() {
 	jpm.jobMgr.OccupyAConnection()
 }
 
 // Sub 1 from the active number of goroutine performing the transfer or executing the chunkFunc
 // TODO: added for debugging purpose. remove later
-func(jpm *jobPartMgr) ReleaseAConnection() {
+func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
 }
 

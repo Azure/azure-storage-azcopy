@@ -10,10 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"path/filepath"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"path/filepath"
 )
 
 type syncDownloadEnumerator common.SyncJobPartOrderRequest
@@ -345,7 +346,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If blob name doesn't match the pattern
 			// This check supports the Use wild cards
 			// SearchPrefix is used to list to all the blobs inside the destination
@@ -434,7 +435,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 		// Get the lastIndex of Path Separator
 		// bName with blob name content from the last path separator till the end.
 		// for example: srcString = https://<container-name>/a1/f1.txt blobName = a1/f1.txt bName = f1.txt
-		if sepIndex != -1{
+		if sepIndex != -1 {
 			bName = bName[sepIndex+1:]
 		}
 		blobLocalPath := util.generateObjectPath(dstString, bName)
@@ -443,7 +444,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(dstString string, isR
 		// If it exists and the blobModified time is after modified time of blob existing locally
 		// download is required.
 		if (err != nil && os.IsNotExist(err)) ||
-			(err == nil && bProperties.LastModified().After(blobLocalInfo.ModTime())){
+			(err == nil && bProperties.LastModified().After(blobLocalInfo.ModTime())) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:           sourceUrl.String(),
 				Destination:      blobLocalPath,

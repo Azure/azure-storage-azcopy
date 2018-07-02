@@ -10,10 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"path/filepath"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"path/filepath"
 )
 
 type syncUploadEnumerator common.SyncJobPartOrderRequest
@@ -126,7 +127,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	// Only files that follow pattern a* will be compared
 	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(sourcePath, os.PathSeparator)
 	//replace the os path separator  with path separator "/" which is path separator for blobs
-	sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/",-1)
+	sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/", -1)
 	destinationUrl, err := url.Parse(destinationUrlString)
 	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
@@ -147,7 +148,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If blob name doesn't match the pattern
 			// This check supports the Use wild cards
 			// SearchPrefix is used to list to all the blobs inside the destination

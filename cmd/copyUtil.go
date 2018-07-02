@@ -539,7 +539,7 @@ func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string 
 
 // doesBlobRepresentAFolder verifies whether blob is valid or not.
 // Used to handle special scenarios or conditions.
-func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
+func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.BlobItem) bool {
 	// this condition is to handle the WASB V1 directory structure.
 	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’
