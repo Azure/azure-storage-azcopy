@@ -134,15 +134,13 @@ func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer, srcMMF *common.M
 
 // read blocks until tickets are obtained
 func (rbp *bodyPacer) Read(p []byte) (int, error) {
-	rbp.mmf.RLock()
-	if rbp.mmf.IsUnmapped() {
-		rbp.mmf.RUnlock()
+	if !rbp.mmf.UseMMF() {
 		return 0, fmt.Errorf("src MMF Unmapped. Cannot read further")
 	}
 	//rbp.p.requestRightToSend(int64(len(p)))
 	n, err := rbp.body.Read(p)
 	atomic.AddInt64(&rbp.p.bytesTransferred, int64(n))
-	rbp.mmf.RUnlock()
+	rbp.mmf.UnuseMMF()
 	return n, err
 }
 
