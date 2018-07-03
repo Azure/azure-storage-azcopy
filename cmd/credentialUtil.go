@@ -64,8 +64,9 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // The verification logic follows following rules:
 // 1. For source or dest url, if the url contains SAS, indicating using anonymous credential(SAS).
 // 2. If it's source blob url, and it's a public resource, indicating using anonymous credential(public resource).
-// 3. Otherwise, if there is cached session OAuth token, indicating using token credential.
-// 4. Otherwise use anonymous credential.
+// 3. If there is cached OAuth token, indicating using token credential.
+// 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
+// 5. Otherwise use anonymous credential.
 // The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
 func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
@@ -91,11 +92,16 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 		fmt.Println(fmt.Errorf("No cached token found, %s", err.Error())) //TODO: replace this with FE logging facility.
 	}
 
-	if !hasCachedToken {
+	hasEnvVarOAuthTokenInfo := common.EnvVarOAuthTokenInfoExists()
+	if hasEnvVarOAuthTokenInfo {
+		fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) //TODO: replace this with FE logging facility.
+	}
+
+	if !hasCachedToken && !hasEnvVarOAuthTokenInfo { // no oauth token found, then directly return anonymous credential
 		return common.ECredentialType.Anonymous(), nil
-	} else if !isSource {
+	} else if !isSource { // oauth token found, if it's destination, then it should not be public resource, return token credential
 		return common.ECredentialType.OAuthToken(), nil
-	} else {
+	} else { // check if it's public resource, and return credential type correspondingly
 		// If has cached token, and no SAS token provided, it could be a public blob resource.
 		p := azblob.NewPipeline(
 			azblob.NewAnonymousCredential(),
@@ -135,10 +141,15 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 // getBlobFSCredentialType is used to get BlobFS's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
 // 1. If there is cached session OAuth token, indicating using token credential.
-// 2. Otherwise use shared key.
+// 2. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
+// 3. Otherwise use shared key.
 func getBlobFSCredentialType() (common.CredentialType, error) {
-	uotm := GetUserOAuthTokenManagerInstance()
+	if common.EnvVarOAuthTokenInfoExists() {
+		fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) //TODO: replace this with FE logging facility.
+		return common.ECredentialType.OAuthToken(), nil
+	}
 
+	uotm := GetUserOAuthTokenManagerInstance()
 	hasCachedToken, err := uotm.HasCachedToken()
 	if err != nil {
 		fmt.Println(fmt.Errorf("No cached token found, %s", err.Error())) //TODO: replace this with FE logging facility.

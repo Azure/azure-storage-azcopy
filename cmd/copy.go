@@ -456,7 +456,6 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
-
 		}
 	}
 
@@ -489,26 +488,16 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 		},
-		CommandString: cca.commandString,
+		CommandString:  cca.commandString,
+		CredentialInfo: common.CredentialInfo{},
 	}
 
-	// print out the job id so that the user can note it down
-	//if !cca.outputJson {
-	//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-	//}
-
-	// wait group to monitor the go routines fetching the job progress summary
-	var wg sync.WaitGroup
-	// lastPartNumber determines the last part number order send for the Job.
-	var lastPartNumber common.PartNumber
-
-	// verify credential type and set credential info.
-	jobPartOrder.CredentialInfo = common.CredentialInfo{}
+	// verifies credential type and initializes credential info.
 	jobPartOrder.CredentialInfo.CredentialType, err = cca.getCredentialType()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Copy using credential type %v\n", jobPartOrder.CredentialInfo.CredentialType) // TODO: use FE logging facility
+	fmt.Printf("Copy uses credential type %q.\n", jobPartOrder.CredentialInfo.CredentialType) // TODO: use FE logging facility
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -517,6 +506,13 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		var tokenInfo *common.OAuthTokenInfo
 		if cca.useInteractiveOAuthUserCredential { // Scenario-1: interactive login per copy command
 			tokenInfo, err = uotm.LoginWithADEndpoint(cca.tenantID, cca.aadEndpoint, false)
+			if err != nil {
+				return err
+			}
+		} else if common.EnvVarOAuthTokenInfoExists() { // Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
+			// Note: Scenario-Test has higher priority than scenario-2, so whenever environment variable is set in the context, it will overwrite the
+			// cached token info.
+			tokenInfo, err = uotm.GetTokenInfoFromEnvVar()
 			if err != nil {
 				return err
 			}
@@ -529,6 +525,14 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
+	// print out the job id so that the user can note it down
+	//if !cca.outputJson {
+	//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
+	//}
+	// wait group to monitor the go routines fetching the job progress summary
+	var wg sync.WaitGroup
+	// lastPartNumber determines the last part number order send for the Job.
+	var lastPartNumber common.PartNumber
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {

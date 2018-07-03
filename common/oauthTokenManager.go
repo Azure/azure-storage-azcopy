@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -39,6 +40,10 @@ const DefaultTenantID = "microsoft.com"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
+
+// EnvVarOAuthTokenInfo passes oauth token info into AzCopy through environment variable.
+// Note: this is only used for testing, and not encouraged to be used in production environments.
+const EnvVarOAuthTokenInfo = "AZCOPY_OAUTH_TOKEN_INFO"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
@@ -133,7 +138,7 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error)
 		Resource,
 		tokenInfo.Token)
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed to due to error: %v", err.Error())
+		return nil, fmt.Errorf("Get cached token failed due to error: %v", err.Error())
 	}
 
 	// Ensure at least 10 minutes fresh time.
@@ -170,6 +175,56 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 // RemoveCachedToken delete all the cached token.
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 	return uotm.credCache.RemoveCachedToken()
+}
+
+// EnvVarOAuthTokenInfoExists verifies if environment variable for OAuthTokenInfo is specified.
+// The method returns true if the environment variable is set.
+func EnvVarOAuthTokenInfoExists() bool {
+	if os.Getenv(EnvVarOAuthTokenInfo) == "" {
+		return false
+	}
+	return true
+}
+
+// GetTokenInfoFromEnvVar gets token info from environment variable.
+func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar() (*OAuthTokenInfo, error) {
+	rawToken := os.Getenv(EnvVarOAuthTokenInfo)
+	if rawToken == "" {
+		return nil, fmt.Errorf("environment variable %v is not set", EnvVarOAuthTokenInfo)
+	}
+
+	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal token, %v", err)
+	}
+
+	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(
+		*oauthConfig,
+		ApplicationID,
+		Resource,
+		tokenInfo.Token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token from env var, %v", err)
+	}
+
+	// Ensure at least 10 minutes fresh time.
+	spt.SetRefreshWithin(DefaultTokenExpiryWithinThreshold)
+	spt.SetAutoRefresh(true)
+	err = spt.EnsureFresh() // EnsureFresh only refresh token when access token's fresh duration is less than threshold set in RefreshWithin.
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure token fresh during get token from env var, %v", err)
+	}
+
+	return &OAuthTokenInfo{
+		Token:                   spt.Token(),
+		Tenant:                  tokenInfo.Tenant,
+		ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+	}, nil
 }
 
 //====================================================================================

@@ -169,22 +169,36 @@ func (rca resumeCmdArgs) process() error {
 		}
 	}
 
-	// Check oauth related commandline switch, and create token with interactive login if necessary.
-	credentialInfo := common.CredentialInfo{}
-	if rca.useInteractiveOAuthUserCredential {
+	// Initialize credential info.
+	credentialInfo := common.CredentialInfo{
+		CredentialType: common.ECredentialType.Anonymous(),
+	}
+	// Check whether to use OAuthToken credential.
+	// Scenario-1: interactive login per copy command
+	// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
+	if rca.useInteractiveOAuthUserCredential || common.EnvVarOAuthTokenInfoExists() {
 		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
-
 		userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-		oAuthTokenInfo, err := userOAuthTokenManager.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
-		if err != nil {
-			return fmt.Errorf(
-				"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
-				rca.tenantID,
-				err.Error())
+
+		// For Scenario-1, create token with interactive login if necessary.
+		if rca.useInteractiveOAuthUserCredential {
+			oAuthTokenInfo, err := userOAuthTokenManager.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
+			if err != nil {
+				return fmt.Errorf(
+					"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
+					rca.tenantID,
+					err.Error())
+			}
+			credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
+		} else { // Scenario-Test
+			fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) // TODO: Do logging what's the source of OAuth token with FE logging facilities.
+
+			oAuthTokenInfo, err := userOAuthTokenManager.GetTokenInfoFromEnvVar()
+			if err != nil {
+				return err
+			}
+			credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 		}
-		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
-	} else {
-		credentialInfo.CredentialType = common.ECredentialType.Anonymous()
 	}
 
 	// Send resume job request.

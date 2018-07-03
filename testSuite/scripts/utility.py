@@ -118,7 +118,7 @@ def clean_test_filesystem(fileSystemURLStr):
     return True
 
 # initialize_test_suite initializes the setup for executing test cases.
-def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, filesystem_url,
+def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, 
                           azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
@@ -127,6 +127,13 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # test_container_url is a global variable used in the entire testSuite holding the user given container shared access signature.
     # all files / directory are uploaded and downloaded to and from this container.
     global test_container_url
+
+    # test_oauth_container_url is a global variable used in the entire testSuite holding the user given container for oAuth testing.
+    # all files / directory are uploaded and downloaded to and from this container.
+    global test_oauth_container_url
+
+    # test_container_oauth_validate_sas_url is same container as test_oauth_container_url, while for validation purpose. 
+    global test_oauth_container_validate_sas_url
 
     # test_premium_account_contaier_url is a global variable used in the entire test suite holding the user given container sas of premium storage account container.
     global test_premium_account_contaier_url
@@ -179,11 +186,24 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
 
     # set the filesystem url
     test_bfs_account_url = filesystem_url
+    if not clean_test_filesystem(test_bfs_account_url):
+        return False
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+        test_bfs_account_url = test_bfs_account_url + "/"
 
     # cleaning the test container provided
     # all blob inside the container will be deleted.
     test_container_url = container_sas
     if not clean_test_container(test_container_url):
+        return False
+
+    test_oauth_container_url = container_oauth
+    if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
+        test_oauth_container_url = test_oauth_container_url + "/"
+    
+    # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
+    test_oauth_container_validate_sas_url = container_oauth_validate
+    if not clean_test_container(test_oauth_container_validate_sas_url):
         return False
 
     test_premium_account_contaier_url = premium_container_sas
@@ -424,6 +444,7 @@ def execute_azcopy_command(command):
     # azcopy executable path location.
     azspath = os.path.join(test_directory_path, azcopy_executable_name)
     cmnd = azspath + " " + command
+
     try:
         # executing the command with timeout to set 3 minutes / 180 sec.
         subprocess.check_output(

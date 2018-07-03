@@ -81,10 +81,10 @@ def parse_config_file_set_env():
     os.environ['TEST_SUITE_EXECUTABLE_LOCATION'] = config[os_type]['TEST_SUITE_EXECUTABLE_LOCATION']
 
     # container whose storage account has been configured properly for the interactive testing user.
-    os.environ['CONTAINER_OAUTH_URL'] = config['INTERACTIVE']['CONTAINER_OAUTH_URL']
+    os.environ['CONTAINER_OAUTH_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_URL']
 
     # container which should be same to CONTAINER_OAUTH_URL, while with SAS for validation purpose.
-    os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['INTERACTIVE']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
+    os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
 
     # set the account name for blob fs service operation
     os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
@@ -96,10 +96,10 @@ def parse_config_file_set_env():
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
 
     # set oauth tenant ID
-    os.environ['OAUTH_TENANT_ID'] = config['INTERACTIVE']['OAUTH_TENANT_ID']
+    os.environ['OAUTH_TENANT_ID'] = config['CREDENTIALS']['OAUTH_TENANT_ID']
 
     # set oauth aad endpoint
-    os.environ['OAUTH_AAD_ENDPOINT'] = config['INTERACTIVE']['OAUTH_AAD_ENDPOINT']
+    os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
 
 
 def init():
@@ -111,6 +111,7 @@ def init():
             os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
             os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
             os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
+            os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
             os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
             os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
             os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \

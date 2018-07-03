@@ -6,6 +6,7 @@ from test_file_upload import *
 from test_azcopy_operations import *
 from test_blobfs_upload import *
 from test_blobfs_download import *
+from test_blob_download_oauth import *
 import glob, os
 import configparser
 import platform
@@ -35,7 +36,22 @@ def execute_user_scenario_blob_1():
 def execute_user_scenario_wildcards_op():
     test_remove_files_with_Wildcard()
 
-def execute_bfs_user_scenario():
+def execute_blob_oauth_bvt():
+    test_download_1kb_blob_oauth()
+    test_recursive_download_blob_oauth()
+
+def execute_bfs_shared_key_user_scenario():
+    # silently use shared key set
+    os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
+    test_blobfs_upload_1Kb_file()
+    test_blobfs_upload_64MB_file()
+    test_blobfs_upload_100_1Kb_file()
+    test_blobfs_download_1Kb_file()
+    test_blobfs_download_64MB_file()
+    test_blobfs_download_100_1Kb_file()
+
+def execute_bfs_oauth_user_scenario():
+    # silently use AZCOPY_OAUTH_TOKEN_INFO set
     test_blobfs_upload_1Kb_file()
     test_blobfs_upload_64MB_file()
     test_blobfs_upload_100_1Kb_file()
@@ -62,7 +78,7 @@ def execute_user_scenario_azcopy_op():
     test_force_flag_set_to_false_download()
 
 
-def execute_user_scenario_file_1():
+def execute_file_sas_bvt():
     #########################
     # download
     #########################
@@ -145,6 +161,12 @@ def parse_config_file_set_env():
     # where test data will be uploaded to and downloaded from.
     os.environ['CONTAINER_SAS_URL'] = config['CREDENTIALS']['CONTAINER_SAS_URL']
 
+    # container whose storage account has been configured properly for the interactive testing user.
+    os.environ['CONTAINER_OAUTH_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_URL']
+
+    # container which should be same to CONTAINER_OAUTH_URL, while with SAS for validation purpose.
+    os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
+
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
     os.environ['SHARE_SAS_URL'] = config['CREDENTIALS']['SHARE_SAS_URL']
 
@@ -160,6 +182,9 @@ def parse_config_file_set_env():
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
 
+    # set the env var OAuth token info
+    os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
+
 def init():
     # Check the environment variables.
     # If they are not set, then parse the config file and set
@@ -169,11 +194,14 @@ def init():
             os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
             os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
             os.environ.get('CONTAINER_SAS_URL', '-1') == '-1' or \
+            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
+            os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
             os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
             os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1' or \
             os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
             os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
-            os.environ.get('ACCOUNT_KEY', '-1') == '-1':
+            os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
+            os.environ.get('AZCOPY_OAUTH_TOKEN_INFO', '-1'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -192,6 +220,12 @@ def init():
     # where test data will be uploaded to and downloaded from.
     container_sas = os.environ.get('CONTAINER_SAS_URL')
 
+    # container_oauth is container for oauth testing.
+    container_oauth = os.environ.get('CONTAINER_OAUTH_URL')
+
+    # container_oauth_validate is the URL with SAS for oauth validation.
+    container_oauth_validate = os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL')
+
     # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
     share_sas_url = os.environ.get('SHARE_SAS_URL')
 
@@ -204,7 +238,7 @@ def init():
     # deleting the log files.
     cleanup()
 
-    if not util.initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas,
+    if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
                                       filesystem_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
@@ -223,13 +257,15 @@ def cleanup():
 
 def main():
     init()
-    execute_bfs_user_scenario()
+    execute_bfs_oauth_user_scenario()
+    execute_blob_oauth_bvt()
+    #execute_bfs_shared_key_user_scenario()
     execute_sync_user_scenario()
     execute_user_scenario_wildcards_op()
     execute_user_scenario_azcopy_op()
     execute_user_scenario_blob_1()
     execute_user_scenario_2()
-    execute_user_scenario_file_1()
+    execute_file_sas_bvt()
     cleanup()
 
 
