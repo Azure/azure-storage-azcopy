@@ -128,14 +128,14 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 		}
 
 		if isRecursive {
-			for _, dirInfo := range listFile.Directories {
+			for _, dirInfo := range listFile.DirectoryItems {
 				newDirURL := curAzureDirURL.NewDirectoryURL(dirInfo.Name)
 				validateAzureDirWithLocalFile(newDirURL, baseAzureDirPath, localBaseDir, isRecursive)
 			}
 		}
 
 		// Process the files returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, fileInfo := range listFile.Files {
+		for _, fileInfo := range listFile.FileItems {
 			curFileURL := curAzureDirURL.NewFileURL(fileInfo.Name)
 			get, err := curFileURL.Download(context.Background(), 0, azfile.CountToEnd, false)
 
@@ -326,7 +326,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 			fmt.Println("error getting the range list ", err.Error())
 			os.Exit(1)
 		}
-		if numberOfPages != (len(resp.Value)) {
+		if numberOfPages != (len(resp.Items)) {
 			fmt.Println("number of ranges uploaded is different from the number of expected to be uploaded")
 			os.Exit(1)
 		}

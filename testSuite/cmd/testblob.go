@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/spf13/cobra"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -13,6 +11,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/spf13/cobra"
 )
 
 // TestBlobCommand represents the struct to get command
@@ -132,7 +133,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// get the blob
 			size := blobInfo.Properties.ContentLength
 			get, err := containerUrl.NewBlobURL(blobInfo.Name).Download(context.Background(),
