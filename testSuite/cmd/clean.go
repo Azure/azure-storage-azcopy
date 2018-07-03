@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
@@ -15,10 +17,11 @@ import (
 
 // initializes the clean command, its aliases and description.
 func init() {
-	resourceUrl := ""
+	resourceURL := ""
 	resourceType := ""
 	blobType := "blob"
 	fileType := "file"
+	blobFSType := "blobFS"
 	isResourceABucket := true
 
 	cleanCmd := &cobra.Command{
@@ -30,30 +33,32 @@ func init() {
 			if len(args) > 1 {
 				return fmt.Errorf("invalid arguments for clean command")
 			}
-			resourceUrl = args[0]
+			resourceURL = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("clean get resourceType", resourceType)
-			if resourceType != blobType && resourceType != fileType {
-				panic(fmt.Errorf("illegal resourceType '%s'", resourceType))
-			}
-
 			switch resourceType {
 			case blobType:
 				if isResourceABucket {
-					cleanContainer(resourceUrl)
+					cleanContainer(resourceURL)
 				} else {
-					cleanBlob(resourceUrl)
+					cleanBlob(resourceURL)
 				}
 			case fileType:
 				if isResourceABucket {
-					cleanShare(resourceUrl)
+					cleanShare(resourceURL)
 				} else {
-					cleanFile(resourceUrl)
+					cleanFile(resourceURL)
 				}
+			case blobFSType:
+				if isResourceABucket {
+					cleanFileSystem(resourceURL)
+				} else {
+					cleanBfsFile(resourceURL)
+				}
+			default:
+				panic(fmt.Errorf("illegal resourceType %q", resourceType))
 			}
-
 		},
 	}
 	rootCmd.AddCommand(cleanCmd)
@@ -157,6 +162,66 @@ func cleanFile(fileURLStr string) {
 	_, err = fileURL.Delete(context.Background())
 	if err != nil {
 		fmt.Println("error deleting the file ", fileURL)
+		os.Exit(1)
+	}
+}
+
+func createBlobFSPipeline() pipeline.Pipeline {
+	// Get the Account Name and Key variables from environment
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+	if name == "" || key == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before cleaning the file system")
+		os.Exit(1)
+	}
+	// create the blob fs pipeline
+	c := azbfs.NewSharedKeyCredential(name, key)
+	return azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+}
+
+func cleanFileSystem(fsURLStr string) {
+	ctx := context.Background()
+	u, err := url.Parse(fsURLStr)
+
+	if err != nil {
+		fmt.Println("error parsing the file system URL ", fsURLStr)
+		os.Exit(1)
+	}
+
+	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline())
+	_, err = fsURL.Delete(ctx)
+	if err != nil {
+		sErr := err.(azbfs.StorageError)
+		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
+			fmt.Println(fmt.Sprintf("error deleting the file system %q for cleaning, %v", fsURLStr, err))
+			os.Exit(1)
+		}
+	}
+
+	// Sleep seconds to wait the share deletion got succeeded
+	time.Sleep(45 * time.Second)
+
+	_, err = fsURL.Create(ctx)
+	if err != nil {
+		fmt.Println(fmt.Fprintf(os.Stdout, "error creating the file system %q for cleaning, %v", fsURLStr, err))
+		os.Exit(1)
+	}
+}
+
+func cleanBfsFile(fileURLStr string) {
+	ctx := context.Background()
+	u, err := url.Parse(fileURLStr)
+
+	if err != nil {
+		fmt.Println("error parsing the file system URL ", fileURLStr)
+		os.Exit(1)
+	}
+
+	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline())
+	_, err = fileURL.Delete(ctx)
+	if err != nil {
+		fmt.Println(fmt.Sprintf("error deleting the blob FS file %s, %v", fileURLStr, err))
 		os.Exit(1)
 	}
 }

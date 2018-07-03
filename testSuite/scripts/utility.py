@@ -102,14 +102,20 @@ def clean_test_container(container):
 
 
 # api executes the clean command on validator which deletes all the contents of the container.
-def clean_test_share():
+def clean_test_share(shareURLStr):
     # execute the clean command.
-    result = Command("clean").add_arguments(test_share_url).add_flags("resourceType", "file").execute_azcopy_clean()
+    result = Command("clean").add_arguments(shareURLStr).add_flags("resourceType", "file").execute_azcopy_clean()
     if not result:
         print("error cleaning the share. please check the share sas provided")
         return False
     return True
 
+def clean_test_filesystem(fileSystemURLStr):
+    result = Command("clean").add_arguments(fileSystemURLStr).add_flags("resourceType", "blobFS").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the share. please check the filesystem URL, user and key provided")
+        return False
+    return True
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, filesystem_url,
@@ -187,7 +193,7 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # cleaning the test share provided
     # all files and directories inside the share will be deleted.
     test_share_url = share_sas_url
-    if not clean_test_share():
+    if not clean_test_share(test_share_url):
         return False
     return True
 
@@ -258,6 +264,8 @@ def initialize_interactive_test_suite(test_dir_path, container_oauth, container_
 
     # set the filesystem url
     test_bfs_account_url = filesystem_url
+    if not clean_test_filesystem(test_bfs_account_url):
+        return False
     if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
         test_bfs_account_url = test_bfs_account_url + "/"
 
