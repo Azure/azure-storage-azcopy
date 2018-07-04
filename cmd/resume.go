@@ -176,30 +176,39 @@ func (rca resumeCmdArgs) process() error {
 	// Check whether to use OAuthToken credential.
 	// Scenario-1: interactive login per copy command
 	// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
-	if rca.useInteractiveOAuthUserCredential || common.EnvVarOAuthTokenInfoExists() {
+	// Scenario-2: session mode which get token from cache
+	uotm := GetUserOAuthTokenManagerInstance()
+	hasCachedToken, err := uotm.HasCachedToken()
+	if rca.useInteractiveOAuthUserCredential || common.EnvVarOAuthTokenInfoExists() || hasCachedToken {
 		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
-		userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-
+		var oAuthTokenInfo *common.OAuthTokenInfo
 		// For Scenario-1, create token with interactive login if necessary.
 		if rca.useInteractiveOAuthUserCredential {
-			oAuthTokenInfo, err := userOAuthTokenManager.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
+			oAuthTokenInfo, err = uotm.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
 			if err != nil {
 				return fmt.Errorf(
 					"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
 					rca.tenantID,
 					err.Error())
 			}
-			credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
-		} else { // Scenario-Test
+		} else if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+			// Scenario-Test
 			fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) // TODO: Do logging what's the source of OAuth token with FE logging facilities.
-
-			oAuthTokenInfo, err := userOAuthTokenManager.GetTokenInfoFromEnvVar()
+			if err != nil {                                         // this is the case when env var exists while get token info failed
+				return err
+			}
+		} else { // Scenario-2
+			oAuthTokenInfo, err = uotm.GetCachedTokenInfo()
 			if err != nil {
 				return err
 			}
-			credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 		}
+		if oAuthTokenInfo == nil {
+			return errors.New("cannot get valid oauth token")
+		}
+		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 	}
+	fmt.Printf("Resume uses credential type %q.\n", credentialInfo.CredentialType) // TODO: use FE logging facility
 
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
