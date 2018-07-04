@@ -509,11 +509,11 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			if err != nil {
 				return err
 			}
-		} else if common.EnvVarOAuthTokenInfoExists() { // Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
-			// Note: Scenario-Test has higher priority than scenario-2, so whenever environment variable is set in the context, it will overwrite the
-			// cached token info.
-			tokenInfo, err = uotm.GetTokenInfoFromEnvVar()
-			if err != nil {
+		} else if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+			// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
+			// Note: Scenario-Test has higher priority than scenario-2, so whenever environment variable is set in the context,
+			// it will overwrite the cached token info.
+			if err != nil { // this is the case when env var exists while get token info failed
 				return err
 			}
 		} else { // Scenario-2: session mode which get token from cache

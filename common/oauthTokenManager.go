@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/go-autorest/autorest/adal"
@@ -40,10 +41,6 @@ const DefaultTenantID = "microsoft.com"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
-
-// EnvVarOAuthTokenInfo passes oauth token info into AzCopy through environment variable.
-// Note: this is only used for testing, and not encouraged to be used in production environments.
-const EnvVarOAuthTokenInfo = "AZCOPY_OAUTH_TOKEN_INFO"
 
 // UserOAuthTokenManager for token management.
 type UserOAuthTokenManager struct {
@@ -177,8 +174,17 @@ func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 	return uotm.credCache.RemoveCachedToken()
 }
 
+// EnvVarOAuthTokenInfo passes oauth token info into AzCopy through environment variable.
+// Note: this is only used for testing, and not encouraged to be used in production environments.
+const EnvVarOAuthTokenInfo = "AZCOPY_OAUTH_TOKEN_INFO"
+
+// ErrorCodeEnvVarOAuthTokenInfoNotSet defines error code when environment variable AZCOPY_OAUTH_TOKEN_INFO is not set.
+const ErrorCodeEnvVarOAuthTokenInfoNotSet = "environment variable AZCOPY_OAUTH_TOKEN_INFO is not set"
+
 // EnvVarOAuthTokenInfoExists verifies if environment variable for OAuthTokenInfo is specified.
 // The method returns true if the environment variable is set.
+// Note: This is useful for only checking whether the env var exists, please use GetTokenInfoFromEnvVar
+// directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
 	if os.Getenv(EnvVarOAuthTokenInfo) == "" {
 		return false
@@ -186,11 +192,19 @@ func EnvVarOAuthTokenInfoExists() bool {
 	return true
 }
 
+// IsErrorEnvVarOAuthTokenInfoNotSet verifies if an error indicates environment variable AZCOPY_OAUTH_TOKEN_INFO is not set.
+func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
+	if err != nil && strings.Contains(err.Error(), ErrorCodeEnvVarOAuthTokenInfoNotSet) {
+		return true
+	}
+	return false
+}
+
 // GetTokenInfoFromEnvVar gets token info from environment variable.
 func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar() (*OAuthTokenInfo, error) {
 	rawToken := os.Getenv(EnvVarOAuthTokenInfo)
 	if rawToken == "" {
-		return nil, fmt.Errorf("environment variable %v is not set", EnvVarOAuthTokenInfo)
+		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
 	}
 
 	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))

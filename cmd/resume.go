@@ -191,7 +191,7 @@ func (rca resumeCmdArgs) process() error {
 					rca.tenantID,
 					err.Error())
 			}
-		} else if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+		} else if oAuthTokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
 			// Scenario-Test
 			fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) // TODO: Do logging what's the source of OAuth token with FE logging facilities.
 			if err != nil {                                         // this is the case when env var exists while get token info failed
