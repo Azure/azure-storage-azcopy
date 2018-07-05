@@ -539,15 +539,15 @@ func (jpm *jobPartMgr) IsForceWriteTrue() bool {
 	return jpm.Plan().ForceWrite
 }
 
-func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+func (jpm *jobPartMgr) blobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) fileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+func (jpm *jobPartMgr) fileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.fileHTTPHeaders, jpm.fileMetadata
 	}
 	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.fileMetadata

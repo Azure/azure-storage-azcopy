@@ -122,7 +122,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 
 	// Get http headers and meta data of file.
-	fileHTTPHeaders, metaData := jptm.FileDstData(*srcMmf)
+	fileHTTPHeaders, metaData := jptm.FileDstData(srcMmf)
 
 	// step 3: Create parent directories and file.
 	// 3a: Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
@@ -187,7 +187,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 		return
 	}
-	
+
 	numChunks := uint32(0)
 	if rem := fileSize % chunkSize; rem == 0 {
 		numChunks = uint32(fileSize / chunkSize)

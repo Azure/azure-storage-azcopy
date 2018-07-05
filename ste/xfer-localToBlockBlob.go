@@ -25,14 +25,15 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"unsafe"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 type blockBlobUpload struct {
@@ -104,7 +105,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	defer srcFile.Close()
 
 	// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
-	var srcMmf  = &common.MMF{}
+	srcMmf := &common.MMF{}
 	if blobSize > 0 {
 		// file needs to be memory mapped only when the file size is greater than 0.
 		srcMmf, err = common.NewMMF(srcFile, false, 0, blobSize)
@@ -138,7 +139,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			chunkSize)
 
 		// Get http headers and meta data of page.
-		blobHttpHeaders, metaData := jptm.BlobDstData(*srcMmf)
+		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
 		// Create Page Blob of the source size
 		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
@@ -217,7 +218,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// then uploading the source as block Blob.
 		// calculating num of chunks using the source size and chunkSize.
 		numChunks := common.Iffuint32(
-			blobSize % chunkSize == 0,
+			blobSize%chunkSize == 0,
 			uint32(blobSize/chunkSize),
 			uint32(blobSize/chunkSize)+1)
 
@@ -271,7 +272,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				info := jptm.Info()
@@ -384,7 +385,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 			// fetching the blob http headers with content-type, content-encoding attributes
 			// fetching the metadata passed with the JobPartOrder
-			blobHttpHeader, metaData := bbu.jptm.BlobDstData(*bbu.srcMmf)
+			blobHttpHeader, metaData := bbu.jptm.BlobDstData(bbu.srcMmf)
 
 			// commit the blocks.
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
@@ -434,7 +435,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 	// This function allows routine to manage behavior of unexpected panics.
 	// The panic error along with transfer details are logged.
 	// The transfer is marked as failed and is reported as done.
-	defer func (jptm IJobPartTransferMgr) {
+	defer func(jptm IJobPartTransferMgr) {
 		r := recover()
 		if r != nil {
 			info := jptm.Info()
@@ -452,7 +453,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 	}(jptm)
 
 	// Get blob http headers and metadata.
-	blobHttpHeader, metaData := jptm.BlobDstData(*srcMmf)
+	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
 	var err error
 
@@ -529,7 +530,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				info := jptm.Info()
