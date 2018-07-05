@@ -44,7 +44,7 @@ type JobPartPlanHeader struct {
 	Priority           common.JobPriority  // The Job Part's priority
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
 	FromTo             common.FromTo       // The location of the transfer's source & destination
-	NumTransfers       uint32 	             // The number of transfers in the Job part
+	NumTransfers       uint32              // The number of transfers in the Job part
 	LogLevel           common.LogLevel     // This Job Part's minimal log level
 	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData       JobPartPlanDstLocal // Additional data for local destinations
@@ -161,6 +161,21 @@ type JobPartPlanTransfer struct {
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
+
+	// TODO: S2S Per Transfer properties
+	// Newly added properties
+	ContentEncodingLength    uint16
+	ContentLanguageLength    uint16
+	ContentDispositionLength uint16
+	ContentLanugageLength    uint16
+	CacheControlLength       uint16
+	ContentMD5Length         uint16
+	BlobTierLength           uint16
+	// ContentDisposition [ContentDispositionMaxBytes]byte
+	// ContentLanguage    [ContentLanguageMaxBytes]byte
+	// CacheControl       [CacheControlMaxBytes]byte
+	// ContentMD5         [ContentMD5MaxBytes]byte
+	// End to-do
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

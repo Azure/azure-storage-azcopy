@@ -4,20 +4,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"math/rand"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
-
-// copyEnumerator is the interface for copy enumerators.
-type CopyEnumerator interface {
-	// enumerate enumerates entities
-	enumerate(sourceURLString string, isRecursiveOn bool, destinationPath string,
-		wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error
-
-	// partNum gets part number
-	partNum() common.PartNumber
-}
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, wg *sync.WaitGroup,

@@ -89,6 +89,8 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.LocalBlobFS()
 	case srcLocation == ELocation.BlobFS() && dstLocation == ELocation.Local():
 		return common.EFromTo.BlobFSLocal()
+	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Blob():
+		return common.EFromTo.BlobBlob()
 	}
 	return common.EFromTo.Unknown()
 }

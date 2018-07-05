@@ -49,6 +49,8 @@ const (
 
 type copyHandlerUtil struct{}
 
+var gCopyUtil = copyHandlerUtil{} // global copy util in cmd package
+
 // checks whether a given url contains a prefix pattern
 func (copyHandlerUtil) numOfStarInUrl(url string) int {
 	return strings.Count(url, "*")

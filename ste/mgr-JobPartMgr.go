@@ -48,7 +48,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // defaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-const defaultServiceApiVersion = "2017-11-09"
+const defaultServiceApiVersion = "2018-03-28"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -190,6 +190,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
+	// TODO: Update for auth
+
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
 		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
@@ -234,7 +236,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone()            // Don't schedule an already-completed/failed transfer
-			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
+			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the bytes done
 			continue
 		}
 
@@ -448,6 +450,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 
 		switch fromTo {
 		case common.EFromTo.BlobTrash():
+			fallthrough
+		case common.EFromTo.BlobBlob(): // Copy from blob service to blob service
 			fallthrough
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
