@@ -12,11 +12,16 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"time"
 )
 
 // TestBlobCommand represents the struct to get command
 // for validating azcopy operations.
+
+// defaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
+const defaultServiceApiVersion = "2017-04-17"
 
 // todo check the number of contents uploaded while verifying.
 
@@ -117,15 +122,28 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 	containerName := strings.SplitAfterN(sasUrl.Path[1:], "/", 2)[0]
 	sasUrl.Path = "/" + containerName
 
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+	// Create Pipeline to Get the Blob Properties or List Blob Segment
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
+		},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    10 * time.Minute,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
 	containerUrl := azblob.NewContainerURL(*sasUrl, p)
 
+	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 	// perform a list blob with search prefix "dirname/"
 	dirName := strings.Split(testBlobCmd.Object, "/")
 	searchPrefix := dirName[len(dirName)-1] + "/"
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
+		listBlob, err := containerUrl.ListBlobsFlatSegment(testCtx, marker, azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas")
 			os.Exit(1)
@@ -135,7 +153,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 		for _, blobInfo := range listBlob.Blobs.Blob {
 			// get the blob
 			size := blobInfo.Properties.ContentLength
-			get, err := containerUrl.NewBlobURL(blobInfo.Name).Download(context.Background(),
+			get, err := containerUrl.NewBlobURL(blobInfo.Name).Download(testCtx,
 				0, *size, azblob.BlobAccessConditions{}, false)
 
 			if err != nil {
@@ -242,12 +260,26 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	}
 
 	// creating the page blob url of the resource on container.
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry: azblob.RetryOptions{TryTimeout: time.Minute * 10}})
+	// Create Pipeline to Get the Blob Properties or List Blob Segment
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
+	},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    10 * time.Minute,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
+
+	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
 
 	// get the blob properties and check the blob tier.
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := pageBlobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		blobProperties, err := pageBlobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{})
 		if err != nil {
 			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
 			os.Exit(1)
@@ -264,7 +296,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		}
 	}
 
-	get, err := pageBlobUrl.Download(context.Background(), 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
+	get, err := pageBlobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
@@ -326,7 +358,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 	// this verifies the page-size and azcopy pageblob implementation.
 	if testBlobCmd.VerifyBlockOrPageSize {
 		numberOfPages := int(testBlobCmd.NumberOfBlocksOrPages)
-		resp, err := pageBlobUrl.GetPageRanges(context.Background(), 0, 0, azblob.BlobAccessConditions{})
+		resp, err := pageBlobUrl.GetPageRanges(testCtx, 0, 0, azblob.BlobAccessConditions{})
 		if err != nil {
 			fmt.Println("error getting the block blob list ", err.Error())
 			os.Exit(1)
@@ -365,13 +397,28 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	}
 
 	// creating the blockblob url of the resource on container.
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{Retry: azblob.RetryOptions{TryTimeout: time.Minute * 10}})
+	// Create Pipeline to Get the Blob Properties or List Blob Segment
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
+	},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    10 * time.Minute,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
+
+	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
+
 	blobUrl := azblob.NewBlobURL(*sourceURL, p)
 
 	// check for access tier type
 	// get the blob properties and get the Access Tier Type.
 	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
-		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		blobProperties, err := blobUrl.GetProperties(testCtx, azblob.BlobAccessConditions{})
 		if err != nil {
 			fmt.Println(fmt.Sprintf("error getting the blob properties. Failed with error %s", err.Error()))
 			os.Exit(1)
@@ -393,7 +440,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 		}
 	}
 
-	get, err := blobUrl.Download(context.Background(), 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
+	get, err := blobUrl.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		fmt.Println("unable to get blob properties ", err.Error())
 		os.Exit(1)
@@ -477,7 +524,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	if testBlobCmd.VerifyBlockOrPageSize {
 		blockBlobUrl := azblob.NewBlockBlobURL(*sourceURL, p)
 		numberOfBlocks := int(testBlobCmd.NumberOfBlocksOrPages)
-		resp, err := blockBlobUrl.GetBlockList(context.Background(), azblob.BlockListNone, azblob.LeaseAccessConditions{})
+		resp, err := blockBlobUrl.GetBlockList(testCtx, azblob.BlockListNone, azblob.LeaseAccessConditions{})
 		if err != nil {
 			fmt.Println("error getting the block blob list")
 			os.Exit(1)

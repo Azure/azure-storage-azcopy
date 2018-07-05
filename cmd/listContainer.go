@@ -76,21 +76,21 @@ func init() {
 func HandleListContainerCommand(source string, jsonOutput bool) error {
 
 	util := copyHandlerUtil{}
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
-		})
+	// Create Pipeline which will be used further in the blob operations.
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
+	},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
 
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(source)
 	if err != nil {
@@ -119,7 +119,7 @@ func HandleListContainerCommand(source string, jsonOutput bool) error {
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
+		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())

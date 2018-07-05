@@ -18,6 +18,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	util := copyHandlerUtil{}
 
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
 	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(),
 		azblob.PipelineOptions{
@@ -45,7 +46,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	// For example given source is https://<container>/a?<query-params> and there exists other blobs aa and aab
 	// Listing the blobs with prefix /a will list other blob as well
 	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-	blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
 	// If the source blob exists, then queue transfer for deletion and return
 	// Example: https://<container>/<blob>?<query-params>
@@ -83,7 +84,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	// perform a list blob with search prefix
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker,
+		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())

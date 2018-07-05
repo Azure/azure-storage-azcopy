@@ -141,7 +141,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		},
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
-	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, defaultServiceApiVersion)
+	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 
 	JobsAdmin = ja
 

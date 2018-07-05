@@ -8,12 +8,11 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"path/filepath"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 type syncUploadEnumerator common.SyncJobPartOrderRequest
@@ -117,6 +116,9 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 
 	util := copyHandlerUtil{}
+
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// rootPath is the path of source without wildCards
 	// sourcePattern is the filePath pattern inside the source
 	// For Example: src = C:\a1\a* , so rootPath = C:\a1 and filePattern is a*
@@ -140,7 +142,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
-		listBlob, err := containerBlobUrl.ListBlobsFlatSegment(context.TODO(), marker,
+		listBlob, err := containerBlobUrl.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
@@ -189,6 +191,8 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(
 
 func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup, p pipeline.Pipeline,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) (error, bool) {
+
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	util := copyHandlerUtil{}
 
 	// attempt to parse the destination url
@@ -221,7 +225,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		}
 	}
 	// Get the destination blob properties
-	bProperties, berr := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	bProperties, berr := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
 	// If the destination is an existing blob and the source is a directory
 	// sync cannot happen between an existing blob and a local directory
@@ -262,7 +266,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 	if isSourceASingleFile != nil && berr != nil {
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, isSourceASingleFile.Name())
 		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
-		bProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		bProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 		// If err is not nil, it means the blob does not exists
 		if err != nil {
 			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
@@ -312,7 +316,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
 		// Get the properties of given on container
 		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
-		blobProperties, err := blobUrl.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+		blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
 		if err != nil {
 			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
@@ -373,20 +377,19 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(src string, isRecursive
 // this function accepts the list of files/directories to transfer and processes them
 func (e *syncUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
 	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      5,
-				TryTimeout:    time.Minute * 1,
-				RetryDelay:    time.Second * 1,
-				MaxRetryDelay: time.Second * 3,
-			},
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
-		})
+	// Create the new azblob pipeline
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
+	},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
 	// Copying the FromTo of sync job to individual copyJobRequest

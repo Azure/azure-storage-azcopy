@@ -44,8 +44,8 @@ type serviceAPIVersionOverride struct{}
 // ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
-// defaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-const defaultServiceApiVersion = "2017-04-17"
+// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
+const DefaultServiceApiVersion = "2017-04-17"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
