@@ -156,7 +156,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 }
 
-func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkID int32, destinationPath string, destinationFile *os.File, destinationMMF common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkID int32, destinationPath string, destinationFile *os.File, destinationMMF *common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -206,7 +206,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 
 			// step 2: write the body into the memory mapped file directly
 			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
-			_, err = io.ReadFull(retryReader, destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(retryReader, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
 			io.Copy(ioutil.Discard, retryReader)
 			retryReader.Close()
 			if err != nil {

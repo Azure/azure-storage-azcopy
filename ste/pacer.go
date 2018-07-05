@@ -30,6 +30,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"fmt"
 )
 
 type pacer struct {
@@ -110,31 +111,36 @@ func (p *pacer) updateTargetRate(increase bool) {
 type bodyPacer struct {
 	body io.Reader // Seeking is required to support retries
 	p    *pacer
+	mmf  *common.MMF
 }
 
 // newRequestBodyPacer wraps a response body to the given pacer to control the upload speed and
 // records the bytes transferred.
-func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
+func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF) io.ReadSeeker {
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &bodyPacer{body: requestBody, p: p}
+	return &bodyPacer{body: requestBody, p: p, mmf:srcMMF}
 }
 
 // newResponseBodyPacer wraps a response body to the given pacer to control the download speed and
 // records the bytes transferred.
-func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer) io.ReadCloser {
+func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer, srcMMF *common.MMF) io.ReadCloser {
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &bodyPacer{body: responseBody, p: p}
+	return &bodyPacer{body: responseBody, p: p, mmf:srcMMF}
 }
 
 // read blocks until tickets are obtained
 func (rbp *bodyPacer) Read(p []byte) (int, error) {
+	if !rbp.mmf.UseMMF() {
+		return 0, fmt.Errorf("src MMF Unmapped. Cannot read further")
+	}
 	//rbp.p.requestRightToSend(int64(len(p)))
 	n, err := rbp.body.Read(p)
 	atomic.AddInt64(&rbp.p.bytesTransferred, int64(n))
+	rbp.mmf.UnuseMMF()
 	return n, err
 }
 

@@ -159,7 +159,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 }
 
-func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF common.MMF, destinationPath string, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
+func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF *common.MMF, destinationPath string, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
 	return func(workerId int) {
 		// TODO: added the two operations for debugging purpose. remove later
 		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
@@ -170,18 +170,18 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
-			r := recover()
-			if r != nil {
-				info := jptm.Info()
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
-							r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF)))
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
-			}
-		}(jptm)
+		//defer func (jptm IJobPartTransferMgr) {
+		//	r := recover()
+		//	if r != nil {
+		//		info := jptm.Info()
+		//		if jptm.ShouldLog(pipeline.LogError) {
+		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
+		//					r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF.Slice())))
+		//		}
+		//		jptm.SetStatus(common.ETransferStatus.Failed())
+		//		jptm.ReportTransferDone()
+		//	}
+		//}(jptm)
 
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
@@ -225,8 +225,8 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 			}
 			// step 2: write the body into the memory mapped file directly
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-			body = newResponseBodyPacer(body, p)
-			_, err = io.ReadFull(body, destinationMMF[startIndex:startIndex+adjustedChunkSize])
+			body = newResponseBodyPacer(body, p, destinationMMF)
+			_, err = io.ReadFull(body, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
