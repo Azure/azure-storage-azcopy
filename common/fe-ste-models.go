@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/JeffreyRichter/enum/enum"
 	"math"
 	"reflect"
 	"sync/atomic"
@@ -91,7 +92,7 @@ func (LogLevel) Info() LogLevel    { return LogLevel(pipeline.LogInfo) }
 func (LogLevel) Debug() LogLevel   { return LogLevel(pipeline.LogDebug) }
 
 func (ll *LogLevel) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(ll), s, true)
+	val, err := enum.ParseInt(reflect.TypeOf(ll), s, true, true)
 	if err == nil {
 		*ll = val.(LogLevel)
 	}
@@ -99,7 +100,7 @@ func (ll *LogLevel) Parse(s string) error {
 }
 
 func (ll LogLevel) String() string {
-	return EnumHelper{}.StringInteger(ll, reflect.TypeOf(ll))
+	return enum.StringInt(ll, reflect.TypeOf(ll))
 }
 
 func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
@@ -118,7 +119,7 @@ type JobPriority uint8
 func (JobPriority) Normal() JobPriority { return JobPriority(0) }
 func (JobPriority) Low() JobPriority    { return JobPriority(1) }
 func (jp JobPriority) String() string {
-	return EnumHelper{}.StringInteger(uint8(jp), reflect.TypeOf(jp))
+	return enum.StringInt(uint8(jp), reflect.TypeOf(jp))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -129,7 +130,7 @@ var EJobStatus = JobStatus(0)
 type JobStatus uint32 // Must be 32-bit for atomic operations
 
 func (j *JobStatus) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(j), s, true)
+	val, err := enum.ParseInt(reflect.TypeOf(j), s, true, true)
 	if err == nil {
 		*j = val.(JobStatus)
 	}
@@ -164,7 +165,7 @@ func (JobStatus) Cancelling() JobStatus { return JobStatus(2) }
 func (JobStatus) Cancelled() JobStatus  { return JobStatus(3) }
 func (JobStatus) Completed() JobStatus  { return JobStatus(4) }
 func (js JobStatus) String() string {
-	return EnumHelper{}.StringInteger(js, reflect.TypeOf(js))
+	return enum.StringInt(js, reflect.TypeOf(js))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -189,10 +190,10 @@ func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
 func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
 
 func (ft FromTo) String() string {
-	return EnumHelper{}.StringInteger(ft, reflect.TypeOf(ft))
+	return enum.StringInt(ft, reflect.TypeOf(ft))
 }
 func (ft *FromTo) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(ft), s, true)
+	val, err := enum.ParseInt(reflect.TypeOf(ft), s, true, true)
 	if err == nil {
 		*ft = val.(FromTo)
 	}
@@ -233,10 +234,10 @@ func (ts TransferStatus) DidFail() bool { return ts < 0 }
 // Transfer is any of the three possible state (InProgress, Completer or Failed)
 func (TransferStatus) All() TransferStatus { return TransferStatus(math.MaxInt8) }
 func (ts TransferStatus) String() string {
-	return EnumHelper{}.StringInteger(ts, reflect.TypeOf(ts))
+	return enum.StringInt(ts, reflect.TypeOf(ts))
 }
 func (ts *TransferStatus) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(ts), s, false)
+	val, err := enum.ParseInt(reflect.TypeOf(ts), s, false, true)
 	if err == nil {
 		*ts = val.(TransferStatus)
 	}
@@ -263,11 +264,11 @@ func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
 
 func (bbt BlockBlobTier) String() string {
-	return EnumHelper{}.StringInteger(bbt, reflect.TypeOf(bbt))
+	return enum.StringInt(bbt, reflect.TypeOf(bbt))
 }
 
 func (bbt *BlockBlobTier) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(bbt), s, true)
+	val, err := enum.ParseInt(reflect.TypeOf(bbt), s, true, true)
 	if err == nil {
 		*bbt = val.(BlockBlobTier)
 	}
@@ -307,11 +308,11 @@ func (PageBlobTier) P50() PageBlobTier  { return PageBlobTier(50) }
 func (PageBlobTier) P6() PageBlobTier   { return PageBlobTier(6) }
 
 func (pbt PageBlobTier) String() string {
-	return EnumHelper{}.String(pbt, reflect.TypeOf(pbt))
+	return enum.StringInt(pbt, reflect.TypeOf(pbt))
 }
 
 func (pbt *PageBlobTier) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(pbt), s, true)
+	val, err := enum.ParseInt(reflect.TypeOf(pbt), s, true, true)
 	if err == nil {
 		*pbt = val.(PageBlobTier)
 	}
@@ -334,94 +335,6 @@ func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
 	}
 	return pbt.Parse(s)
 }
-
-/*type BlockBlobTier azblob.AccessTierType
-
-func (bt BlockBlobTier) Parse(s string) (BlockBlobTier, error) {
-	if strings.EqualFold(s, "") {
-		return BlockBlobTier(azblob.AccessTierNone), nil
-	} else if strings.EqualFold(s, "Hot") {
-		return BlockBlobTier(azblob.AccessTierHot), nil
-	} else if strings.EqualFold(s, "Cool") {
-		return BlockBlobTier(azblob.AccessTierCool), nil
-	} else if strings.EqualFold(s, "Archive") {
-		return BlockBlobTier(azblob.AccessTierArchive), nil
-	} else {
-		return "", fmt.Errorf("invalid block blob tier passed %s", s)
-	}
-}
-
-func (bt BlockBlobTier) String() string {
-	return string(bt)
-}
-
-// Implementing MarshalJSON() method for type BlockBlobTier.
-func (bt BlockBlobTier) MarshalJSON() ([]byte, error) {
-	return json.Marshal(string(bt))
-}
-
-// Implementing UnmarshalJSON() method for type BlockBlobTier.
-func (bt *BlockBlobTier) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	blockBlobTier, err := BlockBlobTier("").Parse(s)
-	if err != nil {
-		return err
-	}
-	*bt = blockBlobTier
-	return nil
-}
-
-type PageBlobTier azblob.AccessTierType
-
-func (pbt PageBlobTier) Parse(s string) (PageBlobTier, error) {
-	if strings.EqualFold(s, "") {
-		return PageBlobTier(azblob.AccessTierNone), nil
-	} else if strings.EqualFold(s, "P10") {
-		return PageBlobTier(azblob.AccessTierP10), nil
-	} else if strings.EqualFold(s, "P20") {
-		return PageBlobTier(azblob.AccessTierP20), nil
-	} else if strings.EqualFold(s, "P30") {
-		return PageBlobTier(azblob.AccessTierP30), nil
-	} else if strings.EqualFold(s, "P4") {
-		return PageBlobTier(azblob.AccessTierP4), nil
-	} else if strings.EqualFold(s, "P40") {
-		return PageBlobTier(azblob.AccessTierP40), nil
-	} else if strings.EqualFold(s, "P50") {
-		return PageBlobTier(azblob.AccessTierP50), nil
-	} else if strings.EqualFold(s, "P6") {
-		return PageBlobTier(azblob.AccessTierP6), nil
-	} else {
-		return " ", fmt.Errorf("failed to parse user given blob tier %s", s)
-	}
-}
-
-func (pbt PageBlobTier) String() string {
-	return string(pbt)
-}
-
-// Implementing MarshalJSON() method for type PageBlobTier.
-func (pbt PageBlobTier) MarshalJSON() ([]byte, error) {
-	return json.Marshal(string(pbt))
-}
-
-// Implementing UnmarshalJSON() method for type PageBlobTier.
-func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	psgeBlobTier, err := PageBlobTier("").Parse(s)
-	if err != nil {
-		return err
-	}
-	*pbt = psgeBlobTier
-	return nil
-}
-*/
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const (
 	DefaultBlockBlobBlockSize = 100 * 1024 * 1024

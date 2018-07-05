@@ -3,6 +3,7 @@ package common
 import (
 	"reflect"
 	"time"
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 var ERpcCmd = RpcCmd("")
@@ -20,12 +21,12 @@ func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
 
 func (c RpcCmd) String() string {
-	return EnumHelper{}.String(c, reflect.TypeOf(c))
+	return enum.String(c, reflect.TypeOf(c))
 }
 func (c RpcCmd) Pattern() string { return "/" + c.String() }
 
 func (c *RpcCmd) Parse(s string) error {
-	val, err := EnumHelper{}.Parse(reflect.TypeOf(c), s, false)
+	val, err := enum.Parse(reflect.TypeOf(c), s, false)
 	if err == nil {
 		*c = val.(RpcCmd)
 	}

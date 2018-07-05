@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -106,7 +107,7 @@ func (Location) Blob() Location    { return Location(3) }
 func (Location) File() Location    { return Location(4) }
 func (Location) BlobFS() Location  { return Location(5) }
 func (l Location) String() string {
-	return common.EnumHelper{}.StringInteger(uint32(l), reflect.TypeOf(l))
+	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
 
 func inferArgumentLocation(arg string) Location {
