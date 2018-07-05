@@ -232,6 +232,10 @@ func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, toke
 		waitDuration = time.Nanosecond
 	}
 
+	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
+	}
+
 	return waitDuration
 }
 
@@ -311,6 +315,9 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, to
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
 	if waitDuration < time.Second {
 		waitDuration = time.Nanosecond
+	}
+	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
 	}
 
 	return waitDuration

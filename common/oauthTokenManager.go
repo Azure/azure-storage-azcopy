@@ -272,3 +272,19 @@ func JSONToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	}
 	return &OAuthTokenInfo, nil
 }
+
+//====================================================================================
+
+// TestOAuthInjection controls variables for OAuth testing injections
+type TestOAuthInjection struct {
+	DoTokenRefreshInjection bool
+	TokenRefreshDuration    time.Duration
+}
+
+// GlobalTestOAuthInjection is the global setting for OAuth testing injection control
+var GlobalTestOAuthInjection = TestOAuthInjection{
+	DoTokenRefreshInjection: false,
+	TokenRefreshDuration:    time.Second * 10,
+}
+
+// TODO: Add pipeline policy for token refreshing validating.

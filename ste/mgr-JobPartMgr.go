@@ -333,7 +333,9 @@ func (jpm *jobPartMgr) refreshBlobToken(ctx context.Context, tokenInfo common.OA
 	if waitDuration < time.Second {
 		waitDuration = time.Nanosecond
 	}
-	//waitDuration = time.Second * 2 //TODO: mock testing
+	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
+	}
 
 	return waitDuration
 }
@@ -396,7 +398,9 @@ func (jpm *jobPartMgr) refreshBlobFSToken(ctx context.Context, tokenInfo common.
 	if waitDuration < time.Second {
 		waitDuration = time.Nanosecond
 	}
-	//waitDuration = time.Second * 2 //TODO: mock testing
+	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
+	}
 
 	return waitDuration
 }
