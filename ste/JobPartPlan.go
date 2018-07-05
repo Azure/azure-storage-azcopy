@@ -44,7 +44,7 @@ type JobPartPlanHeader struct {
 	Priority           common.JobPriority  // The Job Part's priority
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
 	FromTo             common.FromTo       // The location of the transfer's source & destination
-	NumTransfers       uint32              // The number of transfers in the Job part
+	NumTransfers       uint32 	             // The number of transfers in the Job part
 	LogLevel           common.LogLevel     // This Job Part's minimal log level
 	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData       JobPartPlanDstLocal // Additional data for local destinations

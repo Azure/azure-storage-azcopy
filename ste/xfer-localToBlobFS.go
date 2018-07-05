@@ -13,7 +13,7 @@ import (
 
 type fileRangeAppend struct {
 	jptm    IJobPartTransferMgr
-	srcMmf  common.MMF
+	srcMmf  *common.MMF
 	fileUrl azbfs.FileURL
 	pacer   *pacer
 }
@@ -166,7 +166,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				info := jptm.Info()
 				if jptm.ShouldLog(pipeline.LogError) {
 					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startRange %v calculatedRangeInterval %v sourceMMF size %v",
-						r, info.Source, info.Destination, info.SourceSize, startRange, calculatedRangeInterval, len(fru.srcMmf)))
+						r, info.Source, info.Destination, info.SourceSize, startRange, calculatedRangeInterval, len(fru.srcMmf.Slice())))
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
@@ -207,7 +207,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			return
 		}
 
-		body := newRequestBodyPacer(bytes.NewReader(fru.srcMmf[startRange:startRange+calculatedRangeInterval]), fru.pacer)
+		body := newRequestBodyPacer(bytes.NewReader(fru.srcMmf.Slice()[startRange:startRange+calculatedRangeInterval]), fru.pacer, fru.srcMmf)
 		_, err := fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled
