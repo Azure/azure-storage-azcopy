@@ -274,6 +274,18 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 		os.Exit(1)
 	}
 
+	if fileInfo.Size() == 0 {
+		// If the fileSize is 0 and the len of downloaded bytes is not 0
+		// validation fails
+		if len(fileBytesDownloaded) != 0 {
+			fmt.Println(fmt.Sprintf("validation failed since the actual file size %d differs from the downloaded file size %d", fileInfo.Size(), len(fileBytesDownloaded)))
+			os.Exit(1)
+		}
+		// If both the actual and downloaded file size is 0,
+		// validation is successful, no need to match the md5
+		os.Exit(0)
+	}
+
 	// memory mapping the resource on local path.
 	mmap, err := NewMMF(file, false, 0, fileInfo.Size())
 	if err != nil {

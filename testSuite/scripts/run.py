@@ -83,6 +83,7 @@ def execute_file_sas_bvt():
     # download
     #########################
     # single file download scenario
+    test_upload_download_0kb_file_fullname()
     test_upload_download_1kb_file_fullname()
     # single file download with wildcard scenarios
     # Using /*, which actually upload/download everything in a directory

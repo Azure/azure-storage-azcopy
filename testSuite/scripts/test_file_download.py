@@ -5,6 +5,50 @@ import time
 import utility as util
 import sys
 
+# test_upload_download_0kb_file_fullname verifies the upload/download of 1Kb file with fullname using azcopy.
+def test_upload_download_0kb_file_fullname():
+    # create file of size 1KB.
+    filename = "test_upload_download_0kb_file_fullname.txt"
+    file_path = util.create_test_file(filename, 0)
+
+    # Upload 1KB file using azcopy.
+    src = file_path
+    dest = util.test_share_url
+    result = util.Command("copy").add_arguments(src).add_arguments(dest). \
+        add_flags("log-level", "info").execute_azcopy_copy_command()
+    if not result:
+        print("failed uploading 0KB file to the share")
+        sys.exit(1)
+
+    # Verifying the uploaded file.
+    # the resource local path should be the first argument for the azcopy validator.
+    # the resource sas should be the second argument for azcopy validator.
+    resource_url = util.get_resource_sas_from_share(filename)
+    result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
+    if not result:
+        print("test_upload_download_0kb_file_fullname test failed")
+        sys.exit(1)
+
+    time.sleep(5)
+
+    # downloading the uploaded file
+    src = util.get_resource_sas_from_share(filename)
+    dest = util.test_directory_path + "/test_1kb_file_download.txt"
+    result = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level",
+                                                                                   "info").execute_azcopy_copy_command()
+
+    if not result:
+        print("test_upload_download_0kb_file_fullname test case failed")
+        sys.exit(1)
+
+    # Verifying the downloaded file
+    result = util.Command("testFile").add_arguments(dest).add_arguments(src).execute_azcopy_verify()
+    if not result:
+        print("test_upload_download_0kb_file_fullname test case failed")
+        sys.exit(1)
+
+    print("test_upload_download_0kb_file_fullname successfully passed")
+
 # test_upload_download_1kb_file_fullname verifies the upload/download of 1Kb file with fullname using azcopy.
 def test_upload_download_1kb_file_fullname():
     # create file of size 1KB.
