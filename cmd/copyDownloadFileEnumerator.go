@@ -98,7 +98,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 			}
 
 			// Process the files returned in this result segment.
-			for _, fileInfo := range lResp.Files {
+			for _, fileInfo := range lResp.FileItems {
 				f := dirURL.NewFileURL(fileInfo.Name)
 				gResp, err := f.GetProperties(ctx) // TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
 				if err != nil {
@@ -161,7 +161,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 					}
 
 					// Process the files returned in this segment.
-					for _, fileInfo := range lResp.Files {
+					for _, fileInfo := range lResp.FileItems {
 						f := currentDirURL.NewFileURL(fileInfo.Name)
 						gResp, err := f.GetProperties(ctx) // TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
 						if err != nil {
@@ -182,7 +182,7 @@ func (e *copyDownloadFileEnumerator) enumerate(sourceURLString string, isRecursi
 
 					// If recursive is turned on, add sub directories.
 					if isRecursiveOn {
-						for _, dirInfo := range lResp.Directories {
+						for _, dirInfo := range lResp.DirectoryItems {
 							d := currentDirURL.NewDirectoryURL(dirInfo.Name)
 							dirStack.Push(d)
 						}
