@@ -4,70 +4,6 @@ import time
 import unittest
 import utility as util
 
-
-# test_n_1kb_file_in_dir_upload_download_azure_directory verifies the upload of n 1kb file to the share.
-def test_n_1kb_file_in_dir_upload_download_azure_directory(number_of_files, recursive):
-    # create dir dir_n_files and 1 kb files inside the dir.
-    dir_name = "test_n_1kb_file_in_dir_upload_download_azure_directory_" + recursive + "_" + str(
-        number_of_files) + "_files"
-    sub_dir_name = "dir subdir_" + str(number_of_files) + "_files"
-
-    # create n test files in dir
-    src_dir = util.create_test_n_files(1024, number_of_files, dir_name)
-
-    # create n test files in subdir, subdir is contained in dir
-    util.create_test_n_files(1024, number_of_files, os.path.join(dir_name, sub_dir_name))
-
-    # prepare destination directory.
-    # TODO: note azcopy v2 currently only support existing directory and share.
-    dest_azure_dir_name = "dest azure_dir_name"
-    dest_azure_dir = util.get_resource_sas_from_share(dest_azure_dir_name)
-
-    result = util.Command("create").add_arguments(dest_azure_dir).add_flags("resourceType", "file"). \
-        add_flags("isResourceABucket", "true").execute_azcopy_create()
-    if not result:
-        return result
-
-    # execute azcopy command
-    result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_azure_dir). \
-        add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
-    if not result:
-        return result
-
-    # execute the validator.
-    dest_azure_dir_to_compare = util.get_resource_sas_from_share(dest_azure_dir_name + "/" + dir_name)
-    result = util.Command("testFile").add_arguments(src_dir).add_arguments(dest_azure_dir_to_compare). \
-        add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
-    if not result:
-        return result
-
-    download_azure_src_dir = dest_azure_dir_to_compare
-    download_local_dest_dir = src_dir + "_download"
-
-    try:
-        if os.path.exists(download_local_dest_dir) and os.path.isdir(download_local_dest_dir):
-            shutil.rmtree(download_local_dest_dir)
-    except:
-        print("catch error for removing " + download_local_dest_dir)
-    finally:
-        os.makedirs(download_local_dest_dir)
-
-    # downloading the directory created from azure file directory through azcopy with recursive flag to true.
-    result = util.Command("copy").add_arguments(download_azure_src_dir).add_arguments(
-        download_local_dest_dir).add_flags("log-level", "info"). \
-        add_flags("recursive", recursive).execute_azcopy_copy_command()
-    if not result:
-        return result
-    print("directory downloaded ")
-    # verify downloaded file.
-    # todo: ensure the comparing here
-    result = util.Command("testFile").add_arguments(os.path.join(download_local_dest_dir, dir_name)).add_arguments(
-        download_azure_src_dir). \
-        add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
-    if not result:
-        return result
-    return True
-
 class FileShare_Download_User_Scenario(unittest.TestCase):
 
     # test_upload_download_1kb_file_fullname verifies the upload/download of 1Kb file with fullname using azcopy.
@@ -237,13 +173,74 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
             download_azure_src_dir).add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
 
+    # test_n_1kb_file_in_dir_upload_download_azure_directory verifies the upload of n 1kb file to the share.
+    def n_1kb_file_in_dir_upload_download_azure_directory(self, number_of_files, recursive):
+        # create dir dir_n_files and 1 kb files inside the dir.
+        dir_name = "test_n_1kb_file_in_dir_upload_download_azure_directory_" + recursive + "_" + str(
+            number_of_files) + "_files"
+        sub_dir_name = "dir_subdir_" + str(number_of_files) + "_files"
+
+        # create n test files in dir
+        src_dir = util.create_test_n_files(1024, number_of_files, dir_name)
+
+        # create n test files in subdir, subdir is contained in dir
+        util.create_test_n_files(1024, number_of_files, os.path.join(dir_name, sub_dir_name))
+
+        # prepare destination directory.
+        # TODO: note azcopy v2 currently only support existing directory and share.
+        dest_azure_dir_name = "dest azure_dir_name"
+        dest_azure_dir = util.get_resource_sas_from_share(dest_azure_dir_name)
+
+        result = util.Command("create").add_arguments(dest_azure_dir).add_flags("resourceType", "file"). \
+            add_flags("isResourceABucket", "true").execute_azcopy_create()
+        if not result:
+            return result
+
+        # execute azcopy command
+        result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_azure_dir). \
+            add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
+        if not result:
+            return result
+        print("azcopy command executed")
+        # execute the validator.
+        dest_azure_dir_to_compare = util.get_resource_sas_from_share(dest_azure_dir_name + "/" + dir_name)
+        result = util.Command("testFile").add_arguments(src_dir).add_arguments(dest_azure_dir_to_compare). \
+            add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
+        if not result:
+            return result
+
+        download_azure_src_dir = dest_azure_dir_to_compare
+        download_local_dest_dir = src_dir + "_download"
+
+        try:
+            if os.path.exists(download_local_dest_dir) and os.path.isdir(download_local_dest_dir):
+                shutil.rmtree(download_local_dest_dir)
+        except:
+            print("catch error for removing " + download_local_dest_dir)
+        finally:
+            os.makedirs(download_local_dest_dir)
+
+        # downloading the directory created from azure file directory through azcopy with recursive flag to true.
+        result = util.Command("copy").add_arguments(download_azure_src_dir).add_arguments(
+            download_local_dest_dir).add_flags("log-level", "info"). \
+            add_flags("recursive", recursive).execute_azcopy_copy_command()
+        if not result:
+            return result
+        # verify downloaded file.
+        # todo: ensure the comparing here
+        result = util.Command("testFile").add_arguments(os.path.join(download_local_dest_dir, dir_name)).add_arguments(
+            download_azure_src_dir). \
+            add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
+        if not result:
+            return result
+        return True
 
     def test_3_1kb_file_in_dir_upload_download_azure_directory_recursive(self):
-        self.assertTrue(test_n_1kb_file_in_dir_upload_download_azure_directory(3, "true"))
+        self.assertTrue(self.n_1kb_file_in_dir_upload_download_azure_directory(3, "true"))
 
 
     def test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive(self):
-        self.assertTrue(test_n_1kb_file_in_dir_upload_download_azure_directory(8, "false"))
+        self.assertTrue(self.n_1kb_file_in_dir_upload_download_azure_directory(8, "false"))
 
     # test_download_perserve_last_modified_time verifies the azcopy downloaded file
     # and its modified time preserved locally on disk
