@@ -101,7 +101,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
     # test_recursive_download_blob downloads a directory recursively from container through azcopy
-    def test_recursive_download_blob(self):
+    def recursive_download_blob(self):
         # create directory and 5 files of 1KB inside that directory.
         dir_name = "dir_" + str(10) + "_files"
         dir1_path = util.create_test_n_files(1024, 5, dir_name)

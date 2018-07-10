@@ -124,13 +124,15 @@ def cleanup():
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Please enter a part number like so: part1")
-        sys.exit(1)
-
     print("Smoke tests starting...")
     init()
     suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_User_Scenarios)
@@ -139,13 +141,7 @@ def main():
     suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_User_Scenarios)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
     suite = unittest.TestLoader().loadTestsFromTestCase(Azcopy_Operation_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Download_User_Scenario)
@@ -154,21 +150,7 @@ def main():
     suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Upload_User_Scenario)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
-    #get_test_func(sys.argv[1])()
     cleanup()
-
-
-def get_test_func(x):
-    return {
-        'part1': execute_bfs_user_scenario,
-        'part2': execute_sync_user_scenario,
-        'part3': execute_user_scenario_wildcards_op,
-        'part4': execute_user_scenario_azcopy_op,
-        'part5': execute_user_scenario_blob_1,
-        'part6': execute_user_scenario_2,
-        'part7': execute_user_scenario_file_1,
-        'part8': temp_adhoc_scenario,
-    }[x]
 
 if __name__ == '__main__':
     main()
