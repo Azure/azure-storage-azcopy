@@ -194,7 +194,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			if f.IsDir() {
 				// If the filePath doesn't have a separator at the end
 				// place a separator between filePath and '*'
-				if filePath[len(filePath)-1] == os.PathSeparator {
+				if filePath[len(filePath)-1] != os.PathSeparator {
 					filePath = fmt.Sprintf("%s%s%s", filePath, string(os.PathSeparator), "*")
 				} else {
 					filePath = fmt.Sprintf("%s%s", filePath, "*")

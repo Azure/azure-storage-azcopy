@@ -10,126 +10,7 @@ import glob, os
 import configparser
 import platform
 import sys
-
-
-def execute_user_scenario_blob_1():
-    test_0KB_blob_upload()
-    test_1kb_blob_upload()
-    test_63mb_blob_upload()
-    test_n_1kb_blob_upload(5)
-    test_1GB_blob_upload()
-    test_blob_metaData_content_encoding_content_type()
-    test_block_size(4 * 1024 * 1024)
-    test_guess_mime_type()
-    test_download_1kb_blob()
-    test_blob_download_preserve_last_modified_time()
-    test_blob_download_63mb_in_4mb()
-    test_recursive_download_blob()
-    # test_cancel_job()
-    # test_blob_download_63mb_in_4mb()
-    # #test_pause_resume_job_200Mb_file()
-    # #test_pause_resume_job_95Mb_file()
-    test_page_blob_upload_1mb()
-    test_page_range_for_complete_sparse_file()
-    test_page_blob_upload_partial_sparse_file()
-
-
-def temp_adhoc_scenario():
-    # test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
-    test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    # test_upload_download_1kb_file_wildcard_several_files()
-
-
-def execute_user_scenario_wildcards_op():
-    test_remove_files_with_Wildcard()
-
-
-def execute_bfs_user_scenario():
-    test_blobfs_upload_1Kb_file()
-    test_blobfs_upload_64MB_file()
-    test_blobfs_upload_100_1Kb_file()
-    test_blobfs_download_1Kb_file()
-    test_blobfs_download_64MB_file()
-    test_blobfs_download_100_1Kb_file()
-
-def execute_sync_user_scenario():
-    test_sync_local_to_blob_without_wildCards()
-    test_sync_local_to_blob_with_wildCards()
-    test_sync_blob_download_with_wildcards()
-    test_sync_blob_download_without_wildcards()
-
-
-def execute_user_scenario_azcopy_op():
-    test_download_blob_exclude_flag()
-    test_download_blob_include_flag()
-    test_upload_block_blob_include_flag()
-    test_upload_block_blob_exclude_flag()
-    test_remove_virtual_directory()
-    test_set_block_blob_tier()
-    test_set_page_blob_tier()
-    test_force_flag_set_to_false_upload()
-    test_force_flag_set_to_false_download()
-
-
-def execute_user_scenario_file_1():
-    ###
-    # download
-    ###
-    # single context
-    test_upload_download_1kb_file_fullname()
-
-    # wildcard context
-    # Using /*, which actually upload/download everything in a directory
-    test_upload_download_1kb_file_wildcard_all_files()
-
-    # Using /pattern*, which actually upload/download matched files in specific directory
-    test_upload_download_1kb_file_wildcard_several_files()
-
-    # directory context
-    test_6_1kb_file_in_dir_upload_download_share()
-    test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
-
-    # modified time
-    test_download_perserve_last_modified_time()
-
-    # different sizes
-    test_file_download_63mb_in_4mb()
-
-    # directory context
-    # test_recursive_download_file()
-
-    ###
-    # upload
-    ###
-    # single context
-    test_file_upload_1mb_fullname()
-
-    # wildcard context
-    # test_file_upload_1mb_wildcard()
-
-    # single sparse file and range
-    test_file_range_for_complete_sparse_file()
-    test_file_upload_partial_sparse_file()
-
-    # directory context
-    # test_6_1kb_file_in_dir_upload_to_share()
-    # test_3_1kb_file_in_dir_upload_to_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive()
-
-    # metadata and mime-type
-    test_metaData_content_encoding_content_type()
-    test_guess_mime_type()
-
-    # different sizes
-    test_9mb_file_upload()
-    test_1GB_file_upload()
-
-
-def execute_user_scenario_2():
-    test_blob_download_with_special_characters()
-
+import unittest
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
@@ -249,7 +130,31 @@ def main():
 
     print("Smoke tests starting...")
     init()
-    get_test_func(sys.argv[1])()
+    suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Azcopy_Operation_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Download_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Upload_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    #get_test_func(sys.argv[1])()
     cleanup()
 
 
