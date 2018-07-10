@@ -4,23 +4,38 @@
 [[projects]]
   name = "github.com/Azure/azure-pipeline-go"
   packages = ["pipeline"]
-  revision = "098e490af5dc2a905cdc5b64cafda6887b29164b"
-  version = "0.1.6"
+  revision = "7571e8eb0876932ab505918ff7ed5107773e5ee2"
+  version = "0.1.7"
 
 [[projects]]
+  branch = "master"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = [
     "2016-05-31/azblob",
-    "2017-07-29/azblob"
+    "2018-03-28/azblob"
   ]
-  revision = "66ba96e49ebbdc3cd26970c6c675c906d304b5e2"
-  version = "0.1.4"
+  revision = "f0a732ea9441c73511367d5861da6bda664ffabd"
 
 [[projects]]
   name = "github.com/Azure/azure-storage-file-go"
   packages = ["2017-07-29/azfile"]
-  revision = "c9dca3b5e90b16749508f1bdad57c937abe79b10"
-  version = "0.1.0"
+  revision = "9227fd295d972e4395fd601e6f48cee2f5cda02b"
+  version = "0.2.0"
+
+[[projects]]
+  name = "github.com/Azure/go-autorest"
+  packages = [
+    "autorest/adal",
+    "autorest/date"
+  ]
+  revision = "1f7cd6cfe0adea687ad44a512dfe76140f804318"
+  version = "v10.12.0"
+
+[[projects]]
+  name = "github.com/dgrijalva/jwt-go"
+  packages = ["."]
+  revision = "06ea1031745cb8b3dab3f6a236daf2b0aa468b7e"
+  version = "v3.2.0"
 
 [[projects]]
   name = "github.com/fsnotify/fsnotify"
@@ -52,28 +67,52 @@
   version = "v1.0"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/jiacfan/go-keychain"
+  packages = ["."]
+  revision = "a091728a72f75f3763833de405bfdde17571bc4b"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/jiacfan/keyctl"
+  packages = ["."]
+  revision = "988d05162bc59cf7789c35af405be8f1599a87a3"
+
+[[projects]]
+  name = "github.com/kr/pretty"
+  packages = ["."]
+  revision = "73f6ac0b30a98e433b289500d779f50c1a6f0712"
+  version = "v0.1.0"
+
+[[projects]]
+  name = "github.com/kr/text"
+  packages = ["."]
+  revision = "e2ffdb16a802fe2bb95e2e35ff34f0e53aeef34f"
+  version = "v0.1.0"
+
+[[projects]]
   name = "github.com/magiconair/properties"
   packages = ["."]
-  revision = "c3beff4c2358b44d0493c7dda585e7db7ff28ae6"
-  version = "v1.7.6"
+  revision = "c2353362d570a7bfa228149c62842019201cfb71"
+  version = "v1.8.0"
 
 [[projects]]
   branch = "master"
   name = "github.com/mitchellh/go-homedir"
   packages = ["."]
-  revision = "b8bc1bf767474819792c23f32d8286a45736f1c6"
+  revision = "3864e76763d94a6df2f9960b16a20a33da9f9a66"
 
 [[projects]]
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "00c29f56e2386353d58c599509e8dc3801b0d716"
+  revision = "bb74f1db0675b241733089d5a1faa5dd8b0ef57b"
 
 [[projects]]
   name = "github.com/pelletier/go-toml"
   packages = ["."]
-  revision = "acdc4509485b587f5e675510c4f2c63e90ff68a8"
-  version = "v1.1.0"
+  revision = "c01d1270ff3e442a8a57cddc1c92dc1138598194"
+  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/spf13/afero"
@@ -81,8 +120,8 @@
     ".",
     "mem"
   ]
-  revision = "63644898a8da0bc22138abf860edaf5277b6102e"
-  version = "v1.1.0"
+  revision = "787d034dfe70e44075ccc060d346146ef53270ad"
+  version = "v1.1.1"
 
 [[projects]]
   name = "github.com/spf13/cast"
@@ -93,8 +132,8 @@
 [[projects]]
   name = "github.com/spf13/cobra"
   packages = ["."]
-  revision = "a1f051bc3eba734da4772d60e2d677f47cf93ef4"
-  version = "v0.0.2"
+  revision = "ef82de70bb3f60c65fb8eebacbb2d122ef517385"
+  version = "v0.0.3"
 
 [[projects]]
   branch = "master"
@@ -118,7 +157,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "6f686a352de66814cdd080d970febae7767857a3"
+  revision = "1b2967e3c290b7c545b3db0deeda16e9be4f98a2"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -137,7 +176,7 @@
   branch = "v1"
   name = "gopkg.in/check.v1"
   packages = ["."]
-  revision = "20d25e2804050c1cd24a7eea1e7a6447dd0e74ec"
+  revision = "788fd78401277ebd861206a03c884797c6ec5541"
 
 [[projects]]
   name = "gopkg.in/yaml.v2"
@@ -148,6 +187,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "37224f245d6558445c13f84c166430cd545abe1c9f132172eff748455f702773"
+  inputs-digest = "453bc95a31d824085282fe4b2b65f08b59e6ec012d786343d65d1838bf1148bc"
   solver-name = "gps-cdcl"
   solver-version = 1
