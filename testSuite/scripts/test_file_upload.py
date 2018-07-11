@@ -26,13 +26,13 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         file_path = util.create_test_file(file_name, 1024 * 1024)
 
         # execute azcopy upload.
-        destination = util.get_resource_sas_from_share(file_name)
         wildcard_path = file_path.replace(file_name, "*")
-        result = util.Command("copy").add_arguments(wildcard_path).add_arguments(destination).add_flags("log-level", "info"). \
+        result = util.Command("copy").add_arguments(wildcard_path).add_arguments(util.test_share_url).add_flags("log-level", "info"). \
             add_flags("block-size", "4194304").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
+        destination = util.get_resource_sas_from_share(file_name)
         result = util.Command("testFile").add_arguments(file_path).add_arguments(destination).execute_azcopy_verify()
         self.assertTrue(result)
 
@@ -78,58 +78,73 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
             add_flags("number-blocks-or-pages", str(number_of_ranges)).execute_azcopy_verify()
         self.assertTrue(result)
 
-    # n_1kb_file_in_dir_upload_to_share verifies the upload of n 1kb file to the share.
-    def n_1kb_file_in_dir_upload_to_share(self, number_of_files):
+    # util_test_n_1kb_file_in_dir_upload_to_share verifies the upload of n 1kb file to the share.
+    def util_test_n_1kb_file_in_dir_upload_to_share(self, number_of_files):
         # create dir dir_n_files and 1 kb files inside the dir.
         dir_name = "dir_" + str(number_of_files) + "_files"
-        dir_n_files_path = util.create_test_n_files(1024, number_of_files, dir_name)
         sub_dir_name = "dir subdir_" + str(number_of_files) + "_files"
-        dir_n_files_path = util.create_test_n_files(1024, number_of_files, os.path.join(dir_name, sub_dir_name))
+
+        # create n test files in dir
+        src_dir = util.create_test_n_files(1024, number_of_files, dir_name)
+
+        # create n test files in subdir, subdir is contained in dir
+        util.create_test_n_files(1024, number_of_files, os.path.join(dir_name, sub_dir_name))
 
         # execute azcopy command
-        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_share_url). \
+        dest_share = util.test_share_url
+        result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_share). \
             add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
-        if not result:
-            return result
+        self.assertTrue(result)
 
         # execute the validator.
-        destination = util.get_resource_sas_from_share(dir_name)
-        result = util.Command("testFile").add_arguments(dir_n_files_path).add_arguments(destination). \
+        dest_azure_dir = util.get_resource_sas_from_share(dir_name)
+        result = util.Command("testFile").add_arguments(src_dir).add_arguments(dest_azure_dir). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
-        return result
+        self.assertTrue(result)
 
+    @unittest.skip("already covered during downloading.")
     def test_6_1kb_file_in_dir_upload_to_share(self):
-        self.assertTrue(self.n_1kb_file_in_dir_upload_to_share(6))
+        self.util_test_n_1kb_file_in_dir_upload_to_share(6)
 
-    # n_1kb_file_in_dir_upload_to_azure_directory verifies the upload of n 1kb file to the share.
-    def n_1kb_file_in_dir_upload_to_azure_directory(self, number_of_files, recursive):
+    # util_test_n_1kb_file_in_dir_upload_to_azure_directory verifies the upload of n 1kb file to the share.
+    def util_test_n_1kb_file_in_dir_upload_to_azure_directory(self, number_of_files, recursive):
         # create dir dir_n_files and 1 kb files inside the dir.
         dir_name = "dir_" + str(number_of_files) + "_files"
-        dir_n_files_path = util.create_test_n_files(1024, number_of_files, dir_name)
         sub_dir_name = "dir_subdir_" + str(number_of_files) + "_files"
-        dir_n_files_path = util.create_test_n_files(1024, number_of_files, os.path.join(dir_name, sub_dir_name))
 
-        dest_dir_name = "dest_dirname"
-        directory_url = util.get_resource_sas_from_share(dest_dir_name)
+        # create n test files in dir
+        src_dir = util.create_test_n_files(1024, number_of_files, dir_name)
+
+        # create n test files in subdir, subdir is contained in dir
+        util.create_test_n_files(1024, number_of_files, os.path.join(dir_name, sub_dir_name))
+
+        # prepare destination directory.
+        # TODO: note azcopy v2 currently only support existing directory and share.
+        dest_azure_dir_name = "dest azure_dir_name"
+        dest_azure_dir = util.get_resource_sas_from_share(dest_azure_dir_name)
+
+        result = util.Command("create").add_arguments(dest_azure_dir).add_flags("resourceType", "file"). \
+            add_flags("isResourceABucket", "true").execute_azcopy_create()
+        self.assertTrue(result)
 
         # execute azcopy command
-        result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(directory_url). \
+        result = util.Command("copy").add_arguments(src_dir).add_arguments(dest_azure_dir). \
             add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
-        if not result:
-            return result
-
+        self.assertTrue(result)
+        
         # execute the validator.
-        destination = util.get_resource_sas_from_share(dir_name + "/" + dest_dir_name)
-        result = util.Command("testFile").add_arguments(dir_n_files_path).add_arguments(destination). \
+        dest_azure_dir_to_compare = util.get_resource_sas_from_share(dest_azure_dir_name + "/" + dir_name)
+        result = util.Command("testFile").add_arguments(src_dir).add_arguments(dest_azure_dir_to_compare). \
             add_flags("is-object-dir", "true").add_flags("is-recursive", recursive).execute_azcopy_verify()
-        return result
+        self.assertTrue(result)
 
+    @unittest.skip("already covered during downloading.")
     def test_3_1kb_file_in_dir_upload_to_azure_directory_recursive(self):
-        self.assertTrue(self.n_1kb_file_in_dir_upload_to_azure_directory(3, "true"))
+        self.util_test_n_1kb_file_in_dir_upload_to_azure_directory(3, "true")
 
-
+    @unittest.skip("upload directory without --recursive specified is not supported currently.")
     def test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive(self):
-        self.assertTrue(self.n_1kb_file_in_dir_upload_to_azure_directory(8, "false"))
+        self.util_test_n_1kb_file_in_dir_upload_to_azure_directory(8, "false")
 
     # test_metaData_content_encoding_content_type verifies the meta data, content type,
     # content encoding of 2kb upload to share through azcopy.
