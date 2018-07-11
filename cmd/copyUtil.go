@@ -416,7 +416,7 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string, blob
 // matchBlobNameAgainstPattern matches the given blobName against the pattern. If the recursive is set to true
 // '*' in the pattern will match the path sep since we need to recursively look into the sub-dir of given source.
 // If recursive is set to false, then matches happens component wise where component is each dir in the given path
-// defines by the blobname. For Example: blobname = /dir-1/dir-2/blob1.txt components are dir-1, dir-2, blob1.txt
+// defined by the blobname. For Example: blobname = /dir-1/dir-2/blob1.txt components are dir-1, dir-2, blob1.txt
 func (util copyHandlerUtil) matchBlobNameAgainstPattern(pattern string, blobName string, pathSep string, recursive bool) bool {
 	if recursive {
 		return util.blobNameMatchesThePattern(pattern, blobName)
