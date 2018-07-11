@@ -123,7 +123,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 		// look for all files that in current directory
 		listFile, err := curAzureDirURL.ListFilesAndDirectoriesSegment(context.Background(), marker, azfile.ListFilesAndDirectoriesOptions{})
 		if err != nil {
-			fmt.Println("fail to list files and directories inside the directory. Please check the directory sas")
+			fmt.Println(fmt.Sprintf("fail to list files and directories inside the directory. Please check the directory sas, %v", err))
 			os.Exit(1)
 		}
 
