@@ -43,7 +43,7 @@
 
 [[constraint]]
   branch = "master"
-  name = "github.com/jiacfan/go-keychain"
+  name = "github.com/jiacfan/keychain"
 
 [[constraint]]
   branch = "master"

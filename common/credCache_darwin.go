@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"sync"
 
-	keychain "github.com/jiacfan/go-keychain" // forked and customized from github.com/keybase/go-keychain, todo: make a release to ensure stability
+	"github.com/jiacfan/keychain" // forked and customized from github.com/keybase/go-keychain, todo: make a release to ensure stability
 )
 
 const cachedTokenKey = "AzCopyOAuthTokenCache"

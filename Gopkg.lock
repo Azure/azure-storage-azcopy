@@ -14,7 +14,7 @@
     "2016-05-31/azblob",
     "2018-03-28/azblob"
   ]
-  revision = "f0a732ea9441c73511367d5861da6bda664ffabd"
+  revision = "eaae161d9d5e07363f04ddb19d84d57efc66d1a1"
 
 [[projects]]
   name = "github.com/Azure/azure-storage-file-go"
@@ -68,9 +68,9 @@
 
 [[projects]]
   branch = "master"
-  name = "github.com/jiacfan/go-keychain"
+  name = "github.com/jiacfan/keychain"
   packages = ["."]
-  revision = "a091728a72f75f3763833de405bfdde17571bc4b"
+  revision = "87f2c10ffbabfba1246a4f54fc986a4ffdace045"
 
 [[projects]]
   branch = "master"
@@ -187,6 +187,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "453bc95a31d824085282fe4b2b65f08b59e6ec012d786343d65d1838bf1148bc"
+  inputs-digest = "59ad96ee2f804f82a1bc141edda582518ef5855b03051a0bc0b364c570519d3d"
   solver-name = "gps-cdcl"
   solver-version = 1

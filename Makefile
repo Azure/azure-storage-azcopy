@@ -1,6 +1,6 @@
 PROJECT_NAME = azure-storage-azcopy
 WORK_DIR = /go/src/github.com/Azure/${PROJECT_NAME}
-GOX_ARCH = linux/amd64 windows/amd64 darwin/amd64
+GOX_ARCH = linux/amd64 windows/amd64
 
 define with_docker
 	WORK_DIR=$(WORK_DIR) docker-compose run --rm $(PROJECT_NAME) $(1)
