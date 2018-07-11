@@ -134,7 +134,7 @@ func cleanShare(shareURLStr string) {
 	}
 
 	// Sleep seconds to wait the share deletion got succeeded
-	time.Sleep(30 * time.Second)
+	time.Sleep(45 * time.Second)
 
 	_, err = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
 	if err != nil {
