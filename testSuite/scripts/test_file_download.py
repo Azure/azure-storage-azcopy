@@ -201,7 +201,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
             add_flags("recursive", recursive).add_flags("log-level", "info").execute_azcopy_copy_command()
         if not result:
             return result
-        print("azcopy command executed")
+        
         # execute the validator.
         dest_azure_dir_to_compare = util.get_resource_sas_from_share(dest_azure_dir_name + "/" + dir_name)
         result = util.Command("testFile").add_arguments(src_dir).add_arguments(dest_azure_dir_to_compare). \
