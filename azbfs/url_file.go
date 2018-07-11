@@ -157,7 +157,7 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResp
 
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.UpdatePath(ctx, "flush", f.fileSystemName, f.path, &fileSize,
-		&retainUncommittedData, nil,nil, nil, nil, nil,
+		&retainUncommittedData, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil,
 		&overrideHttpVerb, nil, nil, nil, nil)

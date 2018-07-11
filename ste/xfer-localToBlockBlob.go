@@ -217,7 +217,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// then uploading the source as block Blob.
 		// calculating num of chunks using the source size and chunkSize.
 		numChunks := common.Iffuint32(
-			blobSize % chunkSize == 0,
+			blobSize%chunkSize == 0,
 			uint32(blobSize/chunkSize),
 			uint32(blobSize/chunkSize)+1)
 
@@ -271,7 +271,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				info := jptm.Info()
@@ -434,7 +434,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 	// This function allows routine to manage behavior of unexpected panics.
 	// The panic error along with transfer details are logged.
 	// The transfer is marked as failed and is reported as done.
-	defer func (jptm IJobPartTransferMgr) {
+	defer func(jptm IJobPartTransferMgr) {
 		r := recover()
 		if r != nil {
 			info := jptm.Info()
@@ -529,7 +529,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				info := jptm.Info()

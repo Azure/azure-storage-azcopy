@@ -21,12 +21,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
-	"os"
-	"os/signal"
-	"sync"
 	"time"
 )
 
@@ -37,7 +36,7 @@ type syncCommandArguments struct {
 	// options from flags
 	blockSize    uint32
 	logVerbosity string
-	outputJson	bool
+	outputJson   bool
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 }
@@ -65,6 +64,7 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 
 	cooked.recursive = raw.recursive
 	cooked.outputJson = raw.outputJson
+	cooked.jobID = common.NewJobID()
 	return cooked, nil
 }
 
@@ -79,83 +79,121 @@ type cookedSyncCmdArgs struct {
 	outputJson   bool
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
+
+	// generated
+	jobID common.JobID
+
+	// variables used to calculate progress
+	// intervalStartTime holds the last time value when the progress summary was fetched
+	// the value of this variable is used to calculate the throughput
+	// it gets updated every time the progress summary is fetched
+	intervalStartTime        time.Time
+	intervalBytesTransferred uint64
+
+	// used to calculate job summary
+	jobStartTime time.Time
 }
 
-func (cca cookedSyncCmdArgs) process() (err error) {
+func (cca *cookedSyncCmdArgs) PrintJobStartedMsg() {
+	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
+}
+
+func (cca *cookedSyncCmdArgs) CancelJob() {
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *cookedSyncCmdArgs) InitializeProgressCounters() {
+	cca.jobStartTime = time.Now()
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = 0
+}
+
+func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
+	// fetch a job status
+	var summary common.ListJobSummaryResponse
+	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+
+	// if json output is desired, simply marshal and return
+	// note that if job is already done, we simply exit
+	if cca.outputJson {
+		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			// something serious has gone wrong if we cannot marshal a json
+			panic(err)
+		}
+
+		if jobDone {
+			glcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+		} else {
+			glcm.Info(string(jsonOutput))
+			return
+		}
+	}
+
+	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	if jobDone {
+		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+
+		glcm.ExitWithSuccess(fmt.Sprintf(
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+			summary.JobID.String(),
+			ste.ToFixed(duration.Minutes(), 4),
+			summary.TotalTransfers,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.JobStatus), common.EExitCode.Success())
+	}
+
+	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
+	// display a scanning keyword if the job is not completely ordered
+	var scanningString = ""
+	if !summary.CompleteJobOrdered {
+		scanningString = "(scanning...)"
+	}
+
+	// compute the average throughput for the last time interval
+	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+
+	// reset the interval timer and byte count
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = summary.BytesOverWire
+
+	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+}
+
+func (cca *cookedSyncCmdArgs) process() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.SyncJobPartOrderRequest{
-		JobID:            common.NewJobID(),
+		JobID:            cca.jobID,
 		FromTo:           cca.fromTo,
 		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
-		CommandString:cca.commandString,
+		CommandString:    cca.commandString,
 	}
-	// wait group to monitor the go routines fetching the job progress summary
-	var wg sync.WaitGroup
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
 		e := syncUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 	case common.EFromTo.BlobLocal():
 		e := syncDownloadEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 	default:
 		return fmt.Errorf("from to destination not supported")
 	}
 	if err != nil {
 		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.src, cca.dst, err.Error())
 	}
-	wg.Wait()
 	return nil
-}
-
-func (cca cookedSyncCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
-
-	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-
-	if !cca.outputJson {
-		// added empty line to provide gap after the user given
-		fmt.Println("")
-		fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
-		// added empty line to provide gap between the above line and the Summary
-		fmt.Println("")
-	}
-	// throughputIntervalTime holds the last time value when the progress summary was fetched
-	// The value of this variable is used to calculate the throughput
-	// It gets updated every time the progress summary is fetched
-	throughputIntervalTime := time.Now()
-	// jobStartTime holds the time when Job was started
-	// The value of this variable is used to calculate the elapsed time
-	jobStartTime := throughputIntervalTime
-	bytesTransferredInLastInterval := uint64(0)
-	for {
-		select {
-		case <-CancelChannel:
-			fmt.Println("Cancelling Job")
-			cookedCancelCmdArgs{jobID: jobID}.process()
-			os.Exit(1)
-		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, cca.outputJson)
-
-			// happy ending to the front end
-			if summary.JobStatus == common.EJobStatus.Completed() ||
-				summary.JobStatus == common.EJobStatus.Cancelled(){
-					// print final JobSummary if output-json flag is set to false
-					if !cca.outputJson {
-						copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
-					}
-				os.Exit(0)
-			}
-
-			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			//time.Sleep(2 * time.Second)
-			time.Sleep(2 * time.Second)
-		}
-	}
-	wg.Done()
 }
 
 func init() {
@@ -174,19 +212,18 @@ func init() {
 			raw.dst = args[1]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				fmt.Println("error parsing the input given by the user. Failed with error ", err.Error())
-				os.Exit(1)
+				glcm.ExitWithError("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				fmt.Println("error performing the sync between source and destination. Failed with error ", err.Error())
-				os.Exit(1)
+				glcm.ExitWithError("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
 			}
-			return nil
+
+			glcm.SurrenderControl()
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release

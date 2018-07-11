@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 // TestBlobFSCommand represents the struct to get command
@@ -286,7 +286,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			return err
 		}
 		if !info.IsDir() {
-			numberOFFilesInObject ++
+			numberOFFilesInObject++
 		}
 		return nil
 	})

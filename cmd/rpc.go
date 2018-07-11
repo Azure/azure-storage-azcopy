@@ -79,8 +79,7 @@ func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}
 	// Create HTTP request with command in query parameter & request data as JSON payload
 	requestJson, err := json.Marshal(requestData)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error marshalling request payload for command type %q", rpcCmd.String()))
-		return err
+		return fmt.Errorf("error marshalling request payload for command type %q", rpcCmd.String())
 	}
 	request, err := http.NewRequest("POST", httpClient.url, bytes.NewReader(requestJson))
 	// adding the commandType as a query param
@@ -97,8 +96,7 @@ func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}
 	responseJson, err := ioutil.ReadAll(response.Body)
 	response.Body.Close()
 	if err != nil {
-		fmt.Println("error reading response for the request")
-		return err
+		return fmt.Errorf("error reading response for the request")
 	}
 	if err = json.Unmarshal(responseJson, responseData); err != nil {
 		panic(err)

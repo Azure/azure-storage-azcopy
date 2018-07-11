@@ -27,11 +27,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"sort"
 )
 
 var JobsAdminInitialized = make(chan bool, 1)
@@ -40,16 +40,16 @@ var JobsAdminInitialized = make(chan bool, 1)
 // this struct is used to sort the JobPartPlan files of the same job on the basis
 // of Part number
 // TODO: can use the same struct to sort job part plan files on the basis of job number and part number
-type sortPlanFiles struct { Files []os.FileInfo }
+type sortPlanFiles struct{ Files []os.FileInfo }
 
 // Less determines the comparison between two fileInfo's
 // compares the part number of the Job Part files
-func (spf sortPlanFiles) Less(i, j int) bool{
+func (spf sortPlanFiles) Less(i, j int) bool {
 	_, parti, err := JobPartPlanFileName(spf.Files[i].Name()).Parse()
 	if err != nil {
 		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[i].Name(), err.Error()))
 	}
-	_, partj, err :=  JobPartPlanFileName(spf.Files[j].Name()).Parse()
+	_, partj, err := JobPartPlanFileName(spf.Files[j].Name()).Parse()
 	if err != nil {
 		panic(fmt.Errorf("error parsing the JobPartPlanfile name %s. Failed with error %s", spf.Files[j].Name(), err.Error()))
 	}
@@ -57,7 +57,7 @@ func (spf sortPlanFiles) Less(i, j int) bool{
 }
 
 // Len determines the length of number of files
-func (spf sortPlanFiles) Len() int { return len(spf.Files)}
+func (spf sortPlanFiles) Len() int { return len(spf.Files) }
 
 func (spf sortPlanFiles) Swap(i, j int) { spf.Files[i], spf.Files[j] = spf.Files[j], spf.Files[i] }
 
@@ -158,13 +158,13 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 // from where this JobPartMgr will be picked by a routine and
 // its transfers will be scheduled
 func (ja *jobsAdmin) QueueJobParts(jpm IJobPartMgr) {
-	ja.coordinatorChannels.partsChannel <-jpm
+	ja.coordinatorChannels.partsChannel <- jpm
 }
 
 // 1 single goroutine runs this method and InitJobsAdmin  kicks that goroutine off.
 func (ja *jobsAdmin) scheduleJobParts() {
 	for {
-		jobPart := <- ja.xferChannels.partsChannel
+		jobPart := <-ja.xferChannels.partsChannel
 		// If the job manager is not found for the JobId of JobPart
 		// taken from partsChannel
 		// there is an error in our code
@@ -249,13 +249,13 @@ type jobsAdmin struct {
 }
 
 type CoordinatorChannels struct {
-	partsChannel 	chan <- IJobPartMgr // Write Only
+	partsChannel     chan<- IJobPartMgr         // Write Only
 	normalTransferCh chan<- IJobPartTransferMgr // Write-only
 	lowTransferCh    chan<- IJobPartTransferMgr // Write-only
 }
 
 type XferChannels struct {
-	partsChannel <- chan IJobPartMgr // Read only
+	partsChannel     <-chan IJobPartMgr         // Read only
 	normalTransferCh <-chan IJobPartTransferMgr // Read-only
 	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
 	normalChunckCh   chan chunkFunc             // Read-write
@@ -332,14 +332,14 @@ func (ja *jobsAdmin) BytesOverWire() int64 {
 	return atomic.LoadInt64(&ja.pacer.bytesTransferred)
 }
 
-func (ja *jobsAdmin) ResurrectJob(jobId common.JobID) bool{
+func (ja *jobsAdmin) ResurrectJob(jobId common.JobID) bool {
 	// Search the existing plan files for the PartPlans for the given jobId
 	// only the files which have JobId has prefix and DataSchemaVersion as Suffix
 	// are include in the result
 	files := func(prefix, ext string) []os.FileInfo {
 		var files []os.FileInfo
 		filepath.Walk(ja.planDir, func(path string, fileInfo os.FileInfo, _ error) error {
-			if !fileInfo.IsDir() && strings.HasPrefix(fileInfo.Name(), prefix) &&strings.HasSuffix(fileInfo.Name(), ext) {
+			if !fileInfo.IsDir() && strings.HasPrefix(fileInfo.Name(), prefix) && strings.HasSuffix(fileInfo.Name(), ext) {
 				files = append(files, fileInfo)
 			}
 			return nil
@@ -351,8 +351,8 @@ func (ja *jobsAdmin) ResurrectJob(jobId common.JobID) bool{
 		return false
 	}
 	// sort the JobPartPlan files with respect to Part Number
-	sort.Sort(sortPlanFiles{Files:files})
-	for f:= 0; f < len(files); f++ {
+	sort.Sort(sortPlanFiles{Files: files})
+	for f := 0; f < len(files); f++ {
 		planFile := JobPartPlanFileName(files[f].Name())
 		jobID, partNum, err := planFile.Parse()
 		if err != nil {

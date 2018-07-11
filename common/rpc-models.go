@@ -50,7 +50,7 @@ type CopyJobPartOrderRequest struct {
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	// commandString hold the user given command which is logged to the Job log file
-	CommandString  string
+	CommandString string
 }
 
 type SyncJobPartOrderRequest struct {
@@ -66,7 +66,7 @@ type SyncJobPartOrderRequest struct {
 	// the count of the local files deletion is tracked using it.
 	FilesDeletedLocally int
 	// commandString hold the user given command which is logged to the Job log file
-	CommandString       string
+	CommandString string
 }
 
 type CopyJobPartOrderResponse struct {
@@ -112,14 +112,14 @@ type ListJobSummaryResponse struct {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
-	CompleteJobOrdered          bool
-	JobStatus                   JobStatus
-	TotalTransfers              uint32
-	TransfersCompleted          uint32
-	TransfersFailed             uint32
-	JobProgressPercentage       float64
-	BytesOverWire               uint64
-	FailedTransfers             []TransferDetail
+	CompleteJobOrdered    bool
+	JobStatus             JobStatus
+	TotalTransfers        uint32
+	TransfersCompleted    uint32
+	TransfersFailed       uint32
+	JobProgressPercentage float64
+	BytesOverWire         uint64
+	FailedTransfers       []TransferDetail
 }
 
 type ListJobTransfersRequest struct {

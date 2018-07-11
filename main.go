@@ -21,33 +21,21 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
-	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
-	"strconv"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"os"
+	"strconv"
 )
 
-var eexitCode = exitCode(0)
-
-type exitCode int32
-
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
+// get the lifecycle manager to print messages
+var glcm = common.GetLifecycleMgr()
 
 func main() {
-	os.Exit(int(mainWithExitCode()))
-}
-
-func mainWithExitCode() exitCode {
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
 		cmd.Execute()
-		return eexitCode.success()
 	}
 	// Perform os specific initialization
 	_, err := ProcessOSSpecificInitialization()
@@ -63,7 +51,7 @@ func mainWithExitCode() exitCode {
 	if concurrencyValue != "" {
 		val, err := strconv.ParseInt(concurrencyValue, 10, 64)
 		if err != nil {
-			panic(fmt.Sprintf("error parsing the env azcopy_concurency_value %v. " +
+			panic(fmt.Sprintf("error parsing the env azcopy_concurency_value %v. "+
 				"Failed with error %s", concurrencyValue, err.Error()))
 		}
 		defaultConcurrentConnections = int(val)
@@ -71,5 +59,5 @@ func mainWithExitCode() exitCode {
 	azcopyAppPathFolder := GetAzCopyAppPath()
 	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
 	cmd.Execute()
-	return eexitCode.success()
+	glcm.ExitWithSuccess("", common.EExitCode.Success())
 }

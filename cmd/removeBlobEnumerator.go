@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -14,8 +13,7 @@ import (
 
 type removeBlobEnumerator common.CopyJobPartOrderRequest
 
-func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
@@ -33,7 +31,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 		}, nil)
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(sourceUrlString)
+	sourceUrl, err := url.Parse(cca.src)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -54,7 +52,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 		e.addTransfer(common.CopyTransfer{
 			Source:     sourceUrl.String(),
 			SourceSize: blobProperties.ContentLength(),
-		}, wg, waitUntilJobCompletion)
+		}, cca)
 		// only one transfer for this Job, dispatch the JobPart
 		err := e.dispatchFinalPart()
 		if err != nil {
@@ -70,14 +68,14 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	// searchPrefix is the used in listing blob inside a container
 	// all the blob listed should have the searchPrefix as the prefix
 	// blobNamePattern represents the regular expression which the blobName should Match
-	// For Example: src = https://<container-name>/user-1?<sig> searchPrefix = user-1/
-	// For Example: src = https://<container-name>/user-1/file*?<sig> searchPrefix = user-1/file
+	// For Example: cca.src = https://<container-name>/user-1?<sig> searchPrefix = user-1/
+	// For Example: cca.src = https://<container-name>/user-1/file*?<sig> searchPrefix = user-1/file
 	searchPrefix, blobNamePattern := util.searchPrefixFromUrl(blobUrlParts)
 
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	if blobNamePattern == "*" && !isRecursiveOn {
+	if blobNamePattern == "*" && !cca.recursive {
 		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
 	}
 
@@ -105,9 +103,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 
 			e.addTransfer(common.CopyTransfer{
 				Source:     util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
-				SourceSize: *blobInfo.Properties.ContentLength},
-				wg,
-				waitUntilJobCompletion)
+				SourceSize: *blobInfo.Properties.ContentLength}, cca)
 		}
 		marker = listBlob.NextMarker
 	}
@@ -120,9 +116,8 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 }
 
 // accept a new transfer, simply add to the list of transfers and wait for the dispatch call to send the order
-func (e *removeBlobEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *removeBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 // send the current list of transfer to the STE

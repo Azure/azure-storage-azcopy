@@ -174,13 +174,13 @@ func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
 // TODO: added for debugging purpose. remove later
-func(jptm *jobPartTransferMgr) OccupyAConnection() {
+func (jptm *jobPartTransferMgr) OccupyAConnection() {
 	jptm.jobPartMgr.OccupyAConnection()
 }
 
 // Sub 1 from the active number of goroutine performing the transfer or executing the chunkFunc
 // TODO: added for debugging purpose. remove later
-func(jptm *jobPartTransferMgr) ReleaseAConnection() {
+func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
 }
 

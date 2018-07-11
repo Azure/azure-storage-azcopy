@@ -24,9 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
-	"os"
 )
-
 
 type ListResponse struct {
 	ErrorMsg string
@@ -46,15 +44,16 @@ Display information on all jobs.`,
 			// if there is any argument passed
 			// it is an error
 			if len(args) > 0 {
-				fmt.Println("listJobs does not require any argument")
+				return fmt.Errorf("listJobs does not require any argument")
 			}
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string)  {
+		Run: func(cmd *cobra.Command, args []string) {
 			err := HandleListJobsCommand()
-			if err != nil {
-				fmt.Println(err.Error())
-				os.Exit(1)
+			if err == nil {
+				glcm.ExitWithSuccess("", common.EExitCode.Success())
+			} else {
+				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
 			}
 		},
 	}
@@ -71,14 +70,14 @@ func HandleListJobsCommand() error {
 }
 
 // PrintExistingJobIds prints the response of listOrder command when listOrder command requested the list of existing jobs
-func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error{
+func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 	if listJobResponse.ErrorMessage != "" {
 		return fmt.Errorf("request failed with following error message: %s", listJobResponse.ErrorMessage)
 	}
 
-	fmt.Println("Existing Jobs ")
+	glcm.Info("Existing Jobs ")
 	for index := 0; index < len(listJobResponse.JobIDs); index++ {
-		fmt.Println(listJobResponse.JobIDs[index].String())
+		glcm.Info(listJobResponse.JobIDs[index].String())
 	}
 	return nil
 }

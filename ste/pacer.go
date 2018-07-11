@@ -103,7 +103,7 @@ func (p *pacer) updateTargetRate(increase bool) {
 		return
 	}
 	if atomic.CompareAndSwapInt64(&p.lastUpdatedTimestamp, lastCheckedTimestamp, time.Now().UnixNano()) {
-		atomic.StoreInt64(&p.availableBytesPerPeriod, int64(common.Ifffloat64(increase, 1.1, 0.9)*float64(p.availableBytesPerPeriod)))
+		atomic.StoreInt64(&p.availableBytesPerPeriod, int64(common.Iffloat64(increase, 1.1, 0.9)*float64(p.availableBytesPerPeriod)))
 	}
 }
 

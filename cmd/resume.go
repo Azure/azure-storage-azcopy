@@ -24,12 +24,88 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
-	"os"
-	"os/signal"
 	"strings"
 	"time"
 )
+
+// TODO the behavior of the resume command should be double-checked
+// TODO ex: does it output json??
+type resumeJobController struct {
+	// generated
+	jobID common.JobID
+
+	// variables used to calculate progress
+	// intervalStartTime holds the last time value when the progress summary was fetched
+	// the value of this variable is used to calculate the throughput
+	// it gets updated every time the progress summary is fetched
+	intervalStartTime        time.Time
+	intervalBytesTransferred uint64
+
+	// used to calculate job summary
+	jobStartTime time.Time
+}
+
+func (cca *resumeJobController) PrintJobStartedMsg() {
+	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
+}
+
+func (cca *resumeJobController) CancelJob() {
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *resumeJobController) InitializeProgressCounters() {
+	cca.jobStartTime = time.Now()
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = 0
+}
+
+func (cca *resumeJobController) PrintJobProgressStatus() {
+	// fetch a job status
+	var summary common.ListJobSummaryResponse
+	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+
+	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	if jobDone {
+		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+
+		glcm.ExitWithSuccess(fmt.Sprintf(
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+			summary.JobID.String(),
+			ste.ToFixed(duration.Minutes(), 4),
+			summary.TotalTransfers,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.JobStatus), common.EExitCode.Success())
+	}
+
+	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
+	// display a scanning keyword if the job is not completely ordered
+	var scanningString = ""
+	if !summary.CompleteJobOrdered {
+		scanningString = "(scanning...)"
+	}
+
+	// compute the average throughput for the last time interval
+	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+
+	// reset the interval timer and byte count
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = summary.BytesOverWire
+
+	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+}
 
 func init() {
 	var commandLineInput = ""
@@ -41,7 +117,7 @@ func init() {
 		Use:        "resume jobID",
 		SuggestFor: []string{"resme", "esume", "resue"},
 		Short:      "Resume the existing job with the given job ID",
-		Long:       `
+		Long: `
 Resume the existing job with the given job ID.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the resume command requires necessarily to have an argument
@@ -57,8 +133,7 @@ Resume the existing job with the given job ID.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			jobID, err := common.ParseJobID(commandLineInput)
 			if err != nil {
-				fmt.Println(fmt.Sprintf("error parsing the jobId %s. Failed with error %s", commandLineInput, err.Error()))
-				os.Exit(1)
+				glcm.ExitWithError("error parsing the jobId "+commandLineInput+". Failed with error "+err.Error(), common.EExitCode.Error())
 			}
 			rawResumeJobCommand.JobID = jobID
 			rawResumeJobCommand.IncludeTransfer = make(map[string]int)
@@ -104,48 +179,6 @@ Resume the existing job with the given job ID.`,
 		"Files should be separated by ';'.")
 }
 
-func waitUntilJobCompletion(jobID common.JobID) {
-
-	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-
-	// added an empty to provide a gap between the user given command and progress
-	fmt.Println("")
-
-	// throughputIntervalTime holds the last time value when the progress summary was fetched
-	// The value of this variable is used to calculate the throughput
-	// It gets updated every time the progress summary is fetched
-	throughputIntervalTime := time.Now()
-	// jobStartTime holds the time when Job was started
-	// The value of this variable is used to calculate the elapsed time
-	jobStartTime := throughputIntervalTime
-	bytesTransferredInLastInterval := uint64(0)
-	for {
-		select {
-		case <-CancelChannel:
-			//fmt.Println("Cancelling Job")
-			err := cookedCancelCmdArgs{jobID: jobID}.process()
-			if err != nil {
-				fmt.Println(fmt.Sprintf("error occurred while cancelling the job %s. Failed with error %s", jobID, err.Error()))
-				os.Exit(1)
-			}
-		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, false)
-			// happy ending to the front end
-			if summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled() {
-				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
-				os.Exit(0)
-			}
-
-			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			//time.Sleep(2 * time.Second)
-			time.Sleep(2 * time.Second)
-		}
-	}
-}
-
 // handles the resume command
 // dispatches the resume Job order to the storage engine
 func HandleResumeCommand(resJobOrder common.ResumeJob) {
@@ -153,8 +186,9 @@ func HandleResumeCommand(resJobOrder common.ResumeJob) {
 	var resumeJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.ResumeJob(), resJobOrder, &resumeJobResponse)
 	if !resumeJobResponse.CancelledPauseResumed {
-		fmt.Println(resumeJobResponse.ErrorMsg)
-		return
+		glcm.ExitWithError(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
 	}
-	waitUntilJobCompletion(resJobOrder.JobID)
+
+	controller := resumeJobController{jobID: resJobOrder.JobID}
+	glcm.WaitUntilJobCompletion(&controller)
 }

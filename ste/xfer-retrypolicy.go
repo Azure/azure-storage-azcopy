@@ -3,6 +3,8 @@ package ste
 import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -10,8 +12,6 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 )
 
 // XferRetryPolicy tells the pipeline what kind of retry policy to use. See the XferRetryPolicy* constants.
@@ -253,7 +253,6 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				}
 
 				logf("Action=%s\n", action)
-				// fmt.Println(action + "\n") // This is where we could log the retry operation; action is why we're retrying
 				if action[0] != 'R' { // Retry only if action starts with 'R'
 					if err != nil {
 						tryCancel() // If we're returning an error, cancel this current/last per-retry timeout context
@@ -397,7 +396,6 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				}
 
 				logf("Action=%s\n", action)
-				// fmt.Println(action + "\n") // This is where we could log the retry operation; action is why we're retrying
 				if action[0] != 'R' { // Retry only if action starts with 'R'
 					if err != nil {
 						tryCancel() // If we're returning an error, cancel this current/last per-retry timeout context

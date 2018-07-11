@@ -21,10 +21,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
-	"os"
 )
 
 type ListReq struct {
@@ -49,23 +49,22 @@ If the with-status flag is set, then the list of transfers in the job with the g
 			// if there is any argument passed
 			// it is an error
 			if len(args) == 0 {
-				fmt.Println("showJob require atleast the JobID")
-				os.Exit(1)
+				return errors.New("showJob require at least the JobID")
 			}
 			// Parse the JobId
 			jobId, err := common.ParseJobID(args[0])
 			if err != nil {
-				fmt.Println("invalid jobId given ", args[0])
-				return nil
+				return errors.New("invalid jobId given " + args[0])
 			}
 			commandLineInput.JobID = jobId
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string)  {
+		Run: func(cmd *cobra.Command, args []string) {
 			err := HandleShowCommand(commandLineInput)
-			if err != nil {
-				fmt.Println(err.Error())
-				os.Exit(1)
+			if err == nil {
+				glcm.ExitWithSuccess("", common.EExitCode.Success())
+			} else {
+				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
 			}
 		},
 	}
@@ -105,32 +104,34 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
 func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 	if listTransfersResponse.ErrorMsg != "" {
-		fmt.Println(fmt.Sprintf("request failed with following message %s", listTransfersResponse.ErrorMsg))
+		glcm.ExitWithError("request failed with following message "+listTransfersResponse.ErrorMsg, common.EExitCode.Error())
 		return
 	}
 
-	fmt.Println(fmt.Sprintf("----------- Transfers for JobId %s -----------", listTransfersResponse.JobID))
+	glcm.Info("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------")
 	for index := 0; index < len(listTransfersResponse.Details); index++ {
-		fmt.Println(fmt.Sprintf("transfer--> source: %s destination: %s status %s", listTransfersResponse.Details[index].Src, listTransfersResponse.Details[index].Dst,
-			listTransfersResponse.Details[index].TransferStatus))
+		glcm.Info("transfer--> source: " + listTransfersResponse.Details[index].Src + " destination: " +
+			listTransfersResponse.Details[index].Dst + " status " + listTransfersResponse.Details[index].TransferStatus.String())
 	}
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
 func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 	if summary.ErrorMsg != "" {
-		fmt.Println(fmt.Sprintf("list progress summary of job failed because %s", summary.ErrorMsg))
-		return
+		glcm.ExitWithError("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
 	}
-	fmt.Println(fmt.Sprintf("--------------- Progress Summary for Job %s ---------------", summary.JobID))
-	fmt.Println("Total Number of Transfer ", summary.TotalTransfers)
-	fmt.Println("Total Number of Transfer Completed ", summary.TransfersCompleted)
-	fmt.Println("Total Number of Transfer Failed ", summary.TransfersFailed)
-	fmt.Println("Has the final part been ordered ", summary.CompleteJobOrdered)
-	fmt.Println("Job Status ", summary.JobStatus)
-	//fmt.Println("Progress of Job in terms of Perecentage ", summary.PercentageProgress)
+
+	glcm.Info(fmt.Sprintf(
+		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+		summary.JobID.String(),
+		summary.TotalTransfers,
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		summary.JobStatus,
+	))
+
+	// send each message separately so that the printing is smooth
 	for index := 0; index < len(summary.FailedTransfers); index++ {
-		message := fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst)
-		fmt.Println(message)
+		glcm.Info(fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst))
 	}
 }

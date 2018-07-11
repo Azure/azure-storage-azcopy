@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -17,8 +16,7 @@ import (
 
 type copyDownloadBlobFSEnumerator common.CopyJobPartOrderRequest
 
-func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 
 	// Get the Account Name and Key variables from environment
@@ -46,7 +44,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	})
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(sourceUrlString)
+	sourceUrl, err := url.Parse(cca.src)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -72,7 +70,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	}
 
 	// Loop will continue unless the continuationMarker received in the response is empty
-	for continuationMarker != "" || firstListing{
+	for continuationMarker != "" || firstListing {
 		firstListing = false
 		continuationMarker = dListResp.XMsContinuation()
 		// Get only the files inside the given path
@@ -84,10 +82,10 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 			var destination = ""
 			// If the destination is not directory that is existing
 			// It is expected that the resource to be downloaded is downloaded at the destination provided
-			if util.isPathALocalDirectory(destinationPath) {
-				destination = util.generateLocalPath(destinationPath, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name, "/"))
+			if util.isPathALocalDirectory(cca.dst) {
+				destination = util.generateLocalPath(cca.dst, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name, "/"))
 			} else {
-				destination = destinationPath
+				destination = cca.dst
 			}
 			// convert the time of path to time format
 			// If path.LastModified is nil then lastModified time is set to current time
@@ -101,11 +99,11 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 			}
 			// Queue the transfer
 			e.addTransfer(common.CopyTransfer{
-				Source:               directoryUrl.FileSystemURL().NewDirectoryURL(*path.Name).String(),
-				Destination:          destination,
-				LastModifiedTime:     lModifiedTime,
-				SourceSize:           *path.ContentLength,
-			}, wg, waitUntilJobCompletion)
+				Source:           directoryUrl.FileSystemURL().NewDirectoryURL(*path.Name).String(),
+				Destination:      destination,
+				LastModifiedTime: lModifiedTime,
+				SourceSize:       *path.ContentLength,
+			}, cca)
 		}
 		dListResp, err = directoryUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
 		if err != nil {
@@ -120,9 +118,8 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	return nil
 }
 
-func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *copyDownloadBlobFSEnumerator) dispatchFinalPart() error {

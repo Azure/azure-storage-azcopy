@@ -180,7 +180,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 		return
 	}
-	
+
 	numChunks := uint32(0)
 	if rem := fileSize % chunkSize; rem == 0 {
 		numChunks = uint32(fileSize / chunkSize)
