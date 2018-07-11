@@ -31,7 +31,7 @@
 
 [[constraint]]
   name = "github.com/Azure/azure-storage-file-go"
-  branch = "master"
+  version = "0.2.0"
 
 [[constraint]]
   branch = "master"
