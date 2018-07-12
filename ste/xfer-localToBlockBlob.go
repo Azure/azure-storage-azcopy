@@ -93,7 +93,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	srcFile, err := os.Open(info.Source)
 	if err != nil {
 		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %s", info.SourceSize))
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %d", info.SourceSize))
 		}
 		jptm.AddToBytesDone(info.SourceSize)
 		jptm.SetStatus(common.ETransferStatus.Failed())

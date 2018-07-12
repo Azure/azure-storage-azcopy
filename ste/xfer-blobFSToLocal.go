@@ -14,8 +14,8 @@ import (
 type BlobFSFileDownload struct {
 	jptm       IJobPartTransferMgr
 	srcFileURL azbfs.FileURL
-	destMMF *common.MMF
-	pacer *pacer
+	destMMF    *common.MMF
+	pacer      *pacer
 }
 
 func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -263,7 +263,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 					err := os.Chtimes(bffd.jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
 						if bffd.jptm.ShouldLog(pipeline.LogInfo) {
-							bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, bffd))
+							bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, info.Destination))
 						}
 						return
 					}

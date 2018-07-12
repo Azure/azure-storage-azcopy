@@ -267,11 +267,11 @@ type SuicideJob struct{}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (ja jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName {
+func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName {
 	return JobPartPlanFileName(fmt.Sprintf(jobPartPlanFileNameFormat, jobID.String(), partNumber, DataSchemaVersion))
 }
 
-func (ja jobsAdmin) FileExtension() string {
+func (ja *jobsAdmin) FileExtension() string {
 	return fmt.Sprintf(".strV%05d", DataSchemaVersion)
 }
 

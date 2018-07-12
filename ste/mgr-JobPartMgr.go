@@ -143,7 +143,7 @@ type jobPartMgr struct {
 	filename JobPartPlanFileName
 
 	// When the part is schedule to run (inprogress), the below fields are used
-	planMMF JobPartPlanMMF // This Job part plan's MMF
+	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blobHTTPHeaders azblob.BlobHTTPHeaders

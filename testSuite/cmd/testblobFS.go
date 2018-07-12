@@ -4,14 +4,15 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/spf13/cobra"
 	"io"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/spf13/cobra"
 )
 
 // TestBlobFSCommand represents the struct to get command
@@ -117,7 +118,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	// If the length of file at two location is not same
 	// validation has failed
 	if downloadedLength != fInfo.Size() {
-		fmt.Println(fmt.Sprintf("validation failed because there is difference in the source size %d and destination size %s", fInfo.Size(), downloadedLength))
+		fmt.Println(fmt.Sprintf("validation failed because there is difference in the source size %d and destination size %d", fInfo.Size(), downloadedLength))
 		os.Exit(1)
 	}
 	// If the size of the file is 0 both locally and remote
@@ -274,7 +275,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 			// calculate the downloaded file Md5
 			subjMd5 := md5.Sum(downloadedBuffer)
 			if objMd5 != subjMd5 {
-				fmt.Println("source file %s doesn't match the remote file %s", filepathLocal, fileUrl.String())
+				fmt.Println(fmt.Sprintf("source file %s doesn't match the remote file %s", filepathLocal, fileUrl.String()))
 				os.Exit(1)
 			}
 		}

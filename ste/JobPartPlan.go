@@ -2,9 +2,10 @@ package ste
 
 import (
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"reflect"
 	"unsafe"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -23,10 +24,10 @@ const (
 
 type JobPartPlanMMF common.MMF
 
-func (mmf JobPartPlanMMF) Plan() *JobPartPlanHeader {
+func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 	// getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 	// casting the mmf slice's address  to JobPartPlanHeader Pointer
-	return (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&mmf)).Data))
+	return (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(mmf)).Data))
 }
 func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 
@@ -43,7 +44,7 @@ type JobPartPlanHeader struct {
 	Priority           common.JobPriority  // The Job Part's priority
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
 	FromTo             common.FromTo       // The location of the transfer's source & destination
-	NumTransfers       uint32 	             // The number of transfers in the Job part
+	NumTransfers       uint32              // The number of transfers in the Job part
 	LogLevel           common.LogLevel     // This Job Part's minimal log level
 	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData       JobPartPlanDstLocal // Additional data for local destinations
