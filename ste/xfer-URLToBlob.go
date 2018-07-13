@@ -32,11 +32,12 @@ import (
 )
 
 type blockBlobCopy struct {
-	jptm        IJobPartTransferMgr
-	srcURL      url.URL
-	destBlobURL azblob.BlobURL
-	pacer       *pacer
-	blockIDs    []string
+	jptm           IJobPartTransferMgr
+	srcURL         url.URL
+	destBlobURL    azblob.BlobURL
+	pacer          *pacer
+	blockIDs       []string
+	srcHTTPHeaders azblob.BlobHTTPHeaders
 }
 
 func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -105,11 +106,12 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	adjustedChunkSize := chunkSize
 
 	bbc := &blockBlobCopy{
-		jptm:        jptm,
-		srcURL:      *srcURL,
-		destBlobURL: destBlobURL,
-		pacer:       pacer,
-		blockIDs:    blockIDs}
+		jptm:           jptm,
+		srcURL:         *srcURL,
+		destBlobURL:    destBlobURL,
+		pacer:          pacer,
+		blockIDs:       blockIDs,
+		srcHTTPHeaders: info.SrcHTTPHeaders}
 
 	for startRange := int64(0); startRange < srcSize; startRange += chunkSize {
 		// compute exact size of the chunk
@@ -246,13 +248,9 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 						workerId, chunkId, (bbc.blockIDs)))
 			}
 
-			// fetching the blob http headers with content-type, content-encoding attributes
-			// fetching the metadata passed with the JobPartOrder
-			// TODO: fetching per transfer properties, metadata correctly...
-			// blobHTTPHeader, metaData := bbc.jptm.BlobDstData(nil)
-
 			// commit the blocks.
-			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+			// TODO: fetching per transfer metadata correctly...
+			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, bbc.srcHTTPHeaders, azblob.Metadata{}, azblob.BlobAccessConditions{})
 			if err != nil {
 				if bbc.jptm.ShouldLog(pipeline.LogError) {
 					bbc.jptm.Log(pipeline.LogError,

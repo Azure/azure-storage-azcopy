@@ -51,6 +51,8 @@ type copyHandlerUtil struct{}
 
 var gCopyUtil = copyHandlerUtil{} // global copy util in cmd package
 
+const wildCard = "*"
+
 // checks whether a given url contains a prefix pattern
 func (copyHandlerUtil) numOfStarInUrl(url string) int {
 	return strings.Count(url, "*")
@@ -284,7 +286,7 @@ func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithout
 }
 
 func (util copyHandlerUtil) firstIndexOfWildCard(name string) int {
-	return strings.Index(name, "*")
+	return strings.Index(name, wildCard)
 }
 func (util copyHandlerUtil) getContainerURLFromString(url url.URL) url.URL {
 	blobParts := azblob.NewBlobURLParts(url)
@@ -407,6 +409,34 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string, blob
 	}
 
 	return p == len(pattern)
+}
+
+// isAccountLevelSearch check if it's an account level search for blob service.
+// And returns search prefix(part before wildcard) and pattern when it's account level search.
+func (util copyHandlerUtil) isAccountLevelSearch(parts azblob.BlobURLParts) (isAccountLevelSearch bool, prefix, pattern string) {
+	// If it's account level URL which need search container, there could be two cases:
+	// a. https://<account-name>(/)
+	// b. https://<account-name>/containerprefix*
+	if parts.ContainerName == "" ||
+		(strings.HasSuffix(parts.ContainerName, wildCard) && parts.BlobName == "") {
+		isAccountLevelSearch = true
+		// For case 1-a, search for all containers.
+		if parts.ContainerName == "" {
+			pattern = "*"
+			return
+		}
+
+		wildCardIndex := util.firstIndexOfWildCard(parts.ContainerName)
+		// wild card exists prefix will be the content of container name till the wildcard index
+		// Example: https://<account-name>/c-2*
+		// prefix = /c-2 and pattern = /c-2*
+		// All the containers have the prefix "c-2"
+		prefix = parts.ContainerName[:wildCardIndex]
+		pattern = parts.ContainerName
+		return
+	}
+	// Otherwise, it's not account level search.
+	return
 }
 
 func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string) {
@@ -584,13 +614,22 @@ func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, 
 		*bytesTransferredInLastInterval = summary.BytesOverWire
 		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
-		fmt.Printf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v\n",
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-			summary.TotalTransfers,
-			scanningString,
-			ste.ToFixed(throughPut, 4))
+		if throughPut == 0 {
+			fmt.Printf("%v Done, %v Failed, %v Pending, %v Total%s\n",
+				summary.TransfersCompleted,
+				summary.TransfersFailed,
+				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+				summary.TotalTransfers,
+				scanningString)
+		} else {
+			fmt.Printf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v\n",
+				summary.TransfersCompleted,
+				summary.TransfersFailed,
+				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+				summary.TotalTransfers,
+				scanningString,
+				ste.ToFixed(throughPut, 4))
+		}
 	}
 	return summary
 }

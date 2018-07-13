@@ -504,5 +504,5 @@ type CopyTransfer struct {
 	ContentLanguage    string
 	CacheControl       string
 	ContentMD5         string
-	BlobTier           string
+	//BlobTier           string //TODO
 }

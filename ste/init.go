@@ -29,9 +29,10 @@ import (
 	"net/http"
 	"time"
 
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
 )
 
 var steCtx = context.Background()
@@ -197,7 +198,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 			// then Job is cancelled
 			if strings.EqualFold(confirmCancel, "Yes") {
 				break
-			}else if strings.EqualFold(confirmCancel, "No") {
+			} else if strings.EqualFold(confirmCancel, "No") {
 				// If the user provides "No" to cancel the Job
 				// then it returns CancelPauseResumeResponse
 				// and the Job is resumed
@@ -205,7 +206,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 					CancelledPauseResumed: true,
 					ErrorMsg:              "",
 				}
-			}else {
+			} else {
 				fmt.Println("Provide Input as Yes / No")
 			}
 		}
@@ -250,8 +251,8 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// Job immediately stop.
 		if !jobCompletelyOrdered {
 			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed:false,
-				ErrorMsg:      fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
 			}
 			return jr
 		}
