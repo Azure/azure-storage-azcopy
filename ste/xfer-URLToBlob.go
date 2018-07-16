@@ -38,6 +38,7 @@ type blockBlobCopy struct {
 	pacer          *pacer
 	blockIDs       []string
 	srcHTTPHeaders azblob.BlobHTTPHeaders
+	srcMetadata    azblob.Metadata
 }
 
 func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -111,7 +112,8 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		destBlobURL:    destBlobURL,
 		pacer:          pacer,
 		blockIDs:       blockIDs,
-		srcHTTPHeaders: info.SrcHTTPHeaders}
+		srcHTTPHeaders: info.SrcHTTPHeaders,
+		srcMetadata:    azblob.Metadata(info.SrcMetadata)}
 
 	for startRange := int64(0); startRange < srcSize; startRange += chunkSize {
 		// compute exact size of the chunk
@@ -249,8 +251,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			}
 
 			// commit the blocks.
-			// TODO: fetching per transfer metadata correctly...
-			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, bbc.srcHTTPHeaders, azblob.Metadata{}, azblob.BlobAccessConditions{})
+			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, bbc.srcHTTPHeaders, bbc.srcMetadata, azblob.BlobAccessConditions{})
 			if err != nil {
 				if bbc.jptm.ShouldLog(pipeline.LogError) {
 					bbc.jptm.Log(pipeline.LogError,

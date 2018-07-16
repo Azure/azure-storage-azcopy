@@ -779,3 +779,12 @@ func (util copyHandlerUtil) replaceBackSlashWithSlash(urlStr string) string {
 
 	return str
 }
+
+func (util *copyHandlerUtil) marshalMetadata(metadata map[string]string) (string, error) {
+	b, err := json.Marshal(metadata)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}

@@ -154,9 +154,7 @@ func (e *copyBlobToNEnumerator) initiateDestHelperInfo(ctx context.Context) erro
 	return nil
 }
 
-type metadata map[string]string
-
-func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata metadata) error {
+func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata map[string]string) error {
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob():
 		if destInfo.destBlobPipeline == nil {
@@ -196,7 +194,7 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 
 			// TODO: Create share/bucket and etc.
 			// Currently only support blob to blob, so only create container
-			e.createBucket(ctx, tmpDestURL, metadata(containerItem.Metadata))
+			e.createBucket(ctx, tmpDestURL, map[string]string(containerItem.Metadata))
 
 			// List source container
 			// TODO: List in parallel to speed up.
@@ -238,6 +236,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 				srcContainerURL.NewBlobURL(blobItem.Name).String(),
 				tmpDestURL.String(),
 				&blobItem.Properties,
+				map[string]string(blobItem.Metadata),
 				wg,
 				waitUntilJobCompletion)
 			if err != nil {
@@ -249,7 +248,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 	return nil
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, properties *azblob.BlobProperties,
+func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
 		return fmt.Errorf(
@@ -259,6 +258,11 @@ func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, propert
 
 	// work around an existing client bug, the contentMD5 returned from list is base64 encoded bytes, and should be base64 decoded bytes.
 	md5DecodedBytes, err := base64.StdEncoding.DecodeString(string(properties.ContentMD5))
+	if err != nil {
+		return err
+	}
+
+	metadataStr, err := gCopyUtil.marshalMetadata(map[string]string(metadata))
 	if err != nil {
 		return err
 	}
@@ -273,7 +277,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, propert
 		ContentDisposition: *properties.ContentDisposition,
 		ContentLanguage:    *properties.ContentLanguage,
 		CacheControl:       *properties.CacheControl,
-		ContentMD5:         string(md5DecodedBytes)},
+		ContentMD5:         string(md5DecodedBytes),
+		Metadata:           metadataStr},
 		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly
 		wg,
 		waitUntilJobCompletion)
@@ -287,6 +292,11 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, proper
 			properties.BlobType())
 	}
 
+	metadataStr, err := gCopyUtil.marshalMetadata(map[string]string(properties.NewMetadata()))
+	if err != nil {
+		return err
+	}
+
 	return e.addTransfer(common.CopyTransfer{
 		Source:             source,
 		Destination:        dest,
@@ -297,7 +307,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, proper
 		ContentDisposition: properties.ContentDisposition(),
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
-		ContentMD5:         string(properties.ContentMD5())},
+		ContentMD5:         string(properties.ContentMD5()),
+		Metadata:           metadataStr},
 		//BlobTier:           properties.AccessTier()}, // TODO: blob tier setting correctly
 		wg,
 		waitUntilJobCompletion)

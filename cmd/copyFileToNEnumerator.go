@@ -142,7 +142,7 @@ func (e *copyFileToNEnumerator) initiateDestHelperInfo(ctx context.Context) erro
 	return nil
 }
 
-func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata metadata) error {
+func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata map[string]string) error {
 	switch e.FromTo {
 	case common.EFromTo.FileBlob():
 		if destInfo.destBlobPipeline == nil {
@@ -181,7 +181,7 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 
 			// TODO: Create share/bucket and etc.
 			// Currently only support file to blob, so only create container
-			e.createBucket(ctx, tmpDestURL, metadata(shareItem.Metadata))
+			e.createBucket(ctx, tmpDestURL, map[string]string(shareItem.Metadata))
 
 			// List source share
 			// TODO: List in parallel to speed up.

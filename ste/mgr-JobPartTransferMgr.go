@@ -47,6 +47,7 @@ type TransferInfo struct {
 	Destination string
 
 	SrcHTTPHeaders azblob.BlobHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
+	SrcMetadata    map[string]string
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
@@ -97,12 +98,14 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	plan := jptm.jobPartMgr.Plan()
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
+	srcHTTPHeaders, srcMetadata := plan.TransferSrcHTTPHeadersAndMetadata(jptm.transferIndex)
 	return TransferInfo{
 		BlockSize:      dstBlobData.BlockSize,
 		Source:         src,
 		SourceSize:     plan.Transfer(jptm.transferIndex).SourceSize,
 		Destination:    dst,
-		SrcHTTPHeaders: plan.TransferSrcHTTPHeaders(jptm.transferIndex),
+		SrcHTTPHeaders: srcHTTPHeaders,
+		SrcMetadata:    srcMetadata,
 	}
 }
 

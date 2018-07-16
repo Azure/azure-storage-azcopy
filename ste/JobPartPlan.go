@@ -1,6 +1,7 @@
 package ste
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"unsafe"
@@ -110,8 +111,9 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 	return string(tempSlice)
 }
 
-// TransferSrcHTTPHeaders returns the SrcHTTPHeaders for a transfer at given transferIndex in JobPartOrder
-func (jpph *JobPartPlanHeader) TransferSrcHTTPHeaders(transferIndex uint32) (h azblob.BlobHTTPHeaders) {
+// TransferSrcHTTPHeadersAndMetadata returns the SrcHTTPHeaders for a transfer at given transferIndex in JobPartOrder
+func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata map[string]string) {
+	var err error
 	t := jpph.Transfer(transferIndex)
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
@@ -140,8 +142,28 @@ func (jpph *JobPartPlanHeader) TransferSrcHTTPHeaders(transferIndex uint32) (h a
 		h.ContentMD5 = []byte(jpph.getString(offset, t.SrcContentMD5Length))
 		offset += int64(t.SrcContentMD5Length)
 	}
+	if t.SrcMetadataLength != 0 {
+		tmpMetaData := jpph.getString(offset, t.SrcMetadataLength)
+		metadata, err = unmarshalMetadata(tmpMetaData)
+		if err != nil { // should not happen in normal case
+			panic(err)
+		}
+		offset += int64(t.SrcMetadataLength)
+	}
 
 	return
+}
+
+func unmarshalMetadata(metadataString string) (map[string]string, error) {
+	var result map[string]string
+	if metadataString != "" {
+		err := json.Unmarshal([]byte(metadataString), &result)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -215,6 +237,7 @@ type JobPartPlanTransfer struct {
 	SrcContentDispositionLength int16
 	SrcCacheControlLength       int16
 	SrcContentMD5Length         int16
+	SrcMetadataLength           int16
 	//SrcBlobTierLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
