@@ -575,6 +575,10 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		e := copyBlobToNEnumerator(jobPartOrder)
 		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
 		lastPartNumber = e.PartNum
+	case common.EFromTo.FileBlob():
+		e := copyFileToNEnumerator(jobPartOrder)
+		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		lastPartNumber = e.PartNum
 	}
 
 	if err != nil {

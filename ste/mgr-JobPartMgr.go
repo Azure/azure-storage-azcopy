@@ -451,6 +451,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 			fallthrough
 		case common.EFromTo.BlobBlob(): // Copy from blob service to blob service
 			fallthrough
+		case common.EFromTo.FileBlob(): // Copy from file service to blob service
+			fallthrough
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob

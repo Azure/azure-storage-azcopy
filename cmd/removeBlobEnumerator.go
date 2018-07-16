@@ -71,7 +71,7 @@ func (e *removeBlobEnumerator) enumerate(sourceUrlString string, isRecursiveOn b
 	// blobNamePattern represents the regular expression which the blobName should Match
 	// For Example: src = https://<container-name>/user-1?<sig> searchPrefix = user-1/
 	// For Example: src = https://<container-name>/user-1/file*?<sig> searchPrefix = user-1/file
-	searchPrefix, blobNamePattern := util.searchPrefixFromUrl(blobUrlParts)
+	searchPrefix, blobNamePattern := util.searchPrefixFromBlobURL(blobUrlParts)
 
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory

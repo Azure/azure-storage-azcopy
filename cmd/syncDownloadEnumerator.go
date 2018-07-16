@@ -322,7 +322,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(
 
 	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl)
 	containerUrl := util.getContainerUrl(blobUrlParts)
-	searchPrefix, pattern := util.searchPrefixFromUrl(blobUrlParts)
+	searchPrefix, pattern := util.searchPrefixFromBlobURL(blobUrlParts)
 
 	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
 	// virtual directory is the entire virtual directory path before the blob name

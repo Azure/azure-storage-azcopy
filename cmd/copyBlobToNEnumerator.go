@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
@@ -16,7 +17,14 @@ import (
 // The source could be single blob/container/blob account
 type copyBlobToNEnumerator common.CopyJobPartOrderRequest
 
-// TODO: add logic to validating source&dest combination, e.g. for account src, the destination could only be account.
+// destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
+type destHelperInfo struct {
+	destBlobPipeline pipeline.Pipeline
+	// info for other dest type
+}
+
+var destInfo destHelperInfo
+
 func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, destURLStr string,
 	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
 	ctx := context.TODO()
@@ -26,7 +34,12 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	// credential validation logic for both source and destination
 	// Note: e.CredentialInfo is for destination
 	srcCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	p, err := createBlobPipeline(ctx, srcCredInfo)
+	// Note: enumerate will only be started with single thread, so no lock is used protect by design
+	srcBlobPipeline, err := createBlobPipeline(ctx, srcCredInfo)
+	if err != nil {
+		return err
+	}
+	err = e.initiateDestHelperInfo(ctx)
 	if err != nil {
 		return err
 	}
@@ -43,7 +56,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 
 	srcBlobURLPart := azblob.NewBlobURLParts(*sourceURL)
 	// Case-1: Source is account, currently only support blob destination
-	if isAccountLevel, searchPrefix, pattern := gCopyUtil.isAccountLevelSearch(srcBlobURLPart); isAccountLevel {
+	if isAccountLevel, searchPrefix, pattern := gCopyUtil.isBlobAccountLevelSearch(srcBlobURLPart); isAccountLevel {
 		if pattern == "*" && !isRecursiveOn {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
@@ -51,10 +64,10 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 		// Switch URL https://<account-name>/containerprefix* to ServiceURL "https://<account-name>"
 		tmpSrcBlobURLPart := srcBlobURLPart
 		tmpSrcBlobURLPart.ContainerName = ""
-		srcServiceURL := azblob.NewServiceURL(tmpSrcBlobURLPart.URL(), p)
+		srcServiceURL := azblob.NewServiceURL(tmpSrcBlobURLPart.URL(), srcBlobPipeline)
 		// Validate destination
 		// TODO: other type destination URLs, e.g: BlobFS, File and etc
-		destServiceURL := azblob.NewServiceURL(*destURL, p)
+		destServiceURL := azblob.NewServiceURL(*destURL, srcBlobPipeline)
 		_, err = destServiceURL.GetProperties(ctx)
 		if err != nil {
 			return errors.New("invalid source and destination combination for service to service copy: " +
@@ -84,7 +97,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 
 	// Case-2: Source is single blob
 	// Verify if source is a single blob
-	srcBlobURL := azblob.NewBlobURL(*sourceURL, p)
+	srcBlobURL := azblob.NewBlobURL(*sourceURL, srcBlobPipeline)
 	blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{})
 	// Note: Currently only support single to single, and not support single to directory.
 	if err == nil {
@@ -101,7 +114,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 
 	// Case-3: Source is a blob container or directory
 	// Switch URL https://<account-name>/container/blobprefix* to ContainerURL "https://<account-name>/container"
-	searchPrefix, pattern := gCopyUtil.searchPrefixFromUrl(srcBlobURLPart)
+	searchPrefix, pattern := gCopyUtil.searchPrefixFromBlobURL(srcBlobURLPart)
 	if pattern == "*" && !isRecursiveOn {
 		return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
 	}
@@ -109,7 +122,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	tmpSrcBlobURLPart.BlobName = ""
 	err = e.enumerateBlobsInContainer(
 		ctx,
-		azblob.NewContainerURL(tmpSrcBlobURLPart.URL(), p),
+		azblob.NewContainerURL(tmpSrcBlobURLPart.URL(), srcBlobPipeline),
 		*destURL,
 		searchPrefix,
 		wg,
@@ -129,22 +142,32 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	return e.dispatchFinalPart()
 }
 
-// TODO: whether to customize public level?
-func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata azblob.Metadata) error {
+func (e *copyBlobToNEnumerator) initiateDestHelperInfo(ctx context.Context) error {
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob():
-		// Create pipeline for destination bucket cr
-		// TODO: refactor the logic to make blob pipeline shared, note there could be different destinations
 		p, err := createBlobPipeline(ctx, e.CredentialInfo)
 		if err != nil {
 			return err
 		}
-		containerURL := azblob.NewContainerURL(destURL, p)
+		destInfo.destBlobPipeline = p
+	}
+	return nil
+}
+
+type metadata map[string]string
+
+func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata metadata) error {
+	switch e.FromTo {
+	case common.EFromTo.BlobBlob():
+		if destInfo.destBlobPipeline == nil {
+			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
+		}
+		containerURL := azblob.NewContainerURL(destURL, destInfo.destBlobPipeline)
 		// Create the container, in case of it doesn't exist.
-		_, err = containerURL.Create(ctx, metadata, azblob.PublicAccessNone)
+		_, err := containerURL.Create(ctx, azblob.Metadata(metadata), azblob.PublicAccessNone)
 		if err != nil {
 			if stgErr, ok := err.(azblob.StorageError); !ok || stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
-				return fmt.Errorf("fail to create container during enumerate containers in account, %v", err)
+				return fmt.Errorf("fail to create container, %v", err)
 			}
 			// the case error is container already exists
 		}
@@ -173,7 +196,7 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 
 			// TODO: Create share/bucket and etc.
 			// Currently only support blob to blob, so only create container
-			e.createBucket(ctx, tmpDestURL, containerItem.Metadata)
+			e.createBucket(ctx, tmpDestURL, metadata(containerItem.Metadata))
 
 			// List source container
 			// TODO: List in parallel to speed up.
