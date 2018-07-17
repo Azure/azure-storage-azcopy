@@ -29,10 +29,13 @@ test: setup ## run go tests
 build: setup ## build binaries for the project
 	$(call with_docker,gox -osarch="$(GOX_ARCH)")
 
+build-osx: setup ## build osx binary specially, as it's using CGO
+	CC=o64-clang CXX=o64-clang++ GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 $(call with_docker,go build -o "azs_darwin_amd64")
+
 smoke: setup ## set up smoke test
 	$(call with_docker,go build -o test-validator ./testSuite/)
 
-all: setup test build smoke ## run all tests and lints
+all: setup test build build-osx smoke ## run all tests and lints
 
 ## unused for now
 clean: docker-clean ## clean environment and binaries
