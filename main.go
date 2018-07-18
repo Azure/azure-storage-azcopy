@@ -21,35 +21,23 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	//"github.com/Azure/azure-storage-azcopy/ste"
-	"os"
-	//"os/exec"
-	//"strconv"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	//"os/exec"
 	"fmt"
+	"os"
 	"strconv"
+
+	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
-var eexitCode = exitCode(0)
-
-type exitCode int32
-
-func (exitCode) success() exitCode { return exitCode(0) }
-func (exitCode) error() exitCode   { return exitCode(-1) }
+// get the lifecycle manager to print messages
+var glcm = common.GetLifecycleMgr()
 
 func main() {
-	os.Exit(int(mainWithExitCode()))
-}
-
-func mainWithExitCode() exitCode {
 	azcopyAppPathFolder := GetAzCopyAppPath()
-
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
 		cmd.Execute(azcopyAppPathFolder)
-		return eexitCode.success()
 	}
 
 	// Perform os specific initialization
@@ -72,6 +60,7 @@ func mainWithExitCode() exitCode {
 		defaultConcurrentConnections = int(val)
 	}
 	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
+
 	cmd.Execute(azcopyAppPathFolder)
-	return eexitCode.success()
+	glcm.ExitWithSuccess("", common.EExitCode.Success())
 }

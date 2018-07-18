@@ -86,15 +86,19 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 		return common.ECredentialType.Anonymous(), nil
 	}
 
+	// Following are the cases: Use oauth token, public source blob or default anonymous credential.
 	uotm := GetUserOAuthTokenManagerInstance()
 	hasCachedToken, err := uotm.HasCachedToken()
 	if err != nil {
-		fmt.Println(fmt.Errorf("No cached token found, %s", err.Error())) //TODO: replace this with FE logging facility.
+		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
+		glcm.Info(fmt.Sprintf("No cached token found, %v", err))
 	}
 
+	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
+	// the tokens.
 	hasEnvVarOAuthTokenInfo := common.EnvVarOAuthTokenInfoExists()
 	if hasEnvVarOAuthTokenInfo {
-		fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) //TODO: replace this with FE logging facility.
+		glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
 	}
 
 	if !hasCachedToken && !hasEnvVarOAuthTokenInfo { // no oauth token found, then directly return anonymous credential
@@ -144,15 +148,18 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 // 2. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 3. Otherwise use shared key.
 func getBlobFSCredentialType() (common.CredentialType, error) {
+	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
+	// the tokens
 	if common.EnvVarOAuthTokenInfoExists() {
-		fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) //TODO: replace this with FE logging facility.
+		glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
 		return common.ECredentialType.OAuthToken(), nil
 	}
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	hasCachedToken, err := uotm.HasCachedToken()
 	if err != nil {
-		fmt.Println(fmt.Errorf("No cached token found, %s", err.Error())) //TODO: replace this with FE logging facility.
+		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
+		glcm.Info(fmt.Sprintf("No cached token found, %v", err))
 	}
 
 	if hasCachedToken {
@@ -168,6 +175,22 @@ func getBlobFSCredentialType() (common.CredentialType, error) {
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
 	credential := createBlobCredential(ctx, credInfo)
 
+	return ste.NewBlobPipeline(
+		credential,
+		azblob.PipelineOptions{
+			Telemetry: azblob.TelemetryOptions{
+				Value: common.UserAgent,
+			},
+		},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay,
+		},
+		nil), nil
+
 	return azblob.NewPipeline(
 		credential,
 		azblob.PipelineOptions{
@@ -177,9 +200,6 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				TryTimeout:    ste.UploadTryTimeout,
 				RetryDelay:    ste.UploadRetryDelay,
 				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
 			},
 		}), nil
 }
@@ -206,7 +226,7 @@ func createBlobCredential(ctx context.Context, credInfo common.CredentialInfo) a
 func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azblob.TokenCredential) time.Duration {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
-		fmt.Printf("failed to refresh token, due to error: %v\n", err)
+		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
@@ -215,12 +235,12 @@ func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, toke
 		common.Resource,
 		tokenInfo.Token)
 	if err != nil {
-		fmt.Printf("failed to refresh token, due to error: %v\n", err)
+		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
-		fmt.Printf("failed to refresh token, due to error: %v\n", err)
+		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 
 	newToken := spt.Token()
@@ -291,7 +311,7 @@ func createBlobFSCredential(ctx context.Context, credInfo common.CredentialInfo)
 func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
 	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
 	if err != nil {
-		fmt.Printf("failed to refresh token, due to error: %v\n", err)
+		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
@@ -300,12 +320,12 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, to
 		common.Resource,
 		tokenInfo.Token)
 	if err != nil {
-		fmt.Printf("failed to refresh token, due to error: %v\n", err)
+		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 
 	err = spt.RefreshWithContext(ctx)
 	if err != nil {
-		fmt.Printf("failed to refresh token, due to error: %v\n", err)
+		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 
 	newToken := spt.Token()

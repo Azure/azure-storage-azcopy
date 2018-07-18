@@ -24,18 +24,19 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+
 	"io"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/spf13/cobra"
 )
@@ -168,10 +169,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.outputJson = raw.outputJson
 	cooked.acl = raw.acl
 
+	// cook oauth parameters
 	cooked.useInteractiveOAuthUserCredential = raw.useInteractiveOAuthUserCredential
 	cooked.tenantID = raw.tenantID
 	cooked.aadEndpoint = raw.aadEndpoint
-
+	// generate a unique job ID
+	cooked.jobID = common.NewJobID()
 	return cooked, nil
 }
 
@@ -209,9 +212,22 @@ type cookedCopyCmdArgs struct {
 	aadEndpoint                       string
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
+
+	// generated
+	jobID common.JobID
+
+	// variables used to calculate progress
+	// intervalStartTime holds the last time value when the progress summary was fetched
+	// the value of this variable is used to calculate the throughput
+	// it gets updated every time the progress summary is fetched
+	intervalStartTime        time.Time
+	intervalBytesTransferred uint64
+
+	// used to calculate job summary
+	jobStartTime time.Time
 }
 
-func (cca cookedCopyCmdArgs) isRedirection() bool {
+func (cca *cookedCopyCmdArgs) isRedirection() bool {
 	switch cca.fromTo {
 	// File's piping is not supported temporarily.
 	// case common.EFromTo.PipeFile():
@@ -227,7 +243,7 @@ func (cca cookedCopyCmdArgs) isRedirection() bool {
 	}
 }
 
-func (cca cookedCopyCmdArgs) process() error {
+func (cca *cookedCopyCmdArgs) process() error {
 	if cca.isRedirection() {
 		return cca.processRedirectionCopy()
 	}
@@ -235,7 +251,7 @@ func (cca cookedCopyCmdArgs) process() error {
 }
 
 // TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
-func (cca cookedCopyCmdArgs) processRedirectionCopy() error {
+func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 	if cca.fromTo == common.EFromTo.PipeBlob() {
 		return cca.processRedirectionUpload(cca.dst, cca.blockSize)
 	} else if cca.fromTo == common.EFromTo.BlobPipe() {
@@ -245,7 +261,7 @@ func (cca cookedCopyCmdArgs) processRedirectionCopy() error {
 	return fmt.Errorf("unsupported redirection type: %s", cca.fromTo)
 }
 
-func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
+func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
@@ -291,7 +307,7 @@ func (cca cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 	return nil
 }
 
-func (cca cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize uint32) error {
+func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize uint32) error {
 	type uploadTask struct {
 		buffer        []byte
 		blockSize     int
@@ -468,10 +484,10 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
-func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
+func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:      common.NewJobID(),
+		JobID:      cca.jobID,
 		FromTo:     cca.fromTo,
 		ForceWrite: cca.forceWrite,
 		Priority:   common.EJobPriority.Normal(),
@@ -497,7 +513,7 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Copy uses credential type %q.\n", jobPartOrder.CredentialInfo.CredentialType) // TODO: use FE logging facility
+	glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -525,12 +541,6 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
-	// print out the job id so that the user can note it down
-	//if !cca.outputJson {
-	//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-	//}
-	// wait group to monitor the go routines fetching the job progress summary
-	var wg sync.WaitGroup
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
 	// depending on the source and destination type, we process the cp command differently
@@ -542,27 +552,27 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fallthrough
 	case common.EFromTo.LocalFile():
 		e := copyUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobLocal():
 		e := copyDownloadBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileLocal():
 		e := copyDownloadFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobFSLocal():
 		e := copyDownloadBlobFSEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():
 		e := removeBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileTrash():
 		e := removeFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca.src, cca.recursive, cca.dst, &wg, cca.waitUntilJobCompletion)
+		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	}
 
@@ -578,64 +588,86 @@ func (cca cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// If there is only one, part then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
-		//if !cca.outputJson {
-		//	fmt.Println("Job with id", jobPartOrder.JobID, "has started.")
-		//}
-		wg.Add(1)
-		go cca.waitUntilJobCompletion(jobPartOrder.JobID, &wg)
+		go glcm.WaitUntilJobCompletion(cca)
 	}
-	wg.Wait()
 	return nil
 }
 
-func (cca cookedCopyCmdArgs) waitUntilJobCompletion(jobID common.JobID, wg *sync.WaitGroup) {
+func (cca *cookedCopyCmdArgs) PrintJobStartedMsg() {
+	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
+}
 
-	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-
-	// throughputIntervalTime holds the last time value when the progress summary was fetched
-	// The value of this variable is used to calculate the throughput
-	// It gets updated every time the progress summary is fetched
-	throughputIntervalTime := time.Now()
-	// jobStartTime holds the time when Job was started
-	// The value of this variable is used to calculate the elapsed time
-	jobStartTime := throughputIntervalTime
-	if !cca.outputJson {
-		// added empty line to provide gap after the user given
-		fmt.Println("")
-		fmt.Println(fmt.Sprintf("Job %s has started ", jobID.String()))
-		// added empty line to provide gap between the above line and the Summary
-		fmt.Println("")
+func (cca *cookedCopyCmdArgs) CancelJob() {
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
 	}
-	bytesTransferredInLastInterval := uint64(0)
-	for {
-		select {
-		case <-CancelChannel:
-			err := cookedCancelCmdArgs{jobID: jobID}.process()
-			if err != nil {
-				fmt.Println(fmt.Sprintf("error occurred while cancelling the job %s. Failed with error %s", jobID, err.Error()))
-				os.Exit(1)
-			}
-		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, cca.outputJson)
-			// happy ending to the front end
-			if summary.JobStatus == common.EJobStatus.Completed() ||
-				summary.JobStatus == common.EJobStatus.Cancelled() {
-				// print final JobProgress summary if output-json flag is set to false
-				if !cca.outputJson {
-					copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
-				}
-				os.Exit(0)
-			}
+}
 
-			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			//time.Sleep(2 * time.Second)
-			time.Sleep(2 * time.Second)
+func (cca *cookedCopyCmdArgs) InitializeProgressCounters() {
+	cca.jobStartTime = time.Now()
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = 0
+}
+
+func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
+	// fetch a job status
+	var summary common.ListJobSummaryResponse
+	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+
+	// if json output is desired, simply marshal and return
+	// note that if job is already done, we simply exit
+	if cca.outputJson {
+		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			// something serious has gone wrong if we cannot marshal a json
+			panic(err)
+		}
+
+		if jobDone {
+			glcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+		} else {
+			glcm.Info(string(jsonOutput))
+			return
 		}
 	}
-	wg.Done()
+
+	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	if jobDone {
+		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+
+		glcm.ExitWithSuccess(fmt.Sprintf(
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+			summary.JobID.String(),
+			ste.ToFixed(duration.Minutes(), 4),
+			summary.TotalTransfers,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.JobStatus), common.EExitCode.Success())
+	}
+
+	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
+	// display a scanning keyword if the job is not completely ordered
+	var scanningString = ""
+	if !summary.CompleteJobOrdered {
+		scanningString = "(scanning...)"
+	}
+
+	// compute the average throughput for the last time interval
+	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+
+	// reset the interval timer and byte count
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = summary.BytesOverWire
+
+	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
 }
 
 func isStdinPipeIn() (bool, error) {
@@ -701,24 +733,25 @@ Download an entire directory:
 			}
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				return fmt.Errorf("failed to parse user input due to error: %s", err)
+				glcm.ExitWithError("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
 			}
 			// If the stdInEnable is set true, then a separate go routines is reading the standard input.
 			// If the "cancel\n" keyword is passed to the standard input, it will cancel the job
 			// Any other word keyword provided will panic
 			// This feature is to support cancel for node.js applications spawning azcopy
 			if raw.stdInEnable {
-				go ReadStandardInputToCancelJob(CancelChannel)
+				go glcm.ReadStandardInputToCancelJob()
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform copy command due to error: %s", err)
+				glcm.ExitWithError("failed to perform copy command due to error: "+err.Error(), common.EExitCode.Error())
 			}
-			return nil
+
+			glcm.SurrenderControl()
 		},
 	}
 	rootCmd.AddCommand(cpCmd)
@@ -763,6 +796,7 @@ Download an entire directory:
 	cpCmd.PersistentFlags().MarkHidden("exclude")
 	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
+	cpCmd.PersistentFlags().MarkHidden("output-json")
 
 	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
 	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")

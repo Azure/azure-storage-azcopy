@@ -4,7 +4,6 @@ import shutil
 from collections import namedtuple
 from stat import *
 import sys
-
 import utility as util
 
 def test_blobfs_upload_1Kb_file(
@@ -102,7 +101,7 @@ def test_blobfs_upload_100_1Kb_file(
     result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl).\
                 add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
-        print("test_blobfs_upload_100_1Kb_file failed while validating the uploaded directory")
+        print("test_blobfs_upload_100_1Kb_file failed while validating the file upload")
         sys.exit(1)
     print("test_blobfs_upload_100_1Kb_file successfully passed")
 
@@ -137,6 +136,6 @@ def test_blobfs_upload_2000_1Kb_file(
     result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
         add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
-        print("test_blobfs_upload_2000_1Kb_file failed while validating the uploaded directory")
+        print("test_blobfs_upload_2000_1Kb_file failed while validating the files uploaded")
         sys.exit(1)
     print("test_blobfs_upload_2000_1Kb_file successfully passed")

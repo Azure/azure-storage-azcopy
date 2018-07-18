@@ -142,9 +142,10 @@ func (jm *jobMgr) ReleaseAConnection() {
 
 // returns the number of goroutines actively performing the transfer / executing the chunkFunc
 // TODO: added for debugging purpose. remove later
-func (jm *jobMgr) ActiveConnections() int64{
+func (jm *jobMgr) ActiveConnections() int64 {
 	return atomic.LoadInt64(&jm.atomicCurrentConcurrentConnections)
 }
+
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, pacer: JobsAdmin.(*jobsAdmin).pacer}

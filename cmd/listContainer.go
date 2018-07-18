@@ -56,14 +56,21 @@ func init() {
 			sourcePath = args[0]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			// the expected argument in input is the container sas / or path of virtual directory in the container.
 			// verifying the location type
 			location := inferArgumentLocation(sourcePath)
 			if location != location.Blob() {
-				return fmt.Errorf("invalid path passed for listing. given source is of type %s while expect is container / container path ", location.String())
+				glcm.ExitWithError("invalid path passed for listing. given source is of type "+location.String()+" while expect is container / container path ", common.EExitCode.Error())
 			}
-			return HandleListContainerCommand(sourcePath, jsonOutput)
+
+			err := HandleListContainerCommand(sourcePath, jsonOutput)
+			if err == nil {
+				glcm.ExitWithSuccess("", common.EExitCode.Success())
+			} else {
+				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+			}
+
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release
@@ -77,21 +84,21 @@ func init() {
 func HandleListContainerCommand(source string, jsonOutput bool) error {
 
 	util := copyHandlerUtil{}
-	p := azblob.NewPipeline(
-		azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
-		})
+	// Create Pipeline which will be used further in the blob operations.
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
+	},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    ste.UploadTryTimeout,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
 
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(source)
 	if err != nil {
@@ -120,7 +127,7 @@ func HandleListContainerCommand(source string, jsonOutput bool) error {
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
-		listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
+		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
@@ -152,10 +159,10 @@ func printListContainerResponse(lsResponse *common.ListContainerResponse, jsonOu
 		if err != nil {
 			panic(fmt.Errorf("error listing the source. Failed with error %s", err))
 		}
-		fmt.Println(string(marshalledData))
+		glcm.Info(string(marshalledData))
 	} else {
 		for index := 0; index < len(lsResponse.Blobs); index++ {
-			fmt.Println(lsResponse.Blobs[index])
+			glcm.Info(lsResponse.Blobs[index])
 		}
 	}
 	lsResponse.Blobs = nil

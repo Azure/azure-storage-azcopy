@@ -38,7 +38,7 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 // it returns the error.
 // Api gets the hard limit for process file descriptor
 // and sets the soft limit for process file descriptor to above hard limit
-func ProcessOSSpecificInitialization() (uint64, error){
+func ProcessOSSpecificInitialization() (uint64, error) {
 	var rlimit, zero syscall.Rlimit
 	// get the hard limit
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit)

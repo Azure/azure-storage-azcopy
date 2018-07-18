@@ -110,8 +110,8 @@ func (d DirectoryURL) ListDirectorySegment(ctx context.Context, marker *string, 
 	// and listPath for filesystem with directory path set in the path parameter
 	var maxEntriesInListOperation = int32(1000)
 
-	resp , err := d.FileSystemURL().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, fileSystemResourceName, &d.pathParameter, marker,
-					&maxEntriesInListOperation, nil, nil, nil)
+	resp, err := d.FileSystemURL().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, fileSystemResourceName, &d.pathParameter, marker,
+		&maxEntriesInListOperation, nil, nil, nil)
 	return (*DirectoryListResponse)(resp), err
 }
 

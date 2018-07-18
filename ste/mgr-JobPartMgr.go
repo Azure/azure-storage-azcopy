@@ -47,8 +47,8 @@ type serviceAPIVersionOverride struct{}
 // ServiceAPIVersionOverride is a global variable in package ste which is a key to Service Api Version Value set in the every Job's context.
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
-// defaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-const defaultServiceApiVersion = "2017-11-09"
+// DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
+const DefaultServiceApiVersion = "2017-11-09"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -139,7 +139,7 @@ type jobPartMgr struct {
 	filename JobPartPlanFileName
 
 	// When the part is schedule to run (inprogress), the below fields are used
-	planMMF JobPartPlanMMF // This Job part plan's MMF
+	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blobHTTPHeaders azblob.BlobHTTPHeaders

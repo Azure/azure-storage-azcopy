@@ -19,7 +19,7 @@ docker-clean: docker-compose
 	WORK_DIR=$(WORK_DIR) docker-compose down
 
 dep: docker-build #
-	$(call with_docker,dep ensure)
+	$(call with_docker,dep ensure -v)
 
 setup: clean docker-build dep ## setup environment for development
 

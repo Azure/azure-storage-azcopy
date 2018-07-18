@@ -53,7 +53,7 @@ func (jpfn JobPartPlanFileName) Delete() error {
 	return os.Remove(string(jpfn))
 }
 
-func (jpfn JobPartPlanFileName) Map() JobPartPlanMMF {
+func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 	// opening the file with given filename
 	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, 0644) // TODO: Check this permission
 	if err != nil {
@@ -70,7 +70,7 @@ func (jpfn JobPartPlanFileName) Map() JobPartPlanMMF {
 	if err != nil {
 		panic(err)
 	}
-	return JobPartPlanMMF(*mmf)
+	return (*JobPartPlanMMF)(mmf)
 }
 
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData

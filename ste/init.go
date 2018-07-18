@@ -29,9 +29,10 @@ import (
 	"net/http"
 	"time"
 
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
 )
 
 var steCtx = context.Background()
@@ -180,13 +181,13 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	}
 
 	jobCompletelyOrdered := completeJobOrdered(jm)
+	// TODO reconsider this functionality, as it conflicts with cancel from stdin
 	// If the job has not been ordered completely, then if cancelled, Job cannot be resumed later
 	// The user is asked for a Yes / No to cancel or not
 	if !jobCompletelyOrdered {
 		var confirmCancel string
 		// The message is displayed to the User and asked for Yes / No Input to cancel the Job
-		fmt.Println("")
-		fmt.Println("The Job is not completely ordered yet. Cancelling the Job " +
+		fmt.Println("\nThe Job is not completely ordered yet. Cancelling the Job " +
 			"now won't let the Job to be resumed later. Enter 'Yes' to cancel or 'No' to resume to the Job")
 		// The flow goes in to the Indefinite loop reading the standard Input
 		// The loop doesn't break unless the user provide Yes or No for Input
@@ -197,7 +198,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 			// then Job is cancelled
 			if strings.EqualFold(confirmCancel, "Yes") {
 				break
-			}else if strings.EqualFold(confirmCancel, "No") {
+			} else if strings.EqualFold(confirmCancel, "No") {
 				// If the user provides "No" to cancel the Job
 				// then it returns CancelPauseResumeResponse
 				// and the Job is resumed
@@ -205,7 +206,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 					CancelledPauseResumed: true,
 					ErrorMsg:              "",
 				}
-			}else {
+			} else {
 				fmt.Println("Provide Input as Yes / No")
 			}
 		}
@@ -250,8 +251,9 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// Job immediately stop.
 		if !jobCompletelyOrdered {
 			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed:false,
-				ErrorMsg:      fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
+				CancelledPauseResumed: false,
+				// TODO this causes a fatal error on the front end, it should exit gracefully since cancel is successful
+				ErrorMsg: fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
 			}
 			return jr
 		}
@@ -366,7 +368,6 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 * FailedTransfers - list of transfer after last checkpoint timestamp that failed.
  */
 func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
-	//fmt.Println("received a get job order status request for JobId ", jobId)
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
 	if !found {

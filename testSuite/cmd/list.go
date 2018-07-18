@@ -3,12 +3,13 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/spf13/cobra"
 )
 
 // initializes the clean command, its aliases and description.
@@ -123,7 +124,7 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 	}
 
 	if numberOfblobs != numberOfresource {
-		fmt.Println(fmt.Sprintf("expected number of blobs / file %d inside the resource does not match the actual %d"), numberOfresource, numberOfblobs)
+		fmt.Println(fmt.Sprintf("expected number of blobs / file %d inside the resource does not match the actual %d", numberOfresource, numberOfblobs))
 		os.Exit(1)
 	}
 }

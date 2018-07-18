@@ -1,11 +1,7 @@
-from test_blob_download import *
-from test_blob_download_oauth import *
-from test_upload_block_blob import *
-from test_upload_page_blob import *
-from test_azcopy_operations import *
-from test_blobfs_upload import *
-from test_blobfs_download import *
-from test_oauth import *
+from test_interactive_blob_download_oauth import *
+from test_interactive_blobfs_upload_oauth import *
+from test_interactive_blobfs_download_oauth import *
+from test_interactive_operation_oauth import *
 import glob, os
 import configparser
 import platform
@@ -15,12 +11,8 @@ def execute_interactively_copy_blob_oauth_session_scenario():
     #login to get session
     test_login_with_default()
     #execute copy commands
-    test_1kb_blob_upload(True)
-    test_n_1kb_blob_upload(5, True)
-    test_1GB_blob_upload(True)
     test_download_1kb_blob_oauth()
     test_recursive_download_blob_oauth()
-    test_page_blob_upload_1mb(True)
     #logout
     test_logout()
 

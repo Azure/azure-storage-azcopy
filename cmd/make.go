@@ -21,15 +21,16 @@
 package cmd
 
 import (
-	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/spf13/cobra"
-	"os"
-	"net/url"
-	"time"
 	"context"
+	"errors"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/spf13/cobra"
+	"net/url"
+	"os"
 	"strings"
+	"time"
 )
 
 // make related pipeline params
@@ -56,14 +57,14 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
-		resourceURL: *parsedURL,
+		resourceURL:      *parsedURL,
 		resourceLocation: inferArgumentLocation(raw.resourceToCreate),
 	}, nil
 }
 
 // holds processed/actionable args
 type cookedMakeCmdArgs struct {
-	resourceURL url.URL
+	resourceURL      url.URL
 	resourceLocation Location
 }
 
@@ -95,7 +96,7 @@ func (cookedArgs cookedMakeCmdArgs) process() error {
 		_, err := fsURL.Create(context.Background())
 		if err != nil {
 			// print a nicer error message if file system already exists
-			if storageErr,ok := err.(azbfs.StorageError); ok {
+			if storageErr, ok := err.(azbfs.StorageError); ok {
 				if storageErr.ServiceCode() == azbfs.ServiceCodeFileSystemAlreadyExists {
 					return fmt.Errorf("the file system already exists")
 				}
@@ -129,30 +130,24 @@ Create the File System represented by the given resource URL.
 		Args: func(cmd *cobra.Command, args []string) error {
 			// verify that there is exactly one argument
 			if len(args) != 1 {
-				fmt.Println("please provide the resource URL as the only argument")
-				os.Exit(1)
+				return errors.New("please provide the resource URL as the only argument")
 			}
 
 			rawArgs.resourceToCreate = args[0]
 			return nil
 		},
-		Run: func(cmd *cobra.Command, args []string)  {
-			// TODO update after output mechanism is in place
+		Run: func(cmd *cobra.Command, args []string) {
 			cookedArgs, err := rawArgs.cook()
 			if err != nil {
-				fmt.Println(err.Error())
-				os.Exit(1)
+				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
 			}
 
-			// TODO update after output mechanism is in place
 			err = cookedArgs.process()
 			if err != nil {
-				fmt.Println(err.Error())
-				os.Exit(1)
+				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
 			}
 
-			// TODO update after output mechanism is in place
-			fmt.Printf("Successfully created the File System %s.\n", cookedArgs.resourceURL.String())
+			glcm.ExitWithSuccess("Successfully created the File System "+cookedArgs.resourceURL.String(), common.EExitCode.Success())
 		},
 	}
 
