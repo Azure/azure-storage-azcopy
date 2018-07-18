@@ -190,10 +190,10 @@ func (lcm *lifecycleMgr) ReadStandardInputToCancelJob() {
 
 // for the lifecycleMgr to babysit a job, it must be given a controller to get information about the job
 type JobController interface {
-	PrintJobStartedMsg() // print an initial message to indicate that the work has started
-	CancelJob() // handle to cancel the work
+	PrintJobStartedMsg()         // print an initial message to indicate that the work has started
+	CancelJob()                  // handle to cancel the work
 	InitializeProgressCounters() // initialize states needed to track progress (such as start time of the work)
-	PrintJobProgressStatus() // print the progress status, optionally exit the application if work is done
+	PrintJobProgressStatus()     // print the progress status, optionally exit the application if work is done
 }
 
 func (lcm *lifecycleMgr) WaitUntilJobCompletion(jc JobController) {

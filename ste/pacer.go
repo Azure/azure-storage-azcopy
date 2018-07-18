@@ -28,9 +28,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"fmt"
 )
 
 type pacer struct {
@@ -120,7 +120,7 @@ func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &bodyPacer{body: requestBody, p: p, mmf:srcMMF}
+	return &bodyPacer{body: requestBody, p: p, mmf: srcMMF}
 }
 
 // newResponseBodyPacer wraps a response body to the given pacer to control the download speed and
@@ -129,7 +129,7 @@ func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer, srcMMF *common.M
 	if p == nil {
 		panic("pr must not be nil")
 	}
-	return &bodyPacer{body: responseBody, p: p, mmf:srcMMF}
+	return &bodyPacer{body: responseBody, p: p, mmf: srcMMF}
 }
 
 // read blocks until tickets are obtained
