@@ -62,10 +62,10 @@ def parse_config_file_set_env():
     os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
 
     # set the account name for blob fs service operation
-    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
+    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['ACCOUNT_NAME']
 
     # set the account key for blob fs service operation
-    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['ACCOUNT_KEY']
 
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']

@@ -79,10 +79,10 @@ def parse_config_file_set_env():
     os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
 
     # set the account name for blob fs service operation
-    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
+    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['ACCOUNT_NAME']
 
     # set the account key for blob fs service operation
-    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['ACCOUNT_KEY']
 
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
@@ -93,22 +93,23 @@ def parse_config_file_set_env():
     # set oauth aad endpoint
     os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
 
+def check_env_not_exist(key):
+    if os.environ.get(key, '-1') == '-1':
+        print('Environment variable: ' + key + ' not set.')
+        return True
+    return False
 
 def init():
     # Check the environment variables.
     # If they are not set, then parse the config file and set
     # environment variables. If any of the env variable is not set
     # test_config_file is parsed and env variables are reset.
-    if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
-            os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
-            os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
-            os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
-            os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
-            os.environ.get('OAUTH_TENANT_ID', '-1') == '-1' or \
-            os.environ.get('OAUTH_AAD_ENDPOINT', '-1') == '-1':
+    if check_env_not_exist('TEST_DIRECTORY_PATH') or check_env_not_exist('AZCOPY_EXECUTABLE_PATH') or \
+            check_env_not_exist('TEST_SUITE_EXECUTABLE_LOCATION') or check_env_not_exist('CONTAINER_SAS_URL') or \
+            check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
+            check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
+            check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
+            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
         parse_config_file_set_env()
 
     # Get the environment variables value
