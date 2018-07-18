@@ -86,7 +86,7 @@ def init():
             os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
             os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
             os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1' or \
-            os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
+            os.environ.get('FILESYSTEM_URL', '-1') == '-1' or \
             os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
             os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
             os.environ.get('AZCOPY_OAUTH_TOKEN_INFO', '-1') == '-1':

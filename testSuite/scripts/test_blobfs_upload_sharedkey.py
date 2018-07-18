@@ -9,15 +9,12 @@ import unittest
 
 class BlobFs_Upload_ShareKey_User_Scenarios(unittest.TestCase):
 
-    cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
-
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):
+        self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
 
-    @classmethod
-    def tearDownClass(cls):
-        os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = cls.cachedAzCopyOAuthTokenInfo
+    def tearDown(self):
+        os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
 
     def util_test_blobfs_upload_1Kb_file(
         self,
