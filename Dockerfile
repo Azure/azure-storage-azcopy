@@ -6,8 +6,10 @@ RUN go get -u github.com/golang/dep/cmd/dep
 RUN go get -u github.com/golang/lint/golint
 RUN go get -u github.com/mitchellh/gox
 
-# Prepare enviroment for OSX cross compilation
-# For full platform cross compilation, please refer to https://github.com/karalabe/xgo
+# Prepare enviroment for OSX cross compilation.
+# Note: following steps might be considered to be replaced, when MacOS's container is used for testing.
+# In that case, OSX's binary can be compiled directly in MacOS.
+# For other platform's cross compilation, please refer to https://github.com/karalabe/xgo for more details.
 RUN \
   apt-get update && \
   apt-get install -y clang patch xz-utils
@@ -15,6 +17,7 @@ RUN \
 ENV OSX_SDK     MacOSX10.11.sdk
 ENV OSX_NDK_X86 /usr/local/osx-ndk-x86
 
+# Following steps in https://github.com/tpoechtrager/osxcross to prepare the OS X cross toolchain for Linux.
 RUN \
   OSX_SDK_PATH=https://s3.dockerproject.org/darwin/v2/$OSX_SDK.tar.xz && \
   wget -q $OSX_SDK_PATH && \
