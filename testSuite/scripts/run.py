@@ -73,24 +73,27 @@ def parse_config_file_set_env():
     # set the env var OAuth token info
     os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
 
+def check_env_not_exist(key):
+    if os.environ.get(key, '-1') == '-1':
+        print('Environment variable: ' + key + ' not set.')
+        return True
+    return False
+
+
 def init():
     # Check the environment variables.
     # If they are not set, then parse the config file and set
     # environment variables. If any of the env variable is not set
     # test_config_file is parsed and env variables are reset.
-    if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
-            os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
-            os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
-            os.environ.get('CONTAINER_SAS_URL', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1' or \
-            os.environ.get('FILESYSTEM_URL', '-1') == '-1' or \
-            os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
-            os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
-            os.environ.get('AZCOPY_OAUTH_TOKEN_INFO', '-1') == '-1':
+    if check_env_not_exist('TEST_DIRECTORY_PATH') or check_env_not_exist('AZCOPY_EXECUTABLE_PATH') or \
+            check_env_not_exist('TEST_SUITE_EXECUTABLE_LOCATION') or check_env_not_exist('CONTAINER_SAS_URL') or \
+            check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
+            check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
+            check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
+            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
         parse_config_file_set_env()
+
+    print("init out")
 
     # Get the environment variables value
     # test_dir_path is the location where test_data folder will be created and test files will be created further.
@@ -123,8 +126,12 @@ def init():
     # get the filesystem url
     filesystem_url = os.environ.get('FILESYSTEM_URL')
 
+    print("before cleanup")
+
     # deleting the log files.
     cleanup()
+
+    print("before initialize_test_suite")
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
                                       filesystem_url, azcopy_exec_location, test_suite_exec_location):
