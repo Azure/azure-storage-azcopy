@@ -37,7 +37,7 @@ type syncCommandArguments struct {
 	// options from flags
 	blockSize    uint32
 	logVerbosity string
-	outputJson   bool
+	output       string
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 }
@@ -64,7 +64,7 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 	}
 
 	cooked.recursive = raw.recursive
-	cooked.outputJson = raw.outputJson
+	cooked.output.Parse(raw.output)
 	cooked.jobID = common.NewJobID()
 	return cooked, nil
 }
@@ -77,7 +77,7 @@ type cookedSyncCmdArgs struct {
 	// options from flags
 	blockSize    uint32
 	logVerbosity common.LogLevel
-	outputJson   bool
+	output       common.OutputFormat
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -120,7 +120,7 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
-	if cca.outputJson {
+	if cca.output == common.EOutputFormat.Json() {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
 			// something serious has gone wrong if we cannot marshal a json
@@ -231,6 +231,6 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
-	syncCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
+	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 }

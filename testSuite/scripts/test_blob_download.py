@@ -173,7 +173,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # download the destination to the source to match the last modified time
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output", "json"). \
             add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
 
@@ -207,7 +207,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # download the destination to the source to match the last modified time
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output", "json"). \
             add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
 
@@ -272,7 +272,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # sync remote to local
         # 10 files will be downloaded
         result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json","true").\
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output","json").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)

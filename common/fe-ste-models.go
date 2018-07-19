@@ -81,6 +81,21 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type OutputFormat string
+
+var EOutputFormat = OutputFormat("text")
+
+func (OutputFormat) Text() OutputFormat { return OutputFormat("text") }
+func (OutputFormat) Json() OutputFormat { return OutputFormat("json") }
+
+func (of *OutputFormat) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(of), s, true)
+	if err == nil {
+		*of = val.(OutputFormat)
+	}
+	return err
+}
+
 var EExitCode = ExitCode(0)
 
 type ExitCode uint32

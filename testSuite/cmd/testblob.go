@@ -4,14 +4,14 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"time"
 
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -125,10 +125,10 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
 	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
 		},
+	},
 		ste.XferRetryOptions{
 			Policy:        0,
 			MaxTries:      ste.UploadMaxTries,
