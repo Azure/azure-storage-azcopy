@@ -101,6 +101,7 @@ func (cca *resumeJobController) PrintJobProgressStatus() {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
+	// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 	if throughPut == 0 {
 		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s",
 			summary.TransfersCompleted,

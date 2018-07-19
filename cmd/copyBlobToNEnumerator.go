@@ -28,11 +28,11 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
 	// Create pipeline for source Blob service.
-	// TODO: Note: only anonymous credential is supported for blob source(i.e. SAS or public) now.
-	// credential validation logic for both source and destination
-	// Note: e.CredentialInfo is for destination
+	// For copy source with blob type, only anonymous credential is supported now(i.e. SAS or public).
+	// So directoy create anonymous credential for source.
+	// Note: If traditional copy(download first, then upload need be supported), more logic should be added to parse and validate
+	// credential for both source and destination.
 	srcCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	// Note: enumerate will only be started with single thread, so no lock is used protect by design
 	srcBlobPipeline, err := createBlobPipeline(ctx, srcCredInfo)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return err
 	}
 
-	// attempt to parse the source url
+	// attempt to parse the source and destination url
 	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
 	if err != nil {
 		return errors.New("cannot parse source URL")
@@ -139,8 +139,12 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	return e.dispatchFinalPart()
 }
 
+// destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
+// The info, such as blob pipeline is created once, and reused multiple times.
 func (e *copyBlobToNEnumerator) initiateDestHelperInfo(ctx context.Context) error {
 	switch e.FromTo {
+	// Currently, e.CredentialInfo is always for the target needs to trigger copy API.
+	// In this case, blob destination will use it which needs to call StageBlockFromURL later.
 	case common.EFromTo.BlobBlob():
 		p, err := createBlobPipeline(ctx, e.CredentialInfo)
 		if err != nil {
@@ -182,9 +186,8 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 
 		// Process the containers returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, containerItem := range listSvcResp.ContainerItems {
-			// TODO: Note case for different destination URL.
 			// Whatever the destination type is, it should be equivalent to account level,
-			// directoy append container name to it.
+			// directly append container name to it.
 			tmpDestURL := destBaseURL
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, containerItem.Name)
 			containerURL := srcServiceURL.NewContainerURL(containerItem.Name)

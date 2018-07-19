@@ -12,13 +12,13 @@ import (
 )
 
 // copyFileToNEnumerator enumerates file source, and submit request for copy file to blob/file/blobFS (Currently only file->blob is supported)
-// The source could be single file/share/file account
+// The source could be single file/directory/share/file account
 type copyFileToNEnumerator common.CopyJobPartOrderRequest
 
 func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
-	// Create pipeline for source File service.
+	// Create pipeline for source Azure File service.
 	// Note: only anonymous credential is supported for file source(i.e. SAS) now.
 	// e.CredentialInfo is for destination
 	srcCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
@@ -31,7 +31,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return err
 	}
 
-	// attempt to parse the source url
+	// attempt to parse the source and destination url
 	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
 	if err != nil {
 		return errors.New("cannot parse source URL")
@@ -126,6 +126,8 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	return e.dispatchFinalPart()
 }
 
+// destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
+// The info, such as blob pipeline is created once, and reused multiple times.
 func (e *copyFileToNEnumerator) initiateDestHelperInfo(ctx context.Context) error {
 	switch e.FromTo {
 	case common.EFromTo.FileBlob():

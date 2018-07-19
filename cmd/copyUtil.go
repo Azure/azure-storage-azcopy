@@ -503,7 +503,7 @@ func (util copyHandlerUtil) searchPrefixFromBlobURL(parts azblob.BlobURLParts) (
 // Note: This method doesn't validate if the provided URL points to a FileURL, and will treat the input without
 // wildcard as directory URL.
 func (util copyHandlerUtil) getDirURLAndSearchPrefixFromFileURL(parts azfile.FileURLParts, p pipeline.Pipeline) (dirURL azfile.DirectoryURL, prefix string) {
-	// If the  is empty, it means the url provided is of a share,
+	// If the DirectoryOrFilePath is empty, it means the url provided is of a share,
 	// then all files and directories inside share needs to be included, so pattern is set to *
 	if parts.DirectoryOrFilePath == "" {
 		dirURL = azfile.NewDirectoryURL(parts.URL(), p)
