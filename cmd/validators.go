@@ -94,8 +94,9 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BlobFSLocal()
 	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Blob():
 		return common.EFromTo.BlobBlob()
-	case srcLocation == ELocation.File() && dstLocation == ELocation.Blob():
-		return common.EFromTo.FileBlob()
+		// TODO: Hide File to Blob direction.
+		// case srcLocation == ELocation.File() && dstLocation == ELocation.Blob():
+		// 	return common.EFromTo.FileBlob()
 	}
 	return common.EFromTo.Unknown()
 }
