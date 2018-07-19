@@ -196,6 +196,8 @@ func (FromTo) BlobTrash() FromTo   { return FromTo(9) }
 func (FromTo) FileTrash() FromTo   { return FromTo(10) }
 func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
 func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
+func (FromTo) BlobBlob() FromTo    { return FromTo(13) }
+func (FromTo) FileBlob() FromTo    { return FromTo(14) }
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -381,4 +383,14 @@ type CopyTransfer struct {
 	Destination      string
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
+
+	// Properties for service to service copy
+	ContentType        string
+	ContentEncoding    string
+	ContentDisposition string
+	ContentLanguage    string
+	CacheControl       string
+	ContentMD5         string
+	Metadata           string
+	//BlobTier           string //TODO
 }

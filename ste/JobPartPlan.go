@@ -1,11 +1,13 @@
 package ste
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
 	"unsafe"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -80,7 +82,7 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
-// getTransferSrcDstDetail return the source and destination string for a transfer at given transferIndex in JobPartOrder
+// TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
 func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string) {
 	jppt := jpph.Transfer(transferIndex)
 
@@ -97,6 +99,71 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Cap = sh.Len
 
 	return string(srcSlice), string(dstSlice)
+}
+
+func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
+	tempSlice := []byte{}
+	sh := (*reflect.SliceHeader)(unsafe.Pointer(&tempSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(offset) // Address of Job Part Plan + this string's offset
+	sh.Len = int(length)
+	sh.Cap = sh.Len
+
+	return string(tempSlice)
+}
+
+// TransferSrcHTTPHeadersAndMetadata returns the SrcHTTPHeaders for a transfer at given transferIndex in JobPartOrder
+func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata map[string]string) {
+	var err error
+	t := jpph.Transfer(transferIndex)
+
+	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
+
+	if t.SrcContentTypeLength != 0 {
+		h.ContentType = jpph.getString(offset, t.SrcContentTypeLength)
+		offset += int64(t.SrcContentTypeLength)
+	}
+	if t.SrcContentEncodingLength != 0 {
+		h.ContentEncoding = jpph.getString(offset, t.SrcContentEncodingLength)
+		offset += int64(t.SrcContentEncodingLength)
+	}
+	if t.SrcContentLanguageLength != 0 {
+		h.ContentLanguage = jpph.getString(offset, t.SrcContentLanguageLength)
+		offset += int64(t.SrcContentLanguageLength)
+	}
+	if t.SrcContentDispositionLength != 0 {
+		h.ContentDisposition = jpph.getString(offset, t.SrcContentDispositionLength)
+		offset += int64(t.SrcContentDispositionLength)
+	}
+	if t.SrcCacheControlLength != 0 {
+		h.CacheControl = jpph.getString(offset, t.SrcCacheControlLength)
+		offset += int64(t.SrcCacheControlLength)
+	}
+	if t.SrcContentMD5Length != 0 {
+		h.ContentMD5 = []byte(jpph.getString(offset, t.SrcContentMD5Length))
+		offset += int64(t.SrcContentMD5Length)
+	}
+	if t.SrcMetadataLength != 0 {
+		tmpMetaData := jpph.getString(offset, t.SrcMetadataLength)
+		metadata, err = unmarshalMetadata(tmpMetaData)
+		if err != nil { // should not happen in normal case
+			panic(err)
+		}
+		offset += int64(t.SrcMetadataLength)
+	}
+
+	return
+}
+
+func unmarshalMetadata(metadataString string) (map[string]string, error) {
+	var result map[string]string
+	if metadataString != "" {
+		err := json.Unmarshal([]byte(metadataString), &result)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,6 +228,17 @@ type JobPartPlanTransfer struct {
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
+
+	// For S2S copy, per Transfer source's properties
+	// TODO: ensure the length is enough
+	SrcContentTypeLength        int16
+	SrcContentEncodingLength    int16
+	SrcContentLanguageLength    int16
+	SrcContentDispositionLength int16
+	SrcCacheControlLength       int16
+	SrcContentMD5Length         int16
+	SrcMetadataLength           int16
+	//SrcBlobTierLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

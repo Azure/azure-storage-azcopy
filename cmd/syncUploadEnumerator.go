@@ -129,7 +129,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 
 	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl)
 	containerUrl := util.getContainerUrl(blobUrlParts)
-	searchPrefix, pattern := util.searchPrefixFromUrl(blobUrlParts)
+	searchPrefix, pattern := util.searchPrefixFromBlobURL(blobUrlParts)
 
 	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
 

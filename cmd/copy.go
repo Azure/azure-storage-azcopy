@@ -447,7 +447,7 @@ func (cca cookedCopyCmdArgs) validateCredentialType(credentialType common.Creden
 // getCredentialType checks user provided commandline switches, and gets the proper credential type
 // for current copy command.
 func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
-	credentialType = common.ECredentialType.Anonymous()
+	credentialType = common.ECredentialType.Unknown()
 
 	if cca.useInteractiveOAuthUserCredential { // User explicty specify to use interactive login per command-line
 		credentialType = common.ECredentialType.OAuthToken()
@@ -455,6 +455,10 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 		// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
 		// verify credential type with cached token info, src or dest blob resource URL.
 		switch cca.fromTo {
+		case common.EFromTo.BlobBlob():
+			// For blob to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
+			// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
+			fallthrough
 		case common.EFromTo.LocalBlob():
 			credentialType, err = getBlobCredentialType(context.Background(), cca.dst, false)
 			if err != nil {
@@ -472,6 +476,9 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
+		default:
+			credentialType = common.ECredentialType.Anonymous()
+			glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
 		}
 	}
 
@@ -574,6 +581,17 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		e := removeFileEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
+	case common.EFromTo.BlobBlob():
+		e := copyBlobToNEnumerator(jobPartOrder)
+		err = e.enumerate(cca)
+		lastPartNumber = e.PartNum
+	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
+	// case common.EFromTo.FileBlob():
+	// 	e := copyFileToNEnumerator(jobPartOrder)
+	// 	err = e.enumerate(cca)
+	// 	lastPartNumber = e.PartNum
+	default:
+		return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
 	}
 
 	if err != nil {
@@ -663,11 +681,20 @@ func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
-		summary.TransfersCompleted,
-		summary.TransfersFailed,
-		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	if throughPut == 0 {
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers,
+			scanningString))
+	} else {
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	}
 }
 
 func isStdinPipeIn() (bool, error) {
