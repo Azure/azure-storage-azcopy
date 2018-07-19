@@ -105,37 +105,6 @@ class BlobFs_Upload_ShareKey_User_Scenarios(unittest.TestCase):
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
 
-    def util_test_blobfs_upload_2000_1Kb_file(
-        self,
-        explictFromTo=False,
-        forceOAuthLogin=False,
-        tenantID="",
-        aadEndpoint=""):
-        # create dir with 100 1KB files inside it
-        dir_name = "dir_blobfs_2000_1K"
-        dir_n_file_path = util.create_test_n_files(1024, 2000, dir_name)
-
-        # Upload the directory with 2000 files inside it
-        cmd = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-            add_flags("log-level", "Info").add_flags("recursive","true")
-        util.process_oauth_command(
-            cmd,
-            "LocalBlobFS" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Validate the uploaded directory
-        dirUrl = util.test_bfs_account_url + dir_name
-        result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
-            add_flags("is-object-dir", "true").execute_azcopy_verify()
-        self.assertTrue(result)
-
     def test_blobfs_upload_1Kb_file_with_sharedkey(self):
         self.util_test_blobfs_upload_1Kb_file()
 
@@ -144,6 +113,3 @@ class BlobFs_Upload_ShareKey_User_Scenarios(unittest.TestCase):
 
     def test_blobfs_upload_100_1Kb_file_with_sharedkey(self):
         self.util_test_blobfs_upload_100_1Kb_file()
-
-    def test_blobfs_upload_2000_1Kb_file_with_sharedkey(self):
-        self.util_test_blobfs_upload_2000_1Kb_file()

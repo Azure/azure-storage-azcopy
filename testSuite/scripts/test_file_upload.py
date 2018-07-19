@@ -29,8 +29,8 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
 
         # execute azcopy upload.
         destination = util.get_resource_sas_from_share(file_name)
-        wildcard_path = file_path.replace(file_name, "*")
-        result = util.Command("copy").add_arguments(wildcard_path).add_arguments(destination).add_flags("log-level", "info"). \
+        wildcard_path = file_path.replace(file_name, "test_file_upload_1mb_wildcard*")
+        result = util.Command("copy").add_arguments(wildcard_path).add_arguments(util.test_share_url).add_flags("log-level", "info"). \
             add_flags("block-size", "4194304").execute_azcopy_copy_command()
         self.assertTrue(result)
 

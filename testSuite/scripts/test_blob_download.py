@@ -355,7 +355,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         tenantID="",
         aadEndpoint=""):
         # create directory and 5 files of 1KB inside that directory.
-        dir_name = "dir_" + str(10) + "_files"
+        dir_name = "util_test_recursive_download_blob_with_oauth_dir_" + str(10) + "_files"
         dir1_path = util.create_test_n_files(1024, 5, dir_name)
 
         dest = util.test_oauth_container_url
