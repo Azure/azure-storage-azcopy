@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -60,11 +61,13 @@ func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
 	srcLocation := inferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
+		glcm.Info("Can't infer source location of " + src + ". Please specify the --FromTo switch")
 		return common.EFromTo.Unknown()
 	}
 
 	dstLocation := inferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
+		glcm.Info("Can't infer destination location of " + dst + ". Please specify the --FromTo switch")
 		return common.EFromTo.Unknown()
 	}
 
@@ -109,7 +112,7 @@ func (Location) Blob() Location    { return Location(3) }
 func (Location) File() Location    { return Location(4) }
 func (Location) BlobFS() Location  { return Location(5) }
 func (l Location) String() string {
-	return common.EnumHelper{}.StringInteger(uint32(l), reflect.TypeOf(l))
+	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
 
 func inferArgumentLocation(arg string) Location {

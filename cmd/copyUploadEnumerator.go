@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -15,20 +14,19 @@ import (
 type copyUploadEnumerator common.CopyJobPartOrderRequest
 
 // this function accepts the list of files/directories to transfer and processes them
-func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst string, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 	ctx := context.TODO() // Ensure correct context is used
 
 	// attempt to parse the destination url
-	destinationURL, err := url.Parse(dst)
+	destinationURL, err := url.Parse(cca.dst)
 	if err != nil {
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
 
 	// list the source files and directories
-	listOfFilesAndDirectories, err := filepath.Glob(src)
+	listOfFilesAndDirectories, err := filepath.Glob(cca.src)
 	if err != nil || len(listOfFilesAndDirectories) == 0 {
 		return fmt.Errorf("cannot find source to upload")
 	}
@@ -71,7 +69,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 				Destination:      destinationURL.String(),
 				LastModifiedTime: f.ModTime(),
 				SourceSize:       f.Size(),
-			}, wg, waitUntilJobCompletion)
+			}, cca)
 
 			if err != nil {
 				return err
@@ -91,32 +89,32 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	if len(e.Include) > 0 {
 		for file, _ := range e.Include {
 			// append the file name in the include flag to the soure directory
-			// For Example: src = C:\User\new-User include = "file.txt;file2.txt"
+			// For Example: cca.src = C:\User\new-User include = "file.txt;file2.txt"
 			// currentFile = C:\User\new\User\file.txt
-			currentFile := src + string(os.PathSeparator) + file
+			currentFile := cca.src + string(os.PathSeparator) + file
 			// temporary saving the destination Url to later modify it
 			// to get the resource Url
 			currentDestinationUrl := *destinationURL
 			f, err := os.Stat(currentFile)
 			if err != nil {
-				return fmt.Errorf("invalid file name %s. It doesn't exists inside the directory %s", file, src)
+				return fmt.Errorf("invalid file name %s. It doesn't exists inside the directory %s", file, cca.src)
 			}
 			// When the string in include flag is a file
 			// add it to the transfer list.
 			// Example: currentFile = C:\User\new\User\file.txt
 			if !f.IsDir() {
 				currentDestinationUrl.Path = util.generateObjectPath(currentDestinationUrl.Path,
-					util.getRelativePath(src, currentFile, string(os.PathSeparator)))
+					util.getRelativePath(cca.src, currentFile, string(os.PathSeparator)))
 				e.addTransfer(common.CopyTransfer{
 					Source:           currentFile,
 					Destination:      currentDestinationUrl.String(),
 					LastModifiedTime: f.ModTime(),
 					SourceSize:       f.Size(),
-				}, wg, waitUntilJobCompletion)
+				}, cca)
 			} else {
 				// When the string in include flag is a sub-directory
 				// Example: currentFile = C:\User\new\User\dir1
-				if !isRecursiveOn {
+				if !cca.recursive {
 					// If the recursive flag is not set to true
 					// then Ignore the files inside sub-dir
 					continue
@@ -136,7 +134,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						// TODO: Currently disabling the upload of empty directories
 						//if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
 						//	currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
-						//		util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
+						//		util.getRelativePath(cca.src, pathToFile, string(os.PathSeparator)))
 						//	err = e.addTransfer(common.CopyTransfer{
 						//		Source:           pathToFile,
 						//		Destination:      currentDestinationUrl.String(),
@@ -154,13 +152,13 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					} else {
 						// create the remote Url of file inside sub-dir
 						currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
-							util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
+							util.getRelativePath(cca.src, pathToFile, string(os.PathSeparator)))
 						err = e.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      currentDestinationUrl.String(),
 							LastModifiedTime: f.ModTime(),
 							SourceSize:       f.Size(),
-						}, wg, waitUntilJobCompletion)
+						}, cca)
 						if err != nil {
 							return err
 						}
@@ -186,15 +184,15 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			var filePath = ""
 			// If the source directory doesn't have a separator at the end
 			// place a separator between the source and file
-			if src[len(src)-1] != os.PathSeparator {
-				filePath = fmt.Sprintf("%s%s%s", src, string(os.PathSeparator), file)
+			if cca.src[len(cca.src)-1] != os.PathSeparator {
+				filePath = fmt.Sprintf("%s%s%s", cca.src, string(os.PathSeparator), file)
 			} else {
-				filePath = fmt.Sprintf("%s%s", src, file)
+				filePath = fmt.Sprintf("%s%s", cca.src, file)
 			}
 			// Get the file info to verify file exists or not.
 			f, err := os.Stat(filePath)
 			if err != nil {
-				return fmt.Errorf("file %s mentioned in the exclude doesn't exists inside the source dir %s", file, src)
+				return fmt.Errorf("file %s mentioned in the exclude doesn't exists inside the source dir %s", file, cca.src)
 			}
 
 			// If the file passed is a sub-directory inside the source directory
@@ -207,7 +205,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 			if f.IsDir() {
 				// If the filePath doesn't have a separator at the end
 				// place a separator between filePath and '*'
-				if filePath[len(filePath)-1] == os.PathSeparator {
+				if filePath[len(filePath)-1] != os.PathSeparator {
 					filePath = fmt.Sprintf("%s%s%s", filePath, string(os.PathSeparator), "*")
 				} else {
 					filePath = fmt.Sprintf("%s%s", filePath, "*")
@@ -225,7 +223,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 		f, err := os.Stat(fileOrDirectoryPath)
 		if err == nil {
 			// directories are uploaded only if recursive is on
-			if f.IsDir() && isRecursiveOn {
+			if f.IsDir() && cca.recursive {
 				// walk goes through the entire directory tree
 				err = filepath.Walk(fileOrDirectoryPath, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {
@@ -241,7 +239,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 						// TODO: Currently disabling the upload of empty directories
 						//if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
 						//	destinationURL.Path = util.generateObjectPath(cleanContainerPath,
-						//		util.getRelativePath(src, pathToFile, string(os.PathSeparator)))
+						//		util.getRelativePath(cca.src, pathToFile, string(os.PathSeparator)))
 						//	err = e.addTransfer(common.CopyTransfer{
 						//		Source:           pathToFile,
 						//		Destination:      destinationURL.String(),
@@ -271,7 +269,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 							Destination:      destinationURL.String(),
 							LastModifiedTime: f.ModTime(),
 							SourceSize:       f.Size(),
-						}, wg, waitUntilJobCompletion)
+						}, cca)
 						if err != nil {
 							return err
 						}
@@ -286,7 +284,7 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 					Destination:      destinationURL.String(),
 					LastModifiedTime: f.ModTime(),
 					SourceSize:       f.Size(),
-				}, wg, waitUntilJobCompletion)
+				}, cca)
 				if err != nil {
 					return err
 				}
@@ -300,9 +298,8 @@ func (e *copyUploadEnumerator) enumerate(src string, isRecursiveOn bool, dst str
 	return e.dispatchFinalPart()
 }
 
-func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *copyUploadEnumerator) dispatchFinalPart() error {

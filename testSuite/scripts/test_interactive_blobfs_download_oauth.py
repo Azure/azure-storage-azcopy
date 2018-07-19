@@ -1,8 +1,5 @@
-import json
 import os
 import shutil
-from collections import namedtuple
-from stat import *
 import sys
 import utility as util
 
@@ -189,29 +186,8 @@ def test_blobfs_download_100_1Kb_file(
 
     # validate the downloaded directory
     result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl).\
-            add_flags("is-object-dir", "true").execute_azcopy_verify()
+                add_flags("is-object-dir", "true").execute_azcopy_verify()
     if not result:
-        print("test_blobfs_download_100_1Kb_file failed while validating the downloaded directory ")
+        print("test_blobfs_download_100_1Kb_file failed while validating the downloaded directory")
         sys.exit(1)
     print("test_blobfs_download_100_1Kb_file successfully passed")
-
-def test_blobfs_download_2000_1Kb_file():
-    # create dir with 100 1KB files inside it
-    dir_name = "dir_blobfs_2000_1K"
-    dir_n_file_path = util.create_test_n_files(1024, 2000, dir_name)
-
-    # Upload the directory with 2000 files inside it
-    result = util.Command("copy").add_arguments(dir_n_file_path).add_arguments(util.test_bfs_account_url). \
-        add_flags("log-level", "Info").add_flags("recursive","true").execute_azcopy_copy_command()
-    if not result:
-        print("test_blobfs_upload_2000_1Kb_file failed uploading the dir ", dir_name, " to the filesystem")
-        sys.exit(1)
-
-    # Validate the uploaded directory
-    dirUrl = util.test_bfs_account_url + dir_name
-    result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
-        add_flags("is-object-dir", "true").execute_azcopy_verify()
-    if not result:
-        print("test_blobfs_upload_2000_1Kb_file failed while validating the uploaded directory")
-        sys.exit(1)
-    print("test_blobfs_upload_2000_1Kb_file successfully passed")

@@ -142,7 +142,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		},
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
-	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, defaultServiceApiVersion)
+	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 
 	JobsAdmin = ja
 
@@ -268,11 +268,11 @@ type SuicideJob struct{}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func (ja jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName {
+func (ja *jobsAdmin) NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName {
 	return JobPartPlanFileName(fmt.Sprintf(jobPartPlanFileNameFormat, jobID.String(), partNumber, DataSchemaVersion))
 }
 
-func (ja jobsAdmin) FileExtension() string {
+func (ja *jobsAdmin) FileExtension() string {
 	return fmt.Sprintf(".strV%05d", DataSchemaVersion)
 }
 

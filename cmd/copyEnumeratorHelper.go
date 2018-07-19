@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"sync"
-
 	"math/rand"
 	"time"
 
@@ -11,8 +9,7 @@ import (
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
-func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
 	// while the frontend is still gathering more transfers
@@ -26,8 +23,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNum == 0 {
-			wg.Add(1)
-			go waitUntilJobCompletion(e.JobID, wg)
+			go glcm.WaitUntilJobCompletion(cca)
 		}
 		e.Transfers = []common.CopyTransfer{}
 		e.PartNum++

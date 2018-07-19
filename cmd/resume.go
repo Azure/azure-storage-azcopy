@@ -23,14 +23,90 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
 )
+
+// TODO the behavior of the resume command should be double-checked
+// TODO ex: does it output json??
+type resumeJobController struct {
+	// generated
+	jobID common.JobID
+
+	// variables used to calculate progress
+	// intervalStartTime holds the last time value when the progress summary was fetched
+	// the value of this variable is used to calculate the throughput
+	// it gets updated every time the progress summary is fetched
+	intervalStartTime        time.Time
+	intervalBytesTransferred uint64
+
+	// used to calculate job summary
+	jobStartTime time.Time
+}
+
+func (cca *resumeJobController) PrintJobStartedMsg() {
+	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
+}
+
+func (cca *resumeJobController) CancelJob() {
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *resumeJobController) InitializeProgressCounters() {
+	cca.jobStartTime = time.Now()
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = 0
+}
+
+func (cca *resumeJobController) PrintJobProgressStatus() {
+	// fetch a job status
+	var summary common.ListJobSummaryResponse
+	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+
+	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	if jobDone {
+		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+
+		glcm.ExitWithSuccess(fmt.Sprintf(
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+			summary.JobID.String(),
+			ste.ToFixed(duration.Minutes(), 4),
+			summary.TotalTransfers,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.JobStatus), common.EExitCode.Success())
+	}
+
+	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
+	// display a scanning keyword if the job is not completely ordered
+	var scanningString = ""
+	if !summary.CompleteJobOrdered {
+		scanningString = "(scanning...)"
+	}
+
+	// compute the average throughput for the last time interval
+	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+
+	// reset the interval timer and byte count
+	cca.intervalStartTime = time.Now()
+	cca.intervalBytesTransferred = summary.BytesOverWire
+
+	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+		summary.TransfersCompleted,
+		summary.TransfersFailed,
+		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+}
 
 func init() {
 	resumeCmdArgs := resumeCmdArgs{}
@@ -53,13 +129,11 @@ Resume the existing job with the given job ID.`,
 			resumeCmdArgs.jobID = args[0]
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			err := resumeCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform resume command due to error: %s", err.Error())
+				glcm.ExitWithError(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
 			}
-
-			return nil
 		},
 	}
 
@@ -83,48 +157,6 @@ type resumeCmdArgs struct {
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
 	aadEndpoint                       string
-}
-
-func waitUntilJobCompletion(jobID common.JobID) {
-
-	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	signal.Notify(CancelChannel, os.Interrupt, os.Kill)
-
-	// added an empty to provide a gap between the user given command and progress
-	fmt.Println("")
-
-	// throughputIntervalTime holds the last time value when the progress summary was fetched
-	// The value of this variable is used to calculate the throughput
-	// It gets updated every time the progress summary is fetched
-	throughputIntervalTime := time.Now()
-	// jobStartTime holds the time when Job was started
-	// The value of this variable is used to calculate the elapsed time
-	jobStartTime := throughputIntervalTime
-	bytesTransferredInLastInterval := uint64(0)
-	for {
-		select {
-		case <-CancelChannel:
-			//fmt.Println("Cancelling Job")
-			err := cookedCancelCmdArgs{jobID: jobID}.process()
-			if err != nil {
-				fmt.Println(fmt.Sprintf("error occurred while cancelling the job %s. Failed with error %s", jobID, err.Error()))
-				os.Exit(1)
-			}
-		default:
-			summary := copyHandlerUtil{}.fetchJobStatus(jobID, &throughputIntervalTime, &bytesTransferredInLastInterval, false)
-			// happy ending to the front end
-			if summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled() {
-				copyHandlerUtil{}.PrintFinalJobProgressSummary(summary, time.Now().Sub(jobStartTime))
-				os.Exit(0)
-			}
-
-			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-			//time.Sleep(2 * time.Second)
-			time.Sleep(2 * time.Second)
-		}
-	}
 }
 
 // processes the resume command,
@@ -193,8 +225,8 @@ func (rca resumeCmdArgs) process() error {
 			}
 		} else if oAuthTokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
 			// Scenario-Test
-			fmt.Printf("%v is set.\n", common.EnvVarOAuthTokenInfo) // TODO: Do logging what's the source of OAuth token with FE logging facilities.
-			if err != nil {                                         // this is the case when env var exists while get token info failed
+			glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo))
+			if err != nil { // this is the case when env var exists while get token info failed
 				return err
 			}
 		} else { // Scenario-2
@@ -208,7 +240,7 @@ func (rca resumeCmdArgs) process() error {
 		}
 		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 	}
-	fmt.Printf("Resume uses credential type %q.\n", credentialInfo.CredentialType) // TODO: use FE logging facility
+	glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
 
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
@@ -222,10 +254,11 @@ func (rca resumeCmdArgs) process() error {
 		&resumeJobResponse)
 
 	if !resumeJobResponse.CancelledPauseResumed {
-		return fmt.Errorf("resume failed due to error: %s", resumeJobResponse.ErrorMsg)
+		glcm.ExitWithError(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
 	}
 
-	waitUntilJobCompletion(jobID)
+	controller := resumeJobController{jobID: jobID}
+	glcm.WaitUntilJobCompletion(&controller)
 
 	return nil
 }

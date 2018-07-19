@@ -26,10 +26,10 @@ const (
 
 type JobPartPlanMMF common.MMF
 
-func (mmf JobPartPlanMMF) Plan() *JobPartPlanHeader {
+func (mmf *JobPartPlanMMF) Plan() *JobPartPlanHeader {
 	// getJobPartPlanPointer returns the memory map JobPartPlanHeader pointer
 	// casting the mmf slice's address  to JobPartPlanHeader Pointer
-	return (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&mmf)).Data))
+	return (*JobPartPlanHeader)(unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(mmf)).Data))
 }
 func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 

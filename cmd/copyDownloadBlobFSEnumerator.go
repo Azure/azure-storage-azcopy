@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync"
 
 	"net/http"
 	"time"
@@ -16,8 +15,7 @@ import (
 
 type copyDownloadBlobFSEnumerator common.CopyJobPartOrderRequest
 
-func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecursiveOn bool, destinationPath string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 	ctx := context.Background()
 
@@ -28,7 +26,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	}
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(sourceUrlString)
+	sourceUrl, err := url.Parse(cca.src)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -66,10 +64,10 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 			var destination = ""
 			// If the destination is not directory that is existing
 			// It is expected that the resource to be downloaded is downloaded at the destination provided
-			if util.isPathALocalDirectory(destinationPath) {
-				destination = util.generateLocalPath(destinationPath, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name, "/"))
+			if util.isPathALocalDirectory(cca.dst) {
+				destination = util.generateLocalPath(cca.dst, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name, "/"))
 			} else {
-				destination = destinationPath
+				destination = cca.dst
 			}
 			// convert the time of path to time format
 			// If path.LastModified is nil then lastModified time is set to current time
@@ -87,9 +85,9 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 				Destination:      destination,
 				LastModifiedTime: lModifiedTime,
 				SourceSize:       *path.ContentLength,
-			}, wg, waitUntilJobCompletion)
+			}, cca)
 		}
-		dListResp, err = directoryUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
+		dListResp, err = directoryUrl.ListDirectorySegment(ctx, &continuationMarker, true)
 		if err != nil {
 			return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
 		}
@@ -102,9 +100,8 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(sourceUrlString string, isRecur
 	return nil
 }
 
-func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *copyDownloadBlobFSEnumerator) dispatchFinalPart() error {

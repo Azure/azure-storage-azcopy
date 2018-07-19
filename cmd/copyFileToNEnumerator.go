@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -16,8 +15,7 @@ import (
 // The source could be single file/share/file account
 type copyFileToNEnumerator common.CopyJobPartOrderRequest
 
-func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, destURLStr string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
 	// Create pipeline for source File service.
@@ -34,11 +32,11 @@ func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	}
 
 	// attempt to parse the source url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(srcURLStr))
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(destURLStr))
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.dst))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
@@ -46,7 +44,7 @@ func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	srcFileURLPart := azfile.NewFileURLParts(*sourceURL)
 	// Case-1: Source is account, currently only support blob destination
 	if isAccountLevel, searchPrefix, pattern := gCopyUtil.isFileAccountLevelSearch(srcFileURLPart); isAccountLevel {
-		if pattern == "*" && !isRecursiveOn {
+		if pattern == "*" && !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
 
@@ -64,7 +62,7 @@ func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 		}
 
 		// List shares
-		err = e.enumerateSharesInAccount(ctx, srcServiceURL, *destURL, searchPrefix, wg, waitUntilJobCompletion)
+		err = e.enumerateSharesInAccount(ctx, srcServiceURL, *destURL, searchPrefix, cca)
 		if err != nil {
 			return err
 		}
@@ -95,7 +93,7 @@ func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 				"destination must point to a single file, when source is a single file.")
 		}
 		// directly use destURL as destination
-		if err := e.addTransferInternal(srcFileURL.String(), destURL.String(), fileProperties, wg, waitUntilJobCompletion); err != nil {
+		if err := e.addTransferInternal(srcFileURL.String(), destURL.String(), fileProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart()
@@ -104,7 +102,7 @@ func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	// Case-3: Source is a file share or directory
 	// Switch URL https://<account-name>/share/prefix* to ShareURL "https://<account-name>/share"
 	dirURL, searchPrefix := gCopyUtil.getDirURLAndSearchPrefixFromFileURL(srcFileURLPart, srcFilePipeline)
-	if searchPrefix == "" && !isRecursiveOn {
+	if searchPrefix == "" && !cca.recursive {
 		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
 	}
 	err = e.enumerateDirectoriesAndFilesInShare(
@@ -112,9 +110,7 @@ func (e *copyFileToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 		dirURL,
 		*destURL,
 		searchPrefix,
-		isRecursiveOn,
-		wg,
-		waitUntilJobCompletion)
+		cca)
 	if err != nil {
 		return err
 	}
@@ -163,7 +159,7 @@ func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 
 // enumerateSharesInAccount enumerates containers in blob service account.
 func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, srcServiceURL azfile.ServiceURL, destBaseURL url.URL,
-	srcSearchPattern string, wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
 	for marker := (azfile.Marker{}); marker.NotDone(); {
 		listSvcResp, err := srcServiceURL.ListSharesSegment(ctx, marker,
 			azfile.ListSharesOptions{Prefix: srcSearchPattern})
@@ -190,9 +186,7 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 				shareRootDirURL,
 				tmpDestURL,
 				"",
-				true, // isRecursiveOn
-				wg,
-				waitUntilJobCompletion)
+				cca)
 		}
 		marker = listSvcResp.NextMarker
 	}
@@ -201,7 +195,7 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 
 // enumerateDirectoriesAndFilesInShare enumerates blobs in container.
 func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.DirectoryURL, destBaseURL url.URL,
-	srcSearchPattern string, isRecursiveOn bool, wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
 	for marker := (azfile.Marker{}); marker.NotDone(); {
 		listDirResp, err := srcDirURL.ListFilesAndDirectoriesSegment(ctx, marker,
 			azfile.ListFilesAndDirectoriesOptions{Prefix: srcSearchPattern})
@@ -223,15 +217,14 @@ func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.
 				srcFileURL.String(),
 				tmpDestURL.String(),
 				srcFileProperties,
-				wg,
-				waitUntilJobCompletion)
+				cca)
 			if err != nil {
 				return err // TODO: Ensure for list errors, directly return or do logging but not return, make the list mechanism much robust
 			}
 		}
 
 		// Process the directories if the recursive mode is on
-		if isRecursiveOn {
+		if cca.recursive {
 			for _, dirItem := range listDirResp.DirectoryItems {
 				tmpSubDirURL := srcDirURL.NewDirectoryURL(dirItem.Name)
 				tmpDestURL := destBaseURL
@@ -242,9 +235,7 @@ func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.
 					tmpSubDirURL,
 					tmpDestURL,
 					"",
-					isRecursiveOn,
-					wg,
-					waitUntilJobCompletion)
+					cca)
 			}
 		}
 
@@ -253,7 +244,10 @@ func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.
 	return nil
 }
 func (e *copyFileToNEnumerator) addTransferInternal(source, dest string, properties *azfile.FileGetPropertiesResponse,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	cca *cookedCopyCmdArgs) error {
+	// TODO: This is temp work around for Azure file's content MD5, can be removed whe new File SDK get released.
+	contentMD5 := properties.ContentMD5()
+
 	return e.addTransfer(common.CopyTransfer{
 		Source:             source,
 		Destination:        dest,
@@ -264,14 +258,12 @@ func (e *copyFileToNEnumerator) addTransferInternal(source, dest string, propert
 		ContentDisposition: properties.ContentDisposition(),
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
-		ContentMD5:         string(properties.ContentMD5())},
-		wg,
-		waitUntilJobCompletion)
+		ContentMD5:         string(contentMD5[:])},
+		cca)
 }
 
-func (e *copyFileToNEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *copyFileToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *copyFileToNEnumerator) dispatchFinalPart() error {

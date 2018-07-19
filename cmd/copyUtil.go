@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
@@ -31,14 +30,11 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
@@ -641,61 +637,6 @@ func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.BlobItem) bool
 	return bInfo.Metadata["hdi_isfolder"] == "true"
 }
 
-// PrintFinalJobProgressSummary prints the final progress summary of the Job after job is either completed or cancelled.
-func (util copyHandlerUtil) PrintFinalJobProgressSummary(summary common.ListJobSummaryResponse, duration time.Duration) {
-	// added an empty line to provide gap between the last Job progress status and final job summary
-	fmt.Println("")
-	fmt.Println(fmt.Sprintf("Job %s summary ", summary.JobID.String()))
-	fmt.Println("Elapsed Time (Minutes)", ste.ToFixed(duration.Minutes(), 4))
-	fmt.Println("Total Number Of Transfers ", summary.TotalTransfers)
-	fmt.Println("Number of Transfers Completed ", summary.TransfersCompleted)
-	fmt.Println("Number of Transfers Failed ", summary.TransfersFailed)
-	fmt.Println("Final Job Status ", summary.JobStatus)
-}
-
-func (copyHandlerUtil) fetchJobStatus(jobID common.JobID, startTime *time.Time, bytesTransferredInLastInterval *uint64, outputJson bool) common.ListJobSummaryResponse {
-	var scanningString = ""
-	//lsCommand := common.ListRequest{JobID: jobID}
-	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &jobID, &summary)
-	if !summary.CompleteJobOrdered {
-		scanningString = "(scanning ...)"
-	} else {
-		scanningString = ""
-	}
-	if outputJson {
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			panic(err)
-		}
-		fmt.Println(string(jsonOutput))
-	} else {
-		bytesInMb := float64(float64(summary.BytesOverWire-*bytesTransferredInLastInterval) / float64(1024*1024))
-		timeElapsed := time.Since(*startTime).Seconds()
-		*startTime = time.Now()
-		*bytesTransferredInLastInterval = summary.BytesOverWire
-		throughPut := common.Ifffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-
-		if throughPut == 0 {
-			fmt.Printf("%v Done, %v Failed, %v Pending, %v Total%s\n",
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-				summary.TotalTransfers,
-				scanningString)
-		} else {
-			fmt.Printf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v\n",
-				summary.TransfersCompleted,
-				summary.TransfersFailed,
-				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-				summary.TotalTransfers,
-				scanningString,
-				ste.ToFixed(throughPut, 4))
-		}
-	}
-	return summary
-}
-
 func startsWith(s string, t string) bool {
 	return len(s) >= len(t) && strings.EqualFold(s[0:len(t)], t)
 }
@@ -724,9 +665,6 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 	url := givenURL
 	path := url.Path
 
-	buffer := bytes.Buffer{}
-	defer buffer.Reset() // Ensure to free the buffer.
-
 	if strings.HasSuffix(path, "*") {
 		lastSlashIndex := strings.LastIndex(path, "/")
 		url.Path = url.Path[:lastSlashIndex]
@@ -738,7 +676,7 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 			if gResp, err := fileURL.GetProperties(ctx); err == nil {
 				return nil, &fileURL, gResp, true
 			} else {
-				fmt.Fprintf(&buffer, "Fail to parse %v as a file for error %v, given URL: %s\n", url, err, givenURL.String())
+				glcm.Info("Fail to parse " + url.String() + " as a file for error " + err.Error() + ", given URL: " + givenURL.String())
 			}
 		}
 	}
@@ -746,11 +684,8 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 	if _, err := dirURL.GetProperties(ctx); err == nil {
 		return &dirURL, nil, nil, true
 	} else {
-		fmt.Fprintf(&buffer, "Fail to parse %v as a directory for error %v, given URL: %s\n", url, err, givenURL.String())
+		glcm.Info("Fail to parse " + url.String() + " as a directory for error " + err.Error() + ", given URL: " + givenURL.String())
 	}
-
-	// Log the error if the given URL is neither an existing Azure file directory nor an existing Azure file.
-	fmt.Print(buffer.String())
 
 	return nil, nil, nil, false
 }

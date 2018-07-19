@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -25,8 +24,7 @@ type destHelperInfo struct {
 
 var destInfo destHelperInfo
 
-func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, destURLStr string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
 	// Create pipeline for source Blob service.
@@ -45,11 +43,11 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	}
 
 	// attempt to parse the source url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(srcURLStr))
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(destURLStr))
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.dst))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
@@ -57,7 +55,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	srcBlobURLPart := azblob.NewBlobURLParts(*sourceURL)
 	// Case-1: Source is account, currently only support blob destination
 	if isAccountLevel, searchPrefix, pattern := gCopyUtil.isBlobAccountLevelSearch(srcBlobURLPart); isAccountLevel {
-		if pattern == "*" && !isRecursiveOn {
+		if pattern == "*" && !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
 
@@ -75,7 +73,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 		}
 
 		// List containers
-		err = e.enumerateContainersInAccount(ctx, srcServiceURL, *destURL, searchPrefix, wg, waitUntilJobCompletion)
+		err = e.enumerateContainersInAccount(ctx, srcServiceURL, *destURL, searchPrefix, cca)
 		if err != nil {
 			return err
 		}
@@ -106,7 +104,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 				"destination must point to a single file, when source is a single file.")
 		}
 		// directly use destURL as destination
-		if err := e.addTransferInternal2(srcBlobURL.String(), destURL.String(), blobProperties, wg, waitUntilJobCompletion); err != nil {
+		if err := e.addTransferInternal2(srcBlobURL.String(), destURL.String(), blobProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart()
@@ -115,7 +113,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 	// Case-3: Source is a blob container or directory
 	// Switch URL https://<account-name>/container/blobprefix* to ContainerURL "https://<account-name>/container"
 	searchPrefix, pattern := gCopyUtil.searchPrefixFromBlobURL(srcBlobURLPart)
-	if pattern == "*" && !isRecursiveOn {
+	if pattern == "*" && !cca.recursive {
 		return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
 	}
 	tmpSrcBlobURLPart := srcBlobURLPart
@@ -125,8 +123,7 @@ func (e *copyBlobToNEnumerator) enumerate(srcURLStr string, isRecursiveOn bool, 
 		azblob.NewContainerURL(tmpSrcBlobURLPart.URL(), srcBlobPipeline),
 		*destURL,
 		searchPrefix,
-		wg,
-		waitUntilJobCompletion)
+		cca)
 	if err != nil {
 		return err
 	}
@@ -175,7 +172,7 @@ func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 
 // enumerateContainersInAccount enumerates containers in blob service account.
 func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context, srcServiceURL azblob.ServiceURL, destBaseURL url.URL,
-	srcSearchPattern string, wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		listSvcResp, err := srcServiceURL.ListContainersSegment(ctx, marker,
 			azblob.ListContainersSegmentOptions{Prefix: srcSearchPattern})
@@ -203,8 +200,7 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 				containerURL,
 				tmpDestURL,
 				"",
-				wg,
-				waitUntilJobCompletion)
+				cca)
 		}
 		marker = listSvcResp.NextMarker
 	}
@@ -213,7 +209,7 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 
 // enumerateBlobsInContainer enumerates blobs in container.
 func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
-	srcSearchPattern string, wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		listContainerResp, err := srcContainerURL.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: srcSearchPattern})
@@ -237,8 +233,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 				tmpDestURL.String(),
 				&blobItem.Properties,
 				map[string]string(blobItem.Metadata),
-				wg,
-				waitUntilJobCompletion)
+				cca)
 			if err != nil {
 				return err // TODO: Ensure for list errors, directly return or do logging but not return, make the list mechanism much robust
 			}
@@ -249,7 +244,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 }
 
 func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, properties *azblob.BlobProperties, metadata azblob.Metadata,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
 		return fmt.Errorf(
 			"invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
@@ -280,12 +275,11 @@ func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, propert
 		ContentMD5:         string(md5DecodedBytes),
 		Metadata:           metadataStr},
 		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly
-		wg,
-		waitUntilJobCompletion)
+		cca)
 }
 
 func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, properties *azblob.BlobGetPropertiesResponse,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
+	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType() != azblob.BlobBlockBlob {
 		return fmt.Errorf(
 			"invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
@@ -310,13 +304,11 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, proper
 		ContentMD5:         string(properties.ContentMD5()),
 		Metadata:           metadataStr},
 		//BlobTier:           properties.AccessTier()}, // TODO: blob tier setting correctly
-		wg,
-		waitUntilJobCompletion)
+		cca)
 }
 
-func (e *copyBlobToNEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *copyBlobToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *copyBlobToNEnumerator) dispatchFinalPart() error {

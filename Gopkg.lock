@@ -28,8 +28,14 @@
     "autorest/adal",
     "autorest/date"
   ]
-  revision = "1f7cd6cfe0adea687ad44a512dfe76140f804318"
-  version = "v10.12.0"
+  revision = "894522ed0d5cab8d143c39116ddc5f605a1931ee"
+  version = "v10.13.0"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/JeffreyRichter/enum"
+  packages = ["enum"]
+  revision = "7442b5f6e9f53e7658880bd67da9402700acd72e"
 
 [[projects]]
   name = "github.com/dgrijalva/jwt-go"
@@ -106,7 +112,7 @@
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
-  revision = "bb74f1db0675b241733089d5a1faa5dd8b0ef57b"
+  revision = "f15292f7a699fcc1a38a80977f80a046874ba8ac"
 
 [[projects]]
   name = "github.com/pelletier/go-toml"
@@ -157,7 +163,7 @@
   branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "1b2967e3c290b7c545b3db0deeda16e9be4f98a2"
+  revision = "ac767d655b305d4e9612f5f6e33120b9176c4ad4"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -187,6 +193,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "59ad96ee2f804f82a1bc141edda582518ef5855b03051a0bc0b364c570519d3d"
+  inputs-digest = "c905cf6f2885f541f2a0437d28b149dac3f4a6bd7e273d1a8d86987019262e58"
   solver-name = "gps-cdcl"
   solver-version = 1

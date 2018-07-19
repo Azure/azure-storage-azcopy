@@ -1,11 +1,7 @@
-from test_blob_download import *
-from test_blob_download_oauth import *
-from test_upload_block_blob import *
-from test_upload_page_blob import *
-from test_azcopy_operations import *
-from test_blobfs_upload import *
-from test_blobfs_download import *
-from test_oauth import *
+from test_interactive_blob_download_oauth import *
+from test_interactive_blobfs_upload_oauth import *
+from test_interactive_blobfs_download_oauth import *
+from test_interactive_operation_oauth import *
 import glob, os
 import configparser
 import platform
@@ -15,12 +11,8 @@ def execute_interactively_copy_blob_oauth_session_scenario():
     #login to get session
     test_login_with_default()
     #execute copy commands
-    test_1kb_blob_upload(True)
-    test_n_1kb_blob_upload(5, True)
-    test_1GB_blob_upload(True)
     test_download_1kb_blob_oauth()
     test_recursive_download_blob_oauth()
-    test_page_blob_upload_1mb(True)
     #logout
     test_logout()
 
@@ -87,10 +79,10 @@ def parse_config_file_set_env():
     os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
 
     # set the account name for blob fs service operation
-    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
+    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['ACCOUNT_NAME']
 
     # set the account key for blob fs service operation
-    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['ACCOUNT_KEY']
 
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
@@ -101,22 +93,23 @@ def parse_config_file_set_env():
     # set oauth aad endpoint
     os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
 
+def check_env_not_exist(key):
+    if os.environ.get(key, '-1') == '-1':
+        print('Environment variable: ' + key + ' not set.')
+        return True
+    return False
 
 def init():
     # Check the environment variables.
     # If they are not set, then parse the config file and set
     # environment variables. If any of the env variable is not set
     # test_config_file is parsed and env variables are reset.
-    if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
-            os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
-            os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
-            os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
-            os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
-            os.environ.get('OAUTH_TENANT_ID', '-1') == '-1' or \
-            os.environ.get('OAUTH_AAD_ENDPOINT', '-1') == '-1':
+    if check_env_not_exist('TEST_DIRECTORY_PATH') or check_env_not_exist('AZCOPY_EXECUTABLE_PATH') or \
+            check_env_not_exist('TEST_SUITE_EXECUTABLE_LOCATION') or check_env_not_exist('CONTAINER_SAS_URL') or \
+            check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
+            check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
+            check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
+            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
         parse_config_file_set_env()
 
     # Get the environment variables value

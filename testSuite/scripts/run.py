@@ -4,128 +4,15 @@ from test_upload_page_blob import *
 from test_file_download import *
 from test_file_upload import *
 from test_azcopy_operations import *
-from test_blobfs_upload import *
-from test_blobfs_download import *
-from test_blob_download_oauth import *
+from test_blobfs_upload_sharedkey import *
+from test_blobfs_upload_oauth import *
+from test_blobfs_download_sharedkey import *
+from test_blobfs_download_oauth import *
 import glob, os
 import configparser
 import platform
-
-
-def execute_user_scenario_blob_1():
-    test_0KB_blob_upload()
-    test_1kb_blob_upload()
-    test_63mb_blob_upload()
-    test_n_1kb_blob_upload(5)
-    test_1GB_blob_upload()
-    test_blob_metaData_content_encoding_content_type()
-    test_block_size(4 * 1024 * 1024)
-    test_guess_mime_type()
-    test_download_1kb_blob()
-    test_blob_download_preserve_last_modified_time()
-    test_blob_download_63mb_in_4mb()
-    test_recursive_download_blob()
-    # test_cancel_job()
-    # test_blob_download_63mb_in_4mb()
-    # #test_pause_resume_job_200Mb_file()
-    # #test_pause_resume_job_95Mb_file()
-    test_page_blob_upload_1mb()
-    test_page_range_for_complete_sparse_file()
-    test_page_blob_upload_partial_sparse_file()
-
-def execute_user_scenario_wildcards_op():
-    test_remove_files_with_Wildcard()
-
-def execute_blob_oauth_bvt():
-    test_download_1kb_blob_oauth()
-    test_recursive_download_blob_oauth()
-
-def execute_bfs_shared_key_user_scenario():
-    # silently use shared key set
-    os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
-    test_blobfs_upload_1Kb_file()
-    test_blobfs_upload_64MB_file()
-    test_blobfs_upload_100_1Kb_file()
-    test_blobfs_download_1Kb_file()
-    test_blobfs_download_64MB_file()
-    test_blobfs_download_100_1Kb_file()
-
-def execute_bfs_oauth_user_scenario():
-    # silently use AZCOPY_OAUTH_TOKEN_INFO set
-    test_blobfs_upload_1Kb_file()
-    test_blobfs_upload_64MB_file()
-    test_blobfs_upload_100_1Kb_file()
-    test_blobfs_download_1Kb_file()
-    test_blobfs_download_64MB_file()
-    test_blobfs_download_100_1Kb_file()
-
-def execute_sync_user_scenario():
-    test_sync_local_to_blob_without_wildCards()
-    test_sync_local_to_blob_with_wildCards()
-    test_sync_blob_download_with_wildcards()
-    test_sync_blob_download_without_wildcards()
-
-
-def execute_user_scenario_azcopy_op():
-    test_download_blob_exclude_flag()
-    test_download_blob_include_flag()
-    test_upload_block_blob_include_flag()
-    test_upload_block_blob_exclude_flag()
-    test_remove_virtual_directory()
-    test_set_block_blob_tier()
-    test_set_page_blob_tier()
-    test_force_flag_set_to_false_upload()
-    test_force_flag_set_to_false_download()
-
-
-def execute_file_sas_bvt():
-    #########################
-    # download
-    #########################
-    # single file download scenario
-    test_upload_download_0kb_file_fullname()
-    test_upload_download_1kb_file_fullname()
-    # single file download with wildcard scenarios
-    # Using /*, which actually upload/download everything in a directory
-    test_upload_download_1kb_file_wildcard_all_files()
-    # Using /pattern*, which actually upload/download matched files in specific directory
-    test_upload_download_1kb_file_wildcard_several_files()
-    # directory download scenario
-    test_6_1kb_file_in_dir_upload_download_share()
-    test_3_1kb_file_in_dir_upload_download_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_download_azure_directory_non_recursive()
-    # modified time
-    test_download_perserve_last_modified_time()
-    # different sizes
-    test_file_download_63mb_in_4mb()
-    # directory transfer scenarios
-    # test_recursive_download_file()
-
-    #########################
-    # upload
-    #########################
-    # single file upload scenario
-    test_file_upload_1mb_fullname()
-    # wildcard scenario, already coverred in download scenario, as file would be uploaded first
-    # test_file_upload_1mb_wildcard()
-    # single sparse file and range
-    test_file_range_for_complete_sparse_file()
-    test_file_upload_partial_sparse_file()
-    # directory transfer scenarios, already covered during download
-    # test_6_1kb_file_in_dir_upload_to_share()
-    # test_3_1kb_file_in_dir_upload_to_azure_directory_recursive()
-    # test_8_1kb_file_in_dir_upload_to_azure_directory_non_recursive()
-    # metadata and mime-type
-    test_metaData_content_encoding_content_type()
-    test_guess_mime_type()
-    # different sizes
-    test_9mb_file_upload()
-    test_1GB_file_upload()
-
-
-def execute_user_scenario_2():
-    test_blob_download_with_special_characters()
-
+import sys
+import unittest
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
@@ -175,10 +62,10 @@ def parse_config_file_set_env():
     os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
 
     # set the account name for blob fs service operation
-    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['BFS_ACCOUNT_NAME']
+    os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['ACCOUNT_NAME']
 
     # set the account key for blob fs service operation
-    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['BFS_ACCOUNT_KEY']
+    os.environ['ACCOUNT_KEY'] = config['CREDENTIALS']['ACCOUNT_KEY']
 
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
@@ -186,23 +73,24 @@ def parse_config_file_set_env():
     # set the env var OAuth token info
     os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
 
+def check_env_not_exist(key):
+    if os.environ.get(key, '-1') == '-1':
+        print('Environment variable: ' + key + ' not set.')
+        return True
+    return False
+
+
 def init():
     # Check the environment variables.
     # If they are not set, then parse the config file and set
     # environment variables. If any of the env variable is not set
     # test_config_file is parsed and env variables are reset.
-    if os.environ.get('TEST_DIRECTORY_PATH', '-1') == '-1' or \
-            os.environ.get('AZCOPY_EXECUTABLE_PATH', '-1') == '-1' or \
-            os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION', '-1') == '-1' or \
-            os.environ.get('CONTAINER_SAS_URL', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_URL', '-1') == '-1' or \
-            os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('SHARE_SAS_URL', '-1') == '-1' or \
-            os.environ.get('PREMIUM_CONTAINER_SAS_URL', '-1') == '-1' or \
-            os.environ.get('FILESYSTEM_URL' '-1') == '-1' or \
-            os.environ.get('ACCOUNT_NAME', '-1') == '-1' or \
-            os.environ.get('ACCOUNT_KEY', '-1') == '-1' or \
-            os.environ.get('AZCOPY_OAUTH_TOKEN_INFO', '-1'):
+    if check_env_not_exist('TEST_DIRECTORY_PATH') or check_env_not_exist('AZCOPY_EXECUTABLE_PATH') or \
+            check_env_not_exist('TEST_SUITE_EXECUTABLE_LOCATION') or check_env_not_exist('CONTAINER_SAS_URL') or \
+            check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
+            check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
+            check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
+            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -257,18 +145,39 @@ def cleanup():
 
 
 def main():
+    print("Smoke tests starting...")
     init()
-    execute_bfs_oauth_user_scenario()
-    execute_blob_oauth_bvt()
-    #execute_bfs_shared_key_user_scenario()
-    execute_sync_user_scenario()
-    execute_user_scenario_wildcards_op()
-    execute_user_scenario_azcopy_op()
-    execute_user_scenario_blob_1()
-    execute_user_scenario_2()
-    execute_file_sas_bvt()
-    cleanup()
+    suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
 
+    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_OAuth_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_OAuth_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)    
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Azcopy_Operation_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Download_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Upload_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_ShareKey_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_SharedKey_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    cleanup()
 
 if __name__ == '__main__':
     main()

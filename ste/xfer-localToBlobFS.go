@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
+	"os"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"net/url"
-	"os"
 )
 
 type fileRangeAppend struct {
@@ -159,7 +160,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				// Get the transfer Info and log the details
@@ -219,7 +220,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			} else {
 				// If the transfer was not cancelled, then append range failed due to some other reason
 				if fru.jptm.ShouldLog(pipeline.LogInfo) {
-					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSUploadFailed while appending the range to the file %s for startIndex %s and range interval %s. "+
+					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSUploadFailed while appending the range to the file %s for startIndex %d and range interval %d. "+
 						"Failed with error %s", fru.fileUrl, startRange, calculatedRangeInterval, err.Error()))
 				}
 				// cancel the transfer
@@ -240,7 +241,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		// successfully appended the range to the file
 		if fru.jptm.ShouldLog(pipeline.LogInfo) {
 			fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("successfully appended the range for file %s for startrange %d "+
-				"and rangeInterval %s", fru.fileUrl, startRange, calculatedRangeInterval))
+				"and rangeInterval %d", fru.fileUrl, startRange, calculatedRangeInterval))
 		}
 
 		// add range updated to bytes done for progress

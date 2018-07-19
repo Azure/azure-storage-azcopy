@@ -2,20 +2,20 @@ package ste
 
 import (
 	"fmt"
-	"net/url"
-	"os"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"io/ioutil"
+	"net/url"
+	"os"
 )
 
-type  BlobFSFileDownload struct {
-	jptm IJobPartTransferMgr
+type BlobFSFileDownload struct {
+	jptm       IJobPartTransferMgr
 	srcFileURL azbfs.FileURL
-	destMMF *common.MMF
-	pacer *pacer
+	destMMF    *common.MMF
+	pacer      *pacer
 }
 
 func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -41,7 +41,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
 		_, err := os.Stat(info.Destination)
-		if err == nil{
+		if err == nil {
 			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
 			if jptm.ShouldLog(pipeline.LogInfo) {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
@@ -133,10 +133,10 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		}
 		jptm.SetNumberOfChunks(numChunks)
 		blockIdCount := int32(0)
-		bffd := &BlobFSFileDownload{jptm:jptm,
-									srcFileURL: srcBlobURL.NewFileUrl(),
-									destMMF : dstMMF,
-									pacer: pacer}
+		bffd := &BlobFSFileDownload{jptm: jptm,
+			srcFileURL: srcBlobURL.NewFileUrl(),
+			destMMF:    dstMMF,
+			pacer:      pacer}
 		// step 4: go through the blob range and schedule download chunk jobs
 		for startIndex := int64(0); startIndex < sourceSize; startIndex += downloadChunkSize {
 			adjustedChunkSize := downloadChunkSize
@@ -152,13 +152,13 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	}
 }
 
-func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, startIndex int64, adjustedRangeSize int64) chunkFunc{
-	return func(workerId int){
+func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, startIndex int64, adjustedRangeSize int64) chunkFunc {
+	return func(workerId int) {
 
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func (jptm IJobPartTransferMgr) {
+		defer func(jptm IJobPartTransferMgr) {
 			r := recover()
 			if r != nil {
 				// Get the transfer Info and log the details
@@ -195,7 +195,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				if bffd.jptm.TransferStatus() <= 0 {
 					err := os.Remove(info.Destination)
 					if err != nil {
-						if bffd.jptm.ShouldLog(pipeline.LogError){
+						if bffd.jptm.ShouldLog(pipeline.LogError) {
 							bffd.jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", bffd.jptm.Info().Destination, err.Error()))
 						}
 					}
@@ -263,12 +263,12 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 					err := os.Chtimes(bffd.jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
 						if bffd.jptm.ShouldLog(pipeline.LogInfo) {
-							bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, bffd))
+							bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, info.Destination))
 						}
 						return
 					}
 					if bffd.jptm.ShouldLog(pipeline.LogInfo) {
-						bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which successfully preserve the last modified time for destinaton %s", workerId, info.Destination ))
+						bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which successfully preserve the last modified time for destinaton %s", workerId, info.Destination))
 					}
 				}
 			}

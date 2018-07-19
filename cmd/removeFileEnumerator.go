@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -22,9 +21,7 @@ type removeFileEnumerator common.CopyJobPartOrderRequest
 // Case 2: Not end with star, means remove a single file or a directory.
 // directory/dir
 // directory/file
-func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn bool, destinationPath string,
-	wg *sync.WaitGroup, waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-
+func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// Init params.
 	util := copyHandlerUtil{}
 	p := azfile.NewPipeline(
@@ -41,8 +38,8 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 				Value: common.UserAgent,
 			},
 		})
-	ctx := context.TODO()                                                    // Ensure correct context is used
-	cookedSourceURLString := util.replaceBackSlashWithSlash(sourceURLString) // Replace back slash with slash, otherwise url.Parse would encode the back slash.
+	ctx := context.TODO()                                            // Ensure correct context is used
+	cookedSourceURLString := util.replaceBackSlashWithSlash(cca.src) // Replace back slash with slash, otherwise url.Parse would encode the back slash.
 
 	// Attempt to parse the source url.
 	sourceURL, err := url.Parse(cookedSourceURLString)
@@ -58,7 +55,7 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 	doPrefixSearch := numOfStartInURLPath == 1
 
 	// For prefix search, only support file name matching in file prefix's parent dir level.
-	if isRecursiveOn && doPrefixSearch {
+	if cca.recursive && doPrefixSearch {
 		return fmt.Errorf("only support file name matching in file prefix's parent dir level, prefix matching with recursive mode is not supported currently for Azure file remove")
 	}
 
@@ -77,7 +74,7 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 
 	if doPrefixSearch { // Case 1: Do prefix search, the file pattern would be [AnyLetter]+\*
 		// The destination must be a directory, otherwise we don't know where to put the files.
-		if !util.isPathALocalDirectory(destinationPath) {
+		if !util.isPathALocalDirectory(cca.dst) {
 			return fmt.Errorf("the destination must be an existing directory in this remove scenario")
 		}
 
@@ -107,9 +104,7 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 
 				e.addTransfer(common.CopyTransfer{
 					Source:     f.String(),
-					SourceSize: fileInfo.Properties.ContentLength},
-					wg,
-					waitUntilJobCompletion)
+					SourceSize: fileInfo.Properties.ContentLength}, cca)
 			}
 
 			marker = lResp.NextMarker
@@ -127,9 +122,7 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 				common.CopyTransfer{
 					Source:     sourceURL.String(),
 					SourceSize: fileProperties.ContentLength(),
-				},
-				wg,
-				waitUntilJobCompletion)
+				}, cca)
 
 		} else { // Directory.
 			dirStack := &directoryStack{}
@@ -153,13 +146,11 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 						e.addTransfer(
 							common.CopyTransfer{
 								Source:     f.String(),
-								SourceSize: fileInfo.Properties.ContentLength},
-							wg,
-							waitUntilJobCompletion)
+								SourceSize: fileInfo.Properties.ContentLength}, cca)
 					}
 
 					// If recursive is turned on, add sub directories.
-					if isRecursiveOn {
+					if cca.recursive {
 						for _, dirInfo := range lResp.DirectoryItems {
 							d := currentDirURL.NewDirectoryURL(dirInfo.Name)
 							dirStack.Push(d)
@@ -179,9 +170,8 @@ func (e *removeFileEnumerator) enumerate(sourceURLString string, isRecursiveOn b
 	return nil
 }
 
-func (e *removeFileEnumerator) addTransfer(transfer common.CopyTransfer, wg *sync.WaitGroup,
-	waitUntilJobCompletion func(jobID common.JobID, wg *sync.WaitGroup)) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, wg, waitUntilJobCompletion)
+func (e *removeFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
 func (e *removeFileEnumerator) dispatchFinalPart() error {
