@@ -101,11 +101,20 @@ func (cca *resumeJobController) PrintJobProgressStatus() {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
-		summary.TransfersCompleted,
-		summary.TransfersFailed,
-		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	if throughPut == 0 {
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers,
+			scanningString))
+	} else {
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	}
 }
 
 func init() {
