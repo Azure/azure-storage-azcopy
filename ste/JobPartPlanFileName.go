@@ -4,13 +4,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"os"
 	"reflect"
 	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type JobPartPlanFileName string
@@ -159,6 +160,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		},
 		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
 	}
+
 	// Copy any strings into their respective fields
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)

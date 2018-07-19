@@ -25,14 +25,17 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"path/filepath"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
 const (
@@ -46,14 +49,22 @@ func (copyHandlerUtil) numOfStarInUrl(url string) int {
 	return strings.Count(url, "*")
 }
 
-// checks if a given url points to a container, as opposed to a blob or prefix match
-func (copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
-	// if the path contains more than one "/", then it means it points to a blob, and not a container
-	numOfSlashes := strings.Count(url.Path[1:], "/")
+// isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
+// http(s)://IP(:port)/storageaccount/share(||container||etc)/...
+func (util copyHandlerUtil) isIPEndpointStyle(url url.URL) bool {
+	return net.ParseIP(url.Host) != nil
+}
 
-	if numOfSlashes == 0 {
+// checks if a given url points to a container, as opposed to a blob or prefix match
+func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
+	// When it's IP endpoint style, if the path contains more than two "/", then it means it points to a blob, and not a container.
+	// When it's not IP endpoint style, if the path contains more than one "/", then it means it points to a blob, and not a container.
+	numOfSlashes := strings.Count(url.Path[1:], "/")
+	isIPEndpointStyle := util.isIPEndpointStyle(*url)
+
+	if (!isIPEndpointStyle && numOfSlashes == 0) || (isIPEndpointStyle && numOfSlashes == 1) {
 		return true
-	} else if numOfSlashes == 1 && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
+	} else if ((!isIPEndpointStyle && numOfSlashes == 1) || (isIPEndpointStyle && numOfSlashes == 2)) && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
 		return true
 	}
 	return false
@@ -112,24 +123,13 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 	return s.String()
 }
 
-func (util copyHandlerUtil) sharedKeyCreds() *azbfs.SharedKeyCredential {
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
-	}
-	return azbfs.NewSharedKeyCredential(name, key)
-}
-func (util copyHandlerUtil) urlIsDFSFileSystemOrDirectory(ctx context.Context, url *url.URL) bool {
+func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
 	if util.urlIsContainerOrShare(url) {
 		return true
 	}
-	c := util.sharedKeyCreds()
 	// Need to get the resource properties and verify if it is a file or directory
-	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
-	dirUrl := azbfs.NewDirectoryURL(*url, p)
-	return dirUrl.IsDirectory(context.Background())
+	dirURL := azbfs.NewDirectoryURL(*url, p)
+	return dirURL.IsDirectory(context.Background())
 }
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
@@ -210,21 +210,25 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string
 		return filePath
 	}
 
-	var scrubAway string
-	// test if root path finishes with a /, if yes, ignore it
-	if rootPath[len(rootPath)-1:] == pathSep {
-		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
-	} else {
-		// +1 because we want to include the / at the end of the dir
-		scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
-	}
+	result := filePath
+	if rootPath != "" { // Note: there would be case when rootPath is empty
+		var scrubAway string
+		// test if root path finishes with a /, if yes, ignore it
+		if rootPath[len(rootPath)-1:] == pathSep {
+			scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
+		} else {
+			// +1 because we want to include the / at the end of the dir
+			scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
+		}
 
-	result := strings.Replace(filePath, scrubAway, "", 1)
+		result = strings.Replace(filePath, scrubAway, "", 1)
+	}
 
 	// the back slashes need to be replaced with forward ones
 	if os.PathSeparator == '\\' {
 		result = strings.Replace(result, "\\", "/", -1)
 	}
+
 	return result
 }
 
@@ -530,7 +534,7 @@ func (util copyHandlerUtil) blobPathWOSpecialCharacters(blobPath string) string 
 
 // doesBlobRepresentAFolder verifies whether blob is valid or not.
 // Used to handle special scenarios or conditions.
-func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.Blob) bool {
+func (util copyHandlerUtil) doesBlobRepresentAFolder(bInfo azblob.BlobItem) bool {
 	// this condition is to handle the WASB V1 directory structure.
 	// HDFS driver creates a blob for the empty directories (let’s call it ‘myfolder’)
 	// and names all the blobs under ‘myfolder’ as such: ‘myfolder/myblob’

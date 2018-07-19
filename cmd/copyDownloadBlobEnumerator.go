@@ -8,7 +8,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 type copyDownloadBlobEnumerator common.CopyJobPartOrderRequest
@@ -18,18 +18,11 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
-		},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil)
+	p, err := createBlobPipeline(ctx, e.CredentialInfo)
+	if err != nil {
+		return err
+	}
+
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(cca.src)
 	if err != nil {
@@ -133,7 +126,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					}
 
 					// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-					for _, blobInfo := range listBlob.Blobs.Blob {
+					for _, blobInfo := range listBlob.Segment.BlobItems {
 						// If the blob represents a folder as per the conditions mentioned in the
 						// api doesBlobRepresentAFolder, then skip the blob.
 						if util.doesBlobRepresentAFolder(blobInfo) {
@@ -212,7 +205,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If the blob represents a folder as per the conditions mentioned in the
 			// api doesBlobRepresentAFolder, then skip the blob.
 			if util.doesBlobRepresentAFolder(blobInfo) {

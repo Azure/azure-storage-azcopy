@@ -46,10 +46,17 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	fileURL := azfile.NewFileURL(*u, p)
 
 	fileSize := int64(info.SourceSize)
-	chunkSize := int64(info.BlockSize)
 
-	// TODO: remove the hard coded chunk size in case of pageblob or Azure file
-	chunkSize = common.DefaultAzureFileChunkSize
+	chunkSize := int64(info.BlockSize)
+	// If the given chunk Size for the Job is greater than maximum file chunk size i.e 4 MB
+	// then chunk size will be 4 MB.
+	if chunkSize > common.DefaultAzureFileChunkSize {
+		chunkSize = common.DefaultAzureFileChunkSize
+		if jptm.ShouldLog(pipeline.LogInfo) {
+			jptm.Log(pipeline.LogInfo,
+				fmt.Sprintf("specified block size %d is larger than maximum file chunk size, use 4MB as chunk size.", info.BlockSize))
+		}
+	}
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
@@ -115,7 +122,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 
 	// Get http headers and meta data of file.
-	fileHTTPHeaders, metaData := jptm.FileDstData(*srcMmf)
+	fileHTTPHeaders, metaData := jptm.FileDstData(srcMmf)
 
 	// step 3: Create parent directories and file.
 	// 3a: Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.

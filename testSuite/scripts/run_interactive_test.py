@@ -1,18 +1,45 @@
-from test_blob_download import *
-from test_upload_block_blob import *
-from test_upload_page_blob import *
-from test_file_download import *
-from test_file_upload import *
-from test_azcopy_operations import *
-from test_blobfs_upload_sharedkey import *
-from test_blobfs_upload_oauth import *
-from test_blobfs_download_sharedkey import *
-from test_blobfs_download_oauth import *
+from test_interactive_blob_download_oauth import *
+from test_interactive_blobfs_upload_oauth import *
+from test_interactive_blobfs_download_oauth import *
+from test_interactive_operation_oauth import *
 import glob, os
 import configparser
 import platform
-import sys
-import unittest
+import utility as util
+
+def execute_interactively_copy_blob_oauth_session_scenario():
+    #login to get session
+    test_login_with_default()
+    #execute copy commands
+    test_download_1kb_blob_oauth()
+    test_recursive_download_blob_oauth()
+    #logout
+    test_logout()
+
+def execute_interactively_copy_blob_oauth_login_percmd_scenario():
+    #execute copy commands
+    # download will test both upload/download scenarios
+    test_download_1kb_blob_oauth(True)
+    test_recursive_download_blob_oauth(True)
+
+def execute_interactively_copy_bfs_oauth_session_scenario():
+    #login to get session
+    test_login(util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
+    #execute copy commands
+    test_blobfs_upload_1Kb_file(True)
+    test_blobfs_upload_64MB_file(True)
+    test_blobfs_upload_100_1Kb_file(True)
+    test_blobfs_download_1Kb_file(True)
+    test_blobfs_download_64MB_file(True)
+    test_blobfs_download_100_1Kb_file(True)
+    #logout
+    test_logout()
+
+def execute_interactively_copy_bfs_oauth_login_percmd_scenario():
+    #download will test both upload and download
+    test_blobfs_download_1Kb_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
+    test_blobfs_download_64MB_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
+    test_blobfs_download_100_1Kb_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
@@ -45,21 +72,11 @@ def parse_config_file_set_env():
     # set the environment variable TEST_SUITE_EXECUTABLE_LOCATION
     os.environ['TEST_SUITE_EXECUTABLE_LOCATION'] = config[os_type]['TEST_SUITE_EXECUTABLE_LOCATION']
 
-    # CONTAINER_SAS_URL is the shared access signature of the container
-    # where test data will be uploaded to and downloaded from.
-    os.environ['CONTAINER_SAS_URL'] = config['CREDENTIALS']['CONTAINER_SAS_URL']
-
     # container whose storage account has been configured properly for the interactive testing user.
     os.environ['CONTAINER_OAUTH_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_URL']
 
     # container which should be same to CONTAINER_OAUTH_URL, while with SAS for validation purpose.
     os.environ['CONTAINER_OAUTH_VALIDATE_SAS_URL'] = config['CREDENTIALS']['CONTAINER_OAUTH_VALIDATE_SAS_URL']
-
-    # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
-    os.environ['SHARE_SAS_URL'] = config['CREDENTIALS']['SHARE_SAS_URL']
-
-    # container sas of the premium storage account.
-    os.environ['PREMIUM_CONTAINER_SAS_URL'] = config['CREDENTIALS']['PREMIUM_CONTAINER_SAS_URL']
 
     # set the account name for blob fs service operation
     os.environ['ACCOUNT_NAME'] = config['CREDENTIALS']['ACCOUNT_NAME']
@@ -70,15 +87,17 @@ def parse_config_file_set_env():
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
 
-    # set the env var OAuth token info
-    os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
+    # set oauth tenant ID
+    os.environ['OAUTH_TENANT_ID'] = config['CREDENTIALS']['OAUTH_TENANT_ID']
+
+    # set oauth aad endpoint
+    os.environ['OAUTH_AAD_ENDPOINT'] = config['CREDENTIALS']['OAUTH_AAD_ENDPOINT']
 
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
         print('Environment variable: ' + key + ' not set.')
         return True
     return False
-
 
 def init():
     # Check the environment variables.
@@ -105,31 +124,27 @@ def init():
     # test suite executable will be copied to test data folder.
     test_suite_exec_location = os.environ.get('TEST_SUITE_EXECUTABLE_LOCATION')
 
-    # container_sas is the shared access signature of the container
-    # where test data will be uploaded to and downloaded from.
-    container_sas = os.environ.get('CONTAINER_SAS_URL')
-
     # container_oauth is container for oauth testing.
     container_oauth = os.environ.get('CONTAINER_OAUTH_URL')
 
     # container_oauth_validate is the URL with SAS for oauth validation.
     container_oauth_validate = os.environ.get('CONTAINER_OAUTH_VALIDATE_SAS_URL')
 
-    # share_sas_url is the URL with SAS of the share where test data will be uploaded to and downloaded from.
-    share_sas_url = os.environ.get('SHARE_SAS_URL')
-
-    # container sas of the premium storage account.
-    premium_container_sas = os.environ.get('PREMIUM_CONTAINER_SAS_URL')
-
     # get the filesystem url
     filesystem_url = os.environ.get('FILESYSTEM_URL')
+
+    # oauth tenant ID
+    oauth_tenant_id = os.environ.get('OAUTH_TENANT_ID')
+
+    # oauth aad encpoint
+    oauth_aad_endpoint = os.environ.get('OAUTH_AAD_ENDPOINT')
 
     # deleting the log files.
     cleanup()
 
-    if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
-                                      filesystem_url, azcopy_exec_location, test_suite_exec_location):
-        print("failed to initialize the test suite with given user input")
+    if not util.initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, 
+        filesystem_url, oauth_tenant_id, oauth_aad_endpoint, azcopy_exec_location, test_suite_exec_location):
+        print("failed to initialize the interactive test suite with given user input")
         return
     else:
         test_dir_path += "\\test_data"
@@ -145,39 +160,13 @@ def cleanup():
 
 
 def main():
-    print("Smoke tests starting...")
     init()
-    suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_OAuth_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_OAuth_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)    
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(Azcopy_Operation_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Download_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Upload_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_ShareKey_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_SharedKey_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
+    execute_interactively_copy_blob_oauth_session_scenario()
+    execute_interactively_copy_blob_oauth_login_percmd_scenario()
+    execute_interactively_copy_bfs_oauth_session_scenario()
+    execute_interactively_copy_bfs_oauth_login_percmd_scenario()
     cleanup()
+
 
 if __name__ == '__main__':
     main()

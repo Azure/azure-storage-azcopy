@@ -8,7 +8,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 type removeBlobEnumerator common.CopyJobPartOrderRequest
@@ -89,7 +89,7 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If the blob represents a folder as per the conditions mentioned in the
 			// api doesBlobRepresentAFolder, then skip the blob.
 			if util.doesBlobRepresentAFolder(blobInfo) {

@@ -22,13 +22,14 @@ package common
 
 import (
 	"encoding/json"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/JeffreyRichter/enum/enum"
 	"math"
 	"reflect"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -343,6 +344,30 @@ func (pbt *PageBlobTier) UnmarshalJSON(b []byte) error {
 	return pbt.Parse(s)
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var ECredentialType = CredentialType(0)
+
+// CredentialType defines the different types of credentials
+type CredentialType uint8
+
+func (CredentialType) Unknown() CredentialType    { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType { return CredentialType(1) }
+func (CredentialType) Anonymous() CredentialType  { return CredentialType(2) } // For SAS or public.
+func (CredentialType) SharedKey() CredentialType  { return CredentialType(3) }
+
+func (ct CredentialType) String() string {
+	return enum.StringInt(ct, reflect.TypeOf(ct))
+}
+func (ct *CredentialType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(ct), s, true, true)
+	if err == nil {
+		*ct = val.(CredentialType)
+	}
+	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize = 100 * 1024 * 1024
 	//DefaultAppendBlobBlockSize = 4 * 1024 * 1024

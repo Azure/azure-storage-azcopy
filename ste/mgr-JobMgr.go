@@ -23,15 +23,25 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 var _ IJobMgr = &jobMgr{}
 
 type PartNumber = common.PartNumber
+
+// InMemoryTransitJobState defines job state transit in memory, and not in JobPartPlan file.
+// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
+// In memory CredentialInfo is currently maintained per job in STE, as FE could have many-to-one relationship with STE,
+// i.e. different jobs could have different OAuth tokens requested from FE, and these jobs can run at same time in STE.
+// This can be optimized if FE would no more be another module vs STE module.
+type InMemoryTransitJobState struct {
+	credentialInfo common.CredentialInfo
+}
 
 type IJobMgr interface {
 	JobID() common.JobID
@@ -50,6 +60,9 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	//Close()
+	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
+	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
+
 	common.ILoggerCloser
 }
 
@@ -87,6 +100,8 @@ type jobMgr struct {
 	// partsDone keep the count of completed part of the Job.
 	partsDone uint32
 	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
+
+	inMemoryTransitJobState InMemoryTransitJobState
 
 	finalPartOrdered           bool
 	atomicNumberOfBytesCovered uint64
@@ -189,6 +204,17 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	}
 	return partsDone
 }
+
+func (jm *jobMgr) getInMemoryTransitJobState() InMemoryTransitJobState {
+	return jm.inMemoryTransitJobState
+}
+
+// Note: InMemoryTransitJobState should only be set when request come from cmd(FE) module to STE module.
+// And the state should no more be changed inside STE module.
+func (jm *jobMgr) setInMemoryTransitJobState(state InMemoryTransitJobState) {
+	jm.inMemoryTransitJobState = state
+}
+
 func (jm *jobMgr) Context() context.Context                { return jm.ctx }
 func (jm *jobMgr) Cancel()                                 { jm.cancel() }
 func (jm *jobMgr) ShouldLog(level pipeline.LogLevel) bool  { return jm.logger.ShouldLog(level) }

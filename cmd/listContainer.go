@@ -25,12 +25,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
-	"github.com/spf13/cobra"
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -133,7 +134,7 @@ func HandleListContainerCommand(source string, jsonOutput bool) error {
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			blobName := blobInfo.Name
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.

@@ -6,42 +6,24 @@ import (
 	"fmt"
 	"net/url"
 
+	"net/http"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"net/http"
-	"os"
-	"time"
 )
 
 type copyDownloadBlobFSEnumerator common.CopyJobPartOrderRequest
 
 func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
+	ctx := context.Background()
 
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+	// Create blob FS pipeline.
+	p, err := createBlobFSPipeline(ctx, e.CredentialInfo)
+	if err != nil {
+		return err
 	}
-	// create the shared key credentials
-	c := azbfs.NewSharedKeyCredential(name, key)
-
-	// Create Pipeline to List the directory / fileSystem
-	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{
-		Retry: azbfs.RetryOptions{
-			Policy:        azbfs.RetryPolicyExponential,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		},
-		Telemetry: azbfs.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
 
 	// attempt to parse the source url
 	sourceUrl, err := url.Parse(cca.src)
@@ -64,7 +46,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// so add this bool flag which doesn't terminates the loop on first listing.
 	firstListing := true
 
-	dListResp, err := directoryUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
+	dListResp, err := directoryUrl.ListDirectorySegment(ctx, &continuationMarker, true)
 	if err != nil {
 		return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
 	}
@@ -105,7 +87,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				SourceSize:       *path.ContentLength,
 			}, cca)
 		}
-		dListResp, err = directoryUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
+		dListResp, err = directoryUrl.ListDirectorySegment(ctx, &continuationMarker, true)
 		if err != nil {
 			return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
 		}

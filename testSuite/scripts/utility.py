@@ -2,6 +2,7 @@ import os
 import platform
 import shutil
 import subprocess
+import shlex
 from pathlib import Path
 
 
@@ -51,6 +52,9 @@ class Command(object):
     def execute_azcopy_copy_command_get_output(self):
         return execute_azcopy_command_get_output(self.string())
 
+    def execute_azcopy_command_interactive(self):
+        return execute_azcopy_command_interactive(self.string())
+
     # api execute other azcopy commands like cancel, pause, resume or list.
     def execute_azcopy_operation_get_output(self):
         return execute_azcopy_command_get_output(self.string())
@@ -67,11 +71,30 @@ class Command(object):
     def execute_azcopy_create(self):
         return verify_operation(self.string())
 
+    # api executes the info command to get AzCopy binary embedded infos.
+    def execute_azcopy_info(self):
+        return verify_operation_get_output(self.string())
+
+# processes oauth command according to swtiches
+def process_oauth_command(
+    cmd,
+    fromTo="",
+    forceOAuthLogin=False,
+    tenantID="",
+    aadEndpoint=""):
+    if fromTo!="":
+        cmd.add_flags("fromTo", fromTo)
+    if forceOAuthLogin:
+        cmd.add_flags("oauth-user","true")
+    if tenantID!="":
+        cmd.add_flags("tenant-id", tenantID)
+    if aadEndpoint!="":
+        cmd.add_flags("aad-endpoint", aadEndpoint)
 
 # api executes the clean command on validator which deletes all the contents of the container.
-def clean_test_container(container_sas):
+def clean_test_container(container):
     # execute the clean command.
-    result = Command("clean").add_arguments(container_sas).add_flags("resourceType", "blob").execute_azcopy_clean()
+    result = Command("clean").add_arguments(container).add_flags("resourceType", "blob").execute_azcopy_clean()
     if not result:
         print("error cleaning the container. please check the container sas provided")
         return False
@@ -79,17 +102,23 @@ def clean_test_container(container_sas):
 
 
 # api executes the clean command on validator which deletes all the contents of the container.
-def clean_test_share():
+def clean_test_share(shareURLStr):
     # execute the clean command.
-    result = Command("clean").add_arguments(test_share_url).add_flags("resourceType", "file").execute_azcopy_clean()
+    result = Command("clean").add_arguments(shareURLStr).add_flags("resourceType", "file").execute_azcopy_clean()
     if not result:
         print("error cleaning the share. please check the share sas provided")
         return False
     return True
 
+def clean_test_filesystem(fileSystemURLStr):
+    result = Command("clean").add_arguments(fileSystemURLStr).add_flags("resourceType", "blobFS").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the share. please check the filesystem URL, user and key provided")
+        return False
+    return True
 
 # initialize_test_suite initializes the setup for executing test cases.
-def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_container_sas, filesystem_url,
+def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, 
                           azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
@@ -98,6 +127,13 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # test_container_url is a global variable used in the entire testSuite holding the user given container shared access signature.
     # all files / directory are uploaded and downloaded to and from this container.
     global test_container_url
+
+    # test_oauth_container_url is a global variable used in the entire testSuite holding the user given container for oAuth testing.
+    # all files / directory are uploaded and downloaded to and from this container.
+    global test_oauth_container_url
+
+    # test_container_oauth_validate_sas_url is same container as test_oauth_container_url, while for validation purpose. 
+    global test_oauth_container_validate_sas_url
 
     # test_premium_account_contaier_url is a global variable used in the entire test suite holding the user given container sas of premium storage account container.
     global test_premium_account_contaier_url
@@ -150,11 +186,24 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
 
     # set the filesystem url
     test_bfs_account_url = filesystem_url
+    if not clean_test_filesystem(test_bfs_account_url):
+        return False
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+        test_bfs_account_url = test_bfs_account_url + "/"
 
     # cleaning the test container provided
     # all blob inside the container will be deleted.
     test_container_url = container_sas
     if not clean_test_container(test_container_url):
+        return False
+
+    test_oauth_container_url = container_oauth
+    if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
+        test_oauth_container_url = test_oauth_container_url + "/"
+    
+    # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
+    test_oauth_container_validate_sas_url = container_oauth_validate
+    if not clean_test_container(test_oauth_container_validate_sas_url):
         return False
 
     test_premium_account_contaier_url = premium_container_sas
@@ -164,8 +213,91 @@ def initialize_test_suite(test_dir_path, container_sas, share_sas_url, premium_c
     # cleaning the test share provided
     # all files and directories inside the share will be deleted.
     test_share_url = share_sas_url
-    if not clean_test_share():
+    if not clean_test_share(test_share_url):
         return False
+    return True
+
+# initialize_test_suite initializes the setup for executing test cases.
+def initialize_interactive_test_suite(test_dir_path, container_oauth, container_oauth_validate, 
+    filesystem_url, oauth_tenant_id, oauth_aad_endpoint, azcopy_exec_location, test_suite_exec_location):
+    # test_directory_path is global variable holding the location of test directory to execute all the test cases.
+    # contents are created, copied, uploaded and downloaded to and from this test directory only
+    global test_directory_path
+
+    # test_oauth_container_url is a global variable used in the entire testSuite holding the user given container for oAuth testing.
+    # all files / directory are uploaded and downloaded to and from this container.
+    global test_oauth_container_url
+
+    # test_container_oauth_validate_sas_url is same container as test_oauth_container_url, while for validation purpose. 
+    global test_oauth_container_validate_sas_url
+
+    # holds the name of the azcopy executable
+    global azcopy_executable_name
+
+    # holds the name of the test suite executable
+    global test_suite_executable_name
+
+    # holds the filesystem url to perform the operations for blob fs service
+    global test_bfs_account_url
+
+    # holds the oauth tenant id
+    global test_oauth_tenant_id
+
+    # holds the oauth aad encpoint
+    global test_oauth_aad_endpoint
+
+    # creating a test_directory in the location given by user.
+    # this directory will be used to created and download all the test files.
+    new_dir_path = os.path.join(test_dir_path, "test_data")
+    # todo finally
+    try:
+        # removing the directory and its contents, if directory exists
+        shutil.rmtree(new_dir_path)
+        os.mkdir(new_dir_path)
+    except:
+        os.mkdir(new_dir_path)
+
+    # copying the azcopy executable to the newly created test directory.
+    # this copying is done to avoid using the executables at location which might be used by the user
+    # while test suite is running.
+    if os.path.isfile(azcopy_exec_location):
+        shutil.copy2(azcopy_exec_location, new_dir_path)
+        azcopy_executable_name = parse_out_executable_name(azcopy_exec_location)
+    else:
+        print("please verify the azcopy executable location")
+        return False
+
+    # copying the test executable to the newly created test directory.
+    # this copying is done to avoid using the executables at location which might be used by the user
+    # while test suite is running.
+    if os.path.isfile(test_suite_exec_location):
+        shutil.copy2(test_suite_exec_location, new_dir_path)
+        test_suite_executable_name = parse_out_executable_name(test_suite_exec_location)
+    else:
+        print("please verify the test suite executable location")
+        return False
+
+    test_directory_path = new_dir_path
+
+    test_oauth_tenant_id = oauth_tenant_id
+    test_oauth_aad_endpoint = oauth_aad_endpoint
+
+    # set the filesystem url
+    test_bfs_account_url = filesystem_url
+    if not clean_test_filesystem(test_bfs_account_url):
+        return False
+    if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
+        test_bfs_account_url = test_bfs_account_url + "/"
+
+    test_oauth_container_url = container_oauth
+    if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
+        test_oauth_container_url = test_oauth_container_url + "/"
+    
+    # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
+    test_oauth_container_validate_sas_url = container_oauth_validate
+    if not clean_test_container(test_oauth_container_validate_sas_url):
+        return False
+
     return True
 
 
@@ -312,6 +444,7 @@ def execute_azcopy_command(command):
     # azcopy executable path location.
     azspath = os.path.join(test_directory_path, azcopy_executable_name)
     cmnd = azspath + " " + command
+
     try:
         # executing the command with timeout to set 3 minutes / 180 sec.
         subprocess.check_output(
@@ -319,10 +452,28 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        # print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True
+
+# execute_azcopy_command_interactive executes the given azcopy command in "inproc" mode.
+# returns azcopy console output or none on success / failure of command.
+def execute_azcopy_command_interactive(command):
+    # azcopy executable path location concatenated with inproc keyword.
+    azspath = os.path.join(test_directory_path, azcopy_executable_name)
+    cmnd = azspath + " " + command
+    if os.name == "nt":
+        process = subprocess.Popen(cmnd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    else:
+        process = subprocess.Popen(shlex.split(cmnd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    for line in iter(process.stdout.readline, b''):
+        print(line.decode('utf-8'))
+    process.wait()
+    if process.poll() == 0:
+        return True
+    else:
+        return False
 
 
 # execute_azcopy_command_get_output executes the given azcopy command in "inproc" mode.
@@ -361,6 +512,21 @@ def verify_operation(command):
     else:
         return True
 
+# verify_operation_get_output executes the validator command and returns output.
+def verify_operation_get_output(command):
+    # testSuite executable local path inside the test directory.
+    test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
+    command = test_suite_path + " " + command
+    try:
+        # executing the command with timeout set to 3 minutes / 180 sec.
+        output = subprocess.check_output(
+            command, stderr=subprocess.STDOUT, shell=True, timeout=600,
+            universal_newlines=True)
+    except subprocess.CalledProcessError as exec:
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        return None
+    else:
+        return output
 
 # get_resource_sas return the shared access signature for the given resource
 # using the container url.
@@ -370,6 +536,16 @@ def get_resource_sas(resource_name):
     # adding the blob name after the container name
     resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
     return resource_sas
+
+def get_resource_from_oauth_container_validate(resource_name):
+    # Splitting the container URL to add the uploaded blob name to the SAS
+    url_parts = test_oauth_container_validate_sas_url.split("?")
+    # adding the blob name after the container name
+    resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
+    return resource_sas
+
+def get_resource_from_oauth_container(resource_name):
+    return test_oauth_container_url + resource_name
 
 
 def append_text_path_resource_sas(resource_sas, text):

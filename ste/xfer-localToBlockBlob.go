@@ -25,14 +25,15 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"unsafe"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 type blockBlobUpload struct {
@@ -104,7 +105,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	defer srcFile.Close()
 
 	// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
-	var srcMmf  = &common.MMF{}
+	srcMmf := &common.MMF{}
 	if blobSize > 0 {
 		// file needs to be memory mapped only when the file size is greater than 0.
 		srcMmf, err = common.NewMMF(srcFile, false, 0, blobSize)
@@ -138,7 +139,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			chunkSize)
 
 		// Get http headers and meta data of page.
-		blobHttpHeaders, metaData := jptm.BlobDstData(*srcMmf)
+		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
 		// Create Page Blob of the source size
 		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
@@ -384,7 +385,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 			// fetching the blob http headers with content-type, content-encoding attributes
 			// fetching the metadata passed with the JobPartOrder
-			blobHttpHeader, metaData := bbu.jptm.BlobDstData(*bbu.srcMmf)
+			blobHttpHeader, metaData := bbu.jptm.BlobDstData(bbu.srcMmf)
 
 			// commit the blocks.
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
@@ -452,7 +453,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 	}(jptm)
 
 	// Get blob http headers and metadata.
-	blobHttpHeader, metaData := jptm.BlobDstData(*srcMmf)
+	blobHttpHeader, metaData := jptm.BlobDstData(srcMmf)
 
 	var err error
 

@@ -29,9 +29,10 @@ import (
 	"net/http"
 	"time"
 
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
 )
 
 var steCtx = context.Background()
@@ -113,7 +114,7 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 		})
 	http.HandleFunc(common.ERpcCmd.ResumeJob().Pattern(),
 		func(writer http.ResponseWriter, request *http.Request) {
-			var payload common.ResumeJob
+			var payload common.ResumeJobRequest
 			deserialize(request, &payload)
 			serialize(ResumeJobOrder(payload), writer)
 		})
@@ -132,9 +133,16 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order)                                                                   // Convert the order to a plan file
-	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
-	jpm.AddJobPart(order.PartNum, jppfn, true)                                            // Add this part to the Job and schedule its transfers
+	jppfn.Create(order) // Convert the order to a plan file
+
+	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
+	jm.setInMemoryTransitJobState(
+		InMemoryTransitJobState{
+			credentialInfo: order.CredentialInfo,
+		})
+	jm.AddJobPart(order.PartNum, jppfn, true) // Add this part to the Job and schedule its transfers
+
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -268,22 +276,21 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	return jr
 }
 
-func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeResponse {
-	jobID := resJobOrder.JobID
-	jm, found := JobsAdmin.JobMgr(jobID) // Find Job being resumed
+func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
+	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
 	if !found {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID) {
+		if !JobsAdmin.ResurrectJob(req.JobID) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", jobID),
+				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
 			}
 		}
 		// If the job manager was not found, then Job was resurrected
 		// Get the Job manager again for given JobId
-		jm, _ = JobsAdmin.JobMgr(jobID)
+		jm, _ = JobsAdmin.JobMgr(req.JobID)
 	}
 
 	// Check whether Job has been completely ordered or not
@@ -303,7 +310,7 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 	if !completeJobOrdered(jm) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("cannot resumr job with JobId %s . It hasn't been ordered completely", jobID.String()),
+			ErrorMsg:              fmt.Sprintf("cannot resumr job with JobId %s . It hasn't been ordered completely", req.JobID),
 		}
 	}
 
@@ -312,7 +319,7 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 	if !found {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", jobID),
+			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
 
@@ -328,12 +335,19 @@ func ResumeJobOrder(resJobOrder common.ResumeJob) common.CancelPauseResumeRespon
 		common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
+
+		// Get credential info from RPC request, and set in InMemoryTransitJobState.
+		jm.setInMemoryTransitJobState(
+			InMemoryTransitJobState{
+				credentialInfo: req.CredentialInfo,
+			})
+
 		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
 		if jm.ShouldLog(pipeline.LogInfo) {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", jobID))
+			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
 		}
-		jm.ResumeTransfers(steCtx, resJobOrder.IncludeTransfer, resJobOrder.ExcludeTransfer) // Reschedule all job part's transfers
+		jm.ResumeTransfers(steCtx, req.IncludeTransfer, req.ExcludeTransfer) // Reschedule all job part's transfers
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",

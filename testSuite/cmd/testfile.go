@@ -123,7 +123,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 		// look for all files that in current directory
 		listFile, err := curAzureDirURL.ListFilesAndDirectoriesSegment(context.Background(), marker, azfile.ListFilesAndDirectoriesOptions{})
 		if err != nil {
-			fmt.Println("fail to list files and directories inside the directory. Please check the directory sas")
+			fmt.Println(fmt.Sprintf("fail to list files and directories inside the directory. Please check the directory sas, %v", err))
 			os.Exit(1)
 		}
 
@@ -272,6 +272,18 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	if err != nil {
 		fmt.Println("error reading the byes from response and failed with error ", err.Error())
 		os.Exit(1)
+	}
+
+	if fileInfo.Size() == 0 {
+		// If the fileSize is 0 and the len of downloaded bytes is not 0
+		// validation fails
+		if len(fileBytesDownloaded) != 0 {
+			fmt.Println(fmt.Sprintf("validation failed since the actual file size %d differs from the downloaded file size %d", fileInfo.Size(), len(fileBytesDownloaded)))
+			os.Exit(1)
+		}
+		// If both the actual and downloaded file size is 0,
+		// validation is successful, no need to match the md5
+		os.Exit(0)
 	}
 
 	// memory mapping the resource on local path.

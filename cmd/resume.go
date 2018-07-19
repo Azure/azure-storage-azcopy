@@ -23,11 +23,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
-	"strings"
-	"time"
 )
 
 // TODO the behavior of the resume command should be double-checked
@@ -108,10 +109,8 @@ func (cca *resumeJobController) PrintJobProgressStatus() {
 }
 
 func init() {
-	var commandLineInput = ""
-	var includeTransfer = ""
-	var excludeTransfer = ""
-	rawResumeJobCommand := common.ResumeJob{}
+	resumeCmdArgs := resumeCmdArgs{}
+
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
 		Use:        "resume jobID",
@@ -127,68 +126,139 @@ Resume the existing job with the given job ID.`,
 			if len(args) != 1 {
 				return errors.New("this command requires jobId to be passed as argument")
 			}
-			commandLineInput = args[0]
+			resumeCmdArgs.jobID = args[0]
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			jobID, err := common.ParseJobID(commandLineInput)
+			err := resumeCmdArgs.process()
 			if err != nil {
-				glcm.ExitWithError("error parsing the jobId "+commandLineInput+". Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.ExitWithError(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
 			}
-			rawResumeJobCommand.JobID = jobID
-			rawResumeJobCommand.IncludeTransfer = make(map[string]int)
-			rawResumeJobCommand.ExcludeTransfer = make(map[string]int)
-
-			// If the transfer has been provided with the include
-			// parse the transfer list
-			if len(includeTransfer) > 0 {
-				// Split the Include Transfer using ';'
-				transfers := strings.Split(includeTransfer, ";")
-				for index := range transfers {
-					if len(transfers[index]) == 0 {
-						// If the transfer provided is empty
-						// skip the transfer
-						// This is to handle the misplaced ';'
-						continue
-					}
-					rawResumeJobCommand.IncludeTransfer[transfers[index]] = index
-				}
-			}
-			// If the transfer has been provided with the exclude
-			// parse the transfer list
-			if len(excludeTransfer) > 0 {
-				// Split the Exclude Transfer using ';'
-				transfers := strings.Split(excludeTransfer, ";")
-				for index := range transfers {
-					if len(transfers[index]) == 0 {
-						// If the transfer provided is empty
-						// skip the transfer
-						// This is to handle the misplaced ';'
-						continue
-					}
-					rawResumeJobCommand.ExcludeTransfer[transfers[index]] = index
-				}
-			}
-			HandleResumeCommand(rawResumeJobCommand)
 		},
 	}
+
 	rootCmd.AddCommand(resumeCmd)
-	resumeCmd.PersistentFlags().StringVar(&includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
-	resumeCmd.PersistentFlags().StringVar(&excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
+	// oauth options
+	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 }
 
-// handles the resume command
-// dispatches the resume Job order to the storage engine
-func HandleResumeCommand(resJobOrder common.ResumeJob) {
+type resumeCmdArgs struct {
+	jobID           string
+	includeTransfer string
+	excludeTransfer string
 
+	// oauth options
+	useInteractiveOAuthUserCredential bool
+	tenantID                          string
+	aadEndpoint                       string
+}
+
+// processes the resume command,
+// dispatches the resume Job order to the storage engine.
+func (rca resumeCmdArgs) process() error {
+	// parsing the given JobId to validate its format correctness
+	jobID, err := common.ParseJobID(rca.jobID)
+	if err != nil {
+		// If parsing gives an error, hence it is not a valid JobId format
+		return fmt.Errorf("error parsing the jobId %s. Failed with error %s", rca.jobID, err.Error())
+	}
+
+	includeTransfer := make(map[string]int)
+	excludeTransfer := make(map[string]int)
+
+	// If the transfer has been provided with the include, parse the transfer list.
+	if len(rca.includeTransfer) > 0 {
+		// Split the Include Transfer using ';'
+		transfers := strings.Split(rca.includeTransfer, ";")
+		for index := range transfers {
+			if len(transfers[index]) == 0 {
+				// If the transfer provided is empty
+				// skip the transfer
+				// This is to handle the misplaced ';'
+				continue
+			}
+			includeTransfer[transfers[index]] = index
+		}
+	}
+	// If the transfer has been provided with the exclude, parse the transfer list.
+	if len(rca.excludeTransfer) > 0 {
+		// Split the Exclude Transfer using ';'
+		transfers := strings.Split(rca.excludeTransfer, ";")
+		for index := range transfers {
+			if len(transfers[index]) == 0 {
+				// If the transfer provided is empty
+				// skip the transfer
+				// This is to handle the misplaced ';'
+				continue
+			}
+			excludeTransfer[transfers[index]] = index
+		}
+	}
+
+	// Initialize credential info.
+	credentialInfo := common.CredentialInfo{
+		CredentialType: common.ECredentialType.Anonymous(),
+	}
+	// Check whether to use OAuthToken credential.
+	// Scenario-1: interactive login per copy command
+	// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
+	// Scenario-2: session mode which get token from cache
+	uotm := GetUserOAuthTokenManagerInstance()
+	hasCachedToken, err := uotm.HasCachedToken()
+	if rca.useInteractiveOAuthUserCredential || common.EnvVarOAuthTokenInfoExists() || hasCachedToken {
+		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
+		var oAuthTokenInfo *common.OAuthTokenInfo
+		// For Scenario-1, create token with interactive login if necessary.
+		if rca.useInteractiveOAuthUserCredential {
+			oAuthTokenInfo, err = uotm.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
+			if err != nil {
+				return fmt.Errorf(
+					"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
+					rca.tenantID,
+					err.Error())
+			}
+		} else if oAuthTokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+			// Scenario-Test
+			glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo))
+			if err != nil { // this is the case when env var exists while get token info failed
+				return err
+			}
+		} else { // Scenario-2
+			oAuthTokenInfo, err = uotm.GetCachedTokenInfo()
+			if err != nil {
+				return err
+			}
+		}
+		if oAuthTokenInfo == nil {
+			return errors.New("cannot get valid oauth token")
+		}
+		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
+	}
+	glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
+
+	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
-	Rpc(common.ERpcCmd.ResumeJob(), resJobOrder, &resumeJobResponse)
+	Rpc(common.ERpcCmd.ResumeJob(),
+		&common.ResumeJobRequest{
+			JobID:           jobID,
+			CredentialInfo:  credentialInfo,
+			IncludeTransfer: includeTransfer,
+			ExcludeTransfer: excludeTransfer,
+		},
+		&resumeJobResponse)
+
 	if !resumeJobResponse.CancelledPauseResumed {
 		glcm.ExitWithError(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
 	}
 
-	controller := resumeJobController{jobID: resJobOrder.JobID}
+	controller := resumeJobController{jobID: jobID}
 	glcm.WaitUntilJobCompletion(&controller)
+
+	return nil
 }

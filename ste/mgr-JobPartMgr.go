@@ -2,17 +2,20 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"os"
+	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -45,7 +48,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-const DefaultServiceApiVersion = "2017-04-17"
+const DefaultServiceApiVersion = "2017-11-09"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -86,17 +89,10 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-// TODO: The shared key credentials authentication might be removed later in azcopy
-func NewBlobFSPipeline(o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline")
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+	if c == nil {
+		panic("c can't be nil")
 	}
-	c := azbfs.NewSharedKeyCredential(name, key)
-
 	// Closest to API goes first; closest to the wire goes last
 	f := []pipeline.Factory{
 		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
@@ -229,6 +225,8 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 
 	jpm.priority = plan.Priority
 
+	jpm.createPipeline(jobCtx) // pipeline is created per job part manager
+
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
@@ -301,7 +299,150 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipeline() {
+// refreshToken is a delegate function for token refreshing.
+func (jpm *jobPartMgr) refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azblob.TokenCredential) time.Duration {
+	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(*oauthConfig, common.ApplicationID, common.Resource, tokenInfo.Token)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	err = spt.RefreshWithContext(ctx)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	newToken := spt.Token()
+	tokenCredential.SetToken(newToken.AccessToken)
+
+	if jpm.ShouldLog(pipeline.LogDebug) {
+		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
+	}
+
+	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+	if waitDuration < time.Second {
+		waitDuration = time.Nanosecond
+	}
+	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
+	}
+
+	return waitDuration
+}
+
+// createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
+func (jpm *jobPartMgr) createBlobCredential(ctx context.Context) azblob.Credential {
+	credential := azblob.NewAnonymousCredential()
+	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
+	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
+
+	jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, inMemoryJobState.credentialInfo.CredentialType))
+
+	if inMemoryJobState.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		if inMemoryTokenInfo.IsEmpty() {
+			jpm.Panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
+		}
+
+		// Create TokenCredential with refresher.
+		return azblob.NewTokenCredential(
+			inMemoryTokenInfo.AccessToken,
+			func(credential azblob.TokenCredential) time.Duration {
+				return jpm.refreshBlobToken(ctx, inMemoryTokenInfo, credential)
+			})
+	}
+
+	return credential
+}
+
+// refreshToken is a delegate function for token refreshing.
+func (jpm *jobPartMgr) refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
+	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(*oauthConfig, common.ApplicationID, common.Resource, tokenInfo.Token)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	err = spt.RefreshWithContext(ctx)
+	if err != nil {
+		if jpm.ShouldLog(pipeline.LogError) {
+			jpm.Log(pipeline.LogError, fmt.Sprintf("failed to refresh token, due to error: %v", err.Error()))
+		}
+	}
+
+	newToken := spt.Token()
+	tokenCredential.SetToken(newToken.AccessToken)
+
+	if jpm.ShouldLog(pipeline.LogDebug) {
+		jpm.Log(pipeline.LogDebug, fmt.Sprintf("JobID=%v, Part#=%d, token refreshed.", jpm.Plan().JobID, jpm.Plan().PartNum))
+	}
+
+	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
+	if waitDuration < time.Second {
+		waitDuration = time.Nanosecond
+	}
+	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
+	}
+
+	return waitDuration
+}
+
+// createCredential creates Azure storage client Credential based on CredentialInfo saved in InMemoryTransitJobState.
+func (jpm *jobPartMgr) createBlobFSCredential(ctx context.Context) azbfs.Credential {
+	inMemoryJobState := jpm.jobMgr.getInMemoryTransitJobState()
+	inMemoryCredType := inMemoryJobState.credentialInfo.CredentialType
+	inMemoryTokenInfo := inMemoryJobState.credentialInfo.OAuthTokenInfo
+
+	jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, inMemoryJobState.credentialInfo.CredentialType))
+
+	switch inMemoryCredType {
+	case common.ECredentialType.SharedKey(): // For testing
+		// Get the Account Name and Key variables from environment
+		name := os.Getenv("ACCOUNT_NAME")
+		key := os.Getenv("ACCOUNT_KEY")
+		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
+		if name == "" || key == "" {
+			jpm.Panic(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs pipeline"))
+		}
+		return azbfs.NewSharedKeyCredential(name, key)
+	case common.ECredentialType.OAuthToken():
+		if inMemoryTokenInfo.IsEmpty() {
+			jpm.Panic(errors.New("invalid state, cannot get valid token info for OAuthToken credential"))
+		}
+
+		// Create TokenCredential with refresher.
+		return azbfs.NewTokenCredential(
+			inMemoryTokenInfo.AccessToken,
+			func(credential azbfs.TokenCredential) time.Duration {
+				return jpm.refreshBlobFSToken(ctx, inMemoryTokenInfo, credential)
+			})
+	default:
+		jpm.Panic(fmt.Errorf("invalid state, credential type %v is not supported", inMemoryCredType))
+
+		// Suppress compiler warning
+		return nil
+	}
+}
+
+func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 	if jpm.pipeline == nil {
 		fromTo := jpm.planMMF.Plan().FromTo
 
@@ -311,12 +452,15 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 			fallthrough
 		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-			jpm.pipeline = NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-				Log: jpm.jobMgr.PipelineLogInfo(),
-				Telemetry: azblob.TelemetryOptions{
-					Value: common.UserAgent,
+			credential := jpm.createBlobCredential(ctx)
+			jpm.pipeline = NewBlobPipeline(
+				credential,
+				azblob.PipelineOptions{
+					Log: jpm.jobMgr.PipelineLogInfo(),
+					Telemetry: azblob.TelemetryOptions{
+						Value: common.UserAgent,
+					},
 				},
-			},
 				XferRetryOptions{
 					Policy:        0,
 					MaxTries:      UploadMaxTries,
@@ -327,7 +471,9 @@ func (jpm *jobPartMgr) createPipeline() {
 		case common.EFromTo.BlobFSLocal():
 			fallthrough
 		case common.EFromTo.LocalBlobFS():
+			credential := jpm.createBlobFSCredential(ctx)
 			jpm.pipeline = NewBlobFSPipeline(
+				credential,
 				azbfs.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{
@@ -369,7 +515,7 @@ func (jpm *jobPartMgr) createPipeline() {
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
-	jpm.createPipeline()
+	//jpm.createPipeline() //TODO: Ensure with @Jeff and @Prateek, as pipeline is created per jobPartMgr, it is moved to ScheduleTransfers
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
@@ -393,15 +539,15 @@ func (jpm *jobPartMgr) IsForceWriteTrue() bool {
 	return jpm.Plan().ForceWrite
 }
 
-func (jpm *jobPartMgr) blobDstData(dataFileToXfer common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+func (jpm *jobPartMgr) blobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) fileDstData(dataFileToXfer common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType {
+func (jpm *jobPartMgr) fileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.fileHTTPHeaders, jpm.fileMetadata
 	}
 	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.fileMetadata

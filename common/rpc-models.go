@@ -3,6 +3,7 @@ package common
 import (
 	"reflect"
 	"time"
+
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -50,7 +51,15 @@ type CopyJobPartOrderRequest struct {
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
 	// commandString hold the user given command which is logged to the Job log file
-	CommandString string
+	CommandString  string
+	CredentialInfo CredentialInfo
+}
+
+// CredentialInfo contains essential credential info which need be transited between modules,
+// and used during creating Azure storage client Credential.
+type CredentialInfo struct {
+	CredentialType CredentialType
+	OAuthTokenInfo OAuthTokenInfo
 }
 
 type SyncJobPartOrderRequest struct {
@@ -127,10 +136,11 @@ type ListJobTransfersRequest struct {
 	OfStatus TransferStatus
 }
 
-type ResumeJob struct {
+type ResumeJobRequest struct {
 	JobID           JobID
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
+	CredentialInfo  CredentialInfo
 }
 
 // represents the Details and details of a single transfer

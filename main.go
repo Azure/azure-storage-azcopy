@@ -22,21 +22,24 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"os"
-	"strconv"
 )
 
 // get the lifecycle manager to print messages
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+	azcopyAppPathFolder := GetAzCopyAppPath()
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute()
+		cmd.Execute(azcopyAppPathFolder)
 	}
+
 	// Perform os specific initialization
 	_, err := ProcessOSSpecificInitialization()
 	if err != nil {
@@ -56,8 +59,8 @@ func main() {
 		}
 		defaultConcurrentConnections = int(val)
 	}
-	azcopyAppPathFolder := GetAzCopyAppPath()
 	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
-	cmd.Execute()
+
+	cmd.Execute(azcopyAppPathFolder)
 	glcm.ExitWithSuccess("", common.EExitCode.Success())
 }

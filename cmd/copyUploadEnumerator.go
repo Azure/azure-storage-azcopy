@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
 	"path/filepath"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type copyUploadEnumerator common.CopyJobPartOrderRequest
@@ -46,9 +47,21 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 			// append file name as blob name in case the given URL is a container
 			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) ||
-				(e.FromTo == common.EFromTo.LocalBlobFS() && util.urlIsDFSFileSystemOrDirectory(ctx, destinationURL)) {
+				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) {
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
+			}
+
+			// append file name as blob name in case the given URL is a blob FS directory.
+			if e.FromTo == common.EFromTo.LocalBlobFS() {
+				// Create blob FS pipeline.
+				p, err := createBlobFSPipeline(ctx, e.CredentialInfo)
+				if err != nil {
+					return err
+				}
+
+				if util.urlIsBFSFileSystemOrDirectory(ctx, destinationURL, p) {
+					destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
+				}
 			}
 
 			err = e.addTransfer(common.CopyTransfer{
