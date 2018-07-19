@@ -81,12 +81,12 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-type OutputFormat string
+type OutputFormat uint32
 
-var EOutputFormat = OutputFormat("text")
+var EOutputFormat = OutputFormat(0)
 
-func (OutputFormat) Text() OutputFormat { return OutputFormat("text") }
-func (OutputFormat) Json() OutputFormat { return OutputFormat("json") }
+func (OutputFormat) Text() OutputFormat { return OutputFormat(0) }
+func (OutputFormat) Json() OutputFormat { return OutputFormat(1) }
 
 func (of *OutputFormat) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(of), s, true)

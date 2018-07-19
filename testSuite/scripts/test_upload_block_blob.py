@@ -260,7 +260,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
         # uploading the directory again with force flag set to false.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-            add_flags("recursive", "true").add_flags("force", "false").add_flags("log-level", "info"). \
+            add_flags("recursive", "true").add_flags("overwrite", "false").add_flags("log-level", "info"). \
             add_flags("output", "json").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
 
@@ -296,7 +296,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
 
         # uploading the directory again with force flag set to false.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
-            add_flags("recursive", "true").add_flags("force", "false").add_flags("log-level", "info"). \
+            add_flags("recursive", "true").add_flags("overwrite", "false").add_flags("log-level", "info"). \
             add_flags("output", "json").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
 
@@ -345,7 +345,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # downloading the directory created from container through azcopy with recursive flag to true and force flag set to false.
         result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path).add_flags(
             "log-level", "info"). \
-            add_flags("recursive", "true").add_flags("force", "false").add_flags("output",
+            add_flags("recursive", "true").add_flags("overwrite", "false").add_flags("output",
                                                                                  "json").execute_azcopy_copy_command_get_output()
         result = util.parseAzcopyOutput(result)
         try:
@@ -367,7 +367,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # 5 deleted files should be downloaded. Number of failed transfer should be 15 and number of completed transfer should be 5
         result = util.Command("copy").add_arguments(destination).add_arguments(util.test_directory_path).add_flags(
             "log-level", "info"). \
-            add_flags("recursive", "true").add_flags("force", "false").add_flags("output",
+            add_flags("recursive", "true").add_flags("overwrite", "false").add_flags("output",
                                                                                  "json").execute_azcopy_copy_command_get_output()
         result = util.parseAzcopyOutput(result)
         try:

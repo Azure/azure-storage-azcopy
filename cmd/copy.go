@@ -787,7 +787,7 @@ Download an entire directory:
 	// define the flags relevant to the cp command
 	// Visible flags
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "force", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
@@ -824,6 +824,7 @@ Download an entire directory:
 	cpCmd.PersistentFlags().MarkHidden("exclude")
 	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
+	cpCmd.PersistentFlags().MarkHidden("output")
 
 	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
 	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")
