@@ -151,8 +151,6 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     # holds the filesystem url to perform the operations for blob fs service
     global test_bfs_account_url
 
-    print("in initialize_test_suite")
-
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
     new_dir_path = os.path.join(test_dir_path, "test_data")
@@ -184,8 +182,6 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         print("please verify the test suite executable location")
         return False
 
-    print("in initialize_test_suite after executable")
-
     test_directory_path = new_dir_path
 
     # set the filesystem url
@@ -194,8 +190,6 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
         return False
     if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):
         test_bfs_account_url = test_bfs_account_url + "/"
-
-    print("in initialize_test_suite after test_bfs_account_url")
 
     # cleaning the test container provided
     # all blob inside the container will be deleted.
@@ -215,8 +209,6 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_premium_account_contaier_url = premium_container_sas
     if not clean_test_container(test_premium_account_contaier_url):
         return False
-
-    print("in initialize_test_suite after test_premium_account_contaier_url")
 
     # cleaning the test share provided
     # all files and directories inside the share will be deleted.

@@ -93,8 +93,6 @@ def init():
             check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
         parse_config_file_set_env()
 
-    print("init out")
-
     # Get the environment variables value
     # test_dir_path is the location where test_data folder will be created and test files will be created further.
     test_dir_path = os.environ.get('TEST_DIRECTORY_PATH')
@@ -126,12 +124,8 @@ def init():
     # get the filesystem url
     filesystem_url = os.environ.get('FILESYSTEM_URL')
 
-    print("before cleanup")
-
     # deleting the log files.
     cleanup()
-
-    print("before initialize_test_suite")
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
                                       filesystem_url, azcopy_exec_location, test_suite_exec_location):

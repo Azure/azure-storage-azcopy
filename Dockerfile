@@ -6,10 +6,11 @@ RUN go get -u github.com/golang/dep/cmd/dep
 RUN go get -u github.com/golang/lint/golint
 RUN go get -u github.com/mitchellh/gox
 
-# Prepare enviroment for OSX cross compilation.
-# Note: following steps might be considered to be replaced, when MacOS's container is used for testing.
+# Prepare enviroment for OSX cross compilation. 
+# These steps are referenced from https://github.com/karalabe/xgo/blob/master/docker/base/Dockerfile (licensed with MIT)
+# Note: Cross-compile might be considered to be replaced, when MacOS's container is used for testing.
 # In that case, OSX's binary can be compiled directly in MacOS.
-# For other platform's cross compilation, please refer to https://github.com/karalabe/xgo for more details.
+# For other platform's cross compilation, please refer to https://github.com/karalabe/xgo.
 RUN \
   apt-get update && \
   apt-get install -y clang patch xz-utils
