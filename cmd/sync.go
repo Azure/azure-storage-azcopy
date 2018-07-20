@@ -36,7 +36,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type syncCommandArguments struct {
+type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
@@ -46,12 +46,10 @@ type syncCommandArguments struct {
 	include      string
 	exclude      string
 	output       string
-	// commandString hold the user given command which is logged to the Job log file
-	commandString string
 }
 
 // validates and transform raw input into cooked input
-func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
+func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
 	fromTo := inferFromTo(raw.src, raw.dst)
@@ -138,26 +136,54 @@ type cookedSyncCmdArgs struct {
 
 	// used to calculate job summary
 	jobStartTime time.Time
+
+	// this flag is set by the enumerator
+	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
+	isEnumerationComplete bool
 }
 
-func (cca *cookedSyncCmdArgs) PrintJobStartedMsg() {
+// wraps call to lifecycle manager to wait for the job to complete
+// if blocking is specified to true, then this method will never return
+// if blocking is specified to false, then another goroutine spawns and wait out the job
+func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
+	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-}
 
-func (cca *cookedSyncCmdArgs) CancelJob() {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
-	}
-}
-
-func (cca *cookedSyncCmdArgs) InitializeProgressCounters() {
+	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
+
+	// hand over control to the lifecycle manager if blocking
+	if blocking {
+		glcm.InitiateProgressReporting(cca, true)
+		glcm.SurrenderControl()
+	} else {
+		// non-blocking, return after spawning a go routine to watch the job
+		glcm.InitiateProgressReporting(cca, true)
+	}
 }
 
-func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
+func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+	// prompt for confirmation, except when:
+	// 1. output is in json format
+	// 2. enumeration is complete
+	if !(cca.output == common.EOutputFormat.Json() || cca.isEnumerationComplete) {
+		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+
+		// read a line from stdin, if the answer is not yes, then abort cancel by returning
+		if !strings.EqualFold(answer, "y") {
+			return
+		}
+	}
+
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		lcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -167,15 +193,12 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			// something serious has gone wrong if we cannot marshal a json
-			panic(err)
-		}
+		common.PanicIfErr(err)
 
 		if jobDone {
-			glcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+			lcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
 		} else {
-			glcm.Info(string(jsonOutput))
+			lcm.Info(string(jsonOutput))
 			return
 		}
 	}
@@ -184,7 +207,7 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-		glcm.ExitWithSuccess(fmt.Sprintf(
+		lcm.ExitWithSuccess(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
@@ -210,7 +233,7 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
 		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
@@ -322,7 +345,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 }
 
 func init() {
-	raw := syncCommandArguments{}
+	raw := rawSyncCmdArgs{}
 	// syncCmd represents the sync command
 	var syncCmd = &cobra.Command{
 		Use:     "sync",

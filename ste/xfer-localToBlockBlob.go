@@ -37,22 +37,22 @@ import (
 )
 
 type blockBlobUpload struct {
-	jptm     IJobPartTransferMgr
-	srcMmf   *common.MMF
-	source   string
+	jptm        IJobPartTransferMgr
+	srcMmf      *common.MMF
+	source      string
 	destination string
-	blobURL  azblob.BlobURL
-	pacer    *pacer
-	blockIds []string
+	blobURL     azblob.BlobURL
+	pacer       *pacer
+	blockIds    []string
 }
 
 type pageBlobUpload struct {
-	jptm    IJobPartTransferMgr
-	srcMmf  *common.MMF
-	source string
+	jptm        IJobPartTransferMgr
+	srcMmf      *common.MMF
+	source      string
 	destination string
-	blobUrl azblob.BlobURL
-	pacer   *pacer
+	blobUrl     azblob.BlobURL
+	pacer       *pacer
 }
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -101,7 +101,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	// step 2a: Open the Source File.
 	srcFile, err := os.Open(info.Source)
 	if err != nil {
-		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-" + err.Error(), 0)
+		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
 		jptm.AddToBytesDone(info.SourceSize)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
@@ -116,7 +116,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// file needs to be memory mapped only when the file size is greater than 0.
 		srcMmf, err = common.NewMMF(srcFile, false, 0, blobSize)
 		if err != nil {
-			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error-" + err.Error(), 0)
+			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error-"+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
@@ -144,7 +144,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-" +msg, status)
+			jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-"+msg, status)
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -161,7 +161,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			_, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType())
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				jptm.LogUploadError(info.Source, info.Destination, "PageBlob SetTier-" +msg, status)
+				jptm.LogUploadError(info.Source, info.Destination, "PageBlob SetTier-"+msg, status)
 				jptm.Cancel()
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				// Since transfer failed while setting the page blob tier
@@ -186,12 +186,12 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		jptm.SetNumberOfChunks(numPages)
 
 		pbu := &pageBlobUpload{
-			jptm:    jptm,
-			srcMmf:  srcMmf,
-			source:info.Source,
-			destination:info.Destination,
-			blobUrl: blobUrl,
-			pacer:   pacer}
+			jptm:        jptm,
+			srcMmf:      srcMmf,
+			source:      info.Source,
+			destination: info.Destination,
+			blobUrl:     blobUrl,
+			pacer:       pacer}
 
 		// Scheduling page range update to the Page Blob created above.
 		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
@@ -227,13 +227,13 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// creating block Blob struct which holds the srcFile, srcMmf memory map byte slice, pacer instance and blockId list.
 		// Each chunk uses these details which uploading the block.
 		bbu := &blockBlobUpload{
-			jptm:     jptm,
-			srcMmf:   srcMmf,
-			source:info.Source,
-			destination:info.Destination,
-			blobURL:  blobUrl,
-			pacer:    pacer,
-			blockIds: blockIds}
+			jptm:        jptm,
+			srcMmf:      srcMmf,
+			source:      info.Source,
+			destination: info.Destination,
+			blobURL:     blobUrl,
+			pacer:       pacer,
+			blockIds:    blockIds}
 
 		// go through the file and schedule chunk messages to upload each chunk
 		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
@@ -339,7 +339,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				// cancel entire transfer because this chunk has failed
 				bbu.jptm.Cancel()
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				bbu.jptm.LogUploadError(bbu.source, bbu.destination, "Chunk Upload Failed " + msg, status)
+				bbu.jptm.LogUploadError(bbu.source, bbu.destination, "Chunk Upload Failed "+msg, status)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
@@ -381,7 +381,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				bbu.jptm.LogUploadError(bbu.source, bbu.destination, "Commit block list failed " + msg, status)
+				bbu.jptm.LogUploadError(bbu.source, bbu.destination, "Commit block list failed "+msg, status)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 				transferDone()
 				return
@@ -398,7 +398,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType())
 				if err != nil {
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
-					bbu.jptm.LogUploadError(bbu.source, bbu.destination, "BlockBlob SetTier " + msg, status)
+					bbu.jptm.LogUploadError(bbu.source, bbu.destination, "BlockBlob SetTier "+msg, status)
 					bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				}
 			}
@@ -453,7 +453,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 	// if the put blob is a failure, updating the transfer status to failed
 	if err != nil {
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogUploadError(tInfo.Source, tInfo.Destination, "PutBlob Failed " + msg, status)
+		jptm.LogUploadError(tInfo.Source, tInfo.Destination, "PutBlob Failed "+msg, status)
 		if !jptm.WasCanceled() {
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
@@ -469,8 +469,8 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 			_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType())
 			if err != nil {
-				status , msg := ErrorEx{err}.ErrorCodeAndString()
-				jptm.LogUploadError(tInfo.Source, tInfo.Destination, "BlockBlob SetTier " + msg, status)
+				status, msg := ErrorEx{err}.ErrorCodeAndString()
+				jptm.LogUploadError(tInfo.Source, tInfo.Destination, "BlockBlob SetTier "+msg, status)
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				// since blob tier failed, the transfer failed
 				// the blob created should be deleted
@@ -589,7 +589,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 					pbu.jptm.LogError(pageBlobUrl.String(), "PutPageFailed ", err)
 				} else {
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
-					pbu.jptm.LogUploadError(pbu.source, pbu.destination, "UploadPages " + msg, status)
+					pbu.jptm.LogUploadError(pbu.source, pbu.destination, "UploadPages "+msg, status)
 					// cancelling the transfer
 					pbu.jptm.Cancel()
 					pbu.jptm.SetStatus(common.ETransferStatus.Failed())

@@ -17,7 +17,7 @@ func (RpcCmd) CopyJobPartOrder() RpcCmd { return RpcCmd("CopyJobPartOrder") }
 func (RpcCmd) ListJobs() RpcCmd         { return RpcCmd("ListJobs") }
 func (RpcCmd) ListJobSummary() RpcCmd   { return RpcCmd("ListJobSummary") }
 func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd("ListJobTransfers") }
-func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("CancelJob") }
+func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("Cancel") }
 func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
 

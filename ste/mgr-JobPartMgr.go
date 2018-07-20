@@ -581,7 +581,7 @@ func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 	return transfersDone
 }
 
-//func (jpm *jobPartMgr) CancelJob() { jpm.jobMgr.Cancel() }
+//func (jpm *jobPartMgr) Cancel() { jpm.jobMgr.Cancel() }
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
 	// Clear other fields to all for GC

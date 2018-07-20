@@ -12,6 +12,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
@@ -178,9 +179,9 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// For each try, seek to the beginning of the body stream. We do this even for the 1st try because
 				// the stream may not be at offset 0 when we first get it and we want the same behavior for the
 				// 1st try as for additional tries.
-				if err = requestCopy.RewindBody(); err != nil {
-					panic(err)
-				}
+				err = requestCopy.RewindBody()
+				common.PanicIfErr(err)
+
 				if !tryingPrimary {
 					requestCopy.Request.URL.Host = o.retryReadsFromSecondaryHost()
 				}
@@ -321,9 +322,9 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 				// For each try, seek to the beginning of the body stream. We do this even for the 1st try because
 				// the stream may not be at offset 0 when we first get it and we want the same behavior for the
 				// 1st try as for additional tries.
-				if err = requestCopy.RewindBody(); err != nil {
-					panic(err)
-				}
+				err = requestCopy.RewindBody()
+				common.PanicIfErr(err)
+
 				if !tryingPrimary {
 					requestCopy.Request.URL.Host = o.retryReadsFromSecondaryHost()
 				}

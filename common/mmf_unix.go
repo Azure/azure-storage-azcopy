@@ -62,9 +62,7 @@ func (m *MMF) Unmap() {
 	m.lock.Lock()
 	err := syscall.Munmap(m.slice)
 	m.slice = nil
-	if err != nil {
-		panic(err)
-	}
+	PanicIfErr(err)
 	m.isMapped = false
 	m.lock.Unlock()
 }

@@ -21,10 +21,11 @@
 package common
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"log"
 	"os"
 	"runtime"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 type ILogger interface {
@@ -50,9 +51,7 @@ func NewAppLogger(minimumLevelToLog pipeline.LogLevel) ILoggerCloser {
 	// TODO: Put start date time in file name
 	// TODO: log life time management.
 	appLogFile, err := os.OpenFile("azcopy.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
-	if err != nil {
-		panic(err)
-	}
+	PanicIfErr(err)
 	return &appLogger{
 		minimumLevelToLog: minimumLevelToLog,
 		file:              appLogFile,
@@ -77,9 +76,8 @@ func (al *appLogger) ShouldLog(level pipeline.LogLevel) bool {
 
 func (al *appLogger) CloseLog() {
 	al.logger.Println("Closing Log")
-	if err := al.file.Close(); err != nil {
-		panic(err)
-	}
+	err := al.file.Close()
+	PanicIfErr(err)
 }
 
 func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
@@ -120,9 +118,8 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) IL
 
 func (jl *jobLogger) OpenLog() {
 	file, err := os.OpenFile(jl.jobID.String()+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
-	if err != nil {
-		panic(err)
-	}
+	PanicIfErr(err)
+
 	jl.file = file
 	jl.logger = log.New(jl.file, "", log.LstdFlags|log.LUTC)
 	// Log the Azcopy Version
@@ -145,9 +142,8 @@ func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
 
 func (jl *jobLogger) CloseLog() {
 	jl.logger.Println("Closing Log")
-	if err := jl.file.Close(); err != nil {
-		panic(err)
-	}
+	err := jl.file.Close()
+	PanicIfErr(err)
 }
 
 func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {

@@ -6,12 +6,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
-const (
-	// storageAnalyticsVersion indicates the version of Storage Analytics to configure. Use "1.0" for this value.
-	// For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/set-file-service-properties.
-	storageAnalyticsVersion = "1.0"
-)
-
 // A ServiceURL represents a URL to the Azure Storage File service allowing you to manipulate file shares.
 type ServiceURL struct {
 	client managementClient
