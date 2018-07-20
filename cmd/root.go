@@ -25,8 +25,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cfgFile string
-
 var azcopyAppPathFolder string
 
 // rootCmd represents the base command when called without any subcommands

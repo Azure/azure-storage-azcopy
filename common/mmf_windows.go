@@ -73,9 +73,7 @@ func (m *MMF) Unmap() {
 	addr := uintptr(unsafe.Pointer(&(([]byte)(m.slice)[0])))
 	m.slice = []byte{}
 	err := syscall.UnmapViewOfFile(addr)
-	if err != nil {
-		panic(err)
-	}
+	PanicIfErr(err)
 	m.isMapped = false
 	m.lock.Unlock()
 }

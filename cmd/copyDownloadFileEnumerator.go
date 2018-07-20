@@ -114,7 +114,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			marker = lResp.NextMarker
 		}
 
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -186,7 +186,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 		}
 
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -199,12 +199,8 @@ func (e *copyDownloadFileEnumerator) addTransfer(transfer common.CopyTransfer, c
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyDownloadFileEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *copyDownloadFileEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *copyDownloadFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }
 
 // TODO: Optimize for resource consumption cases. Can change to DFS with recursive method simply.

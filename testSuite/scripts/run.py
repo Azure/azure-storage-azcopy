@@ -147,7 +147,6 @@ def init():
         return
     else:
         test_dir_path += "\\test_data"
-    print("test container url ", util.test_container_url)
 
 def cleanup():
     # delete the log files

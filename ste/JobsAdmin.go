@@ -35,8 +35,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-var JobsAdminInitialized = make(chan bool, 1)
-
 // sortPlanFiles is struct that implements len, swap and less than functions
 // this struct is used to sort the JobPartPlan files of the same job on the basis
 // of Part number
@@ -243,10 +241,6 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
-	numOfEngineWorker   int
-	// bytesOverWire defines the total bytes sent from azcopy to the service through sdk.
-	// It is used to calculated the throughput of azcopy.
-	bytesOverWire uint64
 }
 
 type CoordinatorChannels struct {

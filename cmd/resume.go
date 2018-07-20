@@ -48,24 +48,36 @@ type resumeJobController struct {
 	jobStartTime time.Time
 }
 
-func (cca *resumeJobController) PrintJobStartedMsg() {
+// wraps call to lifecycle manager to wait for the job to complete
+// if blocking is specified to true, then this method will never return
+// if blocking is specified to false, then another goroutine spawns and wait out the job
+func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
+	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-}
 
-func (cca *resumeJobController) CancelJob() {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
-	}
-}
-
-func (cca *resumeJobController) InitializeProgressCounters() {
+	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
+
+	// hand over control to the lifecycle manager if blocking
+	if blocking {
+		glcm.InitiateProgressReporting(cca, true)
+		glcm.SurrenderControl()
+	} else {
+		// non-blocking, return after spawning a go routine to watch the job
+		glcm.InitiateProgressReporting(cca, true)
+	}
 }
 
-func (cca *resumeJobController) PrintJobProgressStatus() {
+func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		lcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -75,7 +87,7 @@ func (cca *resumeJobController) PrintJobProgressStatus() {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-		glcm.ExitWithSuccess(fmt.Sprintf(
+		lcm.ExitWithSuccess(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
@@ -272,7 +284,7 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	controller := resumeJobController{jobID: jobID}
-	glcm.WaitUntilJobCompletion(&controller)
+	controller.waitUntilJobCompletion(true)
 
 	return nil
 }

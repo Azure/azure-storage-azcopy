@@ -29,8 +29,6 @@ import (
 	"net/http"
 	"time"
 
-	"strings"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -56,7 +54,6 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 	initJobsAdmin(steCtx, concurrentConnections, targetRateInMBps, azcopyAppPathFolder)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
-	JobsAdminInitialized <- true
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	deserialize := func(request *http.Request, v interface{}) {
@@ -167,8 +164,8 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	completeJobOrdered := func(jm IJobMgr) bool {
-		// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
+	jobCompletelyOrdered := func(jm IJobMgr) bool {
+		// determine whether final part for job with JobId has been ordered or not.
 		completeJobOrdered := false
 		for p := PartNumber(0); true; p++ {
 			jpm, found := jm.JobPartMgr(p)
@@ -178,39 +175,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 			completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
 		}
 		return completeJobOrdered
-	}
-
-	jobCompletelyOrdered := completeJobOrdered(jm)
-	// TODO reconsider this functionality, as it conflicts with cancel from stdin
-	// If the job has not been ordered completely, then if cancelled, Job cannot be resumed later
-	// The user is asked for a Yes / No to cancel or not
-	if !jobCompletelyOrdered {
-		var confirmCancel string
-		// The message is displayed to the User and asked for Yes / No Input to cancel the Job
-		fmt.Println("\nThe Job is not completely ordered yet. Cancelling the Job " +
-			"now won't let the Job to be resumed later. Enter 'Yes' to cancel or 'No' to resume to the Job")
-		// The flow goes in to the Indefinite loop reading the standard Input
-		// The loop doesn't break unless the user provide Yes or No for Input
-		for {
-			// read the standard input
-			fmt.Scanln(&confirmCancel)
-			// If the user provides "Yes" to cancel the Job
-			// then Job is cancelled
-			if strings.EqualFold(confirmCancel, "Yes") {
-				break
-			} else if strings.EqualFold(confirmCancel, "No") {
-				// If the user provides "No" to cancel the Job
-				// then it returns CancelPauseResumeResponse
-				// and the Job is resumed
-				return common.CancelPauseResumeResponse{
-					CancelledPauseResumed: true,
-					ErrorMsg:              "",
-				}
-			} else {
-				fmt.Println("Provide Input as Yes / No")
-			}
-		}
-	}
+	}(jm)
 
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
@@ -252,8 +217,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		if !jobCompletelyOrdered {
 			jr = common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
-				// TODO this causes a fatal error on the front end, it should exit gracefully since cancel is successful
-				ErrorMsg: fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
+				ErrorMsg:              fmt.Sprintf("cancelled the job but it cannot be resumed because the enumeration of the source was not complete"),
 			}
 			return jr
 		}
@@ -521,11 +485,4 @@ func ListJobs() common.ListJobsResponse {
 		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails, common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString()})
 	}
 	return listJobResponse
-}
-
-// todo use this in case of panic
-func assertOK(err error) {
-	if err != nil {
-		panic(err)
-	}
 }

@@ -139,7 +139,3 @@ func (e *removeBlobEnumerator) dispatchFinalPart() error {
 	}
 	return nil
 }
-
-func (e *removeBlobEnumerator) partNum() common.PartNumber {
-	return e.PartNum
-}

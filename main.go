@@ -59,7 +59,7 @@ func main() {
 		}
 		defaultConcurrentConnections = int(val)
 	}
-	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
+	ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
 
 	cmd.Execute(azcopyAppPathFolder)
 	glcm.ExitWithSuccess("", common.EExitCode.Success())

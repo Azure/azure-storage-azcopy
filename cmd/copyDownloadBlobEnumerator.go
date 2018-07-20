@@ -74,7 +74,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			SourceSize:       blobProperties.ContentLength(),
 		}, cca)
 		// only one transfer for this Job, dispatch the JobPart
-		err := e.dispatchFinalPart()
+		err := e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return fmt.Errorf("no transfer queued to download. Please verify the source / destination")
 	}
 	// dispatch the JobPart as Final Part of the Job
-	err = e.dispatchFinalPart()
+	err = e.dispatchFinalPart(cca)
 	if err != nil {
 		return err
 	}
@@ -198,10 +198,6 @@ func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, c
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyDownloadBlobEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *copyDownloadBlobEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *copyDownloadBlobEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }

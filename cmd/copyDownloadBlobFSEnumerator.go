@@ -93,7 +93,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 	}
 	// dispatch the JobPart as Final Part of the Job
-	err = e.dispatchFinalPart()
+	err = e.dispatchFinalPart(cca)
 	if err != nil {
 		return err
 	}
@@ -104,10 +104,6 @@ func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer,
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyDownloadBlobFSEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *copyDownloadBlobFSEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *copyDownloadBlobFSEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }
