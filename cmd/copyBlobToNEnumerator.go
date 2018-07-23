@@ -195,7 +195,7 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, containerItem.Name)
 			containerURL := srcServiceURL.NewContainerURL(containerItem.Name)
 
-			// Transfer azblob's metadata to common metadata, not common metadata can be transferred to other types of metadata.
+			// Transfer azblob's metadata to common metadata, note common metadata can be transferred to other types of metadata.
 			e.createBucket(ctx, tmpDestURL, common.FromAzBlobMetadataToCommonMetadata(containerItem.Metadata))
 
 			// List source container

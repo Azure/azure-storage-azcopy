@@ -180,7 +180,7 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, shareItem.Name)
 			shareRootDirURL := srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL()
 
-			// Transfer azblob's metadata to common metadata, not common metadata can be transferred to other types of metadata.
+			// Transfer azblob's metadata to common metadata, note common metadata can be transferred to other types of metadata.
 			e.createBucket(ctx, tmpDestURL, common.FromAzFileMetadataToCommonMetadata(shareItem.Metadata))
 
 			// List source share
