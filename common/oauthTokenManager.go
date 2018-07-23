@@ -207,6 +207,10 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar() (*OAuthTokenInfo, er
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
 	}
 
+	// Remove the env var after successfully fetching once,
+	// in case of env var is further spreading into child processes unexpectly.
+	os.Setenv(EnvVarOAuthTokenInfo, "")
+
 	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token, %v", err)
