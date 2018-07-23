@@ -178,12 +178,23 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	for t := range order.Transfers {
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
-			SrcOffset:            currentSrcStringOffset, // SrcOffset of the src string
-			SrcLength:            int16(len(order.Transfers[t].Source)),
-			DstLength:            int16(len(order.Transfers[t].Destination)),
-			ModifiedTime:         order.Transfers[t].LastModifiedTime.UnixNano(),
-			SourceSize:           order.Transfers[t].SourceSize,
-			CompletionTime:       0,
+			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
+			SrcLength:      int16(len(order.Transfers[t].Source)),
+			DstLength:      int16(len(order.Transfers[t].Destination)),
+			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
+			SourceSize:     order.Transfers[t].SourceSize,
+			CompletionTime: 0,
+			// For S2S copy, per Transfer source's properties
+			SrcContentTypeLength:        int16(len(order.Transfers[t].ContentType)),
+			SrcContentEncodingLength:    int16(len(order.Transfers[t].ContentEncoding)),
+			SrcContentLanguageLength:    int16(len(order.Transfers[t].ContentLanguage)),
+			SrcContentDispositionLength: int16(len(order.Transfers[t].ContentDisposition)),
+			SrcCacheControlLength:       int16(len(order.Transfers[t].CacheControl)),
+			SrcContentMD5Length:         int16(len(order.Transfers[t].ContentMD5)),
+			SrcMetadataLength:           int16(len(order.Transfers[t].Metadata)),
+			// SrcBlobTierLength:           uint16(len(order.Transfers[t].BlobTier)),
+			// TODO: + Metadata
+
 			atomicTransferStatus: common.ETransferStatus.NotStarted(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
 		}
@@ -192,7 +203,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		// The NEXT transfer's src/dst string come after THIS transfer's src/dst strings
 		srcDstStringsOffset[t] = currentSrcStringOffset
 
-		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength)
+		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
+			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
+			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength)
 	}
 
 	// All the transfers were written; now write each each transfer's src/dst strings
@@ -214,6 +227,70 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			panic(err)
 		}
 		eof += int64(bytesWritten)
+
+		// For S2S copy, write the src properties
+		if len(order.Transfers[t].ContentType) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].ContentEncoding) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].ContentEncoding)
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].ContentLanguage) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].ContentLanguage)
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].ContentDisposition) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].ContentDisposition)
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].CacheControl) != 0 {
+			bytesWritten, err = file.WriteString(order.Transfers[t].CacheControl)
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		if order.Transfers[t].ContentMD5 != nil {
+			bytesWritten, err = file.WriteString(string(order.Transfers[t].ContentMD5))
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		// For S2S copy, write the src metadata
+		if len(order.Transfers[t].Metadata) != 0 {
+			metadataStr, err := order.Transfers[t].Metadata.Marshal()
+			if err != nil {
+				panic(err)
+			}
+
+			bytesWritten, err = file.WriteString(metadataStr)
+			if err != nil {
+				panic(err)
+			}
+			eof += int64(bytesWritten)
+		}
+		// if len(order.Transfers[t].BlobTier) != 0 {
+		// 	bytesWritten, err = file.WriteString(order.Transfers[t].BlobTier)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
+		// 	eof += int64(bytesWritten)
+		// }
 	}
 	// the file is closed to due to defer above
 }

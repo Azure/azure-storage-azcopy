@@ -108,9 +108,10 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 		return fmt.Errorf("error parsing the destinatio url")
 	}
 
-	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl)
+	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl) // TODO: remove and purely use extension
+	blobURLPartsExtension := blobURLPartsExtension{blobUrlParts}
 	containerUrl := util.getContainerUrl(blobUrlParts)
-	searchPrefix, pattern := util.searchPrefixFromUrl(blobUrlParts)
+	searchPrefix, pattern := blobURLPartsExtension.searchPrefixFromBlobURL()
 
 	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
 	// virtual directory is the entire virtual directory path before the blob name

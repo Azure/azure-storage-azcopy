@@ -29,6 +29,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -196,6 +197,8 @@ func (FromTo) BlobTrash() FromTo   { return FromTo(9) }
 func (FromTo) FileTrash() FromTo   { return FromTo(10) }
 func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
 func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
+func (FromTo) BlobBlob() FromTo    { return FromTo(13) }
+func (FromTo) FileBlob() FromTo    { return FromTo(14) }
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -381,4 +384,62 @@ type CopyTransfer struct {
 	Destination      string
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
+
+	// Properties for service to service copy
+	ContentType        string
+	ContentEncoding    string
+	ContentDisposition string
+	ContentLanguage    string
+	CacheControl       string
+	ContentMD5         []byte
+	Metadata           Metadata
+	//BlobTier           string //TODO
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Metadata used in AzCopy.
+type Metadata map[string]string
+
+// ToAzBlobMetadata converts metadata to azblob's metadata.
+func (m Metadata) ToAzBlobMetadata() azblob.Metadata {
+	return azblob.Metadata(m)
+}
+
+// ToAzFileMetadata converts metadata to azfile's metadata.
+func (m Metadata) ToAzFileMetadata() azfile.Metadata {
+	return azfile.Metadata(m)
+}
+
+// FromAzBlobMetadataToCommonMetadata converts azblob's metadata to common metadata.
+func FromAzBlobMetadataToCommonMetadata(m azblob.Metadata) Metadata {
+	return Metadata(m)
+}
+
+// FromAzFileMetadataToCommonMetadata converts azfile's metadata to common metadata.
+func FromAzFileMetadataToCommonMetadata(m azfile.Metadata) Metadata {
+	return Metadata(m)
+}
+
+// Marshal marshals metadata to string.
+func (m Metadata) Marshal() (string, error) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}
+
+// UnMarshalToCommonMetadata unmarshals string to common metadata.
+func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
+	var result Metadata
+	if metadataString != "" {
+		err := json.Unmarshal([]byte(metadataString), &result)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
 }

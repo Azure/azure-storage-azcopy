@@ -48,7 +48,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
-const DefaultServiceApiVersion = "2017-11-09"
+const DefaultServiceApiVersion = "2018-03-28"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -234,7 +234,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
 			jpm.ReportTransferDone()            // Don't schedule an already-completed/failed transfer
-			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the
+			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the bytes done
 			continue
 		}
 
@@ -447,11 +447,9 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 		fromTo := jpm.planMMF.Plan().FromTo
 
 		switch fromTo {
-		case common.EFromTo.BlobTrash():
-			fallthrough
-		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-			fallthrough
-		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
+		// Create pipeline for Azure Blob.
+		case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
+			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
 			credential := jpm.createBlobCredential(ctx)
 			jpm.pipeline = NewBlobPipeline(
 				credential,
@@ -468,9 +466,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
-		case common.EFromTo.BlobFSLocal():
-			fallthrough
-		case common.EFromTo.LocalBlobFS():
+		// Create pipeline for Azure BlobFS.
+		case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
 			credential := jpm.createBlobFSCredential(ctx)
 			jpm.pipeline = NewBlobFSPipeline(
 				credential,
@@ -487,11 +484,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
-		case common.EFromTo.FileTrash():
-			fallthrough
-		case common.EFromTo.FileLocal(): // download from Azure File to local file system
-			fallthrough
-		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
+		// Create pipeline for Azure File.
+		case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
 			jpm.pipeline = newFilePipeline(
 				azfile.NewAnonymousCredential(),
 				azfile.PipelineOptions{

@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"math/rand"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.

@@ -51,7 +51,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		// (b is not a directory) will download blob as C:\\Users\\User1\\b
 		var blobLocalPath string
 		if util.isPathALocalDirectory(cca.dst) {
-			blobNameFromUrl := util.blobNameFromUrl(blobUrlParts)
+			blobNameFromUrl := blobUrlParts.BlobName
 			// check for special characters and get blobName without special character.
 			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
 			blobLocalPath = util.generateLocalPath(cca.dst, blobNameFromUrl)
@@ -187,7 +187,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// searchPrefix is the used in listing blob inside a container
 	// all the blob listed should have the searchPrefix as the prefix
 	// blobNamePattern represents the regular expression which the blobName should Match
-	searchPrefix, blobNamePattern := util.searchPrefixFromUrl(blobUrlParts)
+	searchPrefix, blobNamePattern := blobURLPartsExtension{blobUrlParts}.searchPrefixFromBlobURL() // TODO: replace blobURLParts with blobURLPartsExtension after util refactor finished.
 
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory

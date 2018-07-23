@@ -34,6 +34,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/Azure/go-autorest/autorest/adal"
 )
 
@@ -306,6 +307,23 @@ func createBlobFSCredential(ctx context.Context, credInfo common.CredentialInfo)
 	default:
 		panic(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
+}
+
+func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
+	return azfile.NewPipeline(
+		azfile.NewAnonymousCredential(),
+		azfile.PipelineOptions{
+			Retry: azfile.RetryOptions{
+				Policy:        azfile.RetryPolicyExponential,
+				MaxTries:      ste.UploadMaxTries,
+				TryTimeout:    ste.UploadTryTimeout,
+				RetryDelay:    ste.UploadRetryDelay,
+				MaxRetryDelay: ste.UploadMaxRetryDelay,
+			},
+			Telemetry: azfile.TelemetryOptions{
+				Value: common.UserAgent,
+			},
+		}), nil
 }
 
 func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
