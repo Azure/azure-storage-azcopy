@@ -113,7 +113,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		pacer:          pacer,
 		blockIDs:       blockIDs,
 		srcHTTPHeaders: info.SrcHTTPHeaders,
-		srcMetadata:    azblob.Metadata(info.SrcMetadata)}
+		srcMetadata:    info.SrcMetadata.ToAzBlobMetadata()}
 
 	for startRange := int64(0); startRange < srcSize; startRange += chunkSize {
 		// compute exact size of the chunk

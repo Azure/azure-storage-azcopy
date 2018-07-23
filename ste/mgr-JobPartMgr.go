@@ -447,15 +447,9 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 		fromTo := jpm.planMMF.Plan().FromTo
 
 		switch fromTo {
-		case common.EFromTo.BlobTrash():
-			fallthrough
-		case common.EFromTo.BlobBlob(): // Copy from blob service to blob service
-			fallthrough
-		case common.EFromTo.FileBlob(): // Copy from file service to blob service
-			fallthrough
-		case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-			fallthrough
-		case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
+		// Create pipeline for Azure Blob.
+		case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
+			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
 			credential := jpm.createBlobCredential(ctx)
 			jpm.pipeline = NewBlobPipeline(
 				credential,
@@ -472,9 +466,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
-		case common.EFromTo.BlobFSLocal():
-			fallthrough
-		case common.EFromTo.LocalBlobFS():
+		// Create pipeline for Azure BlobFS.
+		case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
 			credential := jpm.createBlobFSCredential(ctx)
 			jpm.pipeline = NewBlobFSPipeline(
 				credential,
@@ -491,11 +484,8 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 					RetryDelay:    UploadRetryDelay,
 					MaxRetryDelay: UploadMaxRetryDelay},
 				jpm.pacer)
-		case common.EFromTo.FileTrash():
-			fallthrough
-		case common.EFromTo.FileLocal(): // download from Azure File to local file system
-			fallthrough
-		case common.EFromTo.LocalFile(): // upload from local file system to Azure File
+		// Create pipeline for Azure File.
+		case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
 			jpm.pipeline = newFilePipeline(
 				azfile.NewAnonymousCredential(),
 				azfile.PipelineOptions{

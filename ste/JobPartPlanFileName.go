@@ -264,8 +264,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			}
 			eof += int64(bytesWritten)
 		}
-		if len(order.Transfers[t].ContentMD5) != 0 {
-			bytesWritten, err = file.WriteString(order.Transfers[t].ContentMD5)
+		if order.Transfers[t].ContentMD5 != nil {
+			bytesWritten, err = file.WriteString(string(order.Transfers[t].ContentMD5))
 			if err != nil {
 				panic(err)
 			}
@@ -273,7 +273,12 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		}
 		// For S2S copy, write the src metadata
 		if len(order.Transfers[t].Metadata) != 0 {
-			bytesWritten, err = file.WriteString(order.Transfers[t].Metadata)
+			metadataStr, err := order.Transfers[t].Metadata.Marshal()
+			if err != nil {
+				panic(err)
+			}
+
+			bytesWritten, err = file.WriteString(metadataStr)
 			if err != nil {
 				panic(err)
 			}

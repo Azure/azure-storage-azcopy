@@ -11,7 +11,8 @@ import (
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
-// copyFileToNEnumerator enumerates file source, and submit request for copy file to blob/file/blobFS (Currently only file->blob is supported)
+// copyFileToNEnumerator enumerates file source, and submit request for copy file to N,
+// where N stands for blob/file/blobFS (Currently only blob is supported).
 // The source could be single file/directory/share/file account
 type copyFileToNEnumerator common.CopyJobPartOrderRequest
 
@@ -41,15 +42,15 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return errors.New("cannot parse destination URL")
 	}
 
-	srcFileURLPart := azfile.NewFileURLParts(*sourceURL)
+	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
 	// Case-1: Source is account, currently only support blob destination
-	if isAccountLevel, searchPrefix, pattern := gCopyUtil.isFileAccountLevelSearch(srcFileURLPart); isAccountLevel {
+	if isAccountLevel, searchPrefix, pattern := srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
 		if pattern == "*" && !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
 
 		// Switch URL https://<account-name>/shareprefix* to ServiceURL "https://<account-name>"
-		tmpSrcFileURLPart := srcFileURLPart
+		tmpSrcFileURLPart := srcFileURLPartExtension
 		tmpSrcFileURLPart.ShareName = ""
 		srcServiceURL := azfile.NewServiceURL(tmpSrcFileURLPart.URL(), srcFilePipeline)
 		// Validate destination, currently only support blob destination
@@ -93,7 +94,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				"destination must point to a single file, when source is a single file.")
 		}
 		// directly use destURL as destination
-		if err := e.addTransferInternal(srcFileURL.String(), destURL.String(), fileProperties, cca); err != nil {
+		if err := e.addTransferInternal(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart()
@@ -101,7 +102,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// Case-3: Source is a file share or directory
 	// Switch URL https://<account-name>/share/prefix* to ShareURL "https://<account-name>/share"
-	dirURL, searchPrefix := gCopyUtil.getDirURLAndSearchPrefixFromFileURL(srcFileURLPart, srcFilePipeline)
+	dirURL, searchPrefix := srcFileURLPartExtension.getDirURLAndSearchPrefixFromFileURL(srcFilePipeline)
 	if searchPrefix == "" && !cca.recursive {
 		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
 	}
@@ -140,7 +141,8 @@ func (e *copyFileToNEnumerator) initiateDestHelperInfo(ctx context.Context) erro
 	return nil
 }
 
-func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata map[string]string) error {
+// TODO: Create share/bucket and etc. Currently only support blob destination, so create container.
+func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
 	switch e.FromTo {
 	case common.EFromTo.FileBlob():
 		if destInfo.destBlobPipeline == nil {
@@ -148,13 +150,14 @@ func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 		}
 		containerURL := azblob.NewContainerURL(destURL, destInfo.destBlobPipeline)
 		// Create the container, in case of it doesn't exist.
-		_, err := containerURL.Create(ctx, azblob.Metadata(metadata), azblob.PublicAccessNone)
+		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
 		if err != nil {
 			if stgErr, ok := err.(azblob.StorageError); !ok || stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
 				return fmt.Errorf("fail to create container, %v", err)
 			}
 			// the case error is container already exists
 		}
+		// Here could be other cases, e.g.: creating share and etc.
 	}
 	return nil
 }
@@ -177,9 +180,8 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, shareItem.Name)
 			shareRootDirURL := srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL()
 
-			// TODO: Create share/bucket and etc.
-			// Currently only support file to blob, so only create container
-			e.createBucket(ctx, tmpDestURL, map[string]string(shareItem.Metadata))
+			// Transfer azblob's metadata to common metadata, not common metadata can be transferred to other types of metadata.
+			e.createBucket(ctx, tmpDestURL, common.FromAzFileMetadataToCommonMetadata(shareItem.Metadata))
 
 			// List source share
 			// TODO: List in parallel to speed up.
@@ -216,8 +218,8 @@ func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.
 			tmpDestURL := destBaseURL
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, fileItem.Name)
 			err = e.addTransferInternal(
-				srcFileURL.String(),
-				tmpDestURL.String(),
+				srcFileURL.URL(),
+				tmpDestURL,
 				srcFileProperties,
 				cca)
 			if err != nil {
@@ -245,14 +247,15 @@ func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.
 	}
 	return nil
 }
-func (e *copyFileToNEnumerator) addTransferInternal(source, dest string, properties *azfile.FileGetPropertiesResponse,
+
+func (e *copyFileToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	// TODO: This is temp work around for Azure file's content MD5, can be removed whe new File SDK get released.
 	contentMD5 := properties.ContentMD5()
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             source,
-		Destination:        dest,
+		Source:             srcURL.String(),
+		Destination:        destURL.String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),
@@ -260,7 +263,7 @@ func (e *copyFileToNEnumerator) addTransferInternal(source, dest string, propert
 		ContentDisposition: properties.ContentDisposition(),
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
-		ContentMD5:         string(contentMD5[:])},
+		ContentMD5:         contentMD5[:]},
 		cca)
 }
 

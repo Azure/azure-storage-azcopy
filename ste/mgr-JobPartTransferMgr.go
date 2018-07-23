@@ -47,7 +47,7 @@ type TransferInfo struct {
 	Destination string
 
 	SrcHTTPHeaders azblob.BlobHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
-	SrcMetadata    map[string]string
+	SrcMetadata    common.Metadata
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.

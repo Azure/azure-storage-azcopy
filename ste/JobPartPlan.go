@@ -1,7 +1,6 @@
 package ste
 
 import (
-	"encoding/json"
 	"errors"
 	"reflect"
 	"unsafe"
@@ -112,7 +111,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 }
 
 // TransferSrcHTTPHeadersAndMetadata returns the SrcHTTPHeaders for a transfer at given transferIndex in JobPartOrder
-func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata map[string]string) {
+func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -144,7 +143,7 @@ func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex u
 	}
 	if t.SrcMetadataLength != 0 {
 		tmpMetaData := jpph.getString(offset, t.SrcMetadataLength)
-		metadata, err = unmarshalMetadata(tmpMetaData)
+		metadata, err = common.UnMarshalToCommonMetadata(tmpMetaData)
 		if err != nil { // should not happen in normal case
 			panic(err)
 		}
@@ -152,18 +151,6 @@ func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex u
 	}
 
 	return
-}
-
-func unmarshalMetadata(metadataString string) (map[string]string, error) {
-	var result map[string]string
-	if metadataString != "" {
-		err := json.Unmarshal([]byte(metadataString), &result)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return result, nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

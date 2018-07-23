@@ -12,8 +12,9 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
-// copyBlobToNEnumerator enumerates blob source, and submit request for copy blob to blob/file/blobFS (Currently only blob is supported)
-// The source could be single blob/container/blob account
+// copyBlobToNEnumerator enumerates blob source, and submit request for copy blob to N,
+// where N stands for blob/file/blobFS (Currently only blob is supported).
+// The source could be a single blob/container/blob account
 type copyBlobToNEnumerator common.CopyJobPartOrderRequest
 
 // destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
@@ -52,15 +53,15 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return errors.New("cannot parse destination URL")
 	}
 
-	srcBlobURLPart := azblob.NewBlobURLParts(*sourceURL)
+	srcBlobURLPartExtension := blobURLPartsExtension{azblob.NewBlobURLParts(*sourceURL)}
 	// Case-1: Source is account, currently only support blob destination
-	if isAccountLevel, searchPrefix, pattern := gCopyUtil.isBlobAccountLevelSearch(srcBlobURLPart); isAccountLevel {
+	if isAccountLevel, searchPrefix, pattern := srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
 		if pattern == "*" && !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
 
 		// Switch URL https://<account-name>/containerprefix* to ServiceURL "https://<account-name>"
-		tmpSrcBlobURLPart := srcBlobURLPart
+		tmpSrcBlobURLPart := srcBlobURLPartExtension
 		tmpSrcBlobURLPart.ContainerName = ""
 		srcServiceURL := azblob.NewServiceURL(tmpSrcBlobURLPart.URL(), srcBlobPipeline)
 		// Validate destination
@@ -104,7 +105,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				"destination must point to a single file, when source is a single file.")
 		}
 		// directly use destURL as destination
-		if err := e.addTransferInternal2(srcBlobURL.String(), destURL.String(), blobProperties, cca); err != nil {
+		if err := e.addTransferInternal2(srcBlobURL.URL(), *destURL, blobProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart()
@@ -112,11 +113,11 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// Case-3: Source is a blob container or directory
 	// Switch URL https://<account-name>/container/blobprefix* to ContainerURL "https://<account-name>/container"
-	searchPrefix, pattern := gCopyUtil.searchPrefixFromBlobURL(srcBlobURLPart)
+	searchPrefix, pattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
 	if pattern == "*" && !cca.recursive {
 		return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
 	}
-	tmpSrcBlobURLPart := srcBlobURLPart
+	tmpSrcBlobURLPart := srcBlobURLPartExtension
 	tmpSrcBlobURLPart.BlobName = ""
 	err = e.enumerateBlobsInContainer(
 		ctx,
@@ -155,7 +156,9 @@ func (e *copyBlobToNEnumerator) initiateDestHelperInfo(ctx context.Context) erro
 	return nil
 }
 
-func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata map[string]string) error {
+// createBucket creats bucket level object for the destination, e.g. container for blob, share for file, and etc.
+// TODO: Create share/bucket and etc. Currently only support blob destination.
+func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob():
 		if destInfo.destBlobPipeline == nil {
@@ -163,7 +166,7 @@ func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 		}
 		containerURL := azblob.NewContainerURL(destURL, destInfo.destBlobPipeline)
 		// Create the container, in case of it doesn't exist.
-		_, err := containerURL.Create(ctx, azblob.Metadata(metadata), azblob.PublicAccessNone)
+		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
 		if err != nil {
 			if stgErr, ok := err.(azblob.StorageError); !ok || stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
 				return fmt.Errorf("fail to create container, %v", err)
@@ -192,9 +195,8 @@ func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, containerItem.Name)
 			containerURL := srcServiceURL.NewContainerURL(containerItem.Name)
 
-			// TODO: Create share/bucket and etc.
-			// Currently only support blob to blob, so only create container
-			e.createBucket(ctx, tmpDestURL, map[string]string(containerItem.Metadata))
+			// Transfer azblob's metadata to common metadata, not common metadata can be transferred to other types of metadata.
+			e.createBucket(ctx, tmpDestURL, common.FromAzBlobMetadataToCommonMetadata(containerItem.Metadata))
 
 			// List source container
 			// TODO: List in parallel to speed up.
@@ -232,10 +234,10 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 			tmpDestURL := destBaseURL
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, blobRelativePath)
 			err = e.addTransferInternal(
-				srcContainerURL.NewBlobURL(blobItem.Name).String(),
-				tmpDestURL.String(),
+				srcContainerURL.NewBlobURL(blobItem.Name).URL(),
+				tmpDestURL,
 				&blobItem.Properties,
-				map[string]string(blobItem.Metadata),
+				blobItem.Metadata,
 				cca)
 			if err != nil {
 				return err // TODO: Ensure for list errors, directly return or do logging but not return, make the list mechanism much robust
@@ -246,7 +248,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 	return nil
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, properties *azblob.BlobProperties, metadata azblob.Metadata,
+func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
 		return fmt.Errorf(
@@ -260,14 +262,9 @@ func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, propert
 		return err
 	}
 
-	metadataStr, err := gCopyUtil.marshalMetadata(map[string]string(metadata))
-	if err != nil {
-		return err
-	}
-
 	return e.addTransfer(common.CopyTransfer{
-		Source:             source,
-		Destination:        dest,
+		Source:             srcURL.String(),
+		Destination:        destURL.String(),
 		LastModifiedTime:   properties.LastModified,
 		SourceSize:         *properties.ContentLength,
 		ContentType:        *properties.ContentType,
@@ -275,13 +272,13 @@ func (e *copyBlobToNEnumerator) addTransferInternal(source, dest string, propert
 		ContentDisposition: *properties.ContentDisposition,
 		ContentLanguage:    *properties.ContentLanguage,
 		CacheControl:       *properties.CacheControl,
-		ContentMD5:         string(md5DecodedBytes),
-		Metadata:           metadataStr},
+		ContentMD5:         md5DecodedBytes,
+		Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata)},
 		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly
 		cca)
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, properties *azblob.BlobGetPropertiesResponse,
+func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType() != azblob.BlobBlockBlob {
 		return fmt.Errorf(
@@ -289,14 +286,9 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, proper
 			properties.BlobType())
 	}
 
-	metadataStr, err := gCopyUtil.marshalMetadata(map[string]string(properties.NewMetadata()))
-	if err != nil {
-		return err
-	}
-
 	return e.addTransfer(common.CopyTransfer{
-		Source:             source,
-		Destination:        dest,
+		Source:             srcURL.String(),
+		Destination:        destURL.String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),
@@ -304,8 +296,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(source, dest string, proper
 		ContentDisposition: properties.ContentDisposition(),
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
-		ContentMD5:         string(properties.ContentMD5()),
-		Metadata:           metadataStr},
+		ContentMD5:         properties.ContentMD5(),
+		Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata())},
 		//BlobTier:           properties.AccessTier()}, // TODO: blob tier setting correctly
 		cca)
 }

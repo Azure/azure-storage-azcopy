@@ -37,7 +37,8 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// get the blob parts
-	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl)
+	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl) // TODO: keep blobUrlPart temporarily, it should be removed and further refactored.
+	blobURLPartsExtension := blobURLPartsExtension{blobUrlParts}
 
 	// First Check if source blob exists
 	// This check is in place to avoid listing of the blobs and matching the given blob against it
@@ -70,7 +71,7 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// blobNamePattern represents the regular expression which the blobName should Match
 	// For Example: cca.src = https://<container-name>/user-1?<sig> searchPrefix = user-1/
 	// For Example: cca.src = https://<container-name>/user-1/file*?<sig> searchPrefix = user-1/file
-	searchPrefix, blobNamePattern := util.searchPrefixFromBlobURL(blobUrlParts)
+	searchPrefix, blobNamePattern := blobURLPartsExtension.searchPrefixFromBlobURL()
 
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory

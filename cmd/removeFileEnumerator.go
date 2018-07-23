@@ -48,7 +48,7 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// Validate the source url.
-	numOfStartInURLPath := util.numOfStarInUrl(sourceURL.Path)
+	numOfStartInURLPath := util.numOfWildcardInURL(*sourceURL)
 	if numOfStartInURLPath > 1 || (numOfStartInURLPath == 1 && !strings.HasSuffix(sourceURL.Path, "*")) {
 		return fmt.Errorf("only support prefix matching (e.g: fileprefix*), or exact matching")
 	}
