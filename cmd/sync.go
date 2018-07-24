@@ -23,10 +23,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
-	"time"
 )
 
 type syncCommandArguments struct {
@@ -202,8 +203,8 @@ func init() {
 	var syncCmd = &cobra.Command{
 		Use:     "sync",
 		Aliases: []string{"sc", "s"},
-		Short:   "Coming soon: sync replicates source to the destination location.",
-		Long:    `Coming soon: sync replicates source to the destination location.`,
+		Short:   "sync replicates source to the destination location. Last modified time is used for comparison",
+		Long:    `sync replicates source to the destination location. Last modified time the used for comparison`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))
@@ -225,9 +226,6 @@ func init() {
 
 			glcm.SurrenderControl()
 		},
-		// hide features not relevant to BFS
-		// TODO remove after preview release
-		Hidden: true,
 	}
 
 	rootCmd.AddCommand(syncCmd)
