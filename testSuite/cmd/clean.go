@@ -6,23 +6,65 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/JeffreyRichter/enum/enum"
 	"github.com/spf13/cobra"
 )
+
+var EResourceType = ResourceType(0)
+
+// ResourceType defines the different types of credentials
+type ResourceType uint8
+
+func (ResourceType) SingleFile() ResourceType { return ResourceType(0) }
+func (ResourceType) Bucket() ResourceType     { return ResourceType(1) }
+func (ResourceType) Account() ResourceType    { return ResourceType(2) } // For SAS or public.
+
+func (ct ResourceType) String() string {
+	return enum.StringInt(ct, reflect.TypeOf(ct))
+}
+func (ct *ResourceType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(ct), s, true, true)
+	if err == nil {
+		*ct = val.(ResourceType)
+	}
+	return err
+}
+
+var EServiceType = ServiceType(0)
+
+// ServiceType defines the different types of credentials
+type ServiceType uint8
+
+func (ServiceType) Blob() ServiceType   { return ServiceType(0) }
+func (ServiceType) File() ServiceType   { return ServiceType(1) }
+func (ServiceType) BlobFS() ServiceType { return ServiceType(2) } // For SAS or public.
+
+func (ct ServiceType) String() string {
+	return enum.StringInt(ct, reflect.TypeOf(ct))
+}
+func (ct *ServiceType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(ct), s, true, true)
+	if err == nil {
+		*ct = val.(ServiceType)
+	}
+	return err
+}
 
 // initializes the clean command, its aliases and description.
 func init() {
 	resourceURL := ""
-	resourceType := ""
-	blobType := "blob"
-	fileType := "file"
-	blobFSType := "blobFS"
-	isResourceABucket := true
+	serviceType := EServiceType.Blob()
+	resourceType := EResourceType.SingleFile()
+
+	var serviceTypeStr string
+	var resourceTypeStr string
 
 	cleanCmd := &cobra.Command{
 		Use:     "clean",
@@ -37,24 +79,42 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			switch resourceType {
-			case blobType:
-				if isResourceABucket {
+			err := (&serviceType).Parse(serviceTypeStr)
+			if err != nil {
+				panic(fmt.Errorf("fail to parse service type %q, %v", serviceTypeStr, err))
+			}
+			err = (&resourceType).Parse(resourceTypeStr)
+			if err != nil {
+				panic(fmt.Errorf("fail to parse resource type %q, %v", resourceTypeStr, err))
+			}
+
+			switch serviceType {
+			case EServiceType.Blob():
+				switch resourceType {
+				case EResourceType.Bucket():
 					cleanContainer(resourceURL)
-				} else {
+				case EResourceType.SingleFile():
 					cleanBlob(resourceURL)
+				case EResourceType.Account():
+					cleanBlobAccount(resourceURL)
 				}
-			case fileType:
-				if isResourceABucket {
+			case EServiceType.File():
+				switch resourceType {
+				case EResourceType.Bucket():
 					cleanShare(resourceURL)
-				} else {
+				case EResourceType.SingleFile():
 					cleanFile(resourceURL)
+				case EResourceType.Account():
+					cleanFileAccount(resourceURL)
 				}
-			case blobFSType:
-				if isResourceABucket {
+			case EServiceType.BlobFS():
+				switch resourceType {
+				case EResourceType.Bucket():
 					cleanFileSystem(resourceURL)
-				} else {
+				case EResourceType.SingleFile():
 					cleanBfsFile(resourceURL)
+				case EResourceType.Account():
+					cleanBfsAccount(resourceURL)
 				}
 			default:
 				panic(fmt.Errorf("illegal resourceType %q", resourceType))
@@ -63,7 +123,8 @@ func init() {
 	}
 	rootCmd.AddCommand(cleanCmd)
 
-	cleanCmd.PersistentFlags().StringVar(&resourceType, "resourceType", "blob", "Resource type, could be blob or file currently.")
+	cleanCmd.PersistentFlags().StringVar(&resourceTypeStr, "resourceType", "SingleFile", "Resource type, could be single file, bucket or account currently.")
+	cleanCmd.PersistentFlags().StringVar(&serviceTypeStr, "serviceType", "Blob", "Account type, could be blob, file or blobFS currently.")
 }
 
 func cleanContainer(container string) {
@@ -71,7 +132,7 @@ func cleanContainer(container string) {
 	containerSas, err := url.Parse(container)
 
 	if err != nil {
-		fmt.Println("error parsing the container sas ", container)
+		fmt.Println("error parsing the container sas, ", err)
 		os.Exit(1)
 	}
 
@@ -103,7 +164,7 @@ func cleanBlob(blob string) {
 	blobSas, err := url.Parse(blob)
 
 	if err != nil {
-		fmt.Println("error parsing the container sas ", blob)
+		fmt.Println("error parsing the container sas ", err)
 		os.Exit(1)
 	}
 
@@ -112,7 +173,7 @@ func cleanBlob(blob string) {
 
 	_, err = blobUrl.Delete(context.Background(), "include", azblob.BlobAccessConditions{})
 	if err != nil {
-		fmt.Println("error deleting the blob ", blob)
+		fmt.Println("error deleting the blob ", err)
 		os.Exit(1)
 	}
 }
@@ -122,7 +183,7 @@ func cleanShare(shareURLStr string) {
 	u, err := url.Parse(shareURLStr)
 
 	if err != nil {
-		fmt.Println("error parsing the share URL with SAS ", shareURLStr)
+		fmt.Println("error parsing the share URL with SAS ", err)
 		os.Exit(1)
 	}
 
@@ -133,7 +194,7 @@ func cleanShare(shareURLStr string) {
 	if err != nil {
 		sErr := err.(azfile.StorageError)
 		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
-			fmt.Fprintf(os.Stdout, "error deleting the share for clean share '%s', error '%v'\n", shareURL, err)
+			fmt.Fprintf(os.Stdout, "error deleting the share for clean share, error '%v'\n", err)
 			os.Exit(1)
 		}
 	}
@@ -143,7 +204,7 @@ func cleanShare(shareURLStr string) {
 
 	_, err = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "error creating the share for clean share '%s', error '%v'\n", shareURL, err)
+		fmt.Fprintf(os.Stdout, "error creating the share for clean share, error '%v'\n", err)
 		os.Exit(1)
 	}
 }
@@ -152,7 +213,7 @@ func cleanFile(fileURLStr string) {
 	u, err := url.Parse(fileURLStr)
 
 	if err != nil {
-		fmt.Println("error parsing the file URL with SAS ", fileURLStr)
+		fmt.Println("error parsing the file URL with SAS", err)
 		os.Exit(1)
 	}
 
@@ -161,7 +222,7 @@ func cleanFile(fileURLStr string) {
 
 	_, err = fileURL.Delete(context.Background())
 	if err != nil {
-		fmt.Println("error deleting the file ", fileURL)
+		fmt.Println("error deleting the file ", err)
 		os.Exit(1)
 	}
 }
@@ -185,7 +246,7 @@ func cleanFileSystem(fsURLStr string) {
 	u, err := url.Parse(fsURLStr)
 
 	if err != nil {
-		fmt.Println("error parsing the file system URL ", fsURLStr)
+		fmt.Println("error parsing the file system URL", err)
 		os.Exit(1)
 	}
 
@@ -194,7 +255,7 @@ func cleanFileSystem(fsURLStr string) {
 	if err != nil {
 		sErr := err.(azbfs.StorageError)
 		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
-			fmt.Println(fmt.Sprintf("error deleting the file system %q for cleaning, %v", fsURLStr, err))
+			fmt.Println(fmt.Sprintf("error deleting the file system for cleaning, %v", err))
 			os.Exit(1)
 		}
 	}
@@ -204,7 +265,7 @@ func cleanFileSystem(fsURLStr string) {
 
 	_, err = fsURL.Create(ctx)
 	if err != nil {
-		fmt.Println(fmt.Fprintf(os.Stdout, "error creating the file system %q for cleaning, %v", fsURLStr, err))
+		fmt.Println(fmt.Fprintf(os.Stdout, "error creating the file system for cleaning, %v", err))
 		os.Exit(1)
 	}
 }
@@ -214,14 +275,53 @@ func cleanBfsFile(fileURLStr string) {
 	u, err := url.Parse(fileURLStr)
 
 	if err != nil {
-		fmt.Println("error parsing the file system URL ", fileURLStr)
+		fmt.Println("error parsing the file system URL, ", err)
 		os.Exit(1)
 	}
 
 	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline())
 	_, err = fileURL.Delete(ctx)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error deleting the blob FS file %s, %v", fileURLStr, err))
+		fmt.Println(fmt.Sprintf("error deleting the blob FS file, %v", err))
 		os.Exit(1)
 	}
+}
+
+func cleanBlobAccount(resourceURL string) {
+	accountSAS, err := url.Parse(resourceURL)
+
+	if err != nil {
+		fmt.Println("error parsing the account sas ", err)
+		os.Exit(1)
+	}
+
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+	accountURL := azblob.NewServiceURL(*accountSAS, p)
+
+	// perform a list account
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
+		lResp, err := accountURL.ListContainers(context.Background(), marker, azblob.ListContainersOptions{})
+		if err != nil {
+			fmt.Println("error listing containers inside the container. Please check the container sas")
+			os.Exit(1)
+		}
+
+		for _, containerItem := range lResp.Containers {
+			_, err := accountURL.NewContainerURL(containerItem.Name).Delete(context.Background(), azblob.ContainerAccessConditions{})
+			if err != nil {
+				fmt.Println("error deleting the container from account, ", err)
+				os.Exit(1)
+			}
+		}
+		marker = lResp.NextMarker
+	}
+}
+
+func cleanFileAccount(resourceURL string) {
+	panic("not implemented")
+}
+
+func cleanBfsAccount(resourceURL string) {
+	panic("not implemented")
 }

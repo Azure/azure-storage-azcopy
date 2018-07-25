@@ -136,8 +136,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         filename_special_characters = "abc|>rd*"
         resource_url = util.get_resource_sas(filename_special_characters)
         # creating the file with random characters and with file name having special characters.
-        result = util.Command("create").add_arguments(resource_url).add_flags("resourceType", "blob").add_flags(
-            "isResourceABucket", "false").add_flags("blob-size", "1024").execute_azcopy_verify()
+        result = util.Command("create").add_arguments(resource_url).add_flags("serviceType", "Blob").add_flags(
+            "resourceType", "SingleFile").add_flags("blob-size", "1024").execute_azcopy_verify()
         self.assertTrue(result)
 
         # downloading the blob created above.
