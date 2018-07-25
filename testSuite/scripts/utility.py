@@ -3,6 +3,8 @@ import platform
 import shutil
 import subprocess
 import shlex
+import uuid
+import random
 from pathlib import Path
 
 
@@ -94,24 +96,30 @@ def process_oauth_command(
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container(container):
     # execute the clean command.
-    result = Command("clean").add_arguments(container).add_flags("resourceType", "blob").execute_azcopy_clean()
+    result = Command("clean").add_arguments(container).add_flags("serviceType", "Blob").add_flags("resourceType", "Bucket").execute_azcopy_clean()
     if not result:
         print("error cleaning the container. please check the container sas provided")
         return False
     return True
 
+def clean_test_blob_account(account):
+    result = Command("clean").add_arguments(account).add_flags("serviceType", "Blob").add_flags("resourceType", "Account").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the blob account. please check the account sas provided")
+        return False
+    return True
 
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_share(shareURLStr):
     # execute the clean command.
-    result = Command("clean").add_arguments(shareURLStr).add_flags("resourceType", "file").execute_azcopy_clean()
+    result = Command("clean").add_arguments(shareURLStr).add_flags("serviceType", "File").add_flags("resourceType", "Bucket").execute_azcopy_clean()
     if not result:
         print("error cleaning the share. please check the share sas provided")
         return False
     return True
 
 def clean_test_filesystem(fileSystemURLStr):
-    result = Command("clean").add_arguments(fileSystemURLStr).add_flags("resourceType", "blobFS").execute_azcopy_clean()
+    result = Command("clean").add_arguments(fileSystemURLStr).add_flags("serviceType", "BlobFS").add_flags("resourceType", "Bucket").execute_azcopy_clean()
     if not result:
         print("error cleaning the share. please check the filesystem URL, user and key provided")
         return False
@@ -119,7 +127,7 @@ def clean_test_filesystem(fileSystemURLStr):
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, 
-                          azcopy_exec_location, test_suite_exec_location):
+                          s2s_src_blob_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -150,6 +158,10 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
 
     # holds the filesystem url to perform the operations for blob fs service
     global test_bfs_account_url
+
+    global test_s2s_src_blob_account_url
+
+    global test_s2s_dst_blob_account_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -215,6 +227,15 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_share_url = share_sas_url
     if not clean_test_share(test_share_url):
         return False
+
+    test_s2s_src_blob_account_url = s2s_src_blob_account_url
+    if not clean_test_blob_account(test_s2s_src_blob_account_url):
+        return False
+
+    test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
+    if not clean_test_blob_account(test_s2s_dst_blob_account_url):
+        return False
+
     return True
 
 # initialize_test_suite initializes the setup for executing test cases.
@@ -528,6 +549,16 @@ def verify_operation_get_output(command):
     else:
         return output
 
+def get_object_sas(url_with_sas, object_name):
+    # Splitting the container URL to add the uploaded blob name to the SAS
+    url_parts = url_with_sas.split("?")
+    # adding the blob name after the container name
+    if url_parts[0].endswith("/"):
+        resource_sas = url_parts[0] +  object_name + '?' + url_parts[1]
+    else:
+        resource_sas = url_parts[0] + "/" + object_name + '?' + url_parts[1]
+    return resource_sas
+
 # get_resource_sas return the shared access signature for the given resource
 # using the container url.
 def get_resource_sas(resource_name):
@@ -621,3 +652,13 @@ def parseAzcopyOutput(s):
         else:
             final_output = line
     return final_output
+
+def get_resource_name(prefix=''):
+    return prefix + str(uuid.uuid4()).replace('-', '')
+    
+def get_random_bytes(size):
+    rand = random.Random()
+    result = bytearray(size)
+    for i in range(size):
+        result[i] = int(rand.random()*255)  # random() is consistent between python 2 and 3
+    return bytes(result)

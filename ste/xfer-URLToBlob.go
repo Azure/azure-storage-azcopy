@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -91,41 +92,77 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			info.Source, info.Destination, info.SourceSize))
 	}
 
-	// step 3: go through the source range and schedule copy chunk jobs
-	numChunks := common.Iffuint32(
-		srcSize%chunkSize == 0,
-		uint32(srcSize/chunkSize),
-		uint32(srcSize/chunkSize)+1)
+	var azblobMetadata azblob.Metadata
+	if info.SrcMetadata != nil {
+		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()
+	}
 
-	jptm.SetNumberOfChunks(numChunks)
+	// step 3: copy file to blob
+	// Currently only support block blob.
+	if srcSize == 0 {
+		// Create blob and finish.
+		_, err := destBlobURL.ToBlockBlobURL().Upload(jptm.Context(), bytes.NewReader(nil), info.SrcHTTPHeaders, azblobMetadata, azblob.BlobAccessConditions{})
+		// if the create blob failed, updating the transfer status to failed
+		if err != nil {
+			if jptm.WasCanceled() {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo, "create blob failed because transfer was cancelled ")
+				}
+			} else {
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf("create blob failed and cancelling the transfer. Failed with error %v", err))
+				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
+			}
+		} else {
+			// if the create blob is a success, updating the transfer status to success
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, "create blob successfully")
+			}
 
-	// TODO: Dispatch according to blob types
-
-	// creating a slice to contain the block IDs
-	blockIDs := make([]string, numChunks)
-	blockIDCount := int32(0)
-	adjustedChunkSize := chunkSize
-
-	bbc := &blockBlobCopy{
-		jptm:           jptm,
-		srcURL:         *srcURL,
-		destBlobURL:    destBlobURL,
-		pacer:          pacer,
-		blockIDs:       blockIDs,
-		srcHTTPHeaders: info.SrcHTTPHeaders,
-		srcMetadata:    info.SrcMetadata.ToAzBlobMetadata()}
-
-	for startRange := int64(0); startRange < srcSize; startRange += chunkSize {
-		// compute exact size of the chunk
-		// startRange also equals to overall scheduled size
-		if startRange+chunkSize > srcSize {
-			adjustedChunkSize = srcSize - startRange
+			// TODO: set blob tier
+			jptm.SetStatus(common.ETransferStatus.Success())
 		}
 
-		// schedule the download chunk job
-		jptm.ScheduleChunks(
-			bbc.generateCopyURLToBlockBlobFunc(blockIDCount, startRange, adjustedChunkSize))
-		blockIDCount++
+		// updating number of transfers done for job part order
+		jptm.ReportTransferDone()
+	} else {
+		// step 3: go through the source range and schedule copy chunk jobs
+		numChunks := common.Iffuint32(
+			srcSize%chunkSize == 0,
+			uint32(srcSize/chunkSize),
+			uint32(srcSize/chunkSize)+1)
+
+		jptm.SetNumberOfChunks(numChunks)
+
+		// TODO: Dispatch according to blob types
+
+		// creating a slice to contain the block IDs
+		blockIDs := make([]string, numChunks)
+		blockIDCount := int32(0)
+		adjustedChunkSize := chunkSize
+
+		bbc := &blockBlobCopy{
+			jptm:           jptm,
+			srcURL:         *srcURL,
+			destBlobURL:    destBlobURL,
+			pacer:          pacer,
+			blockIDs:       blockIDs,
+			srcHTTPHeaders: info.SrcHTTPHeaders,
+			srcMetadata:    azblobMetadata}
+
+		for startRange := int64(0); startRange < srcSize; startRange += chunkSize {
+			// compute exact size of the chunk
+			// startRange also equals to overall scheduled size
+			if startRange+chunkSize > srcSize {
+				adjustedChunkSize = srcSize - startRange
+			}
+
+			// schedule the download chunk job
+			jptm.ScheduleChunks(
+				bbc.generateCopyURLToBlockBlobFunc(blockIDCount, startRange, adjustedChunkSize))
+			blockIDCount++
+		}
 	}
 }
 

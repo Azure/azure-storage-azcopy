@@ -93,6 +93,10 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return errors.New("invalid source and destination combination for service to service copy: " +
 				"destination must point to a single file, when source is a single file.")
 		}
+		err := e.createBucket(ctx, *destURL, nil)
+		if err != nil {
+			return err
+		}
 		// directly use destURL as destination
 		if err := e.addTransferInternal(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
 			return err
@@ -105,6 +109,10 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	dirURL, searchPrefix := srcFileURLPartExtension.getDirURLAndSearchPrefixFromFileURL(srcFilePipeline)
 	if searchPrefix == "" && !cca.recursive {
 		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
+	}
+	err = e.createBucket(ctx, *destURL, nil)
+	if err != nil {
+		return err
 	}
 	err = e.enumerateDirectoriesAndFilesInShare(
 		ctx,
@@ -148,7 +156,8 @@ func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 		if destInfo.destBlobPipeline == nil {
 			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
 		}
-		containerURL := azblob.NewContainerURL(destURL, destInfo.destBlobPipeline)
+		tmpContainerURL := blobURLPartsExtension{azblob.NewBlobURLParts(destURL)}.getContainerURL()
+		containerURL := azblob.NewContainerURL(tmpContainerURL, destInfo.destBlobPipeline)
 		// Create the container, in case of it doesn't exist.
 		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
 		if err != nil {
@@ -181,7 +190,8 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 			shareRootDirURL := srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL()
 
 			// Transfer azblob's metadata to common metadata, note common metadata can be transferred to other types of metadata.
-			e.createBucket(ctx, tmpDestURL, common.FromAzFileMetadataToCommonMetadata(shareItem.Metadata))
+			// Doesn't copy bucket's metadata as AzCopy-v1 do.
+			e.createBucket(ctx, tmpDestURL, nil)
 
 			// List source share
 			// TODO: List in parallel to speed up.
