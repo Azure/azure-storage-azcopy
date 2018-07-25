@@ -176,6 +176,17 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers {
+		// Prepare info for JobPartPlanTransfer
+		// Sending Metadata type to Transfer could ensure strong type validation.
+		// TODO: discuss the performance drop of marshaling metadata twice
+		srcMetadataLength := 0
+		if order.Transfers[t].Metadata != nil {
+			metadataStr, err := order.Transfers[t].Metadata.Marshal()
+			if err != nil {
+				panic(err)
+			}
+			srcMetadataLength = len(metadataStr)
+		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
@@ -191,7 +202,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcContentDispositionLength: int16(len(order.Transfers[t].ContentDisposition)),
 			SrcCacheControlLength:       int16(len(order.Transfers[t].CacheControl)),
 			SrcContentMD5Length:         int16(len(order.Transfers[t].ContentMD5)),
-			SrcMetadataLength:           int16(len(order.Transfers[t].Metadata)),
+			SrcMetadataLength:           int16(srcMetadataLength),
 			// SrcBlobTierLength:           uint16(len(order.Transfers[t].BlobTier)),
 			// TODO: + Metadata
 
@@ -272,7 +283,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			eof += int64(bytesWritten)
 		}
 		// For S2S copy, write the src metadata
-		if len(order.Transfers[t].Metadata) != 0 {
+		if order.Transfers[t].Metadata != nil {
 			metadataStr, err := order.Transfers[t].Metadata.Marshal()
 			if err != nil {
 				panic(err)

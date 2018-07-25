@@ -660,6 +660,11 @@ func (parts blobURLPartsExtension) isBlobAccountLevelSearch() (isBlobAccountLeve
 	return
 }
 
+func (parts blobURLPartsExtension) getContainerURL() url.URL {
+	parts.BlobName = ""
+	return parts.URL()
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type fileURLPartsExtension struct {
 	azfile.FileURLParts
