@@ -48,7 +48,7 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
         # removes the files that ends with 4.txt
         destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "*4.txt")
         result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
-            add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_operation_get_output()
+            add_flags("recursive", "true").add_flags("output", "json").execute_azcopy_operation_get_output()
         # Get the latest Job Summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -62,7 +62,7 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
         # removes the files that starts with test
         destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "test*")
         result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
-            add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_operation_get_output()
+            add_flags("recursive", "true").add_flags("output", "json").execute_azcopy_operation_get_output()
         # Get the latest Job Summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -96,7 +96,7 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
         # destination_sas_with_wildcard = https://<container-name>/<dir-name>/*?<sig>
         destination_sas_with_wildcard = util.append_text_path_resource_sas(destination, "*")
         result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
-            add_flags("recursive", "true").add_flags("output-json", "true").execute_azcopy_operation_get_output()
+            add_flags("recursive", "true").add_flags("output", "json").execute_azcopy_operation_get_output()
         # Get the latest Job Summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -125,7 +125,7 @@ class Azcopy_Operation_User_Scenario(unittest.TestCase):
 
         destination_sas_with_wildcard = util.append_text_path_resource_sas(util.test_container_url, "rdir*")
         result = util.Command("rm").add_arguments(destination_sas_with_wildcard).add_flags("log-level", "Info"). \
-            add_flags("output-json", "true").add_flags("recursive", "true").execute_azcopy_operation_get_output()
+            add_flags("output", "json").add_flags("recursive", "true").execute_azcopy_operation_get_output()
 
         # Get the latest Job Summary
         result = util.parseAzcopyOutput(result)
