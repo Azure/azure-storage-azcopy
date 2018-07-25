@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -177,7 +178,10 @@ func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 		// Create the container, in case of it doesn't exist.
 		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
 		if err != nil {
-			if stgErr, ok := err.(azblob.StorageError); !ok || stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
+			// Skip the error, when container already exists, or hasn't permission to create container(container might already exists).
+			if stgErr, ok := err.(azblob.StorageError); !ok ||
+				(stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists &&
+					stgErr.Response().StatusCode != http.StatusForbidden) {
 				return fmt.Errorf("fail to create container, %v", err)
 			}
 			// the case error is container already exists
