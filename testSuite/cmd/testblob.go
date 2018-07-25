@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"io"
 	"io/ioutil"
 	"net/http"
