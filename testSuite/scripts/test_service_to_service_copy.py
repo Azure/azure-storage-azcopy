@@ -161,7 +161,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # Downloading the copied files for validation
         validate_dir_name = "validate_copy_%d_%dKB_files_from_%s_bucket_to_%s_bucket" % (n, sizeInKB, srcType, dstType)
         local_validate_dest = util.create_test_dir(validate_dir_name)
-        result = util.Command("copy").add_arguments(dstBucketURL).add_arguments(local_validate_dest). \
+        dst_directory_url = util.get_object_sas(dstBucketURL, src_dir_name)
+        result = util.Command("copy").add_arguments(dst_directory_url).add_arguments(local_validate_dest). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
@@ -208,7 +209,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # Downloading the copied files for validation
         validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_wildcard" % (srcType, dstType)
         local_validate_dest = util.create_test_dir(validate_dir_name)
-        result = util.Command("copy").add_arguments(dstBucketURL).add_arguments(local_validate_dest). \
+        dst_file_url = util.get_object_sas(dstBucketURL, filename)
+        result = util.Command("copy").add_arguments(dst_file_url).add_arguments(local_validate_dest). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
@@ -305,7 +307,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # Downloading the copied files for validation
         validate_dir_name = "validate_copy_files_from_%s_account_to_%s_account" % (srcType, dstType)
         local_validate_dest = util.create_test_dir(validate_dir_name)
-        result = util.Command("copy").add_arguments(validate_dst_container_url).add_arguments(local_validate_dest). \
+        dst_container_url = util.get_object_sas(dstAccountURL, self.bucket_name)
+        dst_directory_url = util.get_object_sas(dst_container_url, src_dir_name)
+        result = util.Command("copy").add_arguments(dst_directory_url).add_arguments(local_validate_dest). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
