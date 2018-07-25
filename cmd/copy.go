@@ -85,7 +85,7 @@ type rawCopyCmdArgs struct {
 	blockBlobTier            string
 	pageBlobTier             string
 	background               bool
-	outputJson               bool
+	output                   string
 	acl                      string
 	logVerbosity             string
 	stdInEnable              bool
@@ -166,7 +166,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.background = raw.background
-	cooked.outputJson = raw.outputJson
+	cooked.output.Parse(raw.output)
 	cooked.acl = raw.acl
 
 	// cook oauth parameters
@@ -203,7 +203,7 @@ type cookedCopyCmdArgs struct {
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	background               bool
-	outputJson               bool
+	output                   common.OutputFormat
 	acl                      string
 	logVerbosity             common.LogLevel
 	// oauth options
@@ -636,7 +636,7 @@ func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
 
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
-	if cca.outputJson {
+	if cca.output == common.EOutputFormat.Json() {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
 			// something serious has gone wrong if we cannot marshal a json
@@ -787,10 +787,10 @@ Download an entire directory:
 	// define the flags relevant to the cp command
 	// Visible flags
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "force", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
-	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "indicate that the output should be in JSON format")
+	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 
 	// hidden filters
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
@@ -824,7 +824,7 @@ Download an entire directory:
 	cpCmd.PersistentFlags().MarkHidden("exclude")
 	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("output-json")
+	cpCmd.PersistentFlags().MarkHidden("output")
 
 	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
 	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")
