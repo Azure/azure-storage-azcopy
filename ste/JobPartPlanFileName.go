@@ -143,6 +143,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		Priority:           order.Priority,
 		TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
 		FromTo:             order.FromTo,
+		SourceStringLength: uint32(len(order.Source)),
+		DestinationStringLength: uint32(len(order.Destination)),
 		NumTransfers:       uint32(len(order.Transfers)),
 		LogLevel:           order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
@@ -167,6 +169,16 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 
 	eof += writeValue(file, &jpph)
+	bytesWritten, err := file.WriteString(order.Source)
+	if err != nil {
+		panic(err)
+	}
+	eof += int64(bytesWritten)
+	bytesWritten, err = file.WriteString(order.Destination)
+	if err != nil {
+		panic(err)
+	}
+	eof += int64(bytesWritten)
 
 	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
 	srcDstStringsOffset := make([]int64, jpph.NumTransfers)

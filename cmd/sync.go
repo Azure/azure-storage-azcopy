@@ -71,7 +71,9 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 
 type cookedSyncCmdArgs struct {
 	src       string
+	srcSAS    string
 	dst       string
+	dstSAS    string
 	fromTo    common.FromTo
 	recursive bool
 	// options from flags
@@ -180,6 +182,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
 		CommandString:    cca.commandString,
+		Source:           cca.src,
+		SourceSAS:        cca.srcSAS,
+		Destination:      cca.dst,
+		DestinationSAS:   cca.dstSAS,
 	}
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():

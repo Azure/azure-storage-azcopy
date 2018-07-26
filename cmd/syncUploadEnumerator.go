@@ -172,7 +172,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			if err != nil && os.IsNotExist(err) {
 				// delete the blob.
 				e.addTransferToDelete(common.CopyTransfer{
-					Source:      util.generateBlobUrl(containerUrl, blobInfo.Name),
+					Source:      util.stripSASFromBlobUrl(util.generateBlobUrl(containerUrl, blobInfo.Name)),
 					Destination: "", // no destination in case of Delete JobPartOrder
 					SourceSize:  *blobInfo.Properties.ContentLength,
 				}, cca)
@@ -244,7 +244,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		if isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:           cca.src,
-				Destination:      destinationUrl.String(),
+				Destination:      util.stripSASFromBlobUrl(destinationUrl.String()),
 				SourceSize:       isSourceASingleFile.Size(),
 				LastModifiedTime: isSourceASingleFile.ModTime(),
 			}, cca)
@@ -271,7 +271,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		}
 		e.addTransferToUpload(common.CopyTransfer{
 			Source:           cca.src,
-			Destination:      filedestinationUrl.String(),
+			Destination:      util.stripSASFromBlobUrl(filedestinationUrl.String()),
 			LastModifiedTime: isSourceASingleFile.ModTime(),
 			SourceSize:       isSourceASingleFile.Size(),
 		}, cca)
@@ -323,7 +323,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		}
 		err = e.addTransferToUpload(common.CopyTransfer{
 			Source:           pathToFile,
-			Destination:      filedestinationUrl.String(),
+			Destination:      util.stripSASFromBlobUrl(filedestinationUrl.String()),
 			LastModifiedTime: f.ModTime(),
 			SourceSize:       f.Size(),
 		}, cca)
@@ -382,14 +382,44 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil)
+
+	dstUrl, err := url.Parse(cca.dst)
+	if err != nil {
+		return fmt.Errorf("error parsing the destination url %s. failed with error %s", cca.dst, err.Error())
+	}
+	if len(dstUrl.RawQuery) > 0 {
+		dstUrl.RawQuery += "&" + cca.dstSAS
+	}else{
+		dstUrl.RawQuery = cca.dstSAS
+	}
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
 	// Copying the FromTo of sync job to individual copyJobRequest
 	e.CopyJobRequest.FromTo = e.FromTo
+
+	// set the user given Source
+	e.CopyJobRequest.Source = e.Source
+	// set the sas of user given Source
+	e.CopyJobRequest.SourceSAS = e.SourceSAS
+
+	// set the user given destination
+	e.CopyJobRequest.Destination = e.Destination
+	// set the sas of user given destination
+	e.CopyJobRequest.DestinationSAS = e.DestinationSAS
+
 	// Copying the JobId of sync job to individual deleteJobRequest.
 	e.DeleteJobRequest.JobID = e.JobID
 	// FromTo of DeleteJobRequest will be BlobTrash.
 	e.DeleteJobRequest.FromTo = common.EFromTo.BlobTrash()
+
+	// set the user given Source
+	e.DeleteJobRequest.Source = e.DestinationSAS
+	// For delete the source is the destination in case of sync upload
+	// For Example: source = /home/user destination = https://container/vd-1?<sig>
+	// For deleting the blobs, Source in Delete Job Source will be the blob url
+	// and source sas is the destination sas which is url sas.
+	// set the destination sas as the source sas
+	e.DeleteJobRequest.SourceSAS = e.DestinationSAS
 
 	// Set the Log Level
 	e.CopyJobRequest.LogLevel = e.LogLevel

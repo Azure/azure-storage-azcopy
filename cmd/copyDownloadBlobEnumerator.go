@@ -31,6 +31,13 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return errors.New("cannot parse source URL")
 	}
 
+	// append the sas at the end of query params.
+	if len(sourceUrl.RawQuery) > 0 {
+		sourceUrl.RawQuery += "&" + cca.srcSAS
+	}else {
+		sourceUrl.RawQuery = cca.srcSAS
+	}
+
 	// get the blob parts
 	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl)
 
@@ -62,7 +69,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 		// Add the transfer to CopyJobPartOrderRequest
 		e.addTransfer(common.CopyTransfer{
-			Source:           sourceUrl.String(),
+			Source:           util.stripSASFromBlobUrl(sourceUrl.String()),
 			Destination:      blobLocalPath,
 			LastModifiedTime: blobProperties.LastModified(),
 			SourceSize:       blobProperties.ContentLength(),
@@ -105,7 +112,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				blobName = util.blobPathWOSpecialCharacters(blobName)
 				blobLocalPath := util.generateLocalPath(cca.dst, blobName)
 				e.addTransfer(common.CopyTransfer{
-					Source:           blobUrl.String(),
+					Source:           util.stripSASFromBlobUrl(blobUrl.String()),
 					Destination:      blobLocalPath,
 					LastModifiedTime: bProperties.LastModified(),
 					SourceSize:       bProperties.ContentLength(),
@@ -144,7 +151,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// check for the special character in blob relative path and get path without special character.
 						blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 						e.addTransfer(common.CopyTransfer{
-							Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
+							Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)),
 							Destination:      util.generateLocalPath(cca.dst, blobRelativePath),
 							LastModifiedTime: blobInfo.Properties.LastModified,
 							SourceSize:       *blobInfo.Properties.ContentLength}, cca)
@@ -241,7 +248,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// check for the special character in blob relative path and get path without special character.
 			blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 			e.addTransfer(common.CopyTransfer{
-				Source:           util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
+				Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)),
 				Destination:      util.generateLocalPath(cca.dst, blobRelativePath),
 				LastModifiedTime: blobInfo.Properties.LastModified,
 				SourceSize:       *blobInfo.Properties.ContentLength}, cca)

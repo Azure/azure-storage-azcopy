@@ -40,9 +40,9 @@ func (c *RpcCmd) Parse(s string) error {
 type CopyJobPartOrderRequest struct {
 	Version        Version     // version of the azcopy
 	JobID          JobID       // Guid - job identifier
-	PartNum        PartNumber  // part number of the job
-	IsFinalPart    bool        // to determine the final part for a specific job
-	ForceWrite     bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
+	PartNum                PartNumber  // part number of the job
+	IsFinalPart            bool        // to determine the final part for a specific job
+	ForceWrite             bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
 	Priority       JobPriority // priority of the task
 	FromTo         FromTo
 	Include        map[string]int
@@ -50,6 +50,10 @@ type CopyJobPartOrderRequest struct {
 	Transfers      []CopyTransfer
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
+	Source         string
+	SourceSAS      string
+	Destination    string
+	DestinationSAS string
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
@@ -68,6 +72,10 @@ type SyncJobPartOrderRequest struct {
 	PartNumber       PartNumber
 	LogLevel         LogLevel
 	BlockSizeInBytes uint32
+	Source         string
+	SourceSAS      string
+	Destination    string
+	DestinationSAS string
 	CopyJobRequest   CopyJobPartOrderRequest
 	DeleteJobRequest CopyJobPartOrderRequest
 	// FilesDeletedLocally is used to keep track of the file that are deleted locally
@@ -138,6 +146,8 @@ type ListJobTransfersRequest struct {
 
 type ResumeJobRequest struct {
 	JobID           JobID
+	SourceSAS		string
+	DestinationSAS  string
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
 	CredentialInfo  CredentialInfo

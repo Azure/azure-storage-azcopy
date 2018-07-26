@@ -162,7 +162,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 			if err != nil && os.IsNotExist(err) {
 				// download the blob
 				err = e.addTransferToUpload(common.CopyTransfer{
-					Source:           util.generateBlobUrl(containerUrl, blobInfo.Name),
+					Source:           util.stripSASFromBlobUrl(util.generateBlobUrl(containerUrl, blobInfo.Name)),
 					Destination:      blobLocalPath,
 					LastModifiedTime: blobInfo.Properties.LastModified,
 					SourceSize:       *blobInfo.Properties.ContentLength,
@@ -235,7 +235,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 		if (err != nil && os.IsNotExist(err)) ||
 			(err == nil && bProperties.LastModified().After(blobLocalInfo.ModTime())) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:           sourceUrl.String(),
+				Source:           util.stripSASFromBlobUrl(sourceUrl.String()),
 				Destination:      blobLocalPath,
 				LastModifiedTime: bProperties.LastModified(),
 				SourceSize:       bProperties.ContentLength(),
@@ -262,7 +262,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 		// sync needs to happen. The transfer is queued
 		if f.ModTime().Before(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:           sourceUrl.String(),
+				Source:           util.stripSASFromBlobUrl(sourceUrl.String()),
 				Destination:      cca.dst,
 				SourceSize:       bProperties.ContentLength(),
 				LastModifiedTime: bProperties.LastModified(),
@@ -326,7 +326,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 		// File exists locally but the modified time of file locally was before the modified
 		// time of blob, so sync is required
 		err = e.addTransferToUpload(common.CopyTransfer{
-			Source:           filedestinationUrl.String(),
+			Source:           util.stripSASFromBlobUrl(filedestinationUrl.String()),
 			Destination:      pathToFile,
 			LastModifiedTime: blobProperties.LastModified(),
 			SourceSize:       blobProperties.ContentLength(),
@@ -383,10 +383,30 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil)
+
+	srcUrl, err := url.Parse(cca.src)
+	if err != nil {
+		return fmt.Errorf("error parsing the source Url %s. Failed with error %s", cca.src, err.Error())
+	}
+	if len(srcUrl.RawQuery) > 0 {
+		srcUrl.RawQuery += "&" + cca.srcSAS
+	}else{
+		srcUrl.RawQuery = cca.srcSAS
+	}
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
 	// Copying the FromTo of sync job to individual copyJobRequest
 	e.CopyJobRequest.FromTo = e.FromTo
+
+	// set the user given Source
+	e.CopyJobRequest.Source = e.Source
+	// set the sas of user given Source
+	e.CopyJobRequest.SourceSAS = e.SourceSAS
+
+	// set the user given destination
+	e.CopyJobRequest.Destination = e.Destination
+	// set the sas of user given destination
+	e.CopyJobRequest.DestinationSAS = e.DestinationSAS
 
 	// Set the preserve-last-modified-time to true in CopyJobRequest
 	e.CopyJobRequest.BlobAttributes.PreserveLastModifiedTime = true
@@ -395,6 +415,16 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	e.DeleteJobRequest.JobID = e.JobID
 	// FromTo of DeleteJobRequest will be BlobTrash.
 	e.DeleteJobRequest.FromTo = common.EFromTo.BlobTrash()
+
+	// set the user given Source
+	e.DeleteJobRequest.Source = e.Source
+	// set the sas of user given Source
+	e.DeleteJobRequest.SourceSAS = e.SourceSAS
+
+	// set the user given destination
+	e.DeleteJobRequest.Destination = e.Destination
+	// set the sas of user given destination
+	e.DeleteJobRequest.DestinationSAS = e.DestinationSAS
 
 	// set force wriet flag to true
 	e.CopyJobRequest.ForceWrite = true

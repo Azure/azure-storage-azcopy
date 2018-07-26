@@ -44,9 +44,9 @@ func init() {
 			}
 			raw.src = args[0]
 			srcLocationType := inferArgumentLocation(raw.src)
-			if srcLocationType == ELocation.Blob() {
+			if srcLocationType == common.ELocation.Blob() {
 				raw.fromTo = common.EFromTo.BlobTrash().String()
-			} else if srcLocationType == ELocation.File() {
+			} else if srcLocationType == common.ELocation.File() {
 				raw.fromTo = common.EFromTo.FileTrash().String()
 			} else {
 				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())

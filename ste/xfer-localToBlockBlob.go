@@ -63,6 +63,11 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	chunkSize := int64(info.BlockSize)
 
 	u, _ := url.Parse(info.Destination)
+	if len(u.RawQuery) > 0 {
+		u.RawQuery += "&" + info.DestinationSAS
+	}else{
+		u.RawQuery = info.DestinationSAS
+	}
 	blobUrl := azblob.NewBlobURL(*u, p)
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.

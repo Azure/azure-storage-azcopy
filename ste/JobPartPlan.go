@@ -45,7 +45,9 @@ type JobPartPlanHeader struct {
 	Priority           common.JobPriority  // The Job Part's priority
 	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
 	FromTo             common.FromTo       // The location of the transfer's source & destination
-	NumTransfers       uint32              // The number of transfers in the Job part
+	SourceStringLength uint32
+	DestinationStringLength  uint32
+	NumTransfers       uint32 	             // The number of transfers in the Job part
 	LogLevel           common.LogLevel     // This Job Part's minimal log level
 	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData       JobPartPlanDstLocal // Additional data for local destinations
@@ -78,7 +80,7 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 
 	// (Job Part Plan's file address) + (header size) --> beginning of transfers in file
 	// Add (transfer size) * (transfer index)
-	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
+	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.SourceStringLength + jpph.DestinationStringLength))  + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder

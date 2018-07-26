@@ -46,6 +46,12 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("cannot parse source URL")
 	}
+	// append the sas at the end of query params.
+	if len(sourceURL.RawQuery) > 0 {
+		sourceURL.RawQuery += "&" + cca.srcSAS
+	}else {
+		sourceURL.RawQuery = cca.srcSAS
+	}
 
 	// Validate the source url.
 	numOfStartInURLPath := util.numOfWildcardInURL(*sourceURL)
@@ -101,9 +107,9 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if err != nil {
 					return err
 				}
-
+				fUrl := util.stripSASFromFileShareUrl(f.String())
 				e.addTransfer(common.CopyTransfer{
-					Source:           f.String(),
+					Source:           fUrl.String(),
 					Destination:      util.generateLocalPath(cca.dst, fileInfo.Name),
 					LastModifiedTime: gResp.LastModified(),
 					SourceSize:       fileInfo.Properties.ContentLength}, cca)
@@ -126,10 +132,10 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			} else {
 				singleFileDestinationPath = cca.dst
 			}
-
+			srcUrl := util.stripSASFromFileShareUrl(sourceURL.String())
 			e.addTransfer(
 				common.CopyTransfer{
-					Source:           sourceURL.String(),
+					Source:           srcUrl.String(),
 					Destination:      singleFileDestinationPath,
 					LastModifiedTime: fileProperties.LastModified(),
 					SourceSize:       fileProperties.ContentLength(),
@@ -162,10 +168,10 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						}
 
 						currentFilePath := "/" + azfile.NewFileURLParts(f.URL()).DirectoryOrFilePath
-
+						fUrl := util.stripSASFromFileShareUrl(f.String())
 						e.addTransfer(
 							common.CopyTransfer{
-								Source:           f.String(),
+								Source:           fUrl.String(),
 								Destination:      util.generateLocalPath(cca.dst, util.getRelativePath(rootDirPath, currentFilePath, "/")),
 								LastModifiedTime: gResp.LastModified(),
 								SourceSize:       fileInfo.Properties.ContentLength}, cca)

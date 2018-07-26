@@ -680,7 +680,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        # Number of Expected Transfer should be 10 since 10 files were deleted
+        # Number of Expected Transfer should be 1 since 1 file's modified time was changed
         self.assertEquals(x.TransfersCompleted, 1)
         self.assertEquals(x.TransfersFailed, 0)
 

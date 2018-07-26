@@ -304,6 +304,24 @@ func (util copyHandlerUtil) blobNameFromUrl(blobParts azblob.BlobURLParts) strin
 	return blobParts.BlobName
 }
 
+// stripSASFromFileShareUrl takes azure file and remove the SAS query param from the URL.
+func (util copyHandlerUtil) stripSASFromFileShareUrl(fileUrl string) url.URL{
+	fu, _ := url.Parse(fileUrl)
+	fuParts := azfile.NewFileURLParts(*fu)
+	fuParts.SAS = azfile.SASQueryParameters{}
+	return fuParts.URL()
+}
+
+// stripSASFromBlobUrl takes azure blob url and remove the SAS query param from the URL
+func(util copyHandlerUtil) stripSASFromBlobUrl(blobUrl string) string{
+	bu, _ := url.Parse(blobUrl)
+	buParts := azblob.NewBlobURLParts(*bu)
+	buParts.SAS = azblob.SASQueryParameters{}
+	bUrl := buParts.URL()
+	return bUrl.String()
+}
+
+// createBlobUrlFromContainer returns a url for given blob parts and blobName.
 func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobURLParts, blobName string) string {
 	blobUrlParts.BlobName = blobName
 	blobUrl := blobUrlParts.URL()

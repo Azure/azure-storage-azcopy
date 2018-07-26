@@ -46,6 +46,12 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if err != nil {
 		return fmt.Errorf("cannot parse source URL")
 	}
+	// append the sas at the end of query params.
+	if len(sourceURL.RawQuery) > 0 {
+		sourceURL.RawQuery += "&" + cca.srcSAS
+	}else {
+		sourceURL.RawQuery = cca.srcSAS
+	}
 
 	// Validate the source url.
 	numOfStartInURLPath := util.numOfWildcardInURL(*sourceURL)
@@ -101,9 +107,9 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if err != nil {
 					return err
 				}
-
+				fUrl := util.stripSASFromFileShareUrl(f.String())
 				e.addTransfer(common.CopyTransfer{
-					Source:     f.String(),
+					Source:     fUrl.String(),
 					SourceSize: fileInfo.Properties.ContentLength}, cca)
 			}
 
@@ -118,9 +124,10 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	} else { // Case 2: remove a single file or a directory.
 
 		if fileURL != nil { // Single file.
+			sUrl := util.stripSASFromFileShareUrl(sourceURL.String())
 			e.addTransfer(
 				common.CopyTransfer{
-					Source:     sourceURL.String(),
+					Source:     sUrl.String(),
 					SourceSize: fileProperties.ContentLength(),
 				}, cca)
 
@@ -142,10 +149,10 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						if err != nil {
 							return err
 						}
-
+						fUrl := util.stripSASFromFileShareUrl(f.String())
 						e.addTransfer(
 							common.CopyTransfer{
-								Source:     f.String(),
+								Source:     fUrl.String(),
 								SourceSize: fileInfo.Properties.ContentLength}, cca)
 					}
 

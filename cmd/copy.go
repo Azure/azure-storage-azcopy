@@ -182,7 +182,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 type cookedCopyCmdArgs struct {
 	// from arguments
 	src    string
+	srcSAS string
 	dst    string
+	dstSAS string
 	fromTo common.FromTo
 
 	// filters from flags

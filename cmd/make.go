@@ -70,15 +70,20 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 
 // holds processed/actionable args
 type cookedMakeCmdArgs struct {
+<<<<<<< HEAD
 	resourceURL      url.URL
 	resourceLocation Location
 	quota            int32 // quota is in GB
+=======
+	resourceURL url.URL
+	resourceLocation common.Location
+>>>>>>> 9387b2f... source / destination sas not pesisted in the part plan file change
 }
 
 // TODO update this function when OAuth is officially enabled
 func (cookedArgs cookedMakeCmdArgs) process() error {
 	switch cookedArgs.resourceLocation {
-	case ELocation.BlobFS():
+	case common.ELocation.BlobFS():
 		// get the Account Name and Key variables from environment
 		name := os.Getenv("ACCOUNT_NAME")
 		key := os.Getenv("ACCOUNT_KEY")
