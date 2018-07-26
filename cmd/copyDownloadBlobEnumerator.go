@@ -234,9 +234,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// blobRelativePath = dir1/1.txt
 			var blobRelativePath = ""
 			if util.firstIndexOfWildCard(blobUrlParts.BlobName) != -1 {
-				fmt.Println("search pref ", searchPrefix[:strings.LastIndex(searchPrefix, "/")+1])
 				blobRelativePath = strings.Replace(blobInfo.Name, searchPrefix[:strings.LastIndex(searchPrefix, "/")+1], "", 1)
-				fmt.Println("blobRelative path ", blobRelativePath)
 			} else {
 				blobRelativePath = util.getRelativePath(searchPrefix, blobInfo.Name, "/")
 			}
