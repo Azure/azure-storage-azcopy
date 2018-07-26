@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"strings"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -192,9 +194,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	if blobNamePattern == "*" && !cca.recursive {
-		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
-	}
+	//if blobNamePattern == "*" && !isRecursiveOn {
+	//	return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
+	//}
 	// perform a list blob with search prefix
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
@@ -213,13 +215,31 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 			// If the blobName doesn't matches the blob name pattern, then blob is not included
 			// queued for transfer
-			if !util.blobNameMatchesThePattern(blobNamePattern, blobInfo.Name) {
+			if !util.matchBlobNameAgainstPattern(blobNamePattern, blobInfo.Name, "/", cca.recursive) {
 				continue
 			}
 			if util.resourceShouldBeExcluded(e.Exclude, blobInfo.Name) {
 				continue
 			}
-			blobRelativePath := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+
+			// If wildcard exists in the source, searchPrefix is the source string till the first wildcard index
+			// In case of wildcards in source string, there is no need to create the last virtal directory in the searchPrefix
+			// locally.
+			// blobRelativePath will be as follow
+			// source = https://<container>/<vd-1>/*?<signature> blobName = /vd-1/dir/1.txt
+			// blobRelativePath = dir/1.txt
+			// source = https://<container>/<vd-1>/dir/*.txt?<signature> blobName = /vd-1/dir/1.txt
+			// blobRelativePath = 1.txt
+			// source = https://<container>/<vd-1>/dir/*/*.txt?<signature> blobName = /vd-1/dir/dir1/1.txt
+			// blobRelativePath = dir1/1.txt
+			var blobRelativePath = ""
+			if util.firstIndexOfWildCard(blobUrlParts.BlobName) != -1 {
+				fmt.Println("search pref ", searchPrefix[:strings.LastIndex(searchPrefix, "/")+1])
+				blobRelativePath = strings.Replace(blobInfo.Name, searchPrefix[:strings.LastIndex(searchPrefix, "/")+1], "", 1)
+				fmt.Println("blobRelative path ", blobRelativePath)
+			} else {
+				blobRelativePath = util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+			}
 			// check for the special character in blob relative path and get path without special character.
 			blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 			e.addTransfer(common.CopyTransfer{

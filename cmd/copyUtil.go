@@ -352,29 +352,33 @@ func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep 
 	return pathWithoutWildcard[:sepIndex], path[sepIndex+1:]
 }
 
+// blobNameMatchesThePatternComponentWise matches the blobName against the pattern component wise
+// Example: /home/user/dir*/*file matches /home/user/dir1/abcfile but does not matches
+// /home/user/dir1/dir2/abcfile. This api does not assume path separator '/' for a wildcard '*'
+func (util copyHandlerUtil) blobNameMatchesThePatternComponentWise(pattern string, blobName string, pathSep string) bool {
+	// find the number of path separator in pattern and blobName
+	// If the number of path separator doesn't match, then blob name doesn't match the pattern
+	pSepInPattern := strings.Count(pattern, pathSep)
+	pSepInBlobName := strings.Count(blobName, pathSep)
+	if pSepInPattern != pSepInBlobName {
+		return false
+	}
+	// If the number of path separator matches in both blobName and pattern
+	// each component of the blobName should match each component in pattern
+	// Length of patternComponents and blobNameComponents is same since we already
+	// match the number of path separators above.
+	patternComponents := strings.Split(blobName, pathSep)
+	blobNameComponents := strings.Split(blobName, pathSep)
+	for index := 0; index < len(patternComponents); index++ {
+		// match the pattern component and blobName component
+		if !util.blobNameMatchesThePattern(patternComponents[index], blobNameComponents[index]) {
+			return false
+		}
+	}
+	return true
+}
+
 func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string, blobName string) bool {
-	//// Since filePath.Match matches "*" with any sequence of non-separator characters
-	//// it will return false when "*" matched with "a/b" on linux or "a\\b" on windows
-	//// Hence hard-coded check added for "*"
-	//if pattern == "*" {
-	//	return true
-	//}
-	//// BlobName has "/" as path separators
-	//// filePath.Match matches "*" with any sequence of non-separator characters
-	//// since path separator on linux and blobName is same
-	//// Replace "/" with its url encoded value "%2F"
-	//// This is to handle cases like matching "dir* and dir/a.txt"
-	//// or matching "dir/* and dir/a/b.txt"
-	//if os.PathSeparator == '/' {
-	//	pattern = strings.Replace(pattern, "/", "%2F", -1)
-	//	blobName = strings.Replace(blobName, "/", "%2F", -1)
-	//}
-	//
-	//matched, err := filepath.Match(pattern, blobName)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//return matched
 	str := []rune(blobName)
 	pattern := []rune(patternString)
 	s := 0 // counter for str index
@@ -409,6 +413,52 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string, blob
 	return p == len(pattern)
 }
 
+// matchBlobNameAgainstPattern matches the given blobName against the pattern. If the recursive is set to true
+// '*' in the pattern will match the path sep since we need to recursively look into the sub-dir of given source.
+// If recursive is set to false, then matches happens component wise where component is each dir in the given path
+// defines by the blobname. For Example: blobname = /dir-1/dir-2/blob1.txt components are dir-1, dir-2, blob1.txt
+func (util copyHandlerUtil) matchBlobNameAgainstPattern(pattern string, blobName string, pathSep string, recursive bool) bool {
+	if recursive {
+		return util.blobNameMatchesThePattern(pattern, blobName)
+	}
+	return util.blobNameMatchesThePatternComponentWise(pattern, blobName, pathSep)
+}
+
+func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string) {
+	// If the blobName is empty, it means  the url provided is of a container,
+	// then all blobs inside containers needs to be included, so pattern is set to *
+	if parts.BlobName == "" {
+		pattern = "*"
+		return
+	}
+	// Check for wildcards and get the index of first wildcard
+	// If the wild card does not exists, then index returned is -1
+	wildCardIndex := util.firstIndexOfWildCard(parts.BlobName)
+	if wildCardIndex < 0 {
+		// If no wild card exits and url represents a virtual directory
+		// prefix is the path of virtual directory after the container.
+		// Example: https://<container-name>/vd-1?<signature>, prefix = /vd-1
+		// Example: https://<container-name>/vd-1/vd-2?<signature>, prefix = /vd-1/vd-2
+		prefix = parts.BlobName
+		// check for separator at the end of virtual directory
+		if prefix[len(prefix)-1] != '/' {
+			prefix += "/"
+		}
+		// since the url is a virtual directory, then all blobs inside the virtual directory
+		// needs to be downloaded, so the pattern is "*"
+		// pattern being "*", all blobNames when matched with "*" will be true
+		// so all blobs inside the virtual dir will be included
+		pattern = "*"
+		return
+	}
+	// wild card exists prefix will be the content of blob name till the wildcard index
+	// Example: https://<container-name>/vd-1/vd-2/abc*
+	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
+	// All the blob inside the container in virtual dir vd-2 that have the prefix "abc"
+	prefix = parts.BlobName[:wildCardIndex]
+	pattern = parts.BlobName
+	return
+}
 func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl, suffix string) {
 	s := strings.SplitAfterN(url.Path[1:], "/", 2)
 	containerUrl = "/" + s[0]
