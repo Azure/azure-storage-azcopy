@@ -12,6 +12,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 type IJobPartTransferMgr interface {
@@ -39,6 +40,9 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	LogUploadError(source, destination, errorMsg string, status int)
+	LogDownloadError(source, destination, errorMsg string, status int)
+	LogError(resource, context string, err error)
 	common.ILogger
 }
 
@@ -235,8 +239,35 @@ func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
 
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
-	jptm.jobPartMgr.Log(level, fmt.Sprintf("JobID=%v, Part#=%d, Transfer#=%d: "+msg, plan.JobID, plan.PartNum, jptm.transferIndex))
+	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: " + msg + " [P#%d-T#%d]", common.LogLevel(level), plan.PartNum, jptm.transferIndex))
 }
+
+func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
+	switch e := err.(type) {
+	case azblob.StorageError:
+		return e.Response().StatusCode, e.Response().Status
+	case azfile.StorageError:
+		return e.Response().StatusCode, e.Response().Status
+	case azbfs.StorageError:
+		return e.Response().StatusCode, e.Response().Status
+	default:
+		return 0, err.Error()
+	}
+}
+
+func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int){
+	jptm.Log(pipeline.LogError, fmt.Sprintf("UPLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+}
+
+func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg string, status int){
+	jptm.Log(pipeline.LogError, fmt.Sprintf("DOWNLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+}
+
+func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
+	status, msg := ErrorEx{err}.ErrorCodeAndString()
+	jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %d: %s-%s", resource, status, context, msg))
+}
+
 func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed

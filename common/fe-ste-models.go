@@ -134,7 +134,24 @@ func (ll *LogLevel) Parse(s string) error {
 }
 
 func (ll LogLevel) String() string {
-	return enum.StringInt(ll, reflect.TypeOf(ll))
+	switch ll {
+	case ELogLevel.None():
+		return "NONE"
+	case ELogLevel.Fatal():
+		return "FATAL"
+	case ELogLevel.Panic():
+		return "PANIC"
+	case ELogLevel.Error():
+		return "ERR"
+	case ELogLevel.Warning():
+		return "WARN"
+	case ELogLevel.Info():
+		return "INFO"
+	case ELogLevel.Debug():
+		return "DBG"
+	default:
+		return enum.StringInt(ll, reflect.TypeOf(ll))
+	}
 }
 
 func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
