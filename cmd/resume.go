@@ -153,6 +153,8 @@ Resume the existing job with the given job ID.`,
 	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "source sas of the source for given JobId")
+	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination sas of the destination for given JobId")
 }
 
 type resumeCmdArgs struct {
@@ -164,6 +166,9 @@ type resumeCmdArgs struct {
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
 	aadEndpoint                       string
+
+	SourceSAS      string
+	DestinationSAS string
 }
 
 // processes the resume command,
@@ -254,6 +259,8 @@ func (rca resumeCmdArgs) process() error {
 	Rpc(common.ERpcCmd.ResumeJob(),
 		&common.ResumeJobRequest{
 			JobID:           jobID,
+			SourceSAS:       rca.SourceSAS,
+			DestinationSAS:  rca.DestinationSAS,
 			CredentialInfo:  credentialInfo,
 			IncludeTransfer: includeTransfer,
 			ExcludeTransfer: excludeTransfer,
