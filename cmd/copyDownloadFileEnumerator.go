@@ -168,7 +168,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						e.addTransfer(
 							common.CopyTransfer{
 								Source:           fUrl.String(),
-								Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(rootDirPath, currentFilePath, "/")),
+								Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(rootDirPath, currentFilePath)),
 								LastModifiedTime: gResp.LastModified(),
 								SourceSize:       fileInfo.Properties.ContentLength}, cca)
 					}

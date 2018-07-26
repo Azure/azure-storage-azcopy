@@ -69,6 +69,8 @@ type SyncJobPartOrderRequest struct {
 	FromTo           FromTo
 	PartNumber       PartNumber
 	LogLevel         LogLevel
+	Include          map[string]int
+	Exclude          map[string]int
 	BlockSizeInBytes uint32
 	SourceSAS        string
 	DestinationSAS   string

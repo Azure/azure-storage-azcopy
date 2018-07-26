@@ -243,7 +243,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 				continue
 			}
 			// TODO: special char (naming resolution) for special directions
-			blobRelativePath := gCopyUtil.getRelativePath(srcSearchPattern, blobItem.Name, "/")
+			blobRelativePath := gCopyUtil.getRelativePath(srcSearchPattern, blobItem.Name)
 			tmpDestURL := destBaseURL
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, blobRelativePath)
 			err = e.addTransferInternal(

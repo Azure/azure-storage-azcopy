@@ -30,10 +30,9 @@ import (
 	"os"
 	"strings"
 
-	"path/filepath"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
@@ -173,13 +172,59 @@ func (copyHandlerUtil) generateObjectPath(destinationPath, fileName string) stri
 	return fmt.Sprintf("%s/%s", destinationPath, fileName)
 }
 
+// resourceShouldBeIncluded decides whether the file at given path should be included or not
+// If no files are explicitly mentioned with the include flag, then given file will be included.
+// If there are files mentioned with the include flag, then given file will be matched first
+// to decide to keep the file or not
+func (util copyHandlerUtil) resourceShouldBeIncluded(parentSourcePath string, includeFileMap map[string]int, filePath string) bool {
+
+	// If no files have been mentioned explicitly with the include flag
+	// then file at given filePath will be included
+	if len(includeFileMap) == 0 {
+		return true
+	}
+
+	// strip the parent source path from the file path to match against the
+	//relative path mentioned in the exclude flag
+	fileRelativePath := strings.Replace(filePath, parentSourcePath, "", 1)
+	if fileRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+		fileRelativePath = fileRelativePath[1:]
+	}
+
+	// Check if the given filePath exists as an entry in the map
+	_, ok := includeFileMap[fileRelativePath]
+	if ok {
+		return true
+	}
+	// Iterate through each entry of the Map
+	// Matches the given filePath against map entry pattern
+	// This is to handle case when user passed a sub-dir inside
+	// source to exclude. All the files inside that sub-directory
+	// should be excluded.
+	// For Example: source = C:\User\user-1 exclude = "dir1"
+	// Entry in Map = C:\User\user-1\dir1\* will match the filePath C:\User\user-1\dir1\file1.txt
+	for key, _ := range includeFileMap {
+		if util.blobNameMatchesThePattern(key, fileRelativePath) {
+			return true
+		}
+	}
+	return false
+}
+
 // resourceShouldBeExcluded decides whether the file at given filePath should be excluded from the transfer or not.
 // First, checks whether filePath exists in the Map or not.
 // Then iterates through each entry of the map and check whether the given filePath matches the expression of any
 // entry of the map.
-func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[string]int, filePath string) bool {
+func (util copyHandlerUtil) resourceShouldBeExcluded(parentSourcePath string, excludedFilePathMap map[string]int, filePath string) bool {
+
+	// strip the parent source path from the file path to match against the
+	//relative path mentioned in the exclude flag
+	fileRelativePath := strings.Replace(filePath, parentSourcePath, "", 1)
+	if fileRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+		fileRelativePath = fileRelativePath[1:]
+	}
 	// Check if the given filePath exists as an entry in the map
-	_, ok := excludedFilePathMap[filePath]
+	_, ok := excludedFilePathMap[fileRelativePath]
 	if ok {
 		return true
 	}
@@ -191,11 +236,7 @@ func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[str
 	// For Example: source = C:\User\user-1 exclude = "dir1"
 	// Entry in Map = C:\User\user-1\dir1\* will match the filePath C:\User\user-1\dir1\file1.txt
 	for key, _ := range excludedFilePathMap {
-		matched, err := filepath.Match(key, filePath)
-		if err != nil {
-			panic(err)
-		}
-		if matched {
+		if util.blobNameMatchesThePattern(key, fileRelativePath) {
 			return true
 		}
 	}
@@ -219,31 +260,27 @@ func (util copyHandlerUtil) relativePathToRoot(rootPath, filePath string, pathSe
 }
 
 // get relative path given a root path
-func (copyHandlerUtil) getRelativePath(rootPath, filePath string, pathSep string) string {
+func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 	// root path contains the entire absolute path to the root directory, so we need to take away everything except the root directory from filePath
 	// example: rootPath = "/dir1/dir2/dir3" filePath = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt" scrubAway="/dir1/dir2/"
 	if len(rootPath) == 0 {
 		return filePath
 	}
-
 	result := filePath
-	if rootPath != "" { // Note: there would be case when rootPath is empty
-		var scrubAway string
-		// test if root path finishes with a /, if yes, ignore it
-		if rootPath[len(rootPath)-1:] == pathSep {
-			scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], pathSep)+1]
-		} else {
-			// +1 because we want to include the / at the end of the dir
-			scrubAway = rootPath[:strings.LastIndex(rootPath, pathSep)+1]
-		}
 
-		result = strings.Replace(filePath, scrubAway, "", 1)
+	// replace the path separator in filepath with AZCOPY_PATH_SEPARATOR
+	// this replacement is required to handle the windows filepath
+	filePath = strings.Replace(filePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	var scrubAway string
+	// test if root path finishes with a /, if yes, ignore it
+	if rootPath[len(rootPath)-1:] == common.AZCOPY_PATH_SEPARATOR_STRING {
+		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+	} else {
+		// +1 because we want to include the / at the end of the dir
+		scrubAway = rootPath[:strings.LastIndex(rootPath, common.AZCOPY_PATH_SEPARATOR_STRING)+1]
 	}
 
-	// the back slashes need to be replaced with forward ones
-	if os.PathSeparator == '\\' {
-		result = strings.Replace(result, "\\", "/", -1)
-	}
+	result = strings.Replace(filePath, scrubAway, "", 1)
 
 	return result
 }
@@ -263,31 +300,32 @@ func (util copyHandlerUtil) isPathALocalDirectory(pathString string) bool {
 func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
 	var result string
 	// check if the directory path ends with the path separator
-	if strings.LastIndex(directoryPath, string(os.PathSeparator)) == len(directoryPath)-1 {
+	if strings.LastIndex(directoryPath, common.AZCOPY_PATH_SEPARATOR_STRING) == len(directoryPath)-1 {
 		result = fmt.Sprintf("%s%s", directoryPath, fileName)
 	} else {
-		result = fmt.Sprintf("%s%s%s", directoryPath, string(os.PathSeparator), fileName)
+		result = fmt.Sprintf("%s%s%s", directoryPath, common.AZCOPY_PATH_SEPARATOR_STRING, fileName)
 	}
 
 	// blob name has "/" as Path Separator.
 	// To preserve the path in blob name on local disk, replace "/" with OS Path Separator
 	// For Example blob name = "blob-1/blob-2/blob-2" will be "blob-1\\blob-2\\blob-3" for windows
-	return strings.Replace(result, "/", string(os.PathSeparator), -1)
+	//return strings.Replace(result, "/", string(os.PathSeparator), -1)
+	return result
 }
 
 func (util copyHandlerUtil) getBlobNameFromURL(path string) string {
 	// return everything after the second /
-	return strings.SplitAfterN(path[1:], "/", 2)[1]
+	return strings.SplitAfterN(path[1:], common.AZCOPY_PATH_SEPARATOR_STRING, 2)[1]
 }
 
 func (util copyHandlerUtil) getDirNameFromSource(path string) (sourcePathWithoutPrefix, searchPrefix string) {
-	if path[len(path)-1:] == string(os.PathSeparator) {
-		sourcePathWithoutPrefix = path[:strings.LastIndex(path[:len(path)-1], string(os.PathSeparator))+1]
-		searchPrefix = path[strings.LastIndex(path[:len(path)-1], string(os.PathSeparator))+1:]
+	if path[len(path)-1:] == common.AZCOPY_PATH_SEPARATOR_STRING {
+		sourcePathWithoutPrefix = path[:strings.LastIndex(path[:len(path)-1], common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+		searchPrefix = path[strings.LastIndex(path[:len(path)-1], common.AZCOPY_PATH_SEPARATOR_STRING)+1:]
 	} else {
 		// +1 because we want to include the / at the end of the dir
-		sourcePathWithoutPrefix = path[:strings.LastIndex(path, string(os.PathSeparator))+1]
-		searchPrefix = path[strings.LastIndex(path, string(os.PathSeparator))+1:]
+		sourcePathWithoutPrefix = path[:strings.LastIndex(path, common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+		searchPrefix = path[strings.LastIndex(path, common.AZCOPY_PATH_SEPARATOR_STRING)+1:]
 	}
 	return
 }
@@ -336,16 +374,16 @@ func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobU
 }
 
 func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts, blobName string) (url.URL, string) {
-	if os.PathSeparator == '\\' {
-		blobName = strings.Replace(blobName, string(os.PathSeparator), "/", -1)
-	}
+	//if os.PathSeparator == '\\' {
+	//	blobName = strings.Replace(blobName, string(os.PathSeparator), "/", -1)
+	//}
 	if blobUrlParts.BlobName == "" {
 		blobUrlParts.BlobName = blobName
 	} else {
 		if blobUrlParts.BlobName[len(blobUrlParts.BlobName)-1] == '/' {
 			blobUrlParts.BlobName += blobName
 		} else {
-			blobUrlParts.BlobName += "/" + blobName
+			blobUrlParts.BlobName += common.AZCOPY_PATH_SEPARATOR_STRING + blobName
 		}
 	}
 	return blobUrlParts.URL(), blobUrlParts.BlobName
@@ -354,7 +392,7 @@ func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts
 // sourceRootPathWithoutWildCards returns the directory from path that does not have wildCards
 // returns the patterns that defines pattern for relativePath of files to the above mentioned directory
 // For Example: source = C:\User\a*\a1*\*.txt rootDir = C:\User\ pattern = a*\a1*\*.txt
-func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep byte) (string, string) {
+func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string) (string, string) {
 	if len(path) == 0 {
 		return path, "*"
 	}
@@ -370,7 +408,7 @@ func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep 
 	// for Example: source = C:\User\a*\a1*\*.txt pathWithoutWildcard = C:\User\a
 	// sepIndex = 7
 	// rootDirectory = C:\User and pattern = a*\a1*\*.txt
-	sepIndex := strings.LastIndex(pathWithoutWildcard, string(pathSep))
+	sepIndex := strings.LastIndex(pathWithoutWildcard, common.AZCOPY_PATH_SEPARATOR_STRING)
 	if sepIndex == -1 {
 		return "", path
 	}
@@ -380,11 +418,11 @@ func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep 
 // blobNameMatchesThePatternComponentWise matches the blobName against the pattern component wise
 // Example: /home/user/dir*/*file matches /home/user/dir1/abcfile but does not matches
 // /home/user/dir1/dir2/abcfile. This api does not assume path separator '/' for a wildcard '*'
-func (util copyHandlerUtil) blobNameMatchesThePatternComponentWise(pattern string, blobName string, pathSep string) bool {
+func (util copyHandlerUtil) blobNameMatchesThePatternComponentWise(pattern string, blobName string) bool {
 	// find the number of path separator in pattern and blobName
 	// If the number of path separator doesn't match, then blob name doesn't match the pattern
-	pSepInPattern := strings.Count(pattern, pathSep)
-	pSepInBlobName := strings.Count(blobName, pathSep)
+	pSepInPattern := strings.Count(pattern, common.AZCOPY_PATH_SEPARATOR_STRING)
+	pSepInBlobName := strings.Count(blobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 	if pSepInPattern != pSepInBlobName {
 		return false
 	}
@@ -392,8 +430,8 @@ func (util copyHandlerUtil) blobNameMatchesThePatternComponentWise(pattern strin
 	// each component of the blobName should match each component in pattern
 	// Length of patternComponents and blobNameComponents is same since we already
 	// match the number of path separators above.
-	patternComponents := strings.Split(blobName, pathSep)
-	blobNameComponents := strings.Split(blobName, pathSep)
+	patternComponents := strings.Split(blobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+	blobNameComponents := strings.Split(blobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 	for index := 0; index < len(patternComponents); index++ {
 		// match the pattern component and blobName component
 		if !util.blobNameMatchesThePattern(patternComponents[index], blobNameComponents[index]) {
@@ -442,11 +480,11 @@ func (util copyHandlerUtil) blobNameMatchesThePattern(patternString string, blob
 // '*' in the pattern will match the path sep since we need to recursively look into the sub-dir of given source.
 // If recursive is set to false, then matches happens component wise where component is each dir in the given path
 // defined by the blobname. For Example: blobname = /dir-1/dir-2/blob1.txt components are dir-1, dir-2, blob1.txt
-func (util copyHandlerUtil) matchBlobNameAgainstPattern(pattern string, blobName string, pathSep string, recursive bool) bool {
+func (util copyHandlerUtil) matchBlobNameAgainstPattern(pattern string, blobName string, recursive bool) bool {
 	if recursive {
 		return util.blobNameMatchesThePattern(pattern, blobName)
 	}
-	return util.blobNameMatchesThePatternComponentWise(pattern, blobName, pathSep)
+	return util.blobNameMatchesThePatternComponentWise(pattern, blobName)
 }
 
 func (util copyHandlerUtil) searchPrefixFromUrl(parts azblob.BlobURLParts) (prefix, pattern string) {

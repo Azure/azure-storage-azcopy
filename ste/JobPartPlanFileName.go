@@ -17,7 +17,7 @@ import (
 type JobPartPlanFileName string
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), string(os.PathSeparator), string(*jppfn))
+	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
 }
 
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"

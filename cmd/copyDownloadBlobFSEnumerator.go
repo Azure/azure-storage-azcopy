@@ -65,7 +65,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// If the destination is not directory that is existing
 			// It is expected that the resource to be downloaded is downloaded at the destination provided
 			if util.isPathALocalDirectory(cca.destination) {
-				destination = util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name, "/"))
+				destination = util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name))
 			} else {
 				destination = cca.destination
 			}

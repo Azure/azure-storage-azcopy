@@ -91,105 +91,24 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	literalContainerUrl := util.getContainerUrl(blobUrlParts)
 	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
 
-	// If the files to be downloaded are mentioned in the include flag
-	// Download the blobs or virtual directory mentioned with the include flag
-	if len(e.Include) > 0 {
-		for blob, _ := range e.Include {
-			// Get the blobUrl by appending the blob name to the given source Url
-			// blobName is the name after the container in the appended blobUrl
-			blobUrl, blobName := util.appendBlobNameToUrl(blobUrlParts, blob)
-			if blob[len(blob)-1] != '/' {
-				// If there is no separator at the end of blobName, then it is consider to be a blob
-				// For Example cca.source = https://<container-name>?<sig> include = "file1.txt"
-				// blobUrl = https://<container-name>/file1.txt?<sig> ; blobName = file1.txt
-				bUrl := azblob.NewBlobURL(blobUrl, p)
-				bProperties, err := bUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
-				if err != nil {
-					return fmt.Errorf("invalid blob name %s passed in include flag", blob)
-				}
-				// check for special characters and get blobName without special character.
-				blobName = util.blobPathWOSpecialCharacters(blobName)
-				blobLocalPath := util.generateLocalPath(cca.destination, blobName)
-				e.addTransfer(common.CopyTransfer{
-					Source:           util.stripSASFromBlobUrl(blobUrl).String(),
-					Destination:      blobLocalPath,
-					LastModifiedTime: bProperties.LastModified(),
-					SourceSize:       bProperties.ContentLength(),
-				}, cca)
-			} else {
-				// If there is a separator at the end of blobName, then it is consider to be a virtual directory in the container
-				// all blobs inside this virtual directory needs to downloaded
-				// For Example: cca.source = https://<container-name>?<sig> include = "dir1/"
-				// blobName = dir1/  searchPrefix = dir1/
-				// all blob starting with dir1/ will be listed
-				searchPrefix := blobName
-				pattern := "*"
-				// perform a list blob with search prefix
-				for marker := (azblob.Marker{}); marker.NotDone(); {
-					// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-					listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
-						azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
-					if err != nil {
-						return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
-					}
-
-					// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-					for _, blobInfo := range listBlob.Segment.BlobItems {
-						// If the blob represents a folder as per the conditions mentioned in the
-						// api doesBlobRepresentAFolder, then skip the blob.
-						if util.doesBlobRepresentAFolder(blobInfo) {
-							continue
-						}
-						// If the blobName doesn't matches the blob name pattern, then blob is not included
-						// queued for transfer
-						if !util.blobNameMatchesThePattern(pattern, blobInfo.Name) {
-							continue
-						}
-
-						blobRelativePath := util.getRelativePath(searchPrefix, blobInfo.Name, "/")
-						// check for the special character in blob relative path and get path without special character.
-						blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
-						e.addTransfer(common.CopyTransfer{
-							Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
-							Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
-							LastModifiedTime: blobInfo.Properties.LastModified,
-							SourceSize:       *blobInfo.Properties.ContentLength}, cca)
-					}
-					marker = listBlob.NextMarker
-				}
-			}
+	// Get the source path without the wildcards
+	// This is defined since the files mentioned with exclude flag
+	// & include flag are relative to the Source
+	// If the source has wildcards, then files are relative to the
+	// parent source path which is the path of last directory in the source
+	// without wildcards
+	// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+	// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
+	// For Example: src = "/home/*" parentSourcePath = "/home"
+	parentSourcePath := blobUrlParts.BlobName
+	wcIndex := util.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
 		}
-		// dispatch the JobPart as Final Part of the Job
-		err = e.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// If some blobs are mentioned with exclude flag
-	// Iterate through each blob and append to the source url passed.
-	// The blob name after appending to the source url is stored in the map
-	// For Example: cca.source = https://<container-name/dir?<sig> exclude ="file.txt"
-	// blobNameToExclude will be dir/file.txt
-	if len(e.Exclude) > 0 {
-		destinationBlobName := blobUrlParts.BlobName
-		if len(destinationBlobName) > 0 && destinationBlobName[len(destinationBlobName)-1] != '/' {
-			destinationBlobName += "/"
-		}
-		for blob, index := range e.Exclude {
-			blobNameToExclude := destinationBlobName + blob
-			// If the blob name passed with the exclude flag is a virtual directory
-			// Append * at the end of the blobNameToExclude so blobNameToExclude matches
-			// the name of all blob inside the virtual dir
-			// For Example: cca.source = https://<container-name/dir?<sig> exclude ="dir/"
-			// blobNameToExclude will be "dir/*"
-			if blobNameToExclude[len(blobNameToExclude)-1] == '/' {
-				blobNameToExclude += "*"
-			}
-			delete(e.Exclude, blob)
-			e.Exclude[blobNameToExclude] = index
-		}
+		parentSourcePath = parentSourcePath[:pathSepIndex]
 	}
 
 	// searchPrefix is the used in listing blob inside a container
@@ -221,10 +140,17 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 			// If the blobName doesn't matches the blob name pattern, then blob is not included
 			// queued for transfer
-			if !util.matchBlobNameAgainstPattern(blobNamePattern, blobInfo.Name, "/", cca.recursive) {
+			if !util.matchBlobNameAgainstPattern(blobNamePattern, blobInfo.Name, cca.recursive) {
 				continue
 			}
-			if util.resourceShouldBeExcluded(e.Exclude, blobInfo.Name) {
+
+			// Check the blob should be included or not
+			if !util.resourceShouldBeIncluded(parentSourcePath, e.Include, blobInfo.Name) {
+				continue
+			}
+
+			// Check the blob should be excluded or not
+			if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, blobInfo.Name) {
 				continue
 			}
 
@@ -240,9 +166,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// blobRelativePath = dir1/1.txt
 			var blobRelativePath = ""
 			if util.firstIndexOfWildCard(blobUrlParts.BlobName) != -1 {
-				blobRelativePath = strings.Replace(blobInfo.Name, searchPrefix[:strings.LastIndex(searchPrefix, "/")+1], "", 1)
+				blobRelativePath = strings.Replace(blobInfo.Name, searchPrefix[:strings.LastIndex(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING)+1], "", 1)
 			} else {
-				blobRelativePath = util.getRelativePath(searchPrefix, blobInfo.Name, "/")
+				blobRelativePath = util.getRelativePath(searchPrefix, blobInfo.Name)
 			}
 			// check for the special character in blob relative path and get path without special character.
 			blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)

@@ -278,7 +278,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, transferBlobURL azblob.B
 
 func createParentDirectoryIfNotExist(destinationPath string) error {
 	// check if parent directory exists
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, string(os.PathSeparator))]
+	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, common.AZCOPY_PATH_SEPARATOR_STRING)]
 	_, err := os.Stat(parentDirectory)
 	// if the parent directory does not exist, create it and all its parents
 	if os.IsNotExist(err) {

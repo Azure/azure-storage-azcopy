@@ -118,10 +118,10 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 	// that doesn't match the pattern
 	// For Example: cca.source = C:\a1\a* des = https://<container-name>?<sig>
 	// Only files that follow pattern a* will be compared
-	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(cca.src, os.PathSeparator)
+	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(cca.source)
 	//replace the os path separator  with path separator "/" which is path separator for blobs
-	sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/", -1)
-	destinationUrl, err := url.Parse(cca.dst)
+	//sourcePattern = strings.Replace(sourcePattern, string(os.PathSeparator), "/", -1)
+	destinationUrl, err := url.Parse(cca.destination)
 	if err != nil {
 		return fmt.Errorf("error parsing the destinatio url")
 	}
@@ -130,7 +130,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 	// since sas parameter will be stripped from the destination url
 	// while cooking the raw command arguments
 	// destination sas is added to url for listing the blobs.
-	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.dstSAS)
+	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.destinationSAS)
 
 	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl) // TODO: remove and purely use extension
 	blobURLPartsExtension := blobURLPartsExtension{blobUrlParts}
@@ -139,6 +139,23 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 	searchPrefix, pattern := blobURLPartsExtension.searchPrefixFromBlobURL()
 
 	containerBlobUrl := azblob.NewContainerURL(containerUrl, p)
+
+	// Get the destination path without the wildcards
+	// This is defined since the files mentioned with exclude flag
+	// & include flag are relative to the Destination
+	// If the Destination has wildcards, then files are relative to the
+	// parent Destination path which is the path of last directory in the Destination
+	// without wildcards
+	// For Example: dst = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+	// For Example: dst = "/home/user/dir*" parentSourcePath = "/home/user"
+	// For Example: dst = "/home/*" parentSourcePath = "/home"
+	parentDestinationPath := blobUrlParts.BlobName
+	wcIndex := util.firstIndexOfWildCard(parentDestinationPath)
+	if wcIndex != -1 {
+		parentDestinationPath = parentDestinationPath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentDestinationPath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		parentDestinationPath = parentDestinationPath[:pathSepIndex]
+	}
 
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
@@ -155,6 +172,14 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			// SearchPrefix is used to list to all the blobs inside the destination
 			// and pattern is used to identify which blob to compare further
 			if !util.blobNameMatchesThePattern(pattern, blobInfo.Name) {
+				continue
+			}
+
+			if !util.resourceShouldBeIncluded(parentDestinationPath, e.Include, blobInfo.Name) {
+				continue
+			}
+
+			if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, blobInfo.Name) {
 				continue
 			}
 
@@ -195,7 +220,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	util := copyHandlerUtil{}
 
 	// attempt to parse the destination url
-	destinationUrl, err := url.Parse(cca.dst)
+	destinationUrl, err := url.Parse(cca.destination)
 	if err != nil {
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
@@ -205,13 +230,13 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// since sas parameter will be stripped from the destination url
 	// while cooking the raw command arguments
 	// destination sas is added to url for listing the blobs.
-	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.dstSAS)
+	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.destinationSAS)
 
 	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
 	// Get the files and directories for the given source pattern
-	listOfFilesAndDir, lofaderr := filepath.Glob(cca.src)
+	listOfFilesAndDir, lofaderr := filepath.Glob(cca.source)
 	if lofaderr != nil {
-		return fmt.Errorf("error getting the files and directories for source pattern %s", cca.src), false
+		return fmt.Errorf("error getting the files and directories for source pattern %s", cca.source), false
 	}
 	// isSourceASingleFile is used to determine whether given source pattern represents single file or not
 	// If the source is a single file, this pointer will not be nil
@@ -237,7 +262,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// sync cannot happen between an existing blob and a local directory
 	if berr == nil && isSourceASingleFile != nil {
 		return fmt.Errorf("cannot perform the sync since source %s "+
-			"is a directory and destination %s is a blob", cca.src, destinationUrl.String()), false
+			"is a directory and destination %s is a blob", cca.source, destinationUrl.String()), false
 	}
 	// If the source is a file and destination is a blob
 	// For Example: "cca.source = C:\User\user-1\a.txt" && "cca.destination = https://<container-name>/vd-1/a.txt"
@@ -256,7 +281,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		// sync needs to happen. The transfer is queued
 		if isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
-				Source:           cca.src,
+				Source:           cca.source,
 				Destination:      util.stripSASFromBlobUrl(*destinationUrl).String(),
 				SourceSize:       isSourceASingleFile.Size(),
 				LastModifiedTime: isSourceASingleFile.ModTime(),
@@ -280,10 +305,10 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 			}
 		}
 		if err == nil && !isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
-			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", cca.src, filedestinationUrl.String()), true
+			return fmt.Errorf("sync is not required since the source %s modified time is before the destinaton %s modified time ", cca.source, filedestinationUrl.String()), true
 		}
 		e.addTransferToUpload(common.CopyTransfer{
-			Source:           cca.src,
+			Source:           cca.source,
 			Destination:      util.stripSASFromBlobUrl(filedestinationUrl).String(),
 			LastModifiedTime: isSourceASingleFile.ModTime(),
 			SourceSize:       isSourceASingleFile.Size(),
@@ -300,7 +325,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		// remove the last component in the root path
 		// root = C:\a1\a2
 		if strings.EqualFold(root, pathToFile) {
-			pathSepIndex := strings.LastIndex(root, string(os.PathSeparator))
+			pathSepIndex := strings.LastIndex(root, common.AZCOPY_PATH_SEPARATOR_STRING)
 			if pathSepIndex <= 0 {
 				root = ""
 			} else {
@@ -312,7 +337,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		// Example2: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		localfileRelativePath := strings.Replace(pathToFile, root, "", 1)
 		// remove the path separator at the start of relative path
-		if len(localfileRelativePath) > 0 && localfileRelativePath[0] == os.PathSeparator {
+		if len(localfileRelativePath) > 0 && localfileRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 			localfileRelativePath = localfileRelativePath[1:]
 		}
 		// Appending the fileRelativePath to the destinationUrl
@@ -345,6 +370,24 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		}
 		return nil
 	}
+
+	// Get the source path without the wildcards
+	// This is defined since the files mentioned with exclude flag
+	// & include flag are relative to the Source
+	// If the source has wildcards, then files are relative to the
+	// parent source path which is the path of last directory in the source
+	// without wildcards
+	// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+	// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
+	// For Example: src = "/home/*" parentSourcePath = "/home"
+	parentSourcePath := cca.source
+	wcIndex := util.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		parentSourcePath = parentSourcePath[:pathSepIndex]
+	}
+
 	// rootPath will be the parent source directory before the first wildcard
 	// For Example: cca.source = C:\a\b* rootPath = C:\a
 	// For Example: cca.source = C:\*\a* rootPath = c:\
@@ -353,7 +396,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// Using this rootPath, path of file on blob is calculated
 	// for ex: cca.source := C:\a*\f*.txt rootPath = C:\
 	// path of file C:\a1\f1.txt on the destination path will be destination/a1/f1.txt
-	rootPath, _ := util.sourceRootPathWithoutWildCards(cca.src, os.PathSeparator)
+	rootPath, _ := util.sourceRootPathWithoutWildCards(cca.source)
 	// Iterate through each file / dir inside the source
 	// and then checkAndQueue
 	for _, fileOrDir := range listOfFilesAndDir {
@@ -369,10 +412,31 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 					if f.IsDir() {
 						return nil
 					} else {
+						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
+						// this replacement is done to handle the windows file paths where path separator "\\"
+						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if !util.resourceShouldBeIncluded(parentSourcePath, e.Include, pathToFile) {
+							return nil
+						}
+
+						if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, pathToFile) {
+							return nil
+						}
 						return checkAndQueue(rootPath, pathToFile, f)
 					}
 				})
 			} else if !f.IsDir() {
+				// replace the OS path separator in fileOrDir string with AZCOPY_PATH_SEPARATOR
+				// this replacement is done to handle the windows file paths where path separator "\\"
+				fileOrDir = strings.Replace(fileOrDir, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				if !util.resourceShouldBeIncluded(parentSourcePath, e.Include, fileOrDir) {
+					continue
+				}
+
+				if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, fileOrDir) {
+					continue
+				}
+
 				err = checkAndQueue(rootPath, fileOrDir, f)
 			}
 		}

@@ -37,6 +37,8 @@ type syncCommandArguments struct {
 	// options from flags
 	blockSize    uint32
 	logVerbosity string
+	include      string
+	exclude      string
 	output       string
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -51,8 +53,8 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 		fromTo != common.EFromTo.BlobLocal() {
 		return cooked, fmt.Errorf("invalid type of source and destination passed for this passed")
 	}
-	cooked.src = raw.src
-	cooked.dst = raw.dst
+	cooked.source = raw.src
+	cooked.destination = raw.dst
 
 	cooked.fromTo = fromTo
 
@@ -70,13 +72,16 @@ func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
 }
 
 type cookedSyncCmdArgs struct {
-	src       string
-	srcSAS    string
-	dst       string
-	dstSAS    string
-	fromTo    common.FromTo
-	recursive bool
+	source         string
+	sourceSAS      string
+	destination    string
+	destinationSAS string
+	fromTo         common.FromTo
+	recursive      bool
+
 	// options from flags
+	include      map[string]int
+	exclude      map[string]int
 	blockSize    uint32
 	logVerbosity common.LogLevel
 	output       common.OutputFormat
@@ -181,9 +186,11 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		FromTo:           cca.fromTo,
 		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
+		Include:          cca.include,
+		Exclude:          cca.exclude,
 		CommandString:    cca.commandString,
-		SourceSAS:        cca.srcSAS,
-		DestinationSAS:   cca.dstSAS,
+		SourceSAS:        cca.sourceSAS,
+		DestinationSAS:   cca.destinationSAS,
 	}
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
@@ -196,7 +203,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return fmt.Errorf("from to destination not supported")
 	}
 	if err != nil {
-		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.src, cca.dst, err.Error())
+		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.source, cca.destination, err.Error())
 	}
 	return nil
 }
@@ -235,6 +242,10 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
+	// hidden filters
+	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
+		"Support use of *. More than one file are separated by ';'")
+	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 }

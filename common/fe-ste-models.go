@@ -29,10 +29,18 @@ import (
 
 	"fmt"
 
+	"os"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+)
+
+const (
+	AZCOPY_PATH_SEPARATOR_STRING = "/"
+	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
+	OS_PATH_SEPARATOR            = string(os.PathSeparator)
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
