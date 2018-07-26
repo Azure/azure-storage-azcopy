@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"net/url"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -98,7 +100,44 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	plan := jptm.jobPartMgr.Plan()
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
+
 	srcHTTPHeaders, srcMetadata := plan.TransferSrcHTTPHeadersAndMetadata(jptm.transferIndex)
+	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
+	// If the length of destination SAS is greater than 0
+	// it means the destination is remote url and destination SAS
+	// has been stripped from the destination before persisting it in
+	// part plan file.
+	// SAS needs to be appended before executing the transfer
+	if len(dstSAS) > 0 {
+		dUrl, e := url.Parse(dst)
+		if e != nil {
+			panic(e)
+		}
+		if len(dUrl.RawQuery) > 0 {
+			dUrl.RawQuery += "&" + dstSAS
+		} else {
+			dUrl.RawQuery = dstSAS
+		}
+		dst = dUrl.String()
+	}
+
+	// If the length of source SAS is greater than 0
+	// it means the source is a remote url and source SAS
+	// has been stripped from the source before persisting it in
+	// part plan file.
+	// SAS needs to be appended before executing the transfer
+	if len(srcSAS) > 0 {
+		sUrl, e := url.Parse(src)
+		if e != nil {
+			panic(e)
+		}
+		if len(sUrl.RawQuery) > 0 {
+			sUrl.RawQuery += "&" + srcSAS
+		} else {
+			sUrl.RawQuery = srcSAS
+		}
+		src = sUrl.String()
+	}
 	return TransferInfo{
 		BlockSize:      dstBlobData.BlockSize,
 		Source:         src,

@@ -24,11 +24,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"reflect"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/JeffreyRichter/enum/enum"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -99,21 +97,6 @@ func inferFromTo(src, dst string) common.FromTo {
 		// 	return common.EFromTo.FileBlob()
 	}
 	return common.EFromTo.Unknown()
-}
-
-var ELocation = Location(0)
-
-// JobStatus indicates the status of a Job; the default is InProgress.
-type Location uint32 // Must be 32-bit for atomic operations
-
-func (Location) Unknown() Location { return Location(0) }
-func (Location) Local() Location   { return Location(1) }
-func (Location) Pipe() Location    { return Location(2) }
-func (Location) Blob() Location    { return Location(3) }
-func (Location) File() Location    { return Location(4) }
-func (Location) BlobFS() Location  { return Location(5) }
-func (l Location) String() string {
-	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
 
 func inferArgumentLocation(arg string) common.Location {

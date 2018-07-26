@@ -76,6 +76,15 @@ func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	return false
 }
 
+func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
+	if len(url.RawQuery) > 0 {
+		url.RawQuery += "&" + queryParam
+	} else {
+		url.RawQuery = queryParam
+	}
+	return url
+}
+
 // redactSigQueryParam checks for the signature in the given rawquery part of the url
 // If the signature exists, it replaces the value of the signature with "REDACTED"
 // This api is used when SAS is written to log file to avoid exposing the user given SAS
@@ -179,7 +188,7 @@ func (util copyHandlerUtil) resourceShouldBeExcluded(excludedFilePathMap map[str
 	// This is to handle case when user passed a sub-dir inside
 	// source to exclude. All the files inside that sub-directory
 	// should be excluded.
-	// For Example: src = C:\User\user-1 exclude = "dir1"
+	// For Example: source = C:\User\user-1 exclude = "dir1"
 	// Entry in Map = C:\User\user-1\dir1\* will match the filePath C:\User\user-1\dir1\file1.txt
 	for key, _ := range excludedFilePathMap {
 		matched, err := filepath.Match(key, filePath)
@@ -305,27 +314,25 @@ func (util copyHandlerUtil) blobNameFromUrl(blobParts azblob.BlobURLParts) strin
 }
 
 // stripSASFromFileShareUrl takes azure file and remove the SAS query param from the URL.
-func (util copyHandlerUtil) stripSASFromFileShareUrl(fileUrl string) url.URL{
-	fu, _ := url.Parse(fileUrl)
-	fuParts := azfile.NewFileURLParts(*fu)
+func (util copyHandlerUtil) stripSASFromFileShareUrl(fileUrl url.URL) *url.URL {
+	fuParts := azfile.NewFileURLParts(fileUrl)
 	fuParts.SAS = azfile.SASQueryParameters{}
-	return fuParts.URL()
+	fUrl := fuParts.URL()
+	return &fUrl
 }
 
 // stripSASFromBlobUrl takes azure blob url and remove the SAS query param from the URL
-func(util copyHandlerUtil) stripSASFromBlobUrl(blobUrl string) string{
-	bu, _ := url.Parse(blobUrl)
-	buParts := azblob.NewBlobURLParts(*bu)
+func (util copyHandlerUtil) stripSASFromBlobUrl(blobUrl url.URL) *url.URL {
+	buParts := azblob.NewBlobURLParts(blobUrl)
 	buParts.SAS = azblob.SASQueryParameters{}
 	bUrl := buParts.URL()
-	return bUrl.String()
+	return &bUrl
 }
 
 // createBlobUrlFromContainer returns a url for given blob parts and blobName.
-func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobURLParts, blobName string) string {
+func (util copyHandlerUtil) createBlobUrlFromContainer(blobUrlParts azblob.BlobURLParts, blobName string) url.URL {
 	blobUrlParts.BlobName = blobName
-	blobUrl := blobUrlParts.URL()
-	return blobUrl.String()
+	return blobUrlParts.URL()
 }
 
 func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts, blobName string) (url.URL, string) {
@@ -346,7 +353,7 @@ func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts
 
 // sourceRootPathWithoutWildCards returns the directory from path that does not have wildCards
 // returns the patterns that defines pattern for relativePath of files to the above mentioned directory
-// For Example: src = C:\User\a*\a1*\*.txt rootDir = C:\User\ pattern = a*\a1*\*.txt
+// For Example: source = C:\User\a*\a1*\*.txt rootDir = C:\User\ pattern = a*\a1*\*.txt
 func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep byte) (string, string) {
 	if len(path) == 0 {
 		return path, "*"
@@ -360,7 +367,7 @@ func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string, pathSep 
 	pathWithoutWildcard := path[:wIndex]
 	// find the last separator in path without the wildCards
 	// result will be content of path till the above separator
-	// for Example: src = C:\User\a*\a1*\*.txt pathWithoutWildcard = C:\User\a
+	// for Example: source = C:\User\a*\a1*\*.txt pathWithoutWildcard = C:\User\a
 	// sepIndex = 7
 	// rootDirectory = C:\User and pattern = a*\a1*\*.txt
 	sepIndex := strings.LastIndex(pathWithoutWildcard, string(pathSep))
@@ -488,13 +495,13 @@ func (util copyHandlerUtil) getConatinerUrlAndSuffix(url url.URL) (containerUrl,
 	return
 }
 
-func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) string {
+func (util copyHandlerUtil) generateBlobUrl(containerUrl url.URL, blobName string) url.URL {
 	if containerUrl.Path[len(containerUrl.Path)-1] != '/' {
 		containerUrl.Path = containerUrl.Path + "/" + blobName
 	} else {
 		containerUrl.Path = containerUrl.Path + blobName
 	}
-	return containerUrl.String()
+	return containerUrl
 }
 
 // for a given virtual directory, find the directory directly above the virtual file

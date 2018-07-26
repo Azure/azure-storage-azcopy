@@ -20,23 +20,20 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
+
 	p, err := createBlobPipeline(ctx, e.CredentialInfo)
 	if err != nil {
 		return err
 	}
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(cca.src)
+	sourceUrl, err := url.Parse(cca.source)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
 
 	// append the sas at the end of query params.
-	if len(sourceUrl.RawQuery) > 0 {
-		sourceUrl.RawQuery += "&" + cca.srcSAS
-	}else {
-		sourceUrl.RawQuery = cca.srcSAS
-	}
+	sourceUrl = util.appendQueryParamToUrl(sourceUrl, cca.sourceSAS)
 
 	// get the blob parts
 	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl)
@@ -59,17 +56,19 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		// Example2: Downloading https://<container>/a?<query-params> to directory C:\\Users\\User1\\b
 		// (b is not a directory) will download blob as C:\\Users\\User1\\b
 		var blobLocalPath string
-		if util.isPathALocalDirectory(cca.dst) {
-			blobNameFromUrl := blobUrlParts.BlobName
+
+		if util.isPathALocalDirectory(cca.destination) {
+			blobNameFromUrl := util.blobNameFromUrl(blobUrlParts)
+
 			// check for special characters and get blobName without special character.
 			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
-			blobLocalPath = util.generateLocalPath(cca.dst, blobNameFromUrl)
+			blobLocalPath = util.generateLocalPath(cca.destination, blobNameFromUrl)
 		} else {
-			blobLocalPath = cca.dst
+			blobLocalPath = cca.destination
 		}
 		// Add the transfer to CopyJobPartOrderRequest
 		e.addTransfer(common.CopyTransfer{
-			Source:           util.stripSASFromBlobUrl(sourceUrl.String()),
+			Source:           util.stripSASFromBlobUrl(*sourceUrl).String(),
 			Destination:      blobLocalPath,
 			LastModifiedTime: blobProperties.LastModified(),
 			SourceSize:       blobProperties.ContentLength(),
@@ -85,7 +84,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// it is either a container or a virtual directory, so it need to be
 	// downloaded to an existing directory
 	// Check if the given destination path is a directory or not.
-	if !util.isPathALocalDirectory(cca.dst) {
+	if !util.isPathALocalDirectory(cca.destination) {
 		return errors.New("the destination must be an existing directory in this download scenario")
 	}
 
@@ -101,7 +100,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			blobUrl, blobName := util.appendBlobNameToUrl(blobUrlParts, blob)
 			if blob[len(blob)-1] != '/' {
 				// If there is no separator at the end of blobName, then it is consider to be a blob
-				// For Example cca.src = https://<container-name>?<sig> include = "file1.txt"
+				// For Example cca.source = https://<container-name>?<sig> include = "file1.txt"
 				// blobUrl = https://<container-name>/file1.txt?<sig> ; blobName = file1.txt
 				bUrl := azblob.NewBlobURL(blobUrl, p)
 				bProperties, err := bUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
@@ -110,9 +109,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				}
 				// check for special characters and get blobName without special character.
 				blobName = util.blobPathWOSpecialCharacters(blobName)
-				blobLocalPath := util.generateLocalPath(cca.dst, blobName)
+				blobLocalPath := util.generateLocalPath(cca.destination, blobName)
 				e.addTransfer(common.CopyTransfer{
-					Source:           util.stripSASFromBlobUrl(blobUrl.String()),
+					Source:           util.stripSASFromBlobUrl(blobUrl).String(),
 					Destination:      blobLocalPath,
 					LastModifiedTime: bProperties.LastModified(),
 					SourceSize:       bProperties.ContentLength(),
@@ -120,7 +119,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			} else {
 				// If there is a separator at the end of blobName, then it is consider to be a virtual directory in the container
 				// all blobs inside this virtual directory needs to downloaded
-				// For Example: cca.src = https://<container-name>?<sig> include = "dir1/"
+				// For Example: cca.source = https://<container-name>?<sig> include = "dir1/"
 				// blobName = dir1/  searchPrefix = dir1/
 				// all blob starting with dir1/ will be listed
 				searchPrefix := blobName
@@ -151,8 +150,8 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// check for the special character in blob relative path and get path without special character.
 						blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 						e.addTransfer(common.CopyTransfer{
-							Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)),
-							Destination:      util.generateLocalPath(cca.dst, blobRelativePath),
+							Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
+							Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
 							LastModifiedTime: blobInfo.Properties.LastModified,
 							SourceSize:       *blobInfo.Properties.ContentLength}, cca)
 					}
@@ -171,7 +170,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// If some blobs are mentioned with exclude flag
 	// Iterate through each blob and append to the source url passed.
 	// The blob name after appending to the source url is stored in the map
-	// For Example: cca.src = https://<container-name/dir?<sig> exclude ="file.txt"
+	// For Example: cca.source = https://<container-name/dir?<sig> exclude ="file.txt"
 	// blobNameToExclude will be dir/file.txt
 	if len(e.Exclude) > 0 {
 		destinationBlobName := blobUrlParts.BlobName
@@ -183,7 +182,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// If the blob name passed with the exclude flag is a virtual directory
 			// Append * at the end of the blobNameToExclude so blobNameToExclude matches
 			// the name of all blob inside the virtual dir
-			// For Example: cca.src = https://<container-name/dir?<sig> exclude ="dir/"
+			// For Example: cca.source = https://<container-name/dir?<sig> exclude ="dir/"
 			// blobNameToExclude will be "dir/*"
 			if blobNameToExclude[len(blobNameToExclude)-1] == '/' {
 				blobNameToExclude += "*"
@@ -248,8 +247,8 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// check for the special character in blob relative path and get path without special character.
 			blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
 			e.addTransfer(common.CopyTransfer{
-				Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)),
-				Destination:      util.generateLocalPath(cca.dst, blobRelativePath),
+				Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
+				Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
 				LastModifiedTime: blobInfo.Properties.LastModified,
 				SourceSize:       *blobInfo.Properties.ContentLength}, cca)
 		}

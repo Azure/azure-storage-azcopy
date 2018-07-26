@@ -45,11 +45,11 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// attempt to parse the source and destination url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.dst))
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}

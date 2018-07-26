@@ -70,14 +70,9 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 
 // holds processed/actionable args
 type cookedMakeCmdArgs struct {
-<<<<<<< HEAD
 	resourceURL      url.URL
-	resourceLocation Location
-	quota            int32 // quota is in GB
-=======
-	resourceURL url.URL
 	resourceLocation common.Location
->>>>>>> 9387b2f... source / destination sas not pesisted in the part plan file change
+	quota            int32 // quota is in GB
 }
 
 // TODO update this function when OAuth is officially enabled
@@ -120,7 +115,7 @@ func (cookedArgs cookedMakeCmdArgs) process() error {
 			// print the ugly error if unexpected
 			return err
 		}
-	case ELocation.Blob():
+	case common.ELocation.Blob():
 		containerURL := azblob.NewContainerURL(cookedArgs.resourceURL, azblob.NewPipeline(azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
 				Retry: azblob.RetryOptions{
@@ -150,7 +145,7 @@ func (cookedArgs cookedMakeCmdArgs) process() error {
 			// print the ugly error if unexpected
 			return err
 		}
-	case ELocation.File():
+	case common.ELocation.File():
 		shareURL := azfile.NewShareURL(cookedArgs.resourceURL, azfile.NewPipeline(azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
 				Retry: azfile.RetryOptions{

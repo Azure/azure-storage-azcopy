@@ -135,18 +135,17 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
-		Version:            DataSchemaVersion,
-		JobID:              order.JobID,
-		PartNum:            order.PartNum,
-		IsFinalPart:        order.IsFinalPart,
-		ForceWrite:         order.ForceWrite,
-		Priority:           order.Priority,
-		TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
-		FromTo:             order.FromTo,
-		SourceStringLength: uint32(len(order.Source)),
-		DestinationStringLength: uint32(len(order.Destination)),
-		NumTransfers:       uint32(len(order.Transfers)),
-		LogLevel:           order.LogLevel,
+		Version:             DataSchemaVersion,
+		JobID:               order.JobID,
+		PartNum:             order.PartNum,
+		IsFinalPart:         order.IsFinalPart,
+		ForceWrite:          order.ForceWrite,
+		Priority:            order.Priority,
+		TTLAfterCompletion:  uint32(time.Time{}.Nanosecond()),
+		FromTo:              order.FromTo,
+		CommandStringLength: uint32(len(order.CommandString)),
+		NumTransfers:        uint32(len(order.Transfers)),
+		LogLevel:            order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
 			//BlobType:              order.OptionalAttributes.BlobType,
 			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
@@ -169,12 +168,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 
 	eof += writeValue(file, &jpph)
-	bytesWritten, err := file.WriteString(order.Source)
-	if err != nil {
-		panic(err)
-	}
-	eof += int64(bytesWritten)
-	bytesWritten, err = file.WriteString(order.Destination)
+
+	// write the command string in the JobPart Plan file
+	bytesWritten, err := file.WriteString(order.CommandString)
 	if err != nil {
 		panic(err)
 	}

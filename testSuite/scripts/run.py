@@ -161,6 +161,7 @@ def cleanup():
 def main():
     print("Smoke tests starting...")
     init()
+
     suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
     unittest.TextTestRunner(verbosity=2).run(suite)
 

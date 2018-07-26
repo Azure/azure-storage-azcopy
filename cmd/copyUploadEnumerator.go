@@ -19,14 +19,14 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO() // Ensure correct context is used
 
 	// attempt to parse the destination url
-	destinationURL, err := url.Parse(cca.dst)
+	destinationURL, err := url.Parse(cca.destination)
 	if err != nil {
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
 
 	// list the source files and directories
-	listOfFilesAndDirectories, err := filepath.Glob(cca.src)
+	listOfFilesAndDirectories, err := filepath.Glob(cca.source)
 	if err != nil || len(listOfFilesAndDirectories) == 0 {
 		return fmt.Errorf("cannot find source to upload")
 	}
@@ -89,22 +89,22 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if len(e.Include) > 0 {
 		for file, _ := range e.Include {
 			// append the file name in the include flag to the soure directory
-			// For Example: cca.src = C:\User\new-User include = "file.txt;file2.txt"
+			// For Example: cca.source = C:\User\new-User include = "file.txt;file2.txt"
 			// currentFile = C:\User\new\User\file.txt
-			currentFile := cca.src + string(os.PathSeparator) + file
+			currentFile := cca.source + string(os.PathSeparator) + file
 			// temporary saving the destination Url to later modify it
 			// to get the resource Url
 			currentDestinationUrl := *destinationURL
 			f, err := os.Stat(currentFile)
 			if err != nil {
-				return fmt.Errorf("invalid file name %s. It doesn't exists inside the directory %s", file, cca.src)
+				return fmt.Errorf("invalid file name %s. It doesn't exists inside the directory %s", file, cca.source)
 			}
 			// When the string in include flag is a file
 			// add it to the transfer list.
 			// Example: currentFile = C:\User\new\User\file.txt
 			if !f.IsDir() {
 				currentDestinationUrl.Path = util.generateObjectPath(currentDestinationUrl.Path,
-					util.getRelativePath(cca.src, currentFile, string(os.PathSeparator)))
+					util.getRelativePath(cca.source, currentFile, string(os.PathSeparator)))
 				e.addTransfer(common.CopyTransfer{
 					Source:           currentFile,
 					Destination:      currentDestinationUrl.String(),
@@ -134,7 +134,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// TODO: Currently disabling the upload of empty directories
 						//if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
 						//	currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
-						//		util.getRelativePath(cca.src, pathToFile, string(os.PathSeparator)))
+						//		util.getRelativePath(cca.source, pathToFile, string(os.PathSeparator)))
 						//	err = e.addTransfer(common.CopyTransfer{
 						//		Source:           pathToFile,
 						//		Destination:      currentDestinationUrl.String(),
@@ -152,7 +152,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					} else {
 						// create the remote Url of file inside sub-dir
 						currentDestinationUrl.Path = util.generateObjectPath(cleanContainerPath,
-							util.getRelativePath(cca.src, pathToFile, string(os.PathSeparator)))
+							util.getRelativePath(cca.source, pathToFile, string(os.PathSeparator)))
 						err = e.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      currentDestinationUrl.String(),
@@ -184,15 +184,15 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			var filePath = ""
 			// If the source directory doesn't have a separator at the end
 			// place a separator between the source and file
-			if cca.src[len(cca.src)-1] != os.PathSeparator {
-				filePath = fmt.Sprintf("%s%s%s", cca.src, string(os.PathSeparator), file)
+			if cca.source[len(cca.source)-1] != os.PathSeparator {
+				filePath = fmt.Sprintf("%s%s%s", cca.source, string(os.PathSeparator), file)
 			} else {
-				filePath = fmt.Sprintf("%s%s", cca.src, file)
+				filePath = fmt.Sprintf("%s%s", cca.source, file)
 			}
 			// Get the file info to verify file exists or not.
 			f, err := os.Stat(filePath)
 			if err != nil {
-				return fmt.Errorf("file %s mentioned in the exclude doesn't exists inside the source dir %s", file, cca.src)
+				return fmt.Errorf("file %s mentioned in the exclude doesn't exists inside the source dir %s", file, cca.source)
 			}
 
 			// If the file passed is a sub-directory inside the source directory
@@ -239,7 +239,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// TODO: Currently disabling the upload of empty directories
 						//if e.FromTo == common.EFromTo.LocalBlobFS() && f.Size() == 0 {
 						//	destinationURL.Path = util.generateObjectPath(cleanContainerPath,
-						//		util.getRelativePath(cca.src, pathToFile, string(os.PathSeparator)))
+						//		util.getRelativePath(cca.source, pathToFile, string(os.PathSeparator)))
 						//	err = e.addTransfer(common.CopyTransfer{
 						//		Source:           pathToFile,
 						//		Destination:      destinationURL.String(),

@@ -103,8 +103,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	cooked.src = raw.src
-	cooked.dst = raw.dst
+	cooked.source = raw.src
+	cooked.destination = raw.dst
 
 	cooked.fromTo = fromTo
 
@@ -181,11 +181,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 // represents the processed copy command input from the user
 type cookedCopyCmdArgs struct {
 	// from arguments
-	src    string
-	srcSAS string
-	dst    string
-	dstSAS string
-	fromTo common.FromTo
+	source         string
+	sourceSAS      string
+	destination    string
+	destinationSAS string
+	fromTo         common.FromTo
 
 	// filters from flags
 	include        map[string]int
@@ -255,9 +255,9 @@ func (cca *cookedCopyCmdArgs) process() error {
 // TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
 func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 	if cca.fromTo == common.EFromTo.PipeBlob() {
-		return cca.processRedirectionUpload(cca.dst, cca.blockSize)
+		return cca.processRedirectionUpload(cca.destination, cca.blockSize)
 	} else if cca.fromTo == common.EFromTo.BlobPipe() {
-		return cca.processRedirectionDownload(cca.src)
+		return cca.processRedirectionDownload(cca.source)
 	}
 
 	return fmt.Errorf("unsupported redirection type: %s", cca.fromTo)
@@ -462,12 +462,12 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
 			fallthrough
 		case common.EFromTo.LocalBlob():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.dst, false)
+			credentialType, err = getBlobCredentialType(context.Background(), cca.destination, false)
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
 		case common.EFromTo.BlobLocal():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.src, true)
+			credentialType, err = getBlobCredentialType(context.Background(), cca.source, true)
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
@@ -513,6 +513,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 		},
+		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
+		SourceSAS: cca.sourceSAS,
+
+		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
+		DestinationSAS: cca.destinationSAS,
 		CommandString:  cca.commandString,
 		CredentialInfo: common.CredentialInfo{},
 	}

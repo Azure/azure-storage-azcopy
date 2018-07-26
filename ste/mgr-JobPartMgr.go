@@ -139,7 +139,11 @@ type jobPartMgr struct {
 	jobMgr   IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
 	filename JobPartPlanFileName
 
-	sourceSAS	string
+	// sourceSAS defines the sas of the source of the Job. If the source is local Location, then sas is empty.
+	// Since sas is not persisted in JobPartPlan file, it stripped from the source and stored in memory in JobPart Manager
+	sourceSAS string
+	// destinationSAS defines the sas of the destination of the Job. If the destination is local Location, then sas is empty.
+	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
 	destinationSAS string
 
 	// When the part is schedule to run (inprogress), the below fields are used

@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
-
 	"path/filepath"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -114,10 +113,10 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 
 	// rootPath is the path of source without wildCards
 	// sourcePattern is the filePath pattern inside the source
-	// For Example: cca.src = C:\a1\a* , so rootPath = C:\a1 and filePattern is a*
+	// For Example: cca.source = C:\a1\a* , so rootPath = C:\a1 and filePattern is a*
 	// This is to avoid enumerator to compare any file inside the destination directory
 	// that doesn't match the pattern
-	// For Example: cca.src = C:\a1\a* des = https://<container-name>?<sig>
+	// For Example: cca.source = C:\a1\a* des = https://<container-name>?<sig>
 	// Only files that follow pattern a* will be compared
 	rootPath, sourcePattern := util.sourceRootPathWithoutWildCards(cca.src, os.PathSeparator)
 	//replace the os path separator  with path separator "/" which is path separator for blobs
@@ -127,8 +126,15 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 		return fmt.Errorf("error parsing the destinatio url")
 	}
 
+	// since destination is a remote url, it will have sas parameter
+	// since sas parameter will be stripped from the destination url
+	// while cooking the raw command arguments
+	// destination sas is added to url for listing the blobs.
+	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.dstSAS)
+
 	blobUrlParts := azblob.NewBlobURLParts(*destinationUrl) // TODO: remove and purely use extension
 	blobURLPartsExtension := blobURLPartsExtension{blobUrlParts}
+
 	containerUrl := util.getContainerUrl(blobUrlParts)
 	searchPrefix, pattern := blobURLPartsExtension.searchPrefixFromBlobURL()
 
@@ -153,7 +159,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			}
 
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
-			// Example: cca.src ="C:\User1\user-1" cca.dst = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
+			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
 			realtivePathofBlobLocally := util.relativePathToRoot(searchPrefix, blobInfo.Name, '/')
 
@@ -172,7 +178,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			if err != nil && os.IsNotExist(err) {
 				// delete the blob.
 				e.addTransferToDelete(common.CopyTransfer{
-					Source:      util.stripSASFromBlobUrl(util.generateBlobUrl(containerUrl, blobInfo.Name)),
+					Source:      util.stripSASFromBlobUrl(util.generateBlobUrl(containerUrl, blobInfo.Name)).String(),
 					Destination: "", // no destination in case of Delete JobPartOrder
 					SourceSize:  *blobInfo.Properties.ContentLength,
 				}, cca)
@@ -194,6 +200,13 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
 		panic(err)
 	}
+
+	// since destination is a remote url, it will have sas parameter
+	// since sas parameter will be stripped from the destination url
+	// while cooking the raw command arguments
+	// destination sas is added to url for listing the blobs.
+	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.dstSAS)
+
 	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
 	// Get the files and directories for the given source pattern
 	listOfFilesAndDir, lofaderr := filepath.Glob(cca.src)
@@ -227,12 +240,12 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 			"is a directory and destination %s is a blob", cca.src, destinationUrl.String()), false
 	}
 	// If the source is a file and destination is a blob
-	// For Example: "cca.src = C:\User\user-1\a.txt" && "cca.dst = https://<container-name>/vd-1/a.txt"
+	// For Example: "cca.source = C:\User\user-1\a.txt" && "cca.destination = https://<container-name>/vd-1/a.txt"
 	if berr == nil && isSourceASingleFile != nil {
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
-		// Example1: "cca.dst = https://<container-name>/blob1?<sig>  blobName = blob1"
-		// Example1: "cca.dst = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
+		// Example1: "cca.destination = https://<container-name>/blob1?<sig>  blobName = blob1"
+		// Example1: "cca.destination = https://<container-name>/dir1/blob1?<sig>  blobName = blob1"
 		blobName := destinationUrl.Path[strings.LastIndex(destinationUrl.Path, "/")+1:]
 		// Compare the blob name and file name
 		// blobName and filename should be same for sync to happen
@@ -244,7 +257,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		if isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
 			e.addTransferToUpload(common.CopyTransfer{
 				Source:           cca.src,
-				Destination:      util.stripSASFromBlobUrl(destinationUrl.String()),
+				Destination:      util.stripSASFromBlobUrl(*destinationUrl).String(),
 				SourceSize:       isSourceASingleFile.Size(),
 				LastModifiedTime: isSourceASingleFile.ModTime(),
 			}, cca)
@@ -271,7 +284,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		}
 		e.addTransferToUpload(common.CopyTransfer{
 			Source:           cca.src,
-			Destination:      util.stripSASFromBlobUrl(filedestinationUrl.String()),
+			Destination:      util.stripSASFromBlobUrl(filedestinationUrl).String(),
 			LastModifiedTime: isSourceASingleFile.ModTime(),
 			SourceSize:       isSourceASingleFile.Size(),
 		}, cca)
@@ -303,7 +316,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 			localfileRelativePath = localfileRelativePath[1:]
 		}
 		// Appending the fileRelativePath to the destinationUrl
-		// root = C:\User\user1\dir-1  cca.dst = https://<container-name>/<vir-d>?<sig>
+		// root = C:\User\user1\dir-1  cca.destination = https://<container-name>/<vir-d>?<sig>
 		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
 		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
@@ -323,7 +336,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		}
 		err = e.addTransferToUpload(common.CopyTransfer{
 			Source:           pathToFile,
-			Destination:      util.stripSASFromBlobUrl(filedestinationUrl.String()),
+			Destination:      util.stripSASFromBlobUrl(filedestinationUrl).String(),
 			LastModifiedTime: f.ModTime(),
 			SourceSize:       f.Size(),
 		}, cca)
@@ -333,12 +346,12 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		return nil
 	}
 	// rootPath will be the parent source directory before the first wildcard
-	// For Example: cca.src = C:\a\b* rootPath = C:\a
-	// For Example: cca.src = C:\*\a* rootPath = c:\
+	// For Example: cca.source = C:\a\b* rootPath = C:\a
+	// For Example: cca.source = C:\*\a* rootPath = c:\
 	// In case of no wildCard, rootPath is equal to the source directory
 	// This rootPath is effective when wildCards are provided
 	// Using this rootPath, path of file on blob is calculated
-	// for ex: cca.src := C:\a*\f*.txt rootPath = C:\
+	// for ex: cca.source := C:\a*\f*.txt rootPath = C:\
 	// path of file C:\a1\f1.txt on the destination path will be destination/a1/f1.txt
 	rootPath, _ := util.sourceRootPathWithoutWildCards(cca.src, os.PathSeparator)
 	// Iterate through each file / dir inside the source
@@ -383,27 +396,14 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil)
 
-	dstUrl, err := url.Parse(cca.dst)
-	if err != nil {
-		return fmt.Errorf("error parsing the destination url %s. failed with error %s", cca.dst, err.Error())
-	}
-	if len(dstUrl.RawQuery) > 0 {
-		dstUrl.RawQuery += "&" + cca.dstSAS
-	}else{
-		dstUrl.RawQuery = cca.dstSAS
-	}
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
 	// Copying the FromTo of sync job to individual copyJobRequest
 	e.CopyJobRequest.FromTo = e.FromTo
 
-	// set the user given Source
-	e.CopyJobRequest.Source = e.Source
 	// set the sas of user given Source
 	e.CopyJobRequest.SourceSAS = e.SourceSAS
 
-	// set the user given destination
-	e.CopyJobRequest.Destination = e.Destination
 	// set the sas of user given destination
 	e.CopyJobRequest.DestinationSAS = e.DestinationSAS
 
@@ -412,8 +412,6 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	// FromTo of DeleteJobRequest will be BlobTrash.
 	e.DeleteJobRequest.FromTo = common.EFromTo.BlobTrash()
 
-	// set the user given Source
-	e.DeleteJobRequest.Source = e.DestinationSAS
 	// For delete the source is the destination in case of sync upload
 	// For Example: source = /home/user destination = https://container/vd-1?<sig>
 	// For deleting the blobs, Source in Delete Job Source will be the blob url

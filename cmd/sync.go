@@ -182,9 +182,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		LogLevel:         cca.logVerbosity,
 		BlockSizeInBytes: cca.blockSize,
 		CommandString:    cca.commandString,
-		Source:           cca.src,
 		SourceSAS:        cca.srcSAS,
-		Destination:      cca.dst,
 		DestinationSAS:   cca.dstSAS,
 	}
 	switch cca.fromTo {

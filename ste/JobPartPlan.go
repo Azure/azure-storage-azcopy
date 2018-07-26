@@ -37,20 +37,19 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version            common.Version      // The version of data schema format of header; see the dataSchemaVersion constant
-	JobID              common.JobID        // Job Part's JobID
-	PartNum            common.PartNumber   // Job Part's part number (0+)
-	IsFinalPart        bool                // True if this is the Job's last part; else false
-	ForceWrite         bool                // True if the existing blobs needs to be overwritten.
-	Priority           common.JobPriority  // The Job Part's priority
-	TTLAfterCompletion uint32              // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
-	FromTo             common.FromTo       // The location of the transfer's source & destination
-	SourceStringLength uint32
-	DestinationStringLength  uint32
-	NumTransfers       uint32 	             // The number of transfers in the Job part
-	LogLevel           common.LogLevel     // This Job Part's minimal log level
-	DstBlobData        JobPartPlanDstBlob  // Additional data for blob destinations
-	DstLocalData       JobPartPlanDstLocal // Additional data for local destinations
+	Version             common.Version     // The version of data schema format of header; see the dataSchemaVersion constant
+	JobID               common.JobID       // Job Part's JobID
+	PartNum             common.PartNumber  // Job Part's part number (0+)
+	IsFinalPart         bool               // True if this is the Job's last part; else false
+	ForceWrite          bool               // True if the existing blobs needs to be overwritten.
+	Priority            common.JobPriority // The Job Part's priority
+	TTLAfterCompletion  uint32             // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
+	FromTo              common.FromTo      // The location of the transfer's source & destination
+	CommandStringLength uint32
+	NumTransfers        uint32              // The number of transfers in the Job part
+	LogLevel            common.LogLevel     // This Job Part's minimal log level
+	DstBlobData         JobPartPlanDstBlob  // Additional data for blob destinations
+	DstLocalData        JobPartPlanDstLocal // Additional data for local destinations
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
@@ -80,7 +79,7 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 
 	// (Job Part Plan's file address) + (header size) --> beginning of transfers in file
 	// Add (transfer size) * (transfer index)
-	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.SourceStringLength + jpph.DestinationStringLength))  + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
+	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder

@@ -37,6 +37,8 @@ import (
 
 var steCtx = context.Background()
 
+const EMPTY_SAS_STRING = ""
+
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
@@ -156,7 +158,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	if !found {
 		// If the Job is not found, search for Job Plan files in the existing plan file
 		// and resurrect the job
-		if !JobsAdmin.ResurrectJob(jobID, "", "") {
+		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
 				ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
@@ -372,7 +374,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID, "", "") {
+		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.ListJobSummaryResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
@@ -455,7 +457,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(r.JobID, "", "") {
+		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.ListJobTransfersResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}

@@ -37,11 +37,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// step 1: get the source, destination info for the transfer.
 	info := jptm.Info()
 	u, _ := url.Parse(info.Source)
-	if len(u.RawQuery) > 0 {
-		u.RawQuery += "&" + info.SourceSAS
-	}else{
-		u.RawQuery = info.SourceSAS
-	}
+
 	srcBlobURL := azblob.NewBlobURL(*u, p)
 	// step 2: get size info for the download
 	blobSize := int64(info.SourceSize)

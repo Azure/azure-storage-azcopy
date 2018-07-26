@@ -16,11 +16,7 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	info := jptm.Info()
 	// Get the source file url of file to delete
 	u, _ := url.Parse(info.Source)
-	if len(u.RawQuery) > 0 {
-		u.RawQuery += "&" + info.SourceSAS
-	}else{
-		u.RawQuery = info.SourceSAS
-	}
+
 	srcFileUrl := azfile.NewFileURL(*u, p)
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.

@@ -38,8 +38,8 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				Value: common.UserAgent,
 			},
 		})
-	ctx := context.TODO()                                            // Ensure correct context is used
-	cookedSourceURLString := util.replaceBackSlashWithSlash(cca.src) // Replace back slash with slash, otherwise url.Parse would encode the back slash.
+	ctx := context.TODO()                                               // Ensure correct context is used
+	cookedSourceURLString := util.replaceBackSlashWithSlash(cca.source) // Replace back slash with slash, otherwise url.Parse would encode the back slash.
 
 	// Attempt to parse the source url.
 	sourceURL, err := url.Parse(cookedSourceURLString)
@@ -47,11 +47,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return fmt.Errorf("cannot parse source URL")
 	}
 	// append the sas at the end of query params.
-	if len(sourceURL.RawQuery) > 0 {
-		sourceURL.RawQuery += "&" + cca.srcSAS
-	}else {
-		sourceURL.RawQuery = cca.srcSAS
-	}
+	sourceURL = util.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
 
 	// Validate the source url.
 	numOfStartInURLPath := util.numOfWildcardInURL(*sourceURL)
@@ -80,7 +76,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	if doPrefixSearch { // Case 1: Do prefix search, the file pattern would be [AnyLetter]+\*
 		// The destination must be a directory, otherwise we don't know where to put the files.
-		if !util.isPathALocalDirectory(cca.dst) {
+		if !util.isPathALocalDirectory(cca.destination) {
 			return fmt.Errorf("the destination must be an existing directory in this download scenario")
 		}
 
@@ -107,10 +103,10 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if err != nil {
 					return err
 				}
-				fUrl := util.stripSASFromFileShareUrl(f.String())
+				fUrl := util.stripSASFromFileShareUrl(f.URL())
 				e.addTransfer(common.CopyTransfer{
 					Source:           fUrl.String(),
-					Destination:      util.generateLocalPath(cca.dst, fileInfo.Name),
+					Destination:      util.generateLocalPath(cca.destination, fileInfo.Name),
 					LastModifiedTime: gResp.LastModified(),
 					SourceSize:       fileInfo.Properties.ContentLength}, cca)
 			}
@@ -127,12 +123,12 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 		if fileURL != nil { // Single file.
 			var singleFileDestinationPath string
-			if util.isPathALocalDirectory(cca.dst) {
-				singleFileDestinationPath = util.generateLocalPath(cca.dst, util.getPossibleFileNameFromURL(sourceURL.Path))
+			if util.isPathALocalDirectory(cca.destination) {
+				singleFileDestinationPath = util.generateLocalPath(cca.destination, util.getPossibleFileNameFromURL(sourceURL.Path))
 			} else {
-				singleFileDestinationPath = cca.dst
+				singleFileDestinationPath = cca.destination
 			}
-			srcUrl := util.stripSASFromFileShareUrl(sourceURL.String())
+			srcUrl := util.stripSASFromFileShareUrl(*sourceURL)
 			e.addTransfer(
 				common.CopyTransfer{
 					Source:           srcUrl.String(),
@@ -143,7 +139,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 		} else { // Directory.
 			// The destination must be a directory, otherwise we don't know where to put the files.
-			if !util.isPathALocalDirectory(cca.dst) {
+			if !util.isPathALocalDirectory(cca.destination) {
 				return fmt.Errorf("the destination must be an existing directory in this download scenario")
 			}
 
@@ -168,11 +164,11 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						}
 
 						currentFilePath := "/" + azfile.NewFileURLParts(f.URL()).DirectoryOrFilePath
-						fUrl := util.stripSASFromFileShareUrl(f.String())
+						fUrl := util.stripSASFromFileShareUrl(f.URL())
 						e.addTransfer(
 							common.CopyTransfer{
 								Source:           fUrl.String(),
-								Destination:      util.generateLocalPath(cca.dst, util.getRelativePath(rootDirPath, currentFilePath, "/")),
+								Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(rootDirPath, currentFilePath, "/")),
 								LastModifiedTime: gResp.LastModified(),
 								SourceSize:       fileInfo.Properties.ContentLength}, cca)
 					}

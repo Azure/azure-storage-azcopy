@@ -48,7 +48,7 @@ type IJobMgr interface {
 	JobPartMgr(partNum PartNumber) (IJobPartMgr, bool)
 	//Throughput() XferThroughput
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
-								destinationSAS string, scheduleTransfers bool) IJobPartMgr
+		destinationSAS string, scheduleTransfers bool) IJobPartMgr
 	ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone() uint32
@@ -149,9 +149,9 @@ func (jm *jobMgr) ActiveConnections() int64 {
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
-			destinationSAS string, scheduleTransfers bool) IJobPartMgr {
+	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
-			destinationSAS:destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer}
+		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart

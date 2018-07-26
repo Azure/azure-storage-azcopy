@@ -198,8 +198,8 @@ func (js JobStatus) String() string {
 
 var ELocation = Location(0)
 
-// JobStatus indicates the status of a Job; the default is InProgress.
-type Location uint32 // Must be 32-bit for atomic operations
+// Location indicates the type of Location
+type Location uint8
 
 func (Location) Unknown() Location { return Location(0) }
 func (Location) Local() Location   { return Location(1) }
@@ -215,7 +215,7 @@ func (l Location) String() string {
 // from / To location combination. In 16 bits fromTo
 // value, first 8 bits represents from location
 func fromToValue(from Location, to Location) FromTo {
-	return FromTo(uint16((from << 8) + to))
+	return FromTo((FromTo(from) << 8) | FromTo(to))
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -265,6 +265,14 @@ func (ft *FromTo) FromAndTo(s string) (srcLocation, dstLocation Location, err er
 	}
 	err = fmt.Errorf("unable to parse the from and to Location from given FromTo %s", s)
 	return
+}
+
+func (ft *FromTo) To() Location {
+	return Location(((1 << 8) - 1) & *ft)
+}
+
+func (ft *FromTo) From() Location {
+	return Location((((1 << 16) - 1) & *ft) >> 8)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
