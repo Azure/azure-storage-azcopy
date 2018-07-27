@@ -222,18 +222,18 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     if not clean_test_container(test_premium_account_contaier_url):
         return False
 
-    # cleaning the test share provided
-    # all files and directories inside the share will be deleted.
-    test_share_url = share_sas_url
-    if not clean_test_share(test_share_url):
-        return False
-
     test_s2s_src_blob_account_url = s2s_src_blob_account_url
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
         return False
 
     test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     if not clean_test_blob_account(test_s2s_dst_blob_account_url):
+        return False
+
+    # cleaning the test share provided
+    # all files and directories inside the share will be deleted.
+    test_share_url = share_sas_url
+    if not clean_test_share(test_share_url):
         return False
 
     return True

@@ -161,14 +161,14 @@ def cleanup():
 def main():
     print("Smoke tests starting...")
     init()
-    # suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
-    # unittest.TextTestRunner(verbosity=2).run(suite)
-    #
-    # suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
-    # unittest.TextTestRunner(verbosity=2).run(suite)
-    #
-    # suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
-    # unittest.TextTestRunner(verbosity=2).run(suite)
+    suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_OAuth_User_Scenarios)
     unittest.TextTestRunner(verbosity=2).run(suite)
