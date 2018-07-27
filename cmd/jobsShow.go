@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -37,10 +38,8 @@ func init() {
 
 	// shJob represents the ls command
 	shJob := &cobra.Command{
-		Use:        "showJob [jobID]",
-		Aliases:    []string{"showJob"},
-		SuggestFor: []string{"shwJob", "shJob", "showJb"},
-		Short:      "Show detailed information for the given job ID",
+		Use:   "show [jobID]",
+		Short: "Show detailed information for the given job ID",
 		Long: `
 Show detailed information for the given job ID: if only the job ID is supplied without flag, then the progress summary of the job is returned.
 If the with-status flag is set, then the list of transfers in the job with the given value will be shown.`,
@@ -69,7 +68,7 @@ If the with-status flag is set, then the list of transfers in the job with the g
 		},
 	}
 
-	rootCmd.AddCommand(shJob)
+	jobsCmd.AddCommand(shJob)
 
 	// filters
 	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: NotStarted, Started, Success, Failed")

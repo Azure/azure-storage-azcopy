@@ -132,7 +132,7 @@ func init() {
 
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
-		Use:        "resume jobID",
+		Use:        "resume [jobID]",
 		SuggestFor: []string{"resme", "esume", "resue"},
 		Short:      "Resume the existing job with the given job ID",
 		Long: `
@@ -156,7 +156,7 @@ Resume the existing job with the given job ID.`,
 		},
 	}
 
-	rootCmd.AddCommand(resumeCmd)
+	jobsCmd.AddCommand(resumeCmd)
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+

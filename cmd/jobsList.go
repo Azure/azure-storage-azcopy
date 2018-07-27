@@ -34,10 +34,9 @@ type ListResponse struct {
 func init() {
 	// lsCmd represents the listJob command
 	lsCmd := &cobra.Command{
-		Use:        "listJobs",
-		Aliases:    []string{"lsJobs", "lsjobs", "listjobs"},
-		SuggestFor: []string{"lsJbs", "lsJob", "lsobs"},
-		Short:      "Display information on all jobs",
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "Display information on all jobs",
 		Long: `
 Display information on all jobs.`,
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -59,7 +58,7 @@ Display information on all jobs.`,
 		},
 	}
 
-	rootCmd.AddCommand(lsCmd)
+	jobsCmd.AddCommand(lsCmd)
 }
 
 // HandleListJobsCommand sends the ListJobs request to transfer engine

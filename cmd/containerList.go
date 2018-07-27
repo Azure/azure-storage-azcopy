@@ -40,11 +40,11 @@ func init() {
 	// listContainerCmd represents the list container command
 	// listContainer list the blobs inside the container or virtual directory inside the container
 	listContainerCmd := &cobra.Command{
-		Use:        "listContainer",
-		Aliases:    []string{"lsc"},
-		SuggestFor: []string{"lstcontainer", "listcntainer", "licontaier"},
-		Short:      "resume resumes the existing job for given JobId.",
-		Long:       `resume resumes the existing job for given JobId.`,
+		Use:     "list [containerURL]",
+		Aliases: []string{"ls"},
+		Short:   "List the blobs in a given container.",
+		Long:    `List the blobs in a given container.`,
+		Example: "azcopy container list [containerURL]",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the listContainer command requires necessarily to have an argument
 
@@ -74,11 +74,8 @@ func init() {
 			}
 
 		},
-		// hide features not relevant to BFS
-		// TODO remove after preview release
-		Hidden: true,
 	}
-	rootCmd.AddCommand(listContainerCmd)
+	containerCmd.AddCommand(listContainerCmd)
 	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "outputRaw", "text", "format of the command's outputRaw, the choices include: text, json")
 }
 
