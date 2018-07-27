@@ -473,7 +473,7 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        #print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True
@@ -528,7 +528,7 @@ def verify_operation(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return False
     else:
         return True
@@ -544,7 +544,7 @@ def verify_operation_get_output(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return None
     else:
         return output
