@@ -82,7 +82,7 @@ def parse_config_file_set_env():
 
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
-        print('Environment variable: ' + key + ' not set.')
+        #print('Environment variable: ' + key + ' not set.')
         return True
     return False
 
@@ -147,7 +147,7 @@ def init():
         return
     else:
         test_dir_path += "\\test_data"
-
+    print("test container url ", util.test_container_url)
 
 def cleanup():
     # delete the log files

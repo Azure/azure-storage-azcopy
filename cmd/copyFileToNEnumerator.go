@@ -34,14 +34,17 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// attempt to parse the source and destination url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.dst))
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
+	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
 
 	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
 	// Case-1: Source is account, currently only support blob destination
@@ -268,8 +271,8 @@ func (e *copyFileToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 	contentMD5 := properties.ContentMD5()
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        destURL.String(),
+		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),

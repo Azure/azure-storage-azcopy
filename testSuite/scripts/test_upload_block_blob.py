@@ -21,7 +21,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         else:
             dest = util.get_resource_from_oauth_container(filename)
             dest_validate = util.get_resource_from_oauth_container_validate(filename)
-        
+
         result = util.Command("copy").add_arguments(src).add_arguments(dest). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
@@ -408,7 +408,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # uploading the directory with sub-dir in the include flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
-            .add_flags("include", "sub_dir_include_flag_set_upload").add_flags("output",
+            .add_flags("include", "sub_dir_include_flag_set_upload/*").add_flags("output",
                                                                                "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -453,7 +453,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # uploading the directory with sub-dir in the exclude flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
-            .add_flags("exclude", "sub_dir_exclude_flag_set_upload").add_flags("output",
+            .add_flags("exclude", "sub_dir_exclude_flag_set_upload/*").add_flags("output",
                                                                                "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -510,7 +510,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output", "json"). \
-            add_flags("include", "sub_dir_include_flag_set_download/"). \
+            add_flags("include", "sub_dir_include_flag_set_download/*"). \
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -564,7 +564,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output", "json"). \
-            add_flags("exclude", "sub_dir_exclude_flag_set_download/"). \
+            add_flags("exclude", "sub_dir_exclude_flag_set_download/*"). \
             execute_azcopy_copy_command_get_output()
 
         # parse the result to get the last job progress summary
@@ -680,7 +680,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        # Number of Expected Transfer should be 10 since 10 files were deleted
+        # Number of Expected Transfer should be 1 since 1 file's modified time was changed
         self.assertEquals(x.TransfersCompleted, 1)
         self.assertEquals(x.TransfersFailed, 0)
 

@@ -45,14 +45,17 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// attempt to parse the source and destination url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.dst))
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
+	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
 
 	srcBlobURLPartExtension := blobURLPartsExtension{azblob.NewBlobURLParts(*sourceURL)}
 	// Case-1: Source is account, currently only support blob destination
@@ -243,7 +246,7 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 				continue
 			}
 			// TODO: special char (naming resolution) for special directions
-			blobRelativePath := gCopyUtil.getRelativePath(srcSearchPattern, blobItem.Name, "/")
+			blobRelativePath := gCopyUtil.getRelativePath(srcSearchPattern, blobItem.Name)
 			tmpDestURL := destBaseURL
 			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, blobRelativePath)
 			err = e.addTransferInternal(
@@ -276,8 +279,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 	}
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        destURL.String(),
+		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified,
 		SourceSize:         *properties.ContentLength,
 		ContentType:        *properties.ContentType,
@@ -300,8 +303,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, pr
 	}
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        destURL.String(),
+		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),

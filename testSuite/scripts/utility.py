@@ -222,18 +222,18 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     if not clean_test_container(test_premium_account_contaier_url):
         return False
 
-    # cleaning the test share provided
-    # all files and directories inside the share will be deleted.
-    test_share_url = share_sas_url
-    if not clean_test_share(test_share_url):
-        return False
-
     test_s2s_src_blob_account_url = s2s_src_blob_account_url
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
         return False
 
     test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     if not clean_test_blob_account(test_s2s_dst_blob_account_url):
+        return False
+
+    # cleaning the test share provided
+    # all files and directories inside the share will be deleted.
+    test_share_url = share_sas_url
+    if not clean_test_share(test_share_url):
         return False
 
     return True
@@ -473,7 +473,7 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        #print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True
@@ -510,7 +510,7 @@ def execute_azcopy_command_get_output(command):
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return None
     else:
         return output
@@ -528,7 +528,7 @@ def verify_operation(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return False
     else:
         return True
@@ -544,7 +544,7 @@ def verify_operation_get_output(command):
             command, stderr=subprocess.STDOUT, shell=True, timeout=600,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return None
     else:
         return output

@@ -17,7 +17,7 @@ import (
 type JobPartPlanFileName string
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), string(os.PathSeparator), string(*jppfn))
+	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
 }
 
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"
@@ -135,16 +135,17 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
-		Version:            DataSchemaVersion,
-		JobID:              order.JobID,
-		PartNum:            order.PartNum,
-		IsFinalPart:        order.IsFinalPart,
-		ForceWrite:         order.ForceWrite,
-		Priority:           order.Priority,
-		TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
-		FromTo:             order.FromTo,
-		NumTransfers:       uint32(len(order.Transfers)),
-		LogLevel:           order.LogLevel,
+		Version:             DataSchemaVersion,
+		JobID:               order.JobID,
+		PartNum:             order.PartNum,
+		IsFinalPart:         order.IsFinalPart,
+		ForceWrite:          order.ForceWrite,
+		Priority:            order.Priority,
+		TTLAfterCompletion:  uint32(time.Time{}.Nanosecond()),
+		FromTo:              order.FromTo,
+		CommandStringLength: uint32(len(order.CommandString)),
+		NumTransfers:        uint32(len(order.Transfers)),
+		LogLevel:            order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
 			//BlobType:              order.OptionalAttributes.BlobType,
 			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
@@ -167,6 +168,13 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 
 	eof += writeValue(file, &jpph)
+
+	// write the command string in the JobPart Plan file
+	bytesWritten, err := file.WriteString(order.CommandString)
+	if err != nil {
+		panic(err)
+	}
+	eof += int64(bytesWritten)
 
 	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
 	srcDstStringsOffset := make([]int64, jpph.NumTransfers)

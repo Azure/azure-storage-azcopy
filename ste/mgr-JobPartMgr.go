@@ -33,6 +33,7 @@ type IJobPartMgr interface {
 	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
+	SAS() (string, string)
 	//CancelJob()
 	Close()
 	// TODO: added for debugging purpose. remove later
@@ -137,6 +138,13 @@ type jobPartMgr struct {
 	// These fields represent the part's existence
 	jobMgr   IJobMgr // Refers to this part's Job (for logging, cancelling, etc.)
 	filename JobPartPlanFileName
+
+	// sourceSAS defines the sas of the source of the Job. If the source is local Location, then sas is empty.
+	// Since sas is not persisted in JobPartPlan file, it stripped from the source and stored in memory in JobPart Manager
+	sourceSAS string
+	// destinationSAS defines the sas of the destination of the Job. If the destination is local Location, then sas is empty.
+	// Since sas is not persisted in JobPartPlan file, it stripped from the destination and stored in memory in JobPart Manager
+	destinationSAS string
 
 	// When the part is schedule to run (inprogress), the below fields are used
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
@@ -549,6 +557,10 @@ func (jpm *jobPartMgr) fileDstData(dataFileToXfer *common.MMF) (headers azfile.F
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jpm.blockBlobTier, jpm.pageBlobTier
+}
+
+func (jpm *jobPartMgr) SAS() (string, string) {
+	return jpm.sourceSAS, jpm.destinationSAS
 }
 
 func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {

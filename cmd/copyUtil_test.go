@@ -21,9 +21,10 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
 	"net/url"
 	"testing"
+
+	chk "gopkg.in/check.v1"
 )
 
 // Hookup to the testing framework

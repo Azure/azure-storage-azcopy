@@ -43,6 +43,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	info := jptm.Info()
 
 	u, _ := url.Parse(info.Destination)
+
 	fileURL := azfile.NewFileURL(*u, p)
 
 	fileSize := int64(info.SourceSize)

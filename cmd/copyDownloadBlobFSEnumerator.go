@@ -26,7 +26,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(cca.src)
+	sourceUrl, err := url.Parse(cca.source)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
@@ -64,10 +64,10 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			var destination = ""
 			// If the destination is not directory that is existing
 			// It is expected that the resource to be downloaded is downloaded at the destination provided
-			if util.isPathALocalDirectory(cca.dst) {
-				destination = util.generateLocalPath(cca.dst, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name, "/"))
+			if util.isPathALocalDirectory(cca.destination) {
+				destination = util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name))
 			} else {
-				destination = cca.dst
+				destination = cca.destination
 			}
 			// convert the time of path to time format
 			// If path.LastModified is nil then lastModified time is set to current time

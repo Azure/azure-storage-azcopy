@@ -27,10 +27,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"fmt"
+
+	"os"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+)
+
+const (
+	AZCOPY_PATH_SEPARATOR_STRING = "/"
+	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
+	OS_PATH_SEPARATOR            = string(os.PathSeparator)
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -124,7 +134,24 @@ func (ll *LogLevel) Parse(s string) error {
 }
 
 func (ll LogLevel) String() string {
-	return enum.StringInt(ll, reflect.TypeOf(ll))
+	switch ll {
+	case ELogLevel.None():
+		return "NONE"
+	case ELogLevel.Fatal():
+		return "FATAL"
+	case ELogLevel.Panic():
+		return "PANIC"
+	case ELogLevel.Error():
+		return "ERR"
+	case ELogLevel.Warning():
+		return "WARN"
+	case ELogLevel.Info():
+		return "INFO"
+	case ELogLevel.Debug():
+		return "DBG"
+	default:
+		return enum.StringInt(ll, reflect.TypeOf(ll))
+	}
 }
 
 func (ll LogLevel) ToPipelineLogLevel() pipeline.LogLevel {
@@ -192,28 +219,54 @@ func (js JobStatus) String() string {
 	return enum.StringInt(js, reflect.TypeOf(js))
 }
 
+////////////////////////////////////////////////////////////////
+
+var ELocation = Location(0)
+
+// Location indicates the type of Location
+type Location uint8
+
+func (Location) Unknown() Location { return Location(0) }
+func (Location) Local() Location   { return Location(1) }
+func (Location) Pipe() Location    { return Location(2) }
+func (Location) Blob() Location    { return Location(3) }
+func (Location) File() Location    { return Location(4) }
+func (Location) BlobFS() Location  { return Location(5) }
+func (l Location) String() string {
+	return enum.StringInt(uint32(l), reflect.TypeOf(l))
+}
+
+// fromToValue returns the fromTo enum value for given
+// from / To location combination. In 16 bits fromTo
+// value, first 8 bits represents from location
+func fromToValue(from Location, to Location) FromTo {
+	return FromTo((FromTo(from) << 8) | FromTo(to))
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
 
 // FromTo defines the different types of sources/destination location combinations
-type FromTo uint8
+// FromTo is 16 bit where first 8 bit represents the from location and other 8 bits
+// represents the to location
+type FromTo uint16
 
 func (FromTo) Unknown() FromTo     { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo   { return FromTo(1) }
-func (FromTo) LocalFile() FromTo   { return FromTo(2) }
-func (FromTo) BlobLocal() FromTo   { return FromTo(3) }
-func (FromTo) FileLocal() FromTo   { return FromTo(4) }
-func (FromTo) BlobPipe() FromTo    { return FromTo(5) }
-func (FromTo) PipeBlob() FromTo    { return FromTo(6) }
-func (FromTo) FilePipe() FromTo    { return FromTo(7) }
-func (FromTo) PipeFile() FromTo    { return FromTo(8) }
-func (FromTo) BlobTrash() FromTo   { return FromTo(9) }
-func (FromTo) FileTrash() FromTo   { return FromTo(10) }
-func (FromTo) LocalBlobFS() FromTo { return FromTo(11) }
-func (FromTo) BlobFSLocal() FromTo { return FromTo(12) }
-func (FromTo) BlobBlob() FromTo    { return FromTo(13) }
-func (FromTo) FileBlob() FromTo    { return FromTo(14) }
+func (FromTo) LocalBlob() FromTo   { return FromTo(fromToValue(ELocation.Local(), ELocation.Blob())) }
+func (FromTo) LocalFile() FromTo   { return FromTo(fromToValue(ELocation.Local(), ELocation.File())) }
+func (FromTo) BlobLocal() FromTo   { return FromTo(fromToValue(ELocation.Blob(), ELocation.Local())) }
+func (FromTo) FileLocal() FromTo   { return FromTo(fromToValue(ELocation.File(), ELocation.Local())) }
+func (FromTo) BlobPipe() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Pipe())) }
+func (FromTo) PipeBlob() FromTo    { return FromTo(fromToValue(ELocation.Pipe(), ELocation.Blob())) }
+func (FromTo) FilePipe() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Pipe())) }
+func (FromTo) PipeFile() FromTo    { return FromTo(fromToValue(ELocation.Pipe(), ELocation.File())) }
+func (FromTo) BlobTrash() FromTo   { return FromTo(fromToValue(ELocation.Blob(), ELocation.Unknown())) }
+func (FromTo) FileTrash() FromTo   { return FromTo(fromToValue(ELocation.File(), ELocation.Unknown())) }
+func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.BlobFS())) }
+func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
+func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
+func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -224,6 +277,27 @@ func (ft *FromTo) Parse(s string) error {
 		*ft = val.(FromTo)
 	}
 	return err
+}
+
+func (ft *FromTo) FromAndTo(s string) (srcLocation, dstLocation Location, err error) {
+	srcLocation = ELocation.Unknown()
+	dstLocation = ELocation.Unknown()
+	val, err := enum.ParseInt(reflect.TypeOf(ft), s, true, true)
+	if err == nil {
+		dstLocation = Location(((1 << 8) - 1) & val.(FromTo))
+		srcLocation = Location((((1 << 16) - 1) & val.(FromTo)) >> 8)
+		return
+	}
+	err = fmt.Errorf("unable to parse the from and to Location from given FromTo %s", s)
+	return
+}
+
+func (ft *FromTo) To() Location {
+	return Location(((1 << 8) - 1) & *ft)
+}
+
+func (ft *FromTo) From() Location {
+	return Location((((1 << 16) - 1) & *ft) >> 8)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

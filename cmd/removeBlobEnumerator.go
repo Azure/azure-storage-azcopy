@@ -31,10 +31,12 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}, nil)
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(cca.src)
+	sourceUrl, err := url.Parse(cca.source)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
+	// append the sas at the end of query params.
+	sourceUrl = util.appendQueryParamToUrl(sourceUrl, cca.sourceSAS)
 
 	// get the blob parts
 	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl) // TODO: keep blobUrlPart temporarily, it should be removed and further refactored.
@@ -51,7 +53,7 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// Example: https://<container>/<blob>?<query-params>
 	if err == nil {
 		e.addTransfer(common.CopyTransfer{
-			Source:     sourceUrl.String(),
+			Source:     util.stripSASFromBlobUrl(*sourceUrl).String(),
 			SourceSize: blobProperties.ContentLength(),
 		}, cca)
 		// only one transfer for this Job, dispatch the JobPart
@@ -103,7 +105,7 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 
 			e.addTransfer(common.CopyTransfer{
-				Source:     util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name),
+				Source:     util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
 				SourceSize: *blobInfo.Properties.ContentLength}, cca)
 		}
 		marker = listBlob.NextMarker
