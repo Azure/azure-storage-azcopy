@@ -171,7 +171,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			// This check supports the Use wild cards
 			// SearchPrefix is used to list to all the blobs inside the destination
 			// and pattern is used to identify which blob to compare further
-			if !util.blobNameMatchesThePattern(pattern, blobInfo.Name) {
+			if !util.matchBlobNameAgainstPattern(pattern, blobInfo.Name, cca.recursive) {
 				continue
 			}
 
@@ -403,7 +403,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 		f, err := os.Stat(fileOrDir)
 		if err == nil {
 			// directories are uploaded only if recursive is on
-			if f.IsDir() {
+			if f.IsDir() && cca.recursive {
 				// walk goes through the entire directory tree
 				err = filepath.Walk(fileOrDir, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {

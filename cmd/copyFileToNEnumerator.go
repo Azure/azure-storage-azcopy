@@ -38,10 +38,13 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+
 	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
+	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
 
 	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
 	// Case-1: Source is account, currently only support blob destination

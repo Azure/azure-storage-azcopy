@@ -38,6 +38,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -480,7 +481,7 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			}
 		default:
 			credentialType = common.ECredentialType.Anonymous()
-			glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
+			//glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
 		}
 	}
 
@@ -527,7 +528,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
+	//glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -553,6 +554,83 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			}
 		}
 		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+	}
+
+	from := cca.fromTo.From()
+	to := cca.fromTo.To()
+	// If the Credentials is of Anonymous Type i.e SAS, then we need to strip the SAS from the credentials
+	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+		switch from {
+		case common.ELocation.Blob():
+			fromUrl, err := url.Parse(cca.source)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+			}
+			blobParts := azblob.NewBlobURLParts(*fromUrl)
+			cca.sourceSAS = blobParts.SAS.Encode()
+			jobPartOrder.SourceSAS = cca.sourceSAS
+			blobParts.SAS = azblob.SASQueryParameters{}
+			bUrl := blobParts.URL()
+			cca.source = bUrl.String()
+		case common.ELocation.File():
+			fromUrl, err := url.Parse(cca.source)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+			}
+			fileParts := azfile.NewFileURLParts(*fromUrl)
+			cca.sourceSAS = fileParts.SAS.Encode()
+			jobPartOrder.SourceSAS = cca.sourceSAS
+			fileParts.SAS = azfile.SASQueryParameters{}
+			fUrl := fileParts.URL()
+			cca.source = fUrl.String()
+		}
+
+		switch to {
+		case common.ELocation.Blob():
+			toUrl, err := url.Parse(cca.destination)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+			}
+			blobParts := azblob.NewBlobURLParts(*toUrl)
+			cca.destinationSAS = blobParts.SAS.Encode()
+			jobPartOrder.DestinationSAS = cca.destinationSAS
+			blobParts.SAS = azblob.SASQueryParameters{}
+			bUrl := blobParts.URL()
+			cca.destination = bUrl.String()
+		case common.ELocation.File():
+			toUrl, err := url.Parse(cca.destination)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+			}
+			fileParts := azfile.NewFileURLParts(*toUrl)
+			cca.destinationSAS = fileParts.SAS.Encode()
+			jobPartOrder.DestinationSAS = cca.destinationSAS
+			fileParts.SAS = azfile.SASQueryParameters{}
+			fUrl := fileParts.URL()
+			cca.destination = fUrl.String()
+		}
+	}
+
+	if from == common.ELocation.Local() {
+		// If the path separator is '\\', it means
+		// local path is a windows path
+		// To avoid path separator check and handling the windows
+		// path differently, replace the path separator with the
+		// the linux path separator '/'
+		if os.PathSeparator == '\\' {
+			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, "/", -1)
+		}
+	}
+
+	if to == common.ELocation.Local() {
+		// If the path separator is '\\', it means
+		// local path is a windows path
+		// To avoid path separator check and handling the windows
+		// path differently, replace the path separator with the
+		// the linux path separator '/'
+		if os.PathSeparator == '\\' {
+			cca.destination = strings.Replace(cca.destination, common.OS_PATH_SEPARATOR, "/", -1)
+		}
 	}
 
 	// lastPartNumber determines the last part number order send for the Job.
