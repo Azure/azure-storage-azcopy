@@ -192,8 +192,8 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         dest_azure_dir_name = "dest azure_dir_name"
         dest_azure_dir = util.get_resource_sas_from_share(dest_azure_dir_name)
 
-        result = util.Command("create").add_arguments(dest_azure_dir).add_flags("resourceType", "file"). \
-            add_flags("isResourceABucket", "true").execute_azcopy_create()
+        result = util.Command("create").add_arguments(dest_azure_dir).add_flags("serviceType", "File"). \
+            add_flags("resourceType", "Bucket").execute_azcopy_create()
         self.assertTrue(result)
 
         # execute azcopy command

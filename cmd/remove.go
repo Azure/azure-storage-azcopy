@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -43,9 +44,9 @@ func init() {
 			}
 			raw.src = args[0]
 			srcLocationType := inferArgumentLocation(raw.src)
-			if srcLocationType == ELocation.Blob() {
+			if srcLocationType == common.ELocation.Blob() {
 				raw.fromTo = common.EFromTo.BlobTrash().String()
-			} else if srcLocationType == ELocation.File() {
+			} else if srcLocationType == common.ELocation.File() {
 				raw.fromTo = common.EFromTo.FileTrash().String()
 			} else {
 				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
@@ -73,5 +74,5 @@ func init() {
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when deleting from container.")
 	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
-	deleteCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "true if user wants the output in Json format")
+	deleteCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 }

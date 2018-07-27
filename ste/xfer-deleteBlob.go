@@ -15,6 +15,7 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	info := jptm.Info()
 	// Get the source blob url of blob to delete
 	u, _ := url.Parse(info.Source)
+
 	srcBlobURL := azblob.NewBlobURL(*u, p)
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.

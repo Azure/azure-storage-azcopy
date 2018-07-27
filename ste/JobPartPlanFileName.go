@@ -17,7 +17,7 @@ import (
 type JobPartPlanFileName string
 
 func (jppfn *JobPartPlanFileName) GetJobPartPlanPath() string {
-	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), string(os.PathSeparator), string(*jppfn))
+	return fmt.Sprintf("%s%s%s", JobsAdmin.AppPathFolder(), common.AZCOPY_PATH_SEPARATOR_STRING, string(*jppfn))
 }
 
 const jobPartPlanFileNameFormat = "%v--%05d.steV%d"
@@ -135,16 +135,17 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
-		Version:            DataSchemaVersion,
-		JobID:              order.JobID,
-		PartNum:            order.PartNum,
-		IsFinalPart:        order.IsFinalPart,
-		ForceWrite:         order.ForceWrite,
-		Priority:           order.Priority,
-		TTLAfterCompletion: uint32(time.Time{}.Nanosecond()),
-		FromTo:             order.FromTo,
-		NumTransfers:       uint32(len(order.Transfers)),
-		LogLevel:           order.LogLevel,
+		Version:             DataSchemaVersion,
+		JobID:               order.JobID,
+		PartNum:             order.PartNum,
+		IsFinalPart:         order.IsFinalPart,
+		ForceWrite:          order.ForceWrite,
+		Priority:            order.Priority,
+		TTLAfterCompletion:  uint32(time.Time{}.Nanosecond()),
+		FromTo:              order.FromTo,
+		CommandStringLength: uint32(len(order.CommandString)),
+		NumTransfers:        uint32(len(order.Transfers)),
+		LogLevel:            order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
 			//BlobType:              order.OptionalAttributes.BlobType,
 			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
@@ -168,6 +169,13 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	eof += writeValue(file, &jpph)
 
+	// write the command string in the JobPart Plan file
+	bytesWritten, err := file.WriteString(order.CommandString)
+	if err != nil {
+		panic(err)
+	}
+	eof += int64(bytesWritten)
+
 	// srcDstStringsOffset points to after the header & all the transfers; this is where the src/dst strings go for each transfer
 	srcDstStringsOffset := make([]int64, jpph.NumTransfers)
 
@@ -176,6 +184,17 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// Write each transfer to the Job Part Plan file (except for the src/dst strings; comes come later)
 	for t := range order.Transfers {
+		// Prepare info for JobPartPlanTransfer
+		// Sending Metadata type to Transfer could ensure strong type validation.
+		// TODO: discuss the performance drop of marshaling metadata twice
+		srcMetadataLength := 0
+		if order.Transfers[t].Metadata != nil {
+			metadataStr, err := order.Transfers[t].Metadata.Marshal()
+			if err != nil {
+				panic(err)
+			}
+			srcMetadataLength = len(metadataStr)
+		}
 		// Create & initialize this transfer's Job Part Plan Transfer
 		jppt := JobPartPlanTransfer{
 			SrcOffset:      currentSrcStringOffset, // SrcOffset of the src string
@@ -191,7 +210,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcContentDispositionLength: int16(len(order.Transfers[t].ContentDisposition)),
 			SrcCacheControlLength:       int16(len(order.Transfers[t].CacheControl)),
 			SrcContentMD5Length:         int16(len(order.Transfers[t].ContentMD5)),
-			SrcMetadataLength:           int16(len(order.Transfers[t].Metadata)),
+			SrcMetadataLength:           int16(srcMetadataLength),
 			// SrcBlobTierLength:           uint16(len(order.Transfers[t].BlobTier)),
 			// TODO: + Metadata
 
@@ -272,7 +291,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			eof += int64(bytesWritten)
 		}
 		// For S2S copy, write the src metadata
-		if len(order.Transfers[t].Metadata) != 0 {
+		if order.Transfers[t].Metadata != nil {
 			metadataStr, err := order.Transfers[t].Metadata.Marshal()
 			if err != nil {
 				panic(err)

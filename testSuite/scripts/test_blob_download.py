@@ -136,8 +136,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         filename_special_characters = "abc|>rd*"
         resource_url = util.get_resource_sas(filename_special_characters)
         # creating the file with random characters and with file name having special characters.
-        result = util.Command("create").add_arguments(resource_url).add_flags("resourceType", "blob").add_flags(
-            "isResourceABucket", "false").add_flags("blob-size", "1024").execute_azcopy_verify()
+        result = util.Command("create").add_arguments(resource_url).add_flags("serviceType", "Blob").add_flags(
+            "resourceType", "SingleFile").add_flags("blob-size", "1024").execute_azcopy_verify()
         self.assertTrue(result)
 
         # downloading the blob created above.
@@ -173,7 +173,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # download the destination to the source to match the last modified time
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output", "json"). \
             add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
 
@@ -207,7 +207,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # download the destination to the source to match the last modified time
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(util.test_directory_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json", "true"). \
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output", "json"). \
             add_flags("preserve-last-modified-time", "true").execute_azcopy_copy_command_get_output()
         self.assertNotEquals(result, None)
 
@@ -272,7 +272,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # sync remote to local
         # 10 files will be downloaded
         result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output-json","true").\
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output","json").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -405,3 +405,140 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("testBlob").add_arguments(dir1_path).add_arguments(dest_validate).add_flags("is-object-dir",
                                                                                                             "true").execute_azcopy_verify()
         self.assertTrue(result)
+
+    def test_blob_download_wildcard_recursive_false_1(self):
+        #This test verifies the azcopy behavior when wildcards are
+        # provided in the source and recursive flag is set to false
+        # example src = https://<container>/<vd-1>/*?<sig> recursive = false
+        dir_name = "dir_download_wildcard_recursive_false_1"
+        dir_path = util.create_test_n_files(1024, 10, dir_name)
+
+        #create sub-directory inside directory
+        sub_dir_name = os.path.join(dir_name, "sub_dir_download_wildcard_recursive_false_1")
+        sub_dir_path = util.create_test_n_files(1024, 10, sub_dir_name)
+
+        #upload the directory with 20 files
+        # upload the directory
+        # execute azcopy command
+        result = util.Command("copy").add_arguments(dir_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # execute the validator.
+        dir_sas = util.get_resource_sas(dir_name)
+        result = util.Command("testBlob").add_arguments(dir_path).add_arguments(dir_sas). \
+            add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # Dir dir_download_wildcard_recursive_false_1 inside the container is attempted to download
+        # but recursive flag is set to false, so no files will be downloaded
+        dir_sas = util.get_resource_sas(dir_name)
+        result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command_get_output()
+        self.assertEquals(result, None)
+
+        # create the resource sas
+        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
+        #download the directory
+        result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path).\
+                add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command_get_output()
+        # parse the result to get the last job progress summary
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        # since the wildcards '*' exists at the end of dir_name in the sas
+        # and recursive is set to false, files inside dir will be download
+        # and not files inside the sub-dir
+        # Number of Expected Transfer should be 10
+        self.assertEquals(x.TransfersCompleted, 10)
+        self.assertEquals(x.TransfersFailed, 0)
+
+        # create the resource sas
+        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*/*.txt")
+        #download the directory
+        result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command_get_output()
+        # parse the result to get the last job progress summary
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        # since the wildcards '*/*.txt' exists at the end of dir_name in the sas
+        # and recursive is set to false, .txt files inside sub-dir inside the dir
+        # will be downloaded
+        # Number of Expected Transfer should be 10
+        self.assertEquals(x.TransfersCompleted, 10)
+        self.assertEquals(x.TransfersFailed, 0)
+
+    def test_blob_download_wildcard_recursive_true_1(self):
+        #This test verifies the azcopy behavior when wildcards are
+        # provided in the source and recursive flag is set to false
+        # example src = https://<container>/<vd-1>/*?<sig> recursive = false
+        dir_name = "dir_download_wildcard_recursive=true"
+        dir_path = util.create_test_n_files(1024, 10, dir_name)
+
+        #create sub-directory inside directory
+        sub_dir_name_1 = os.path.join(dir_name, "logs")
+        sub_dir_path_1 = util.create_test_n_files(1024, 10, sub_dir_name_1)
+
+        #create sub-directory inside sub-directory
+        sub_dir_name_2 = os.path.join(sub_dir_name_1, "abc")
+        sub_dir_path_2 = util.create_test_n_files(1024, 10, sub_dir_name_2)
+
+        #upload the directory with 30 files
+        # upload the directory
+        # execute azcopy command
+        result = util.Command("copy").add_arguments(dir_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # execute the validator.
+        dir_sas = util.get_resource_sas(dir_name)
+        result = util.Command("testBlob").add_arguments(dir_path).add_arguments(dir_sas). \
+            add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # create the resource sas
+        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
+        #download the directory
+        result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true").\
+            execute_azcopy_copy_command_get_output()
+        # parse the result to get the last job progress summary
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        # since the wildcards '*' exists at the end of dir_name in the sas
+        # and recursive is set to true, all files inside dir and
+        # inside sub-dirs will be download
+        # Number of Expected Transfer should be 30
+        self.assertEquals(x.TransfersCompleted, 30)
+        self.assertEquals(x.TransfersFailed, 0)
+
+        # create the resource sas
+        dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*/*")
+        #download the directory
+        result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output","json") \
+            .add_flags("recursive", "true").execute_azcopy_copy_command_get_output()
+        # parse the result to get the last job progress summary
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        # since the wildcards '*/*' exists at the end of dir_name in the sas
+        # and recursive is set to true, files immediately inside will not be downloaded
+        # but files inside sub-dir logs and sub-dir inside logs i.e abc inside dir will be downloaded
+        # Number of Expected Transfer should be 20
+        self.assertEquals(x.TransfersCompleted, 20)
+        self.assertEquals(x.TransfersFailed, 0)

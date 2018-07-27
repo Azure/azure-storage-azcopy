@@ -24,11 +24,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"reflect"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/JeffreyRichter/enum/enum"
 )
 
 func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo, error) {
@@ -72,27 +70,27 @@ func inferFromTo(src, dst string) common.FromTo {
 	}
 
 	switch {
-	case srcLocation == ELocation.Local() && dstLocation == ELocation.Blob():
+	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.LocalBlob()
-	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Local():
+	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Local():
 		return common.EFromTo.BlobLocal()
-	case srcLocation == ELocation.Local() && dstLocation == ELocation.File():
+	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.File():
 		return common.EFromTo.LocalFile()
-	case srcLocation == ELocation.File() && dstLocation == ELocation.Local():
+	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Local():
 		return common.EFromTo.FileLocal()
-	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.Blob():
+	case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.PipeBlob()
-	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Pipe():
+	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Pipe():
 		return common.EFromTo.BlobPipe()
-	case srcLocation == ELocation.Pipe() && dstLocation == ELocation.File():
+	case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.File():
 		return common.EFromTo.PipeFile()
-	case srcLocation == ELocation.File() && dstLocation == ELocation.Pipe():
+	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Pipe():
 		return common.EFromTo.FilePipe()
-	case srcLocation == ELocation.Local() && dstLocation == ELocation.BlobFS():
+	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.BlobFS():
 		return common.EFromTo.LocalBlobFS()
-	case srcLocation == ELocation.BlobFS() && dstLocation == ELocation.Local():
+	case srcLocation == common.ELocation.BlobFS() && dstLocation == common.ELocation.Local():
 		return common.EFromTo.BlobFSLocal()
-	case srcLocation == ELocation.Blob() && dstLocation == ELocation.Blob():
+	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.BlobBlob()
 		// TODO: Hide File to Blob direction.
 		// case srcLocation == ELocation.File() && dstLocation == ELocation.Blob():
@@ -101,24 +99,9 @@ func inferFromTo(src, dst string) common.FromTo {
 	return common.EFromTo.Unknown()
 }
 
-var ELocation = Location(0)
-
-// JobStatus indicates the status of a Job; the default is InProgress.
-type Location uint32 // Must be 32-bit for atomic operations
-
-func (Location) Unknown() Location { return Location(0) }
-func (Location) Local() Location   { return Location(1) }
-func (Location) Pipe() Location    { return Location(2) }
-func (Location) Blob() Location    { return Location(3) }
-func (Location) File() Location    { return Location(4) }
-func (Location) BlobFS() Location  { return Location(5) }
-func (l Location) String() string {
-	return enum.StringInt(uint32(l), reflect.TypeOf(l))
-}
-
-func inferArgumentLocation(arg string) Location {
+func inferArgumentLocation(arg string) common.Location {
 	if arg == pipeLocation {
-		return ELocation.Pipe()
+		return common.ELocation.Pipe()
 	}
 	if startsWith(arg, "https") {
 		// Let's try to parse the argument as a URL
@@ -129,11 +112,11 @@ func inferArgumentLocation(arg string) Location {
 			switch host := strings.ToLower(u.Host); true {
 			// Azure Stack does not have the core.windows.net
 			case strings.Contains(host, ".blob"):
-				return ELocation.Blob()
+				return common.ELocation.Blob()
 			case strings.Contains(host, ".file"):
-				return ELocation.File()
+				return common.ELocation.File()
 			case strings.Contains(host, ".dfs.core.windows.net"):
-				return ELocation.BlobFS()
+				return common.ELocation.BlobFS()
 			}
 		}
 	} else {
@@ -143,8 +126,8 @@ func inferArgumentLocation(arg string) Location {
 		//	return ELocation.Unknown()
 		//}
 
-		return ELocation.Local()
+		return common.ELocation.Local()
 	}
 
-	return ELocation.Unknown()
+	return common.ELocation.Unknown()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -33,14 +34,17 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// attempt to parse the source and destination url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.src))
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.dst))
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
+	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
 
 	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
 	// Case-1: Source is account, currently only support blob destination
@@ -93,6 +97,10 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return errors.New("invalid source and destination combination for service to service copy: " +
 				"destination must point to a single file, when source is a single file.")
 		}
+		err := e.createBucket(ctx, *destURL, nil)
+		if err != nil {
+			return err
+		}
 		// directly use destURL as destination
 		if err := e.addTransferInternal(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
 			return err
@@ -105,6 +113,10 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	dirURL, searchPrefix := srcFileURLPartExtension.getDirURLAndSearchPrefixFromFileURL(srcFilePipeline)
 	if searchPrefix == "" && !cca.recursive {
 		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
+	}
+	err = e.createBucket(ctx, *destURL, nil)
+	if err != nil {
+		return err
 	}
 	err = e.enumerateDirectoriesAndFilesInShare(
 		ctx,
@@ -148,11 +160,15 @@ func (e *copyFileToNEnumerator) createBucket(ctx context.Context, destURL url.UR
 		if destInfo.destBlobPipeline == nil {
 			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
 		}
-		containerURL := azblob.NewContainerURL(destURL, destInfo.destBlobPipeline)
+		tmpContainerURL := blobURLPartsExtension{azblob.NewBlobURLParts(destURL)}.getContainerURL()
+		containerURL := azblob.NewContainerURL(tmpContainerURL, destInfo.destBlobPipeline)
 		// Create the container, in case of it doesn't exist.
 		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
 		if err != nil {
-			if stgErr, ok := err.(azblob.StorageError); !ok || stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists {
+			// Skip the error, when container already exists, or hasn't permission to create container(container might already exists).
+			if stgErr, ok := err.(azblob.StorageError); !ok ||
+				(stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists &&
+					stgErr.Response().StatusCode != http.StatusForbidden) {
 				return fmt.Errorf("fail to create container, %v", err)
 			}
 			// the case error is container already exists
@@ -181,7 +197,8 @@ func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, sr
 			shareRootDirURL := srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL()
 
 			// Transfer azblob's metadata to common metadata, note common metadata can be transferred to other types of metadata.
-			e.createBucket(ctx, tmpDestURL, common.FromAzFileMetadataToCommonMetadata(shareItem.Metadata))
+			// Doesn't copy bucket's metadata as AzCopy-v1 do.
+			e.createBucket(ctx, tmpDestURL, nil)
 
 			// List source share
 			// TODO: List in parallel to speed up.
@@ -254,8 +271,8 @@ func (e *copyFileToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 	contentMD5 := properties.ContentMD5()
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        destURL.String(),
+		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),

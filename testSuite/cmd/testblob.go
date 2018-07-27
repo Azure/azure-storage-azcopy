@@ -10,9 +10,10 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/spf13/cobra"
@@ -38,17 +39,12 @@ type TestBlobCommand struct {
 	MetaData string
 	// NoGuessMimeType represent the azcopy NoGuessMimeType flag set while uploading the blob.
 	NoGuessMimeType bool
-	// Content Type of the blob to be validated.
-	ContentType string
-	// Content Encoding of the blob to be validated.
-	ContentEncoding string
 	// Represents the flag to determine whether number of blocks or pages needs
 	// to be verified or not.
 	// todo always set this to true
 	VerifyBlockOrPageSize bool
 	// BlobType of the resource to be validated.
 	BlobType string
-
 	// access tier for block blobs
 	BlobTier string
 	// Number of Blocks or Pages Expected from the blob.
@@ -57,6 +53,14 @@ type TestBlobCommand struct {
 	//todo consecutive page ranges get squashed.
 	// PreserveLastModifiedTime represents the azcopy PreserveLastModifiedTime flag while downloading the blob.
 	PreserveLastModifiedTime bool
+
+	// Property of the blob to be validated.
+	ContentType        string
+	ContentEncoding    string
+	ContentDisposition string
+	ContentLanguage    string
+	CacheControl       string
+	CheckContentMD5    bool
 }
 
 // initializes the testblob command, its aliases and description.
@@ -88,7 +92,11 @@ func init() {
 	// add flags.
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.MetaData, "metadata", "", "metadata expected from the blob in the container")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentType, "content-type", "", "content type expected from the blob in the container")
-	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentEncoding, "content-encoding", "", "Validate content encoding.")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentDisposition, "content-disposition", "", "Validate content disposition.")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.ContentLanguage, "content-language", "", "Validate content language.")
+	testBlobCmd.PersistentFlags().StringVar(&cmdInput.CacheControl, "cache-control", "", "Validate cache control.")
+	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.CheckContentMD5, "check-content-md5", false, "Validate content MD5.")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.IsObjectDirectory, "is-object-dir", false, "set the type of object to verify against the subject")
 	testBlobCmd.PersistentFlags().Uint64Var(&cmdInput.NumberOfBlocksOrPages, "number-blocks-or-pages", 0, "Use this block size to verify the number of blocks uploaded")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.VerifyBlockOrPageSize, "verify-block-size", false, "this flag verify the block size by determining the number of blocks")
@@ -125,10 +133,10 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
 	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-			Telemetry: azblob.TelemetryOptions{
-				Value: common.UserAgent,
-			},
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
 		},
+	},
 		ste.XferRetryOptions{
 			Policy:        0,
 			MaxTries:      ste.UploadMaxTries,
@@ -342,13 +350,33 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		expectedContentType = http.DetectContentType(mmap)
 	}
 	if !validateString(expectedContentType, get.ContentType()) {
-		fmt.Println("mismatch content type between actual and user given blob content type")
+		fmt.Println("mismatch content type between actual and user given blob")
 		os.Exit(1)
 	}
 
 	//verify the content-encoding
 	if !validateString(testBlobCmd.ContentEncoding, get.ContentEncoding()) {
-		fmt.Println("mismatch content encoding between actual and user given blob content encoding")
+		fmt.Println("mismatch ContentEncoding between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if !validateString(testBlobCmd.CacheControl, get.CacheControl()) {
+		fmt.Println("mismatch CacheControl between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if !validateString(testBlobCmd.ContentDisposition, get.ContentDisposition()) {
+		fmt.Println("mismatch ContentDisposition between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if !validateString(testBlobCmd.ContentLanguage, get.ContentLanguage()) {
+		fmt.Println("mismatch ContentLanguage between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if testBlobCmd.CheckContentMD5 && (get.ContentMD5() == nil || len(get.ContentMD5()) == 0) {
+		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
 

@@ -38,6 +38,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -85,7 +86,7 @@ type rawCopyCmdArgs struct {
 	blockBlobTier            string
 	pageBlobTier             string
 	background               bool
-	outputJson               bool
+	output                   string
 	acl                      string
 	logVerbosity             string
 	stdInEnable              bool
@@ -103,8 +104,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	cooked.src = raw.src
-	cooked.dst = raw.dst
+	cooked.source = raw.src
+	cooked.destination = raw.dst
 
 	cooked.fromTo = fromTo
 
@@ -166,7 +167,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.background = raw.background
-	cooked.outputJson = raw.outputJson
+	cooked.output.Parse(raw.output)
 	cooked.acl = raw.acl
 
 	// cook oauth parameters
@@ -181,9 +182,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 // represents the processed copy command input from the user
 type cookedCopyCmdArgs struct {
 	// from arguments
-	src    string
-	dst    string
-	fromTo common.FromTo
+	source         string
+	sourceSAS      string
+	destination    string
+	destinationSAS string
+	fromTo         common.FromTo
 
 	// filters from flags
 	include        map[string]int
@@ -203,7 +206,7 @@ type cookedCopyCmdArgs struct {
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	background               bool
-	outputJson               bool
+	output                   common.OutputFormat
 	acl                      string
 	logVerbosity             common.LogLevel
 	// oauth options
@@ -253,9 +256,9 @@ func (cca *cookedCopyCmdArgs) process() error {
 // TODO discuss with Jeff what features should be supported by redirection, such as metadata, content-type, etc.
 func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 	if cca.fromTo == common.EFromTo.PipeBlob() {
-		return cca.processRedirectionUpload(cca.dst, cca.blockSize)
+		return cca.processRedirectionUpload(cca.destination, cca.blockSize)
 	} else if cca.fromTo == common.EFromTo.BlobPipe() {
-		return cca.processRedirectionDownload(cca.src)
+		return cca.processRedirectionDownload(cca.source)
 	}
 
 	return fmt.Errorf("unsupported redirection type: %s", cca.fromTo)
@@ -460,12 +463,12 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
 			fallthrough
 		case common.EFromTo.LocalBlob():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.dst, false)
+			credentialType, err = getBlobCredentialType(context.Background(), cca.destination, false)
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
 		case common.EFromTo.BlobLocal():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.src, true)
+			credentialType, err = getBlobCredentialType(context.Background(), cca.source, true)
 			if err != nil {
 				return common.ECredentialType.Unknown(), err
 			}
@@ -478,7 +481,7 @@ func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.Credenti
 			}
 		default:
 			credentialType = common.ECredentialType.Anonymous()
-			glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
+			//glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
 		}
 	}
 
@@ -511,6 +514,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
 		},
+		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
+		SourceSAS: cca.sourceSAS,
+
+		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
+		DestinationSAS: cca.destinationSAS,
 		CommandString:  cca.commandString,
 		CredentialInfo: common.CredentialInfo{},
 	}
@@ -520,7 +528,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	if err != nil {
 		return err
 	}
-	glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
+	//glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
@@ -546,6 +554,83 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			}
 		}
 		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+	}
+
+	from := cca.fromTo.From()
+	to := cca.fromTo.To()
+	// If the Credentials is of Anonymous Type i.e SAS, then we need to strip the SAS from the credentials
+	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+		switch from {
+		case common.ELocation.Blob():
+			fromUrl, err := url.Parse(cca.source)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+			}
+			blobParts := azblob.NewBlobURLParts(*fromUrl)
+			cca.sourceSAS = blobParts.SAS.Encode()
+			jobPartOrder.SourceSAS = cca.sourceSAS
+			blobParts.SAS = azblob.SASQueryParameters{}
+			bUrl := blobParts.URL()
+			cca.source = bUrl.String()
+		case common.ELocation.File():
+			fromUrl, err := url.Parse(cca.source)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+			}
+			fileParts := azfile.NewFileURLParts(*fromUrl)
+			cca.sourceSAS = fileParts.SAS.Encode()
+			jobPartOrder.SourceSAS = cca.sourceSAS
+			fileParts.SAS = azfile.SASQueryParameters{}
+			fUrl := fileParts.URL()
+			cca.source = fUrl.String()
+		}
+
+		switch to {
+		case common.ELocation.Blob():
+			toUrl, err := url.Parse(cca.destination)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+			}
+			blobParts := azblob.NewBlobURLParts(*toUrl)
+			cca.destinationSAS = blobParts.SAS.Encode()
+			jobPartOrder.DestinationSAS = cca.destinationSAS
+			blobParts.SAS = azblob.SASQueryParameters{}
+			bUrl := blobParts.URL()
+			cca.destination = bUrl.String()
+		case common.ELocation.File():
+			toUrl, err := url.Parse(cca.destination)
+			if err != nil {
+				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+			}
+			fileParts := azfile.NewFileURLParts(*toUrl)
+			cca.destinationSAS = fileParts.SAS.Encode()
+			jobPartOrder.DestinationSAS = cca.destinationSAS
+			fileParts.SAS = azfile.SASQueryParameters{}
+			fUrl := fileParts.URL()
+			cca.destination = fUrl.String()
+		}
+	}
+
+	if from == common.ELocation.Local() {
+		// If the path separator is '\\', it means
+		// local path is a windows path
+		// To avoid path separator check and handling the windows
+		// path differently, replace the path separator with the
+		// the linux path separator '/'
+		if os.PathSeparator == '\\' {
+			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, "/", -1)
+		}
+	}
+
+	if to == common.ELocation.Local() {
+		// If the path separator is '\\', it means
+		// local path is a windows path
+		// To avoid path separator check and handling the windows
+		// path differently, replace the path separator with the
+		// the linux path separator '/'
+		if os.PathSeparator == '\\' {
+			cca.destination = strings.Replace(cca.destination, common.OS_PATH_SEPARATOR, "/", -1)
+		}
 	}
 
 	// lastPartNumber determines the last part number order send for the Job.
@@ -636,7 +721,7 @@ func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
 
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
-	if cca.outputJson {
+	if cca.output == common.EOutputFormat.Json() {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		if err != nil {
 			// something serious has gone wrong if we cannot marshal a json
@@ -787,10 +872,10 @@ Download an entire directory:
 	// define the flags relevant to the cp command
 	// Visible flags
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "force", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
-	cpCmd.PersistentFlags().BoolVar(&raw.outputJson, "output-json", false, "indicate that the output should be in JSON format")
+	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 
 	// hidden filters
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
@@ -824,7 +909,7 @@ Download an entire directory:
 	cpCmd.PersistentFlags().MarkHidden("exclude")
 	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("output-json")
+	cpCmd.PersistentFlags().MarkHidden("output")
 
 	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
 	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")

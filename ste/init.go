@@ -37,6 +37,8 @@ import (
 
 var steCtx = context.Background()
 
+const EMPTY_SAS_STRING = ""
+
 // round api rounds up the float number after the decimal point.
 func round(num float64) int {
 	return int(num + math.Copysign(0.5, num))
@@ -133,16 +135,14 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.CopyJobPartOrderResponse {
 	// Get the file name for this Job Part's Plan
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
-	jppfn.Create(order) // Convert the order to a plan file
-
-	jm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+	jppfn.Create(order)                                                                   // Convert the order to a plan file
+	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
-	jm.setInMemoryTransitJobState(
+	jpm.setInMemoryTransitJobState(
 		InMemoryTransitJobState{
 			credentialInfo: order.CredentialInfo,
 		})
-	jm.AddJobPart(order.PartNum, jppfn, true) // Add this part to the Job and schedule its transfers
-
+	jpm.AddJobPart(order.PartNum, jppfn, order.SourceSAS, order.DestinationSAS, true) // Add this part to the Job and schedule its transfers
 	return common.CopyJobPartOrderResponse{JobStarted: true}
 }
 
@@ -158,7 +158,7 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 	if !found {
 		// If the Job is not found, search for Job Plan files in the existing plan file
 		// and resurrect the job
-		if !JobsAdmin.ResurrectJob(jobID) {
+		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
 				ErrorMsg:              fmt.Sprintf("no active job with JobId %s exists", jobID.String()),
@@ -282,7 +282,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(req.JobID) {
+		if !JobsAdmin.ResurrectJob(req.JobID, req.SourceSAS, req.DestinationSAS) {
 			return common.CancelPauseResumeResponse{
 				CancelledPauseResumed: false,
 				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
@@ -374,7 +374,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(jobID) {
+		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.ListJobSummaryResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
 			}
@@ -457,7 +457,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(r.JobID) {
+		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
 			return common.ListJobTransfersResponse{
 				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", r.JobID),
 			}

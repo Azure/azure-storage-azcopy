@@ -8,6 +8,7 @@ from test_blobfs_upload_sharedkey import *
 from test_blobfs_upload_oauth import *
 from test_blobfs_download_sharedkey import *
 from test_blobfs_download_oauth import *
+from test_service_to_service_copy import *
 import glob, os
 import configparser
 import platform
@@ -73,9 +74,15 @@ def parse_config_file_set_env():
     # set the env var OAuth token info
     os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
 
+    # set env var for service-2-service copy source blob account
+    os.environ['S2S_SRC_BLOB_ACCOUNT_SAS_URL'] = config['CREDENTIALS']['S2S_SRC_BLOB_ACCOUNT_SAS_URL']
+
+    # set env var for service-2-service copy destination blob account
+    os.environ['S2S_DST_BLOB_ACCOUNT_SAS_URL'] = config['CREDENTIALS']['S2S_DST_BLOB_ACCOUNT_SAS_URL']
+
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
-        print('Environment variable: ' + key + ' not set.')
+        #print('Environment variable: ' + key + ' not set.')
         return True
     return False
 
@@ -90,7 +97,8 @@ def init():
             check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
             check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
-            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO'):
+            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
+            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -124,16 +132,22 @@ def init():
     # get the filesystem url
     filesystem_url = os.environ.get('FILESYSTEM_URL')
 
+    # get the s2s copy src blob account url
+    s2s_src_blob_account_url = os.environ.get('S2S_SRC_BLOB_ACCOUNT_SAS_URL')
+
+    # get the s2s copy dest blob account url
+    s2s_dst_blob_account_url = os.environ.get('S2S_DST_BLOB_ACCOUNT_SAS_URL')
+
     # deleting the log files.
     cleanup()
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
-                                      filesystem_url, azcopy_exec_location, test_suite_exec_location):
+                                      filesystem_url, s2s_src_blob_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
         test_dir_path += "\\test_data"
-
+    print("test container url ", util.test_container_url)
 
 def cleanup():
     # delete the log files
@@ -175,6 +189,9 @@ def main():
     unittest.TextTestRunner(verbosity=2).run(suite)
 
     suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_SharedKey_User_Scenarios)
+    unittest.TextTestRunner(verbosity=2).run(suite)
+
+    suite = unittest.TestLoader().loadTestsFromTestCase(Service_2_Service_Copy_User_Scenario)
     unittest.TextTestRunner(verbosity=2).run(suite)
 
     cleanup()

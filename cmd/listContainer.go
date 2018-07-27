@@ -36,7 +36,7 @@ import (
 
 func init() {
 	var sourcePath = ""
-	var jsonOutput = false
+	var outputRaw = ""
 	// listContainerCmd represents the list container command
 	// listContainer list the blobs inside the container or virtual directory inside the container
 	listContainerCmd := &cobra.Command{
@@ -64,7 +64,9 @@ func init() {
 				glcm.ExitWithError("invalid path passed for listing. given source is of type "+location.String()+" while expect is container / container path ", common.EExitCode.Error())
 			}
 
-			err := HandleListContainerCommand(sourcePath, jsonOutput)
+			var output common.OutputFormat
+			output.Parse(outputRaw)
+			err := HandleListContainerCommand(sourcePath, output)
 			if err == nil {
 				glcm.ExitWithSuccess("", common.EExitCode.Success())
 			} else {
@@ -77,11 +79,11 @@ func init() {
 		Hidden: true,
 	}
 	rootCmd.AddCommand(listContainerCmd)
-	listContainerCmd.PersistentFlags().BoolVar(&jsonOutput, "output-json", false, "true if user wants the output in Json format")
+	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "outputRaw", "text", "format of the command's outputRaw, the choices include: text, json")
 }
 
 // handles the list container command
-func HandleListContainerCommand(source string, jsonOutput bool) error {
+func HandleListContainerCommand(source string, outputFormat common.OutputFormat) error {
 
 	util := copyHandlerUtil{}
 	// Create Pipeline which will be used further in the blob operations.
@@ -143,23 +145,22 @@ func HandleListContainerCommand(source string, jsonOutput bool) error {
 			summary.Blobs = append(summary.Blobs, blobName)
 		}
 		marker = listBlob.NextMarker
-		printListContainerResponse(&summary, jsonOutput)
+		printListContainerResponse(&summary, outputFormat)
 	}
 	return nil
 }
 
 // printListContainerResponse prints the list container response
-// If the output-json flag is set to true, it prints the output in json format.
-func printListContainerResponse(lsResponse *common.ListContainerResponse, jsonOutput bool) {
+func printListContainerResponse(lsResponse *common.ListContainerResponse, outputFormat common.OutputFormat) {
 	if len(lsResponse.Blobs) == 0 {
 		return
 	}
-	if jsonOutput {
-		marshalledData, err := json.MarshalIndent(lsResponse, "", " ")
+	if outputFormat == common.EOutputFormat.Json() {
+		marshaledData, err := json.MarshalIndent(lsResponse, "", " ")
 		if err != nil {
 			panic(fmt.Errorf("error listing the source. Failed with error %s", err))
 		}
-		glcm.Info(string(marshalledData))
+		glcm.Info(string(marshaledData))
 	} else {
 		for index := 0; index < len(lsResponse.Blobs); index++ {
 			glcm.Info(lsResponse.Blobs[index])

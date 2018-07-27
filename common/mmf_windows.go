@@ -23,9 +23,9 @@ package common
 import (
 	"os"
 	"reflect"
+	"sync"
 	"syscall"
 	"unsafe"
-	"sync"
 )
 
 type MMF struct {
@@ -44,7 +44,6 @@ type MMF struct {
 	// isMapped is false and gracefully fails the http request (avoiding the
 	// access violation panic).
 	lock sync.RWMutex
-
 }
 
 func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
@@ -63,7 +62,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	h.Data = addr
 	h.Len = int(length)
 	h.Cap = h.Len
-	return &MMF{slice:m, isMapped:true, lock:sync.RWMutex{}}, nil
+	return &MMF{slice: m, isMapped: true, lock: sync.RWMutex{}}, nil
 }
 
 // To unmap, we need exclusive (write) access to the MMF and
@@ -91,11 +90,11 @@ func (m *MMF) UseMMF() bool {
 }
 
 // RUnlock unlocks the held lock
-func (m *MMF) UnuseMMF(){
+func (m *MMF) UnuseMMF() {
 	m.lock.RUnlock()
 }
 
 // Slice() returns the memory mapped byte slice
-func (m* MMF) Slice() []byte {
+func (m *MMF) Slice() []byte {
 	return m.slice
 }

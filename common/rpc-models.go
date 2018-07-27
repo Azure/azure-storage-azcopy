@@ -50,6 +50,8 @@ type CopyJobPartOrderRequest struct {
 	Transfers      []CopyTransfer
 	LogLevel       LogLevel
 	BlobAttributes BlobTransferAttributes
+	SourceSAS      string
+	DestinationSAS string
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
@@ -67,7 +69,11 @@ type SyncJobPartOrderRequest struct {
 	FromTo           FromTo
 	PartNumber       PartNumber
 	LogLevel         LogLevel
+	Include          map[string]int
+	Exclude          map[string]int
 	BlockSizeInBytes uint32
+	SourceSAS        string
+	DestinationSAS   string
 	CopyJobRequest   CopyJobPartOrderRequest
 	DeleteJobRequest CopyJobPartOrderRequest
 	// FilesDeletedLocally is used to keep track of the file that are deleted locally
@@ -138,6 +144,8 @@ type ListJobTransfersRequest struct {
 
 type ResumeJobRequest struct {
 	JobID           JobID
+	SourceSAS       string
+	DestinationSAS  string
 	IncludeTransfer map[string]int
 	ExcludeTransfer map[string]int
 	CredentialInfo  CredentialInfo

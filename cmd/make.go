@@ -22,15 +22,19 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"errors"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/spf13/cobra"
 )
 
 // make related pipeline params
@@ -42,6 +46,7 @@ const makeMaxRetryDelay = time.Second * 3
 // holds raw input from user
 type rawMakeCmdArgs struct {
 	resourceToCreate string
+	quota            uint32
 }
 
 // parse raw input
@@ -52,25 +57,28 @@ func (raw rawMakeCmdArgs) cook() (cookedMakeCmdArgs, error) {
 	}
 
 	if strings.Count(parsedURL.Path, "/") > 1 {
-		return cookedMakeCmdArgs{}, fmt.Errorf("please provide a valid top-level(ex: File System) resource URL")
+		return cookedMakeCmdArgs{}, fmt.Errorf("please provide a valid top-level(ex: File System or Container) resource URL")
 	}
 
 	// resourceLocation could be unknown at this stage, it will be handled by the caller
 	return cookedMakeCmdArgs{
 		resourceURL:      *parsedURL,
 		resourceLocation: inferArgumentLocation(raw.resourceToCreate),
+		quota:            int32(raw.quota),
 	}, nil
 }
 
 // holds processed/actionable args
 type cookedMakeCmdArgs struct {
 	resourceURL      url.URL
-	resourceLocation Location
+	resourceLocation common.Location
+	quota            int32 // quota is in GB
 }
 
+// TODO update this function when OAuth is officially enabled
 func (cookedArgs cookedMakeCmdArgs) process() error {
 	switch cookedArgs.resourceLocation {
-	case ELocation.BlobFS():
+	case common.ELocation.BlobFS():
 		// get the Account Name and Key variables from environment
 		name := os.Getenv("ACCOUNT_NAME")
 		key := os.Getenv("ACCOUNT_KEY")
@@ -99,17 +107,78 @@ func (cookedArgs cookedMakeCmdArgs) process() error {
 			if storageErr, ok := err.(azbfs.StorageError); ok {
 				if storageErr.ServiceCode() == azbfs.ServiceCodeFileSystemAlreadyExists {
 					return fmt.Errorf("the file system already exists")
+				} else if storageErr.ServiceCode() == azbfs.ServiceCodeResourceNotFound {
+					return fmt.Errorf("please specify a valid file system URL with corresponding credentials")
 				}
 			}
 
 			// print the ugly error if unexpected
 			return err
 		}
+	case common.ELocation.Blob():
+		containerURL := azblob.NewContainerURL(cookedArgs.resourceURL, azblob.NewPipeline(azblob.NewAnonymousCredential(),
+			azblob.PipelineOptions{
+				Retry: azblob.RetryOptions{
+					Policy:        azblob.RetryPolicyExponential,
+					MaxTries:      makeMaxTries,
+					TryTimeout:    makeTryTimeout,
+					RetryDelay:    makeRetryDelay,
+					MaxRetryDelay: makeMaxRetryDelay,
+				},
+				Telemetry: azblob.TelemetryOptions{
+					Value: common.UserAgent,
+				},
+			}))
 
-		return nil
+		_, err := containerURL.Create(context.Background(), nil, azblob.PublicAccessNone)
+
+		if err != nil {
+			// print a nicer error message if container already exists
+			if storageErr, ok := err.(azblob.StorageError); ok {
+				if storageErr.ServiceCode() == azblob.ServiceCodeContainerAlreadyExists {
+					return fmt.Errorf("the container already exists")
+				} else if storageErr.ServiceCode() == azblob.ServiceCodeResourceNotFound {
+					return fmt.Errorf("please specify a valid container URL with account SAS")
+				}
+			}
+
+			// print the ugly error if unexpected
+			return err
+		}
+	case common.ELocation.File():
+		shareURL := azfile.NewShareURL(cookedArgs.resourceURL, azfile.NewPipeline(azfile.NewAnonymousCredential(),
+			azfile.PipelineOptions{
+				Retry: azfile.RetryOptions{
+					Policy:        azfile.RetryPolicyExponential,
+					MaxTries:      makeMaxTries,
+					TryTimeout:    makeTryTimeout,
+					RetryDelay:    makeRetryDelay,
+					MaxRetryDelay: makeMaxRetryDelay,
+				},
+				Telemetry: azfile.TelemetryOptions{
+					Value: common.UserAgent,
+				},
+			}))
+
+		_, err := shareURL.Create(context.Background(), nil, cookedArgs.quota)
+
+		if err != nil {
+			// print a nicer error message if share already exists
+			if storageErr, ok := err.(azfile.StorageError); ok {
+				if storageErr.ServiceCode() == azfile.ServiceCodeShareAlreadyExists {
+					return fmt.Errorf("the file share already exists")
+				} else if storageErr.ServiceCode() == azfile.ServiceCodeResourceNotFound {
+					return fmt.Errorf("please specify a valid share URL with account SAS")
+				}
+			}
+
+			// print the ugly error if unexpected
+			return err
+		}
 	default:
 		return fmt.Errorf("operation not supported, cannot create resource %s type at the moment", cookedArgs.resourceURL.String())
 	}
+	return nil
 }
 
 func init() {
@@ -125,7 +194,7 @@ func init() {
 Create the File System represented by the given resource URL.
 `,
 		Example: `
-  - azcopy make "https://[account-name].dfs.core.windows.net/[filesystem-name]"
+  - azcopy make "https://[account-name].[blob,file,dfs].core.windows.net/[top-level-resource-name]"
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// verify that there is exactly one argument
@@ -147,9 +216,10 @@ Create the File System represented by the given resource URL.
 				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
 			}
 
-			glcm.ExitWithSuccess("Successfully created the File System "+cookedArgs.resourceURL.String(), common.EExitCode.Success())
+			glcm.ExitWithSuccess("Successfully created the resource.", common.EExitCode.Success())
 		},
 	}
 
+	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota", 0, "specifies the maximum size of the share in gigabytes, 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
 }

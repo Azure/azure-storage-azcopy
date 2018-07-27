@@ -7,14 +7,15 @@ import (
 	"os"
 	"time"
 
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"github.com/spf13/cobra"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"strings"
+
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/spf13/cobra"
 )
 
 const charset = "abcdefghijklmnopqrstuvwxyz" +
@@ -31,15 +32,25 @@ func createStringWithRandomChars(length int) string {
 // initializes the create command, its aliases and description.
 func init() {
 	resourceURL := ""
-	resourceType := ""
-	blobType := "blob"
-	fileType := "file"
-	isResourceABucket := true
+
+	serviceType := EServiceType.Blob()
+	resourceType := EResourceType.SingleFile()
+	serviceTypeStr := ""
+	resourceTypeStr := ""
+
 	blobSize := uint32(0)
+	metaData := ""
+	contentType := ""
+	contentEncoding := ""
+	contentDisposition := ""
+	contentLanguage := ""
+	cacheControl := ""
+	contentMD5 := ""
+
 	createCmd := &cobra.Command{
 		Use:     "create",
 		Aliases: []string{"create"},
-		Short:   "create deletes everything inside the container.",
+		Short:   "create creates resource.",
 
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 1 {
@@ -49,53 +60,122 @@ func init() {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if resourceType != blobType && resourceType != fileType {
-				panic(fmt.Errorf("illegal resourceType '%s'", resourceType))
+			err := (&serviceType).Parse(serviceTypeStr)
+			if err != nil {
+				panic(fmt.Errorf("fail to parse service type %q, %v", serviceTypeStr, err))
+			}
+			err = (&resourceType).Parse(resourceTypeStr)
+			if err != nil {
+				panic(fmt.Errorf("fail to parse resource type %q, %v", resourceTypeStr, err))
 			}
 
-			switch resourceType {
-			case blobType:
-				if isResourceABucket {
+			switch serviceType {
+			case EServiceType.Blob():
+				switch resourceType {
+				case EResourceType.Bucket():
 					createContainer(resourceURL)
-				} else {
-					createBlob(resourceURL, blobSize)
+				case EResourceType.SingleFile():
+					createBlob(
+						resourceURL,
+						blobSize,
+						getBlobMetadata(metaData),
+						azblob.BlobHTTPHeaders{
+							ContentType:        contentType,
+							ContentDisposition: contentDisposition,
+							ContentEncoding:    contentEncoding,
+							ContentLanguage:    contentLanguage,
+							ContentMD5:         []byte(contentMD5),
+							CacheControl:       cacheControl,
+						})
+				default:
+					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
-			case fileType:
-				if isResourceABucket {
+			case EServiceType.File():
+				switch resourceType {
+				case EResourceType.Bucket():
 					createShareOrDirectory(resourceURL)
-				} else {
+				case EResourceType.SingleFile():
 					createFile(resourceURL)
+				default:
+					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
+			case EServiceType.BlobFS():
+				panic(fmt.Errorf("not implemented %v", serviceType))
+			default:
+				panic(fmt.Errorf("illegal resourceType %q", resourceType))
 			}
-
 		},
 	}
 	rootCmd.AddCommand(createCmd)
 
-	createCmd.PersistentFlags().StringVar(&resourceType, "resourceType", "blob", "Resource type, could be blob or file currently.")
-	createCmd.PersistentFlags().BoolVar(&isResourceABucket, "isResourceABucket", true, "Whether resource is a bucket, if it's bucket, for blob it's container, and for file it's share or directory.")
+	createCmd.PersistentFlags().StringVar(&serviceTypeStr, "serviceType", "Blob", "Service type, could be blob, file or blobFS currently.")
+	createCmd.PersistentFlags().StringVar(&resourceTypeStr, "resourceType", "SingleFile", "Resource type, could be a single file, bucket.")
 	createCmd.PersistentFlags().Uint32Var(&blobSize, "blob-size", 0, "")
+	createCmd.PersistentFlags().StringVar(&metaData, "metadata", "", "metadata for blob.")
+	createCmd.PersistentFlags().StringVar(&contentType, "content-type", "", "content type for blob.")
+	createCmd.PersistentFlags().StringVar(&contentEncoding, "content-encoding", "", "content encoding for blob.")
+	createCmd.PersistentFlags().StringVar(&contentDisposition, "content-disposition", "", "content disposition for blob.")
+	createCmd.PersistentFlags().StringVar(&contentLanguage, "content-language", "", "content language for blob.")
+	createCmd.PersistentFlags().StringVar(&cacheControl, "cache-control", "", "cache control for blob.")
+	createCmd.PersistentFlags().StringVar(&contentMD5, "content-md5", "", "content MD5 for blob.")
+
+}
+
+func getBlobMetadata(metadataString string) azblob.Metadata {
+	var metadata azblob.Metadata
+
+	if len(metadataString) > 0 {
+		metadata = azblob.Metadata{}
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadata[kv[0]] = kv[1]
+		}
+	}
+
+	return metadata
 }
 
 // Can be used for overwrite scenarios.
 func createContainer(container string) {
-	panic("todo")
+	u, err := url.Parse(container)
+
+	if err != nil {
+		fmt.Println("error parsing the container URL with SAS ", err)
+		os.Exit(1)
+	}
+
+	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+
+	containerURL := azblob.NewContainerURL(*u, p)
+	_, err = containerURL.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
+
+	if err != nil {
+		fmt.Println("error createContainer, ", err)
+		os.Exit(1)
+	}
 }
 
-func createBlob(blobUri string, blobSize uint32) {
-	url, err := url.Parse(blobUri)
+func createBlob(blobURL string, blobSize uint32, metadata azblob.Metadata, blobHTTPHeaders azblob.BlobHTTPHeaders) {
+	url, err := url.Parse(blobURL)
 	if err != nil {
-		fmt.Println("error parsing the blob sas ", blobUri)
+		fmt.Println("error parsing the blob sas ", err)
 		os.Exit(1)
 	}
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	blobUrl := azblob.NewBlockBlobURL(*url, p)
 
 	randomString := createStringWithRandomChars(int(blobSize))
-	contentType := http.DetectContentType([]byte(randomString))
-	putBlobResp, err := blobUrl.PutBlob(context.Background(), strings.NewReader(randomString), azblob.BlobHTTPHeaders{ContentType: contentType}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	if blobHTTPHeaders.ContentType == "" {
+		blobHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+	}
+	putBlobResp, err := blobUrl.Upload(
+		context.Background(),
+		strings.NewReader(randomString),
+		blobHTTPHeaders,
+		metadata,
+		azblob.BlobAccessConditions{})
 	if err != nil {
-		fmt.Println(fmt.Sprintf("error uploading the blob %s", blobUrl))
+		fmt.Println(fmt.Sprintf("error uploading the blob %v", err))
 		os.Exit(1)
 	}
 	if putBlobResp.Response() != nil {
@@ -105,12 +185,10 @@ func createBlob(blobUri string, blobSize uint32) {
 }
 
 func createShareOrDirectory(shareOrDirectoryURLStr string) {
-	fmt.Println("createShareOrDirectory with URL: ", shareOrDirectoryURLStr)
-
 	u, err := url.Parse(shareOrDirectoryURLStr)
 
 	if err != nil {
-		fmt.Println("error parsing the share or directory URL with SAS ", shareOrDirectoryURLStr)
+		fmt.Println("error parsing the share or directory URL with SAS ", err)
 		os.Exit(1)
 	}
 
@@ -128,7 +206,7 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 
 	_, err = dirURL.GetProperties(context.Background())
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "error createShareOrDirectory with URL '%s', error '%v'\n", shareOrDirectoryURLStr, err)
+		fmt.Println("error createShareOrDirectory with URL, ", err)
 		os.Exit(1)
 	}
 }

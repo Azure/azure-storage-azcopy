@@ -24,8 +24,8 @@ package common
 
 import (
 	"os"
-	"syscall"
 	"sync"
+	"syscall"
 )
 
 type MMF struct {
@@ -52,7 +52,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
 	}
 	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
-	return &MMF{slice : (addr), isMapped:true, lock : sync.RWMutex{}}, err
+	return &MMF{slice: (addr), isMapped: true, lock: sync.RWMutex{}}, err
 }
 
 // To unmap, we need exclusive (write) access to the MMF and
@@ -79,11 +79,11 @@ func (m *MMF) UseMMF() bool {
 }
 
 // RUnlock unlocks the held lock
-func (m *MMF) UnuseMMF(){
+func (m *MMF) UnuseMMF() {
 	m.lock.RUnlock()
 }
 
 // Slice() returns the memory mapped byte slice
-func (m* MMF) Slice() []byte {
+func (m *MMF) Slice() []byte {
 	return m.slice
 }
