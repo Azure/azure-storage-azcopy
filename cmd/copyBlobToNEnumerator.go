@@ -279,8 +279,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 	}
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        destURL.String(),
+		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified,
 		SourceSize:         *properties.ContentLength,
 		ContentType:        *properties.ContentType,
@@ -303,8 +303,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, pr
 	}
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        destURL.String(),
+		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),

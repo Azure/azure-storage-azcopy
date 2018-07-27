@@ -9,10 +9,10 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 type IJobPartTransferMgr interface {
@@ -239,7 +239,7 @@ func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
 
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
-	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: " + msg + " [P#%d-T#%d]", common.LogLevel(level), plan.PartNum, jptm.transferIndex))
+	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: "+msg+" [P#%d-T#%d]", common.LogLevel(level), plan.PartNum, jptm.transferIndex))
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
@@ -255,11 +255,11 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 	}
 }
 
-func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int){
+func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
 	jptm.Log(pipeline.LogError, fmt.Sprintf("UPLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
 }
 
-func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg string, status int){
+func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg string, status int) {
 	jptm.Log(pipeline.LogError, fmt.Sprintf("DOWNLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
 }
 
