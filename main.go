@@ -38,6 +38,7 @@ func main() {
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
 		cmd.Execute(azcopyAppPathFolder)
+		return
 	}
 
 	// Perform os specific initialization
