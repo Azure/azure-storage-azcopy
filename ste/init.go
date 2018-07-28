@@ -335,19 +335,22 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
+		go func() {
+			// Navigate through transfers and schedule them independently
+			// This is done to avoid FE to get blocked until all the transfers have been scheduled
+			// Get credential info from RPC request, and set in InMemoryTransitJobState.
+			jm.setInMemoryTransitJobState(
+				InMemoryTransitJobState{
+					credentialInfo: req.CredentialInfo,
+				})
 
-		// Get credential info from RPC request, and set in InMemoryTransitJobState.
-		jm.setInMemoryTransitJobState(
-			InMemoryTransitJobState{
-				credentialInfo: req.CredentialInfo,
-			})
+			jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
-		jpp0.SetJobStatus(common.EJobStatus.InProgress())
-
-		if jm.ShouldLog(pipeline.LogInfo) {
-			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
-		}
-		jm.ResumeTransfers(steCtx, req.IncludeTransfer, req.ExcludeTransfer) // Reschedule all job part's transfers
+			if jm.ShouldLog(pipeline.LogInfo) {
+				jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
+			}
+			jm.ResumeTransfers(steCtx, req.IncludeTransfer, req.ExcludeTransfer) // Reschedule all job part's transfers
+		}()
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
