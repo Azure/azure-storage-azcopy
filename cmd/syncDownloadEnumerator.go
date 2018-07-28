@@ -30,7 +30,7 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			go glcm.WaitUntilJobCompletion(cca)
+			cca.waitUntilJobCompletion(false)
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -40,7 +40,7 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 }
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
-func (e *syncDownloadEnumerator) dispatchFinalPart() error {
+func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 	numberOfCopyTransfers := len(e.CopyJobRequest.Transfers)
 	numberOfDeleteTransfers := len(e.DeleteJobRequest.Transfers)
 	// If the numberoftransfer to copy / delete both are 0
@@ -91,6 +91,7 @@ func (e *syncDownloadEnumerator) dispatchFinalPart() error {
 			return fmt.Errorf("delete job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
 	}
+	cca.isEnumerationComplete = true
 	return nil
 }
 
@@ -220,10 +221,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// attempt to parse the destination url
 	sourceUrl, err := url.Parse(cca.source)
-	if err != nil {
-		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
-		panic(err)
-	}
+	// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
+	common.PanicIfErr(err)
 	// since source is a remote url, it will have sas parameter
 	// since sas parameter will be stripped from the source url
 	// while cooking the raw command arguments
@@ -515,11 +514,11 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	if e.PartNumber == 0 ||
 		len(e.CopyJobRequest.Transfers) > 0 ||
 		len(e.DeleteJobRequest.Transfers) > 0 {
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
-		glcm.WaitUntilJobCompletion(cca)
+		cca.waitUntilJobCompletion(true)
 	}
 	return nil
 }

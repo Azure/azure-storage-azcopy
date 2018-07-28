@@ -23,7 +23,7 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNum == 0 {
-			go glcm.WaitUntilJobCompletion(cca)
+			cca.waitUntilJobCompletion(false)
 		}
 		e.Transfers = []common.CopyTransfer{}
 		e.PartNum++
@@ -44,7 +44,7 @@ func shuffleTransfers(transfers []common.CopyTransfer) {
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 // dispatchFinalPart sends a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent.
-func dispatchFinalPart(e *common.CopyJobPartOrderRequest) error {
+func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs) error {
 	shuffleTransfers(e.Transfers)
 	e.IsFinalPart = true
 	var resp common.CopyJobPartOrderResponse
@@ -54,5 +54,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest) error {
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
 	}
 
+	// set the flag on cca, to indicate the enumeration is done
+	cca.isEnumerationComplete = true
 	return nil
 }

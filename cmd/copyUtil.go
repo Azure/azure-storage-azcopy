@@ -690,13 +690,6 @@ func (util copyHandlerUtil) hasEquivalentDirectoryURL(url url.URL) (isDirectoryS
 	return
 }
 
-// reactURLQuery reacts the query part of URL.
-func (util copyHandlerUtil) reactURLQuery(url url.URL) url.URL {
-	// Note: this is copy by value
-	url.RawQuery = "<Reacted Query>"
-	return url
-}
-
 // replaceBackSlashWithSlash replaces all backslash '\' with slash '/' in a given URL string.
 func (util copyHandlerUtil) replaceBackSlashWithSlash(urlStr string) string {
 	str := strings.Replace(urlStr, "\\", "/", -1)

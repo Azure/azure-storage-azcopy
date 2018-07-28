@@ -89,7 +89,7 @@ type rawCopyCmdArgs struct {
 	output                   string
 	acl                      string
 	logVerbosity             string
-	stdInEnable              bool
+	cancelFromStdin          bool
 	// oauth options
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
@@ -169,6 +169,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.background = raw.background
 	cooked.output.Parse(raw.output)
 	cooked.acl = raw.acl
+	cooked.cancelFromStdin = raw.cancelFromStdin
 
 	// cook oauth parameters
 	cooked.useInteractiveOAuthUserCredential = raw.useInteractiveOAuthUserCredential
@@ -209,6 +210,7 @@ type cookedCopyCmdArgs struct {
 	output                   common.OutputFormat
 	acl                      string
 	logVerbosity             common.LogLevel
+	cancelFromStdin          bool
 	// oauth options
 	useInteractiveOAuthUserCredential bool
 	tenantID                          string
@@ -228,6 +230,10 @@ type cookedCopyCmdArgs struct {
 
 	// used to calculate job summary
 	jobStartTime time.Time
+
+	// this flag is set by the enumerator
+	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
+	isEnumerationComplete bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -689,31 +695,56 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return nil
 	}
 
-	// If there is only one, part then start fetching the JobPart Order.
+	// If there is only one part, then start fetching the JobPart Order.
 	if lastPartNumber == 0 {
-		go glcm.WaitUntilJobCompletion(cca)
+		cca.waitUntilJobCompletion(false)
 	}
 	return nil
 }
 
-func (cca *cookedCopyCmdArgs) PrintJobStartedMsg() {
+// wraps call to lifecycle manager to wait for the job to complete
+// if blocking is specified to true, then this method will never return
+// if blocking is specified to false, then another goroutine spawns and wait out the job
+func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
+	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-}
 
-func (cca *cookedCopyCmdArgs) CancelJob() {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
-	}
-}
-
-func (cca *cookedCopyCmdArgs) InitializeProgressCounters() {
+	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
+
+	// hand over control to the lifecycle manager if blocking
+	if blocking {
+		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.SurrenderControl()
+	} else {
+		// non-blocking, return after spawning a go routine to watch the job
+		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+	}
 }
 
-func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
+func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
+	// prompt for confirmation, except when:
+	// 1. output is in json format
+	// 2. azcopy was spawned by another process (cancelFromStdin indicates this)
+	// 3. enumeration is complete
+	if !(cca.output == common.EOutputFormat.Json() || cca.cancelFromStdin || cca.isEnumerationComplete) {
+		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+
+		// read a line from stdin, if the answer is not yes, then abort cancel by returning
+		if !strings.EqualFold(answer, "y") {
+			return
+		}
+	}
+
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		lcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -723,15 +754,12 @@ func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			// something serious has gone wrong if we cannot marshal a json
-			panic(err)
-		}
+		common.PanicIfErr(err)
 
 		if jobDone {
-			glcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+			lcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
 		} else {
-			glcm.Info(string(jsonOutput))
+			lcm.Info(string(jsonOutput))
 			return
 		}
 	}
@@ -740,7 +768,7 @@ func (cca *cookedCopyCmdArgs) PrintJobProgressStatus() {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-		glcm.ExitWithSuccess(fmt.Sprintf(
+		lcm.ExitWithSuccess(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
@@ -851,13 +879,6 @@ Download an entire directory:
 			if err != nil {
 				glcm.ExitWithError("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
 			}
-			// If the stdInEnable is set true, then a separate go routines is reading the standard input.
-			// If the "cancel\n" keyword is passed to the standard input, it will cancel the job
-			// Any other word keyword provided will panic
-			// This feature is to support cancel for node.js applications spawning azcopy
-			if raw.stdInEnable {
-				go glcm.ReadStandardInputToCancelJob()
-			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
@@ -894,8 +915,8 @@ Download an entire directory:
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
-	cpCmd.PersistentFlags().BoolVar(&raw.stdInEnable, "stdIn-enable", false, "true if user wants to cancel the process by passing 'cancel' "+
-		"to the standard Input. This flag enables azcopy reading the standard input while running the operation")
+	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
+		"to the standard input. This is mostly used when the application is spawned by another process.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
 	// oauth options

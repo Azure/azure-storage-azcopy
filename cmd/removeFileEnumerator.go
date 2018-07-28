@@ -112,7 +112,7 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			marker = lResp.NextMarker
 		}
 
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 		}
 
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -177,10 +177,6 @@ func (e *removeFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *co
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *removeFileEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *removeFileEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *removeFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }

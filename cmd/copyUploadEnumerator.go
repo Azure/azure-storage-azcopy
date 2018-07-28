@@ -22,10 +22,8 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// attempt to parse the destination url
 	destinationURL, err := url.Parse(cca.destination)
-	if err != nil {
-		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
-		panic(err)
-	}
+	// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
+	common.PanicIfErr(err)
 
 	// list the source files and directories
 	listOfFilesAndDirectories, err := filepath.Glob(cca.source)
@@ -76,7 +74,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			if err != nil {
 				return err
 			}
-			return e.dispatchFinalPart()
+			return e.dispatchFinalPart(cca)
 		}
 	}
 	// if the user specifies a virtual directory ex: /container_name/extra_path
@@ -186,17 +184,13 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if e.PartNum == 0 && len(e.Transfers) == 0 {
 		return errors.New("nothing can be uploaded, please use --recursive to upload directories")
 	}
-	return e.dispatchFinalPart()
+	return e.dispatchFinalPart(cca)
 }
 
 func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyUploadEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *copyUploadEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *copyUploadEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }

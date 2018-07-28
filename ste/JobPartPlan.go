@@ -155,9 +155,7 @@ func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex u
 	if t.SrcMetadataLength != 0 {
 		tmpMetaData := jpph.getString(offset, t.SrcMetadataLength)
 		metadata, err = common.UnMarshalToCommonMetadata(tmpMetaData)
-		if err != nil { // should not happen in normal case
-			panic(err)
-		}
+		common.PanicIfErr(err)
 		offset += int64(t.SrcMetadataLength)
 	}
 

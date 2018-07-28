@@ -80,7 +80,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		// dispatch the JobPart as Final Part of the Job
-		err := e.dispatchFinalPart()
+		err := e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		if err := e.addTransferInternal(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
 			return err
 		}
-		return e.dispatchFinalPart()
+		return e.dispatchFinalPart(cca)
 	}
 
 	// Case-3: Source is a file share or directory
@@ -136,7 +136,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// dispatch the JobPart as Final Part of the Job
-	return e.dispatchFinalPart()
+	return e.dispatchFinalPart(cca)
 }
 
 // destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
@@ -288,8 +288,8 @@ func (e *copyFileToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *c
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyFileToNEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
+func (e *copyFileToNEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }
 
 func (e *copyFileToNEnumerator) partNum() common.PartNumber {

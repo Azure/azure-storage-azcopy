@@ -91,7 +91,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		// dispatch the JobPart as Final Part of the Job
-		err := e.dispatchFinalPart()
+		err := e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		if err := e.addTransferInternal2(srcBlobURL.URL(), *destURL, blobProperties, cca); err != nil {
 			return err
 		}
-		return e.dispatchFinalPart()
+		return e.dispatchFinalPart(cca)
 	}
 
 	// Case-3: Source is a blob container or directory
@@ -148,7 +148,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// dispatch the JobPart as Final Part of the Job
-	return e.dispatchFinalPart()
+	return e.dispatchFinalPart(cca)
 }
 
 // destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
@@ -322,8 +322,8 @@ func (e *copyBlobToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *c
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyBlobToNEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
+func (e *copyBlobToNEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }
 
 func (e *copyBlobToNEnumerator) partNum() common.PartNumber {
