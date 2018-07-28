@@ -1,7 +1,6 @@
 package ste
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 
@@ -30,13 +29,13 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	// Internal function is created to avoid redundancy of the above steps from several places in the api.
 	transferDone := func(status common.TransferStatus, err error) {
 		if jptm.ShouldLog(pipeline.LogInfo) {
-			var msg = ""
 			if status == common.ETransferStatus.Failed() {
-				msg = fmt.Sprintf("delete blob failed. Failed with error %s", err.Error())
+				jptm.LogError(info.Source, "DELETE ERROR ", err)
 			} else {
-				msg = "blob delete successful"
+				if jptm.ShouldLog(pipeline.LogInfo) {
+					jptm.Log(pipeline.LogInfo, "DELETE SUCCESSFUL")
+				}
 			}
-			jptm.Log(pipeline.LogInfo, msg)
 		}
 		jptm.SetStatus(status)
 		jptm.AddToBytesDone(info.SourceSize)

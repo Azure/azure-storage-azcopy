@@ -35,18 +35,14 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// since url to upload files and directories is different
 	fInfo, err := os.Stat(info.Source)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogError) {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. error getting the source info %s", info.Source))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, err.Error(), 0)
 		transferDone(common.ETransferStatus.Failed())
 		return
 	}
 	// parse the destination Url
 	dUrl, err := url.Parse(info.Destination)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogError) {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. error parsing the destination Url %s", info.Destination))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, "Url Parsing Error "+err.Error(), 0)
 		transferDone(common.ETransferStatus.Failed())
 		return
 	}
@@ -56,21 +52,17 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		dirUrl := azbfs.NewDirectoryURL(*dUrl, p)
 		_, err := dirUrl.Create(jptm.Context())
 		if err != nil {
+			status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.LogUploadError(info.Source, info.Destination, "Directory creation error "+msg, status)
 			if jptm.WasCanceled() {
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf("creating directory %s failed since transfer was cancelled ", info.Destination))
-				}
 				transferDone(jptm.TransferStatus())
 			} else {
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. Creating directory %s failed with error ", err.Error()))
-				}
 				transferDone(common.ETransferStatus.Failed())
 			}
 			return
 		}
 		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSUploadSuccessful. created directory for the given destination url %s", info.Destination))
+			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
 		}
 		transferDone(common.ETransferStatus.Success())
 		return
@@ -81,14 +73,13 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		fileUrl := azbfs.NewFileURL(*dUrl, p)
 		_, err = fileUrl.Create(jptm.Context())
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogError) {
-				jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. Error creating the file for destination url %s. failed with error %s", info.Destination, err.Error()))
-			}
+			status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.LogUploadError(info.Source, info.Destination, "File creation Eror "+msg, status)
 			transferDone(common.ETransferStatus.Failed())
 			return
 		}
 		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSUploadSuccessful. Created the empty file for destination url %s", info.Destination))
+			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
 		}
 		transferDone(common.ETransferStatus.Success())
 		return
@@ -97,9 +88,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// Open the source file and memory map it
 	srcfile, err := os.Open(info.Source)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogError) {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. Error opening the source file %s. Failed with error %s", info.Source, err.Error()))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, "File Open Error "+err.Error(), 0)
 		transferDone(common.ETransferStatus.Failed())
 		return
 	}
@@ -108,9 +97,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	// memory map the source file
 	srcMmf, err := common.NewMMF(srcfile, false, 0, sourceSize)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogError) {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. Error mapping the source file %s. failed with error %s", info.Source, err.Error()))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
 		transferDone(common.ETransferStatus.Failed())
 		return
 	}
@@ -121,9 +108,8 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	fileUrl := azbfs.NewFileURL(*dUrl, p)
 	_, err = fileUrl.Create(jptm.Context())
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogError) {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed. Error creating the file for destination url %s. failed with error %s", info.Destination, err.Error()))
-		}
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogUploadError(info.Source, info.Destination, "File creation Eror "+msg, status)
 		transferDone(common.ETransferStatus.Failed())
 		return
 	}
@@ -156,23 +142,23 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 // fileRangeAppend is the api that is used to append the range to a file from range startRange to (startRange + calculatedRangeInterval)
 func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInterval int64) chunkFunc {
 	return func(workerId int) {
-
+		info := fru.jptm.Info()
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func(jptm IJobPartTransferMgr) {
-			r := recover()
-			if r != nil {
-				// Get the transfer Info and log the details
-				info := jptm.Info()
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startRange %v calculatedRangeInterval %v sourceMMF size %v",
-						r, info.Source, info.Destination, info.SourceSize, startRange, calculatedRangeInterval, len(fru.srcMmf.Slice())))
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
-			}
-		}(fru.jptm)
+		//defer func(jptm IJobPartTransferMgr) {
+		//	r := recover()
+		//	if r != nil {
+		//		// Get the transfer Info and log the details
+		//		info := jptm.Info()
+		//		if jptm.ShouldLog(pipeline.LogError) {
+		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startRange %v calculatedRangeInterval %v sourceMMF size %v",
+		//				r, info.Source, info.Destination, info.SourceSize, startRange, calculatedRangeInterval, len(fru.srcMmf.Slice())))
+		//		}
+		//		jptm.SetStatus(common.ETransferStatus.Failed())
+		//		jptm.ReportTransferDone()
+		//	}
+		//}(fru.jptm)
 
 		// transferDone is the internal function which called by the last range append
 		// it unmaps the source file and delete the file in case transfer failed
@@ -184,17 +170,15 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			if fru.jptm.TransferStatus() <= 0 {
 				_, err := fru.fileUrl.Delete(context.Background())
 				if err != nil {
-					if fru.jptm.ShouldLog(pipeline.LogInfo) {
-						fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the file %s. failed with error %s", fru.fileUrl, err.Error()))
-					}
+					fru.jptm.LogError(fru.fileUrl.String(), "Delete Remote File Error ", err)
 				}
 			}
 			// report transfer done
 			fru.jptm.ReportTransferDone()
 		}
 		if fru.jptm.WasCanceled() {
-			if fru.jptm.ShouldLog(pipeline.LogInfo) {
-				fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("not picking up the chunk since transfer was cancelled"))
+			if fru.jptm.ShouldLog(pipeline.LogDebug) {
+				fru.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Chunk of cancelled transfer not picked "))
 			}
 			// add range updated to bytes done for progress
 			fru.jptm.AddToBytesDone(calculatedRangeInterval)
@@ -214,15 +198,13 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			// If the file append range failed, it could be that transfer was cancelled
 			// status of transfer does not change when it is cancelled
 			if fru.jptm.WasCanceled() {
-				if fru.jptm.ShouldLog(pipeline.LogInfo) {
-					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error appending the range to the file %s since transfer was cancelled", fru.fileUrl))
+				if fru.jptm.ShouldLog(pipeline.LogDebug) {
+					fru.jptm.Log(pipeline.LogDebug, "Append Range of cancelled transfer not processed")
 				}
 			} else {
+				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				// If the transfer was not cancelled, then append range failed due to some other reason
-				if fru.jptm.ShouldLog(pipeline.LogInfo) {
-					fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("BlobFSUploadFailed while appending the range to the file %s for startIndex %d and range interval %d. "+
-						"Failed with error %s", fru.fileUrl, startRange, calculatedRangeInterval, err.Error()))
-				}
+				fru.jptm.LogUploadError(info.Source, info.Destination, msg, status)
 				// cancel the transfer
 				fru.jptm.Cancel()
 				fru.jptm.SetStatus(common.ETransferStatus.Failed())
@@ -239,9 +221,9 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			return
 		}
 		// successfully appended the range to the file
-		if fru.jptm.ShouldLog(pipeline.LogInfo) {
-			fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("successfully appended the range for file %s for startrange %d "+
-				"and rangeInterval %d", fru.fileUrl, startRange, calculatedRangeInterval))
+		if fru.jptm.ShouldLog(pipeline.LogDebug) {
+			fru.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Append Range Successful for startrange %d "+
+				"and rangeInterval %d", startRange, calculatedRangeInterval))
 		}
 
 		// add range updated to bytes done for progress
@@ -260,13 +242,12 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			if err != nil {
 				if fru.jptm.WasCanceled() {
 					// Flush Range failed because the transfer was cancelled
-					if fru.jptm.ShouldLog(pipeline.LogInfo) {
-						fru.jptm.Log(pipeline.LogInfo, fmt.Sprintf("error flushing the ranges for file %s since transfer was cancelled ", fru.fileUrl))
+					if fru.jptm.ShouldLog(pipeline.LogDebug) {
+						fru.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Cancelled transfer range %d %d not flushed ", startRange, startRange+calculatedRangeInterval))
 					}
 				} else {
-					if fru.jptm.ShouldLog(pipeline.LogError) {
-						fru.jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadFailed while flushing the ranges for file %s failed with error %s", fru.fileUrl, err.Error()))
-					}
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					fru.jptm.LogUploadError(info.Source, info.Destination, msg, status)
 					fru.jptm.Cancel()
 					fru.jptm.SetStatus(common.ETransferStatus.Failed())
 				}
@@ -274,7 +255,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				return
 			}
 			if fru.jptm.ShouldLog(pipeline.LogError) {
-				fru.jptm.Log(pipeline.LogError, fmt.Sprintf("BlobFSUploadSuccessful. successfully flushed the ranges for file %s", fru.fileUrl))
+				fru.jptm.Log(pipeline.LogError, "UPLOAD SUCCESSFUL")
 			}
 			fru.jptm.SetStatus(common.ETransferStatus.Success())
 			transferDone()

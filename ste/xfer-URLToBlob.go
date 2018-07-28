@@ -75,9 +75,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := destBlobURL.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
 		if err == nil {
 			// If the error is nil, then blob exists and doesn't needs to be copied.
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
-			}
+			jptm.LogUploadError(info.Source, info.Destination, "Blob Already Exists ", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
 			jptm.AddToBytesDone(info.SourceSize)
@@ -104,20 +102,15 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := destBlobURL.ToBlockBlobURL().Upload(jptm.Context(), bytes.NewReader(nil), info.SrcHTTPHeaders, azblobMetadata, azblob.BlobAccessConditions{})
 		// if the create blob failed, updating the transfer status to failed
 		if err != nil {
-			if jptm.WasCanceled() {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "create blob failed because transfer was cancelled ")
-				}
-			} else {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf("create blob failed and cancelling the transfer. Failed with error %v", err))
-				}
+			status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.LogUploadError(info.Source, info.Destination, msg, status)
+			if !jptm.WasCanceled() {
 				jptm.SetStatus(common.ETransferStatus.Failed())
 			}
 		} else {
 			// if the create blob is a success, updating the transfer status to success
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "create blob successfully")
+				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
 			}
 
 			// TODO: set blob tier
@@ -175,26 +168,27 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer bbc.jptm.ReleaseAConnection()
 
+		info := bbc.jptm.Info()
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
-		defer func(jptm IJobPartTransferMgr) {
-			r := recover()
-			if r != nil {
-				info := jptm.Info()
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v",
-						r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize))
-				}
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
-			}
-		}(bbc.jptm)
+		//defer func(jptm IJobPartTransferMgr) {
+		//	r := recover()
+		//	if r != nil {
+		//		info := jptm.Info()
+		//		if jptm.ShouldLog(pipeline.LogError) {
+		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v",
+		//				r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize))
+		//		}
+		//		jptm.SetStatus(common.ETransferStatus.Failed())
+		//		jptm.ReportTransferDone()
+		//	}
+		//}(bbc.jptm)
 
 		// and the chunkFunc has been changed to the version without param workId
 		// transfer done is internal function which marks the transfer done.
 		transferDone := func() {
-			bbc.jptm.Log(pipeline.LogInfo, "Reported Done. Cleanup in progress")
+			bbc.jptm.Log(pipeline.LogInfo, "Transfer Done")
 			// Get the Status of the transfer
 			// If the transfer status value < 0, then transfer failed with some failure
 			// there is a possibility that some uncommitted blocks will be there
@@ -204,24 +198,20 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 					// Other errors report that uncommitted blocks are there
-					if bbc.jptm.ShouldLog(pipeline.LogError) {
-						bbc.jptm.Log(pipeline.LogError, fmt.Sprintf("error occurred while deleting the uncommitted "+
-							"blocks of blob %s. Failed with error %v", bbc.destBlobURL.String(), err))
-					}
+					bbc.jptm.LogError(info.Destination, "Delete Uncommitted blocks ", err)
 				}
 			}
 			bbc.jptm.ReportTransferDone()
 		}
 
 		if bbc.jptm.WasCanceled() {
-			if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-				bbc.jptm.Log(pipeline.LogInfo, fmt.Sprintf("is cancelled. Hence not picking up chunkId %d", chunkId))
+			if bbc.jptm.ShouldLog(pipeline.LogDebug) {
+				bbc.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled. not picking up chunk %d", chunkId))
 			}
 			bbc.jptm.AddToBytesDone(adjustedChunkSize)
 			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
-				if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-					bbc.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d finalizing cancellation of transfer", workerId))
+				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
+					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
 				transferDone()
 			}
@@ -240,19 +230,12 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		if err != nil {
 			// check if the transfer was cancelled while Stage Block was in process.
 			if bbc.jptm.WasCanceled() {
-				if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-					bbc.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d which failed to upload chunkId %d because transfer was cancelled",
-							workerId, chunkId))
-				}
+				bbc.jptm.LogError(info.Destination, "Chunk Upload Failed ", err)
 			} else {
 				// cancel entire transfer because this chunk has failed
 				bbc.jptm.Cancel()
-				if bbc.jptm.ShouldLog(pipeline.LogError) {
-					bbc.jptm.Log(pipeline.LogError,
-						fmt.Sprintf("copy from URL to block blob failed, worker %d is canceling transfer because upload of chunkId %d with startIndex %v and chunkSize %v failed with error %s",
-							workerId, chunkId, startIndex, adjustedChunkSize, err.Error()))
-				}
+				status, msg := ErrorEx{err}.ErrorCodeAndString()
+				bbc.jptm.LogUploadError(info.Source, info.Destination, msg, status)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
@@ -261,9 +244,8 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			bbc.jptm.AddToBytesDone(adjustedChunkSize)
 
 			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
-				if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-					bbc.jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d finalizing cancellation of transfer", workerId))
+				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
+					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
 				transferDone()
 			}
@@ -281,27 +263,22 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				return
 			}
 			// step 5: this is the last block, perform EPILOGUE
-			if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-				bbc.jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("has worker %d which is concluding upload transfer after processing chunkId %d with blocklist %s",
-						workerId, chunkId, (bbc.blockIDs)))
+			if bbc.jptm.ShouldLog(pipeline.LogDebug) {
+				bbc.jptm.Log(pipeline.LogDebug, "Concluding transfer")
 			}
 
 			// commit the blocks.
 			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, bbc.srcHTTPHeaders, bbc.srcMetadata, azblob.BlobAccessConditions{})
 			if err != nil {
-				if bbc.jptm.ShouldLog(pipeline.LogError) {
-					bbc.jptm.Log(pipeline.LogError,
-						fmt.Sprintf("copy from URL to block blob failed, worker %d failed to commit blockList with error %s",
-							workerId, err.Error()))
-				}
+				status, msg := ErrorEx{err}.ErrorCodeAndString()
+				bbc.jptm.LogUploadError(info.Source, info.Destination, "Commit block list"+msg, status)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 				transferDone()
 				return
 			}
 
 			if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-				bbc.jptm.Log(pipeline.LogInfo, "copy from URL to block blob succeeded. Commit block list completed successfully")
+				bbc.jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
 			}
 
 			// TODO: get and set blob tier correctly
