@@ -82,6 +82,16 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
+// CommandString returns the command string given by user when job was created
+func (jpph *JobPartPlanHeader) CommandString() string {
+	commandSlice := []byte{}
+	sh := (*reflect.SliceHeader)(unsafe.Pointer(&commandSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(unsafe.Sizeof(*jpph)) // Address of Job Part Plan + Command String Length
+	sh.Len = int(jpph.CommandStringLength)
+	sh.Cap = sh.Len
+	return string(commandSlice)
+}
+
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
 func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string) {
 	jppt := jpph.Transfer(transferIndex)

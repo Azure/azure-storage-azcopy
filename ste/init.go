@@ -508,7 +508,19 @@ func ListJobs() common.ListJobsResponse {
 	if len(jobIds) == 0 {
 		return common.ListJobsResponse{ErrorMessage: "no Jobs exists in Azcopy history"}
 	}
-	return common.ListJobsResponse{ErrorMessage: "", JobIDs: JobsAdmin.JobIDs()}
+	listJobResponse := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
+	for _, jobId := range jobIds {
+		jm, found := JobsAdmin.JobMgr(jobId)
+		if !found {
+			continue
+		}
+		jpm, found := jm.JobPartMgr(0)
+		if !found {
+			continue
+		}
+		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails, common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString()})
+	}
+	return listJobResponse
 }
 
 // todo use this in case of panic
