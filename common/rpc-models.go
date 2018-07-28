@@ -108,10 +108,15 @@ type BlobTransferAttributes struct {
 	BlockSizeInBytes         uint32
 }
 
+type JobIDDetails struct {
+	JobId         JobID
+	CommandString string
+}
+
 // ListJobsResponse represent the Job with JobId and
 type ListJobsResponse struct {
 	ErrorMessage string
-	JobIDs       []JobID
+	JobIDDetails []JobIDDetails
 }
 
 // ListContainerResponse represents the list of blobs within the container.

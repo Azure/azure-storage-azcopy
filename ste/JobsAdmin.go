@@ -66,7 +66,7 @@ func (spf sortPlanFiles) Swap(i, j int) { spf.Files[i], spf.Files[j] = spf.Files
 var JobsAdmin interface {
 	NewJobPartPlanFileName(jobID common.JobID, partNumber common.PartNumber) JobPartPlanFileName
 
-	// JobIDs returns point-in-time list of JobIDs
+	// JobIDDetails returns point-in-time list of JobIDDetails
 	JobIDs() []common.JobID
 
 	// JobMgr returns the specified JobID's JobMgr
@@ -276,7 +276,7 @@ func (ja *jobsAdmin) FileExtension() string {
 	return fmt.Sprintf(".strV%05d", DataSchemaVersion)
 }
 
-// JobIDs returns point-in-time list of JobIDs
+// JobIDDetails returns point-in-time list of JobIDDetails
 func (ja *jobsAdmin) JobIDs() []common.JobID {
 	var jobIDs []common.JobID
 	ja.jobIDToJobMgr.Iterate(false, func(k common.JobID, v IJobMgr) {

@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -76,8 +77,10 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 	}
 
 	glcm.Info("Existing Jobs ")
-	for index := 0; index < len(listJobResponse.JobIDs); index++ {
-		glcm.Info(listJobResponse.JobIDs[index].String())
+	for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
+		jobDetail := listJobResponse.JobIDDetails[index]
+		message := fmt.Sprintf("JobId: %s Command: %s", jobDetail.JobId.String(), jobDetail.CommandString)
+		glcm.Info(message)
 	}
 	return nil
 }

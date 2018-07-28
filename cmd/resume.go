@@ -252,7 +252,7 @@ func (rca resumeCmdArgs) process() error {
 		}
 		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 	}
-	glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
+	//glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
 
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
