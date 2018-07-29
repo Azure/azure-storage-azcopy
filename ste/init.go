@@ -292,7 +292,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	// Cannot resume a Job which is in Cancelling state
 	// Cancelling is an intermediary state
 	case common.EJobStatus.Cancelling():
-		break
+		jpp0.SetJobStatus(common.EJobStatus.Cancelled())
+		fallthrough
 
 	// Resume all the failed / In Progress Transfers.
 	case common.EJobStatus.InProgress(),
