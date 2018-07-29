@@ -119,9 +119,15 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	//if blobNamePattern == "*" && !isRecursiveOn {
-	//	return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
-	//}
+	if blobNamePattern == "*" && !cca.recursive {
+		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
+	}
+
+	// if downloading entire container, then create a local directory with the container's name
+	if blobUrlParts.BlobName == "" {
+		cca.destination = util.generateLocalPath(cca.destination, blobUrlParts.ContainerName)
+	}
+
 	// perform a list blob with search prefix
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
