@@ -108,9 +108,10 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// directories are uploaded only if recursive is on
 			if f.IsDir() && cca.recursive {
 				// walk goes through the entire directory tree
-				err = filepath.Walk(fileOrDirectoryPath, func(pathToFile string, f os.FileInfo, err error) error {
+				filepath.Walk(fileOrDirectoryPath, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {
-						return err
+						glcm.Info(fmt.Sprintf("Accessing %s failed with error %s", pathToFile, err.Error()))
+						return nil
 					}
 					if f.IsDir() {
 						// For Blob and Azure Files, empty directories are not uploaded
