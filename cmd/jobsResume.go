@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"os"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
@@ -54,7 +56,8 @@ type resumeJobController struct {
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-
+	currentDir, _ := os.Getwd()
+	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, currentDir))
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()

@@ -148,6 +148,8 @@ type cookedSyncCmdArgs struct {
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
+	currentDir, _ := os.Getwd()
+	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, currentDir))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
