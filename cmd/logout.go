@@ -47,8 +47,7 @@ func init() {
 			}
 			return nil
 		},
-		// hide features not relevant to BFS
-		// TODO remove after preview release
+		// hide oauth feature temporarily
 		Hidden: true,
 	}
 
