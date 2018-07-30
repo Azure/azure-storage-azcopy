@@ -945,4 +945,9 @@ Download an entire directory:
 	cpCmd.PersistentFlags().MarkHidden("fromTo")
 	cpCmd.PersistentFlags().MarkHidden("acl")
 	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
+
+	// hide oauth feature temporarily
+	cpCmd.PersistentFlags().MarkHidden("oauth-user")
+	cpCmd.PersistentFlags().MarkHidden("tenant-id")
+	cpCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }

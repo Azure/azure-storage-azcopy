@@ -170,6 +170,11 @@ Resume the existing job with the given job ID.`,
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "source sas of the source for given JobId")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination sas of the destination for given JobId")
+
+	// hide oauth feature temporarily
+	resumeCmd.PersistentFlags().MarkHidden("oauth-user")
+	resumeCmd.PersistentFlags().MarkHidden("tenant-id")
+	resumeCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }
 
 type resumeCmdArgs struct {
