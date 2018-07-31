@@ -286,7 +286,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
-
+	// After creating the Job mgr, set the include / exclude list of transfer.
+	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
@@ -300,22 +301,22 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
-		go func() {
-			// Navigate through transfers and schedule them independently
-			// This is done to avoid FE to get blocked until all the transfers have been scheduled
-			// Get credential info from RPC request, and set in InMemoryTransitJobState.
-			jm.setInMemoryTransitJobState(
-				InMemoryTransitJobState{
-					credentialInfo: req.CredentialInfo,
-				})
+		//go func() {
+		// Navigate through transfers and schedule them independently
+		// This is done to avoid FE to get blocked until all the transfers have been scheduled
+		// Get credential info from RPC request, and set in InMemoryTransitJobState.
+		jm.setInMemoryTransitJobState(
+			InMemoryTransitJobState{
+				credentialInfo: req.CredentialInfo,
+			})
 
-			jpp0.SetJobStatus(common.EJobStatus.InProgress())
+		jpp0.SetJobStatus(common.EJobStatus.InProgress())
 
-			if jm.ShouldLog(pipeline.LogInfo) {
-				jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
-			}
-			jm.ResumeTransfers(steCtx, req.IncludeTransfer, req.ExcludeTransfer) // Reschedule all job part's transfers
-		}()
+		if jm.ShouldLog(pipeline.LogInfo) {
+			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
+		}
+		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
+		//}()
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
@@ -394,6 +395,11 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			}
 		}
 	})
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.FinalPartResumed()
 
 	// get zero'th part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)

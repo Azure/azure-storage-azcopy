@@ -22,7 +22,7 @@ var _ IJobPartMgr = &jobPartMgr{}
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
+	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	IsForceWriteTrue() bool
@@ -189,12 +189,13 @@ type jobPartMgr struct {
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
-
+	// get the list of include / exclude transfers
+	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
@@ -295,6 +296,15 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 		if jpm.ShouldLog(pipeline.LogInfo) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
+
+		// This sets the atomic variable atomicFinalPartResumed to 1
+		// atomicFinalPartResumed variables is used in case of resume job
+		// Since iterating the JobParts and scheduling transfer is independent
+		// a variable is required which defines whether last part is resumed or not
+		if plan.IsFinalPart {
+			jpm.jobMgr.ConfirmFinalPartResumed()
+		}
+
 		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 	}
 }
