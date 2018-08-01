@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
@@ -56,5 +58,61 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 
 	// set the flag on cca, to indicate the enumeration is done
 	cca.isEnumerationComplete = true
+	return nil
+}
+
+// enumerateBlobsInContainer enumerates blobs in container.
+func enumerateBlobsInContainer(ctx context.Context, containerURL azblob.ContainerURL,
+	blobPrefix string, filter func(blobItem azblob.BlobItem) bool,
+	callback func(blobItem azblob.BlobItem) error) error {
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		listContainerResp, err := containerURL.ListBlobsFlatSegment(
+			ctx, marker,
+			azblob.ListBlobsSegmentOptions{
+				Details: azblob.BlobListingDetails{Metadata: true},
+				Prefix:  blobPrefix})
+		if err != nil {
+			return fmt.Errorf("cannot list blobs, %v", err)
+		}
+
+		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
+		for _, blobItem := range listContainerResp.Segment.BlobItems {
+			// If the blob represents a folder as per the conditions mentioned in the
+			// api doesBlobRepresentAFolder, then skip the blob.
+			if gCopyUtil.doesBlobRepresentAFolder(blobItem) {
+				continue
+			}
+
+			if !filter(blobItem) {
+				continue
+			}
+
+			if err := callback(blobItem); err != nil {
+				return err
+			}
+		}
+		marker = listContainerResp.NextMarker
+	}
+	return nil
+}
+
+// enumerateContainersInAccount enumerates containers in blob service account.
+func enumerateContainersInAccount(ctx context.Context, srcServiceURL azblob.ServiceURL,
+	containerPrefix string, callback func(containerItem azblob.ContainerItem) error) error {
+	for marker := (azblob.Marker{}); marker.NotDone(); {
+		listSvcResp, err := srcServiceURL.ListContainersSegment(ctx, marker,
+			azblob.ListContainersSegmentOptions{Prefix: containerPrefix})
+		if err != nil {
+			return fmt.Errorf("cannot list containers, %v", err)
+		}
+
+		// Process the containers returned in this result segment (if the segment is empty, the loop body won't execute)
+		for _, containerItem := range listSvcResp.ContainerItems {
+			if err := callback(containerItem); err != nil {
+				return err
+			}
+		}
+		marker = listSvcResp.NextMarker
+	}
 	return nil
 }

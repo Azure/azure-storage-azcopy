@@ -842,6 +842,24 @@ func (util copyHandlerUtil) replaceBackSlashWithSlash(urlStr string) string {
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+type urlExtension struct {
+	url.URL
+}
+
+func (u urlExtension) redactSigQueryParamForLogging() string {
+	if ok, rawQuery := gCopyUtil.redactSigQueryParam(u.RawQuery); ok {
+		u.RawQuery = rawQuery
+	}
+
+	return u.String()
+}
+
+func (u urlExtension) generateObjectPath(objectName string) url.URL {
+	u.Path = gCopyUtil.generateObjectPath(u.Path, objectName)
+	return u.URL
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
 type blobURLPartsExtension struct {
 	azblob.BlobURLParts
 }
@@ -883,27 +901,25 @@ func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern st
 }
 
 // isBlobAccountLevelSearch check if it's an account level search for blob service.
-// And returns search prefix(part before wildcard) and pattern when it's account level search.
-func (parts blobURLPartsExtension) isBlobAccountLevelSearch() (isBlobAccountLevelSearch bool, prefix, pattern string) {
+// And returns search prefix(part before wildcard) for container and pattern is the blob pattern to match.
+func (parts blobURLPartsExtension) isBlobAccountLevelSearch() (isBlobAccountLevelSearch bool, containerPrefix string) {
 	// If it's account level URL which need search container, there could be two cases:
 	// a. https://<account-name>(/)
-	// b. https://<account-name>/containerprefix*
+	// b. https://<account-name>/containerprefix*(/*)
 	if parts.ContainerName == "" ||
-		(strings.HasSuffix(parts.ContainerName, wildCard) && parts.BlobName == "") {
+		strings.Contains(parts.ContainerName, wildCard) {
 		isBlobAccountLevelSearch = true
-		// For case 1-a, search for all containers.
+		// For case container name is empty, search for all containers.
 		if parts.ContainerName == "" {
-			pattern = "*"
 			return
 		}
 
 		wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.ContainerName)
+
 		// wild card exists prefix will be the content of container name till the wildcard index
-		// Example: https://<account-name>/c-2*
-		// prefix = /c-2 and pattern = /c-2*
-		// All the containers have the prefix "c-2"
-		prefix = parts.ContainerName[:wildCardIndex]
-		pattern = parts.ContainerName
+		// Example 1: for URL https://<account-name>/c-2*, containerPrefix = c-2
+		// Example 2: for URL https://<account-name>/c-2*/vd/b*, containerPrefix = c-2
+		containerPrefix = parts.ContainerName[:wildCardIndex]
 		return
 	}
 	// Otherwise, it's not account level search.
@@ -913,6 +929,36 @@ func (parts blobURLPartsExtension) isBlobAccountLevelSearch() (isBlobAccountLeve
 func (parts blobURLPartsExtension) getContainerURL() url.URL {
 	parts.BlobName = ""
 	return parts.URL()
+}
+
+func (parts blobURLPartsExtension) getServiceURL() url.URL {
+	parts.ContainerName = ""
+	return parts.URL()
+}
+
+// Get the source path without the wildcards
+// This is defined since the files mentioned with exclude flag
+// & include flag are relative to the Source
+// If the source has wildcards, then files are relative to the
+// parent source path which is the path of last directory in the source
+// without wildcards
+// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
+// For Example: src = "/home/*" parentSourcePath = "/home"
+func (parts blobURLPartsExtension) getParentSourcePath() string {
+	parentSourcePath := parts.BlobName
+	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		}
+	}
+
+	return parentSourcePath
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
