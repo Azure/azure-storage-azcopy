@@ -49,7 +49,12 @@ type IJobMgr interface {
 	//Throughput() XferThroughput
 	AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
 		destinationSAS string, scheduleTransfers bool) IJobPartMgr
-	ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
+	SetIncludeExclude(map[string]int, map[string]int)
+	IncludeExclude() (map[string]int, map[string]int)
+	ResumeTransfers(appCtx context.Context)
+	AllTransfersScheduled() bool
+	ConfirmAllTransfersScheduled()
+	ResetAllTransfersScheduled()
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone() uint32
 	Context() context.Context
@@ -70,7 +75,9 @@ type IJobMgr interface {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string) IJobMgr {
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), logger: common.NewJobLogger(jobID, level, appLogger) /*Other fields remain zero-value until this job is scheduled */}
+	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+		logger: common.NewJobLogger(jobID, level, appLogger) /*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
 }
@@ -103,10 +110,16 @@ type jobMgr struct {
 	//throughput  common.CountPerSecond // TODO: Set LastCheckedTime to now
 
 	inMemoryTransitJobState InMemoryTransitJobState
-
-	finalPartOrdered           bool
-	atomicNumberOfBytesCovered uint64
-	atomicTotalBytesToXfer     uint64
+	// list of transfer mentioned to include only then while resuming the job
+	include map[string]int
+	// list of transfer mentioned to exclude while resuming the job
+	exclude          map[string]int
+	finalPartOrdered bool
+	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
+	// 	atomicAllTransfersScheduled is int32 since atomic load and store operations have to be performed
+	atomicAllTransfersScheduled int32
+	atomicNumberOfBytesCovered  uint64
+	atomicTotalBytesToXfer      uint64
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
@@ -166,12 +179,43 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	return jpm
 }
 
+// SetIncludeExclude sets the include / exclude list of transfers
+// supplied with resume command to include or exclude mentioned transfers
+func (jm *jobMgr) SetIncludeExclude(include, exclude map[string]int) {
+	jm.include = include
+	jm.exclude = exclude
+}
+
+// Returns the list of transfer mentioned to include / exclude
+func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
+	return jm.include, jm.exclude
+}
+
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jm *jobMgr) ResumeTransfers(appCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
+func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.reset(appCtx, "")
+	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
+	// reset it to false while resuming it
+	//jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
-		jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
+		JobsAdmin.QueueJobParts(jpm)
+		//jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
+}
+
+// AllTransfersScheduled returns whether Job has completely resumed or not
+func (jm *jobMgr) AllTransfersScheduled() bool {
+	return atomic.LoadInt32(&jm.atomicAllTransfersScheduled) == 1
+}
+
+// ConfirmAllTransfersScheduled sets the atomicAllTransfersScheduled to true
+func (jm *jobMgr) ConfirmAllTransfersScheduled() {
+	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 1)
+}
+
+// ResetAllTransfersScheduled sets the ResetAllTransfersScheduled to false
+func (jm *jobMgr) ResetAllTransfersScheduled() {
+	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 0)
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed
@@ -281,7 +325,7 @@ func (m *jobPartToJobPartMgr) Delete(key common.PartNumber) {
 func (m *jobPartToJobPartMgr) Iterate(readonly bool, f func(k common.PartNumber, v IJobPartMgr)) {
 	m.nocopy.Check()
 	locker := sync.Locker(&m.lock)
-	if !readonly {
+	if readonly {
 		locker = m.lock.RLocker()
 	}
 	locker.Lock()

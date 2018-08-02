@@ -174,7 +174,7 @@ func (ja *jobsAdmin) scheduleJobParts() {
 		if !found {
 			panic(fmt.Errorf("no job manager found for JobId %s", jobId.String()))
 		}
-		jobPart.ScheduleTransfers(jm.Context(), map[string]int{}, map[string]int{})
+		jobPart.ScheduleTransfers(jm.Context())
 	}
 }
 

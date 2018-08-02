@@ -1,3 +1,4 @@
+import ctypes
 import os
 import platform
 import shutil
@@ -394,7 +395,6 @@ def create_test_n_files(size, n, dir_name):
         os.mkdir(dir_n_files_path)
     except:
         os.mkdir(dir_n_files_path)
-
     # creating file prefix
     filesprefix = "test" + str(n) + str(size)
     # creating n files.
@@ -662,3 +662,30 @@ def get_random_bytes(size):
     for i in range(size):
         result[i] = int(rand.random()*255)  # random() is consistent between python 2 and 3
     return bytes(result)
+
+def create_hidden_file(path, file_name, data):
+    FILE_ATTRIBUTE_HIDDEN = 0x02
+    os_type = platform.system()
+    os_type = os_type.upper()
+
+    # For *nix add a '.' prefix.
+    prefix = '.' if os_type != "WINDOWS" else ''
+    file_name = prefix + file_name
+
+    file_path = os.path.join(path, file_name)
+    # Write file.
+    with open(file_path, 'w') as f:
+        f.write(data)
+
+    # For windows set file attribute.
+    if os_type == "WINDOWS":
+        ret = ctypes.windll.kernel32.SetFileAttributesW(file_path,
+                                                        FILE_ATTRIBUTE_HIDDEN)
+        if not ret: # There was an error.
+            raise ctypes.WinError()
+
+def create_file_in_path(path, file_name, data):
+    file_path = os.path.join(path, file_name)
+    with open(file_path, 'w') as f:
+        f.write(data)
+    return file_path
