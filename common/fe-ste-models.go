@@ -482,6 +482,9 @@ type CopyTransfer struct {
 	CacheControl       string
 	ContentMD5         []byte
 	Metadata           Metadata
+
+	// Properties for blob copy only
+	BlobType azblob.BlobType
 	//BlobTier           string //TODO
 }
 

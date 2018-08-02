@@ -90,6 +90,17 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			info.Source, info.Destination, info.SourceSize))
 	}
 
+	// validate blob type and fail for page/append blob temporarily.
+	// TODO: support page/append blob when service side is ready.
+	if info.SrcBlobType != azblob.BlobNone && info.SrcBlobType != azblob.BlobBlockBlob {
+		err := fmt.Errorf("skipping %v. This version of AzCopy only supports BlockBlob transfer", info.SrcBlobType)
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogUploadError(info.Source, info.Destination, msg, status)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
 	var azblobMetadata azblob.Metadata
 	if info.SrcMetadata != nil {
 		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()

@@ -267,16 +267,10 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
-		tmpSrcURL := srcURL
-		if ok, rawQuery := gCopyUtil.redactSigQueryParam(tmpSrcURL.RawQuery); ok {
-			tmpSrcURL.RawQuery = rawQuery
-		}
 		glcm.Info(fmt.Sprintf(
-			"skip blob %s with invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
-			tmpSrcURL.String(),
-			properties.BlobType))
-
-		return nil
+			"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
+			properties.BlobType,
+			urlExtension{srcURL}.redactSigQueryParamForLogging()))
 	}
 
 	// work around an existing client bug, the contentMD5 returned from list is base64 encoded bytes, and should be base64 decoded bytes.
@@ -296,7 +290,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 		ContentLanguage:    *properties.ContentLanguage,
 		CacheControl:       *properties.CacheControl,
 		ContentMD5:         md5DecodedBytes,
-		Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata)},
+		Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata),
+		BlobType:           properties.BlobType},
 		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly
 		cca)
 }
@@ -304,16 +299,10 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType() != azblob.BlobBlockBlob {
-		tmpSrcURL := srcURL
-		if ok, rawQuery := gCopyUtil.redactSigQueryParam(tmpSrcURL.RawQuery); ok {
-			tmpSrcURL.RawQuery = rawQuery
-		}
 		glcm.Info(fmt.Sprintf(
-			"skip blob %s with invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
-			tmpSrcURL.String(),
-			properties.BlobType()))
-
-		return nil
+			"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
+			properties.BlobType(),
+			urlExtension{srcURL}.redactSigQueryParamForLogging()))
 	}
 
 	return e.addTransfer(common.CopyTransfer{
@@ -327,7 +316,8 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, pr
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
 		ContentMD5:         properties.ContentMD5(),
-		Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata())},
+		Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata()),
+		BlobType:           properties.BlobType()},
 		//BlobTier:           properties.AccessTier()}, // TODO: blob tier setting correctly
 		cca)
 }

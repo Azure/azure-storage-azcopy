@@ -121,8 +121,9 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 	return string(tempSlice)
 }
 
-// TransferSrcHTTPHeadersAndMetadata returns the SrcHTTPHeaders for a transfer at given transferIndex in JobPartOrder
-func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata) {
+// TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
+// TODO: Refactor return type to an object
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -157,6 +158,11 @@ func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex u
 		metadata, err = common.UnMarshalToCommonMetadata(tmpMetaData)
 		common.PanicIfErr(err)
 		offset += int64(t.SrcMetadataLength)
+	}
+	if t.SrcBlobTypeLength != 0 {
+		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
+		blobType = azblob.BlobType(tmpBlobTypeStr)
+		offset += int64(t.SrcBlobTypeLength)
 	}
 
 	return
@@ -234,6 +240,7 @@ type JobPartPlanTransfer struct {
 	SrcCacheControlLength       int16
 	SrcContentMD5Length         int16
 	SrcMetadataLength           int16
+	SrcBlobTypeLength           int16
 	//SrcBlobTierLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
