@@ -42,6 +42,7 @@ type IJobPartTransferMgr interface {
 	ReleaseAConnection()
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
+	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
 	common.ILogger
 }
@@ -265,6 +266,10 @@ func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg str
 
 func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg string, status int) {
 	jptm.Log(pipeline.LogError, fmt.Sprintf("DOWNLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+}
+
+func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg string, status int) {
+	jptm.Log(pipeline.LogError, fmt.Sprintf("COPYFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
 }
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {

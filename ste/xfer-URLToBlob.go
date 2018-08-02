@@ -75,7 +75,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := destBlobURL.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
 		if err == nil {
 			// If the error is nil, then blob exists and doesn't needs to be copied.
-			jptm.LogUploadError(info.Source, info.Destination, "Blob Already Exists ", 0)
+			jptm.LogS2SCopyError(info.Source, info.Destination, "Blob Already Exists ", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
 			jptm.AddToBytesDone(info.SourceSize)
@@ -95,7 +95,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	if info.SrcBlobType != azblob.BlobNone && info.SrcBlobType != azblob.BlobBlockBlob {
 		err := fmt.Errorf("skipping %v. This version of AzCopy only supports BlockBlob transfer", info.SrcBlobType)
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogUploadError(info.Source, info.Destination, msg, status)
+		jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -114,7 +114,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		// if the create blob failed, updating the transfer status to failed
 		if err != nil {
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogUploadError(info.Source, info.Destination, msg, status)
+			jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
 			if !jptm.WasCanceled() {
 				jptm.SetStatus(common.ETransferStatus.Failed())
 			}
@@ -246,7 +246,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				// cancel entire transfer because this chunk has failed
 				bbc.jptm.Cancel()
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				bbc.jptm.LogUploadError(info.Source, info.Destination, msg, status)
+				bbc.jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
@@ -282,7 +282,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, bbc.srcHTTPHeaders, bbc.srcMetadata, azblob.BlobAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				bbc.jptm.LogUploadError(info.Source, info.Destination, "Commit block list"+msg, status)
+				bbc.jptm.LogS2SCopyError(info.Source, info.Destination, "Commit block list"+msg, status)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 				transferDone()
 				return
