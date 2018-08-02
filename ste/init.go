@@ -164,18 +164,21 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	jobCompletelyOrdered := func(jm IJobMgr) bool {
-		// determine whether final part for job with JobId has been ordered or not.
-		completeJobOrdered := false
-		for p := PartNumber(0); true; p++ {
-			jpm, found := jm.JobPartMgr(p)
-			if !found {
-				break
-			}
-			completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
-		}
-		return completeJobOrdered
-	}(jm)
+	// No need to check the job completely ordered or not
+	// since FE checks and asks for user consent to proceed.
+	// TODO: remove the commented portion
+	//jobCompletelyOrdered := func(jm IJobMgr) bool {
+	//	// determine whether final part for job with JobId has been ordered or not.
+	//	completeJobOrdered := false
+	//	for p := PartNumber(0); true; p++ {
+	//		jpm, found := jm.JobPartMgr(p)
+	//		if !found {
+	//			break
+	//		}
+	//		completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
+	//	}
+	//	return completeJobOrdered
+	//}(jm)
 
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
@@ -214,13 +217,18 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// hence sending the response immediately. Response CancelPauseResumeResponse
 		// returned has CancelledPauseResumed set to false, because that will let
 		// Job immediately stop.
-		if !jobCompletelyOrdered {
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("cancelled the job but it cannot be resumed because the enumeration of the source was not complete"),
-			}
-			return jr
-		}
+
+		// No need to check the job completely ordered or not
+		// since FE checks and asks for user consent to proceed.
+		// TODO: remove the commented portion
+
+		//if !jobCompletelyOrdered {
+		//	jr = common.CancelPauseResumeResponse{
+		//		CancelledPauseResumed: false,
+		//		ErrorMsg:              fmt.Sprintf("cancelled the job but it cannot be resumed because the enumeration of the source was not complete"),
+		//	}
+		//	return jr
+		//}
 		// If the job is completely ordered, then it follow the graceful cancellation of job path
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job

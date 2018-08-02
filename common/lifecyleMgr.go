@@ -3,6 +3,7 @@ package common
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -234,10 +235,15 @@ func (lcm *lifecycleMgr) readInCleanLineFromStdIn() string {
 
 	// reads input until the first occurrence of \n in the input,
 	input, err := consoleReader.ReadString('\n')
-	PanicIfErr(err)
+	// When the user cancel the job more than one time before providing the
+	// input there will be an EOF Error.
+	if err == io.EOF {
+		return ""
+	}
 
 	// remove the delimiter "\n" and spaces before/after the content
-	return strings.Trim(input, "\n ")
+	input = strings.TrimSpace(input)
+	return strings.Trim(input, " ")
 }
 
 // captures the common logic of exiting if there's an expected error
