@@ -52,9 +52,9 @@ type IJobMgr interface {
 	SetIncludeExclude(map[string]int, map[string]int)
 	IncludeExclude() (map[string]int, map[string]int)
 	ResumeTransfers(appCtx context.Context)
-	FinalPartResumed() bool
-	ConfirmFinalPartResumed()
-	ResetFinalPartResumed()
+	AllTransfersScheduled() bool
+	ConfirmAllTransfersScheduled()
+	ResetAllTransfersScheduled()
 	PipelineLogInfo() pipeline.LogOptions
 	ReportJobPartDone() uint32
 	Context() context.Context
@@ -75,9 +75,8 @@ type IJobMgr interface {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string) IJobMgr {
-	// atomicFinalPartResumed is set to 1 since this api is also called when new job part is ordered.
-	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(),
-		atomicFinalPartResumed: 1, include: map[string]int{}, exclude: map[string]int{},
+	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
+	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		logger: common.NewJobLogger(jobID, level, appLogger) /*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
@@ -116,11 +115,11 @@ type jobMgr struct {
 	// list of transfer mentioned to exclude while resuming the job
 	exclude          map[string]int
 	finalPartOrdered bool
-	// atomicFinalPartResumed defines whether all job parts have been iterated and resumed or not
-	// 	atomicFinalPartResumed is int32 since atomic load and store operations have to be performed
-	atomicFinalPartResumed     int32
-	atomicNumberOfBytesCovered uint64
-	atomicTotalBytesToXfer     uint64
+	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
+	// 	atomicAllTransfersScheduled is int32 since atomic load and store operations have to be performed
+	atomicAllTransfersScheduled int32
+	atomicNumberOfBytesCovered  uint64
+	atomicTotalBytesToXfer      uint64
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
@@ -195,28 +194,28 @@ func (jm *jobMgr) IncludeExclude() (map[string]int, map[string]int) {
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
 func (jm *jobMgr) ResumeTransfers(appCtx context.Context) {
 	jm.reset(appCtx, "")
-	// Since while creating the JobMgr, atomicFinalPartResumed is set to true
+	// Since while creating the JobMgr, atomicAllTransfersScheduled is set to true
 	// reset it to false while resuming it
-	jm.ResetFinalPartResumed()
+	//jm.ResetAllTransfersScheduled()
 	jm.jobPartMgrs.Iterate(false, func(p common.PartNumber, jpm IJobPartMgr) {
 		JobsAdmin.QueueJobParts(jpm)
 		//jpm.ScheduleTransfers(jm.ctx, includeTransfer, excludeTransfer)
 	})
 }
 
-// FinalPartResumed returns whether Job has completely resumed or not
-func (jm *jobMgr) FinalPartResumed() bool {
-	return atomic.LoadInt32(&jm.atomicFinalPartResumed) == 1
+// AllTransfersScheduled returns whether Job has completely resumed or not
+func (jm *jobMgr) AllTransfersScheduled() bool {
+	return atomic.LoadInt32(&jm.atomicAllTransfersScheduled) == 1
 }
 
-// ConfirmFinalPartResumed sets the atomicFinalPartResumed to true
-func (jm *jobMgr) ConfirmFinalPartResumed() {
-	atomic.StoreInt32(&jm.atomicFinalPartResumed, 1)
+// ConfirmAllTransfersScheduled sets the atomicAllTransfersScheduled to true
+func (jm *jobMgr) ConfirmAllTransfersScheduled() {
+	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 1)
 }
 
-// ResetFinalPartResumed sets the ResetFinalPartResumed to false
-func (jm *jobMgr) ResetFinalPartResumed() {
-	atomic.StoreInt32(&jm.atomicFinalPartResumed, 0)
+// ResetAllTransfersScheduled sets the ResetAllTransfersScheduled to false
+func (jm *jobMgr) ResetAllTransfersScheduled() {
+	atomic.StoreInt32(&jm.atomicAllTransfersScheduled, 0)
 }
 
 // ReportJobPartDone is called to report that a job part completed or failed

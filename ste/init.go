@@ -399,7 +399,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// in case of resume. In case of resume, the Job is already completely
 	// ordered so the progress summary should be fetched until all job parts
 	// are iterated and have been scheduled
-	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.FinalPartResumed()
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
 
 	// get zero'th part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)

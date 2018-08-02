@@ -297,15 +297,15 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
 
-		// This sets the atomic variable atomicFinalPartResumed to 1
-		// atomicFinalPartResumed variables is used in case of resume job
+		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
+
+		// This sets the atomic variable atomicAllTransfersScheduled to 1
+		// atomicAllTransfersScheduled variables is used in case of resume job
 		// Since iterating the JobParts and scheduling transfer is independent
 		// a variable is required which defines whether last part is resumed or not
 		if plan.IsFinalPart {
-			jpm.jobMgr.ConfirmFinalPartResumed()
+			jpm.jobMgr.ConfirmAllTransfersScheduled()
 		}
-
-		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 	}
 }
 
