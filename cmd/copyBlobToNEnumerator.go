@@ -267,9 +267,16 @@ func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, s
 func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
-		return fmt.Errorf(
-			"invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
-			properties.BlobType)
+		tmpSrcURL := srcURL
+		if ok, rawQuery := gCopyUtil.redactSigQueryParam(tmpSrcURL.RawQuery); ok {
+			tmpSrcURL.RawQuery = rawQuery
+		}
+		glcm.Info(fmt.Sprintf(
+			"skip blob %s with invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
+			tmpSrcURL.String(),
+			properties.BlobType))
+
+		return nil
 	}
 
 	// work around an existing client bug, the contentMD5 returned from list is base64 encoded bytes, and should be base64 decoded bytes.
@@ -297,9 +304,16 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType() != azblob.BlobBlockBlob {
-		return fmt.Errorf(
-			"invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
-			properties.BlobType())
+		tmpSrcURL := srcURL
+		if ok, rawQuery := gCopyUtil.redactSigQueryParam(tmpSrcURL.RawQuery); ok {
+			tmpSrcURL.RawQuery = rawQuery
+		}
+		glcm.Info(fmt.Sprintf(
+			"skip blob %s with invalid blob type %q found in Service to Service copy, only block blob is supported now when source is Blob",
+			tmpSrcURL.String(),
+			properties.BlobType()))
+
+		return nil
 	}
 
 	return e.addTransfer(common.CopyTransfer{
