@@ -107,8 +107,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
 		if pathSepIndex == -1 {
 			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
 		}
-		parentSourcePath = parentSourcePath[:pathSepIndex]
 	}
 
 	// searchPrefix is the used in listing blob inside a container
