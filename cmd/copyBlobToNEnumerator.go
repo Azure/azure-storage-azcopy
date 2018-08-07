@@ -89,7 +89,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
 
-		// Validate destination is service level account
+		// Validate IF destination is service level account.
 		if err := e.validateDestIsService(ctx, *destURL); err != nil {
 			return err
 		}
@@ -112,7 +112,6 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				// After enumerating the containers according to container prefix in account level,
 				// do container level enumerating and add transfers.
 				searchPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
-
 				return e.addTransfersFromContainer(
 					ctx,
 					srcServiceURL.NewContainerURL(containerItem.Name),
