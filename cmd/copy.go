@@ -930,7 +930,7 @@ Download an entire directory:
 	// TODO remove after preview release
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("exclude")
-	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
+	//cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
 	cpCmd.PersistentFlags().MarkHidden("output")
 

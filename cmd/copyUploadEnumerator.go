@@ -38,7 +38,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return errors.New("cannot find source to upload")
 		}
 
-		if !f.IsDir() {
+		if f.Mode().IsRegular() {
 			// Check if the files are passed with include flag
 			// then source needs to be directory, if it is a file
 			// then error is returned
@@ -121,7 +121,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// a directory
 						// TODO: Currently not implemented the upload of empty directories for BlobFS
 						return nil
-					} else {
+					} else if f.Mode().IsRegular() { // If the resource is file
 						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
 						// this replacement is done to handle the windows file paths where path separator "\\"
 						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
@@ -152,10 +152,35 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						if err != nil {
 							return err
 						}
+					} else if f.Mode()&os.ModeSymlink != 0 {
+						// If follow symlink is set to false, then symlinks are not evaluated.
+						if !cca.followSymlinks {
+							return nil
+						}
+						evaluatedSymlinkPath, err := filepath.EvalSymlinks(pathToFile)
+						if err != nil {
+							glcm.Info(fmt.Sprintf("error evaluating the symlink path %s", evaluatedSymlinkPath))
+							return nil
+						}
+						// If the path is a windows file system path, replace '\\' with '/'
+						// to maintain the consistency with other system paths.
+						if common.AZCOPY_PATH_SEPARATOR_CHAR == '\\' {
+							evaluatedSymlinkPath = strings.Replace(evaluatedSymlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						}
+						tList, errorList := util.getSymlinkTransferList(evaluatedSymlinkPath, fileOrDirectoryPath, parentSourcePath, cleanContainerPath, destinationURL, e.Include, e.Exclude)
+						// Iterate though the list of all transfers and add it to the CopyJobPartOrder Request
+						for _, tl := range tList {
+							e.addTransfer(tl, cca)
+						}
+						// Iterate through all the errors occurred while traversing the symlinks and
+						// put them into the lifecycle manager
+						for _, err := range errorList {
+							glcm.Info(err.Error())
+						}
 					}
 					return nil
 				})
-			} else if !f.IsDir() {
+			} else if f.Mode().IsRegular() {
 				// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
 				// this replacement is done to handle the windows file paths where path separator "\\"
 				fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
