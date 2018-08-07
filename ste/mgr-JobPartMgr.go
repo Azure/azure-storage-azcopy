@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -68,6 +69,43 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
+func newAzcopyHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
+			Dial /*Context*/ : (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).Dial, /*Context*/
+			MaxIdleConns:           0, // No limit
+			MaxIdleConnsPerHost:    1000,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     false,
+			MaxResponseHeaderBytes: 0,
+			//ResponseHeaderTimeout:  time.Duration{},
+			//ExpectContinueTimeout:  time.Duration{},
+		},
+	}
+}
+
+// newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
+func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factory {
+	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+			r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
+			if err != nil {
+				err = pipeline.NewError(err, "HTTP request failed")
+			}
+			return pipeline.NewHTTPResponse(r), err
+		}
+	})
+}
+
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
 func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
@@ -84,8 +122,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		NewVersionPolicyFactory(),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
@@ -108,7 +145,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		NewPacerPolicyFactory(p),
 		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
 // newFilePipeline creates a Pipeline using the specified credentials and options.
@@ -127,8 +164,7 @@ func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
