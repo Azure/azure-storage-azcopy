@@ -44,6 +44,7 @@ type IJobPartTransferMgr interface {
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
+	LogTransferStart(source, destination, description string)
 	common.ILogger
 }
 
@@ -244,7 +245,7 @@ func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
 
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
-	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: "+msg+" [P#%d-T#%d]", common.LogLevel(level), plan.PartNum, jptm.transferIndex))
+	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] "+msg, common.LogLevel(level), plan.PartNum, jptm.transferIndex))
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
@@ -260,21 +261,46 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 	}
 }
 
+type transferErrorCode string
+
+const (
+	transferErrorCodeUploadFailed   transferErrorCode = "UPLOADFAILED"
+	transferErrorCodeDownloadFailed transferErrorCode = "DOWNLOADFAILED"
+	transferErrorCodeCopyFailed     transferErrorCode = "COPYFAILED"
+)
+
+func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
+	jptm.Log(pipeline.LogError, fmt.Sprintf("%v: %s: %03d : %s\n   Dst: %s", errorCode, source, status, errorMsg, destination))
+}
+
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
-	jptm.Log(pipeline.LogError, fmt.Sprintf("UPLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+	jptm.logTransferError(transferErrorCodeUploadFailed,
+		source, common.URLStringExtension(destination).RedactSigQueryParamForLogging(), errorMsg, status)
 }
 
 func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg string, status int) {
-	jptm.Log(pipeline.LogError, fmt.Sprintf("DOWNLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+	jptm.logTransferError(transferErrorCodeDownloadFailed,
+		common.URLStringExtension(source).RedactSigQueryParamForLogging(), destination, errorMsg, status)
 }
 
 func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg string, status int) {
-	jptm.Log(pipeline.LogError, fmt.Sprintf("COPYFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+	jptm.logTransferError(transferErrorCodeCopyFailed,
+		common.URLStringExtension(source).RedactSigQueryParamForLogging(), common.URLStringExtension(destination).RedactSigQueryParamForLogging(),
+		errorMsg, status)
 }
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	status, msg := ErrorEx{err}.ErrorCodeAndString()
-	jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %d: %s-%s", resource, status, context, msg))
+	jptm.Log(pipeline.LogError,
+		fmt.Sprintf("%s: %d: %s-%s", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg))
+}
+
+func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
+	jptm.Log(pipeline.LogInfo,
+		fmt.Sprintf("Starting transfer: Source %q Destination %q. %s",
+			common.URLStringExtension(source).RedactSigQueryParamForLogging(),
+			common.URLStringExtension(destination).RedactSigQueryParamForLogging(),
+			description))
 }
 
 func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }

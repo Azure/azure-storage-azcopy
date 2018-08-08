@@ -270,7 +270,7 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 		glcm.Info(fmt.Sprintf(
 			"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
 			properties.BlobType,
-			urlExtension{srcURL}.redactSigQueryParamForLogging()))
+			common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
 	}
 
 	// work around an existing client bug, the contentMD5 returned from list is base64 encoded bytes, and should be base64 decoded bytes.
@@ -302,7 +302,7 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, pr
 		glcm.Info(fmt.Sprintf(
 			"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
 			properties.BlobType(),
-			urlExtension{srcURL}.redactSigQueryParamForLogging()))
+			common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
 	}
 
 	return e.addTransfer(common.CopyTransfer{

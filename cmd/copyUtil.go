@@ -698,19 +698,6 @@ func (util copyHandlerUtil) replaceBackSlashWithSlash(urlStr string) string {
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-type urlExtension struct {
-	url.URL
-}
-
-func (u urlExtension) redactSigQueryParamForLogging() string {
-	if ok, rawQuery := gCopyUtil.redactSigQueryParam(u.RawQuery); ok {
-		u.RawQuery = rawQuery
-	}
-
-	return u.String()
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////////////
 type blobURLPartsExtension struct {
 	azblob.BlobURLParts
 }

@@ -59,6 +59,10 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 	}
 
+	if jptm.ShouldLog(pipeline.LogInfo) {
+		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Chunk size %d", chunkSize))
+	}
+
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.AddToBytesDone(info.SourceSize)

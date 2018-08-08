@@ -61,6 +61,10 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		common.DefaultBlockBlobBlockSize,
 		chunkSize)
 
+	if jptm.ShouldLog(pipeline.LogInfo) {
+		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Chunk size %d", chunkSize))
+	}
+
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
 		jptm.AddToBytesDone(info.SourceSize)
@@ -82,12 +86,6 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.ReportTransferDone()
 			return
 		}
-	}
-
-	// log the transfer details.
-	if jptm.ShouldLog(pipeline.LogInfo) {
-		jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Source %s Destination %s Source Size %v is picked for processing",
-			info.Source, info.Destination, info.SourceSize))
 	}
 
 	// validate blob type and fail for page/append blob temporarily.
@@ -121,7 +119,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		} else {
 			// if the create blob is a success, updating the transfer status to success
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+				jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
 			}
 
 			// TODO: set blob tier
@@ -289,7 +287,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			}
 
 			if bbc.jptm.ShouldLog(pipeline.LogInfo) {
-				bbc.jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+				bbc.jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
 			}
 
 			// TODO: get and set blob tier correctly
