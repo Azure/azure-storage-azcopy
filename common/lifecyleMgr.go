@@ -30,8 +30,7 @@ type LifecycleMgr interface {
 	Progress(string)                                // print on the same line over and over again, not allowed to float up
 	Info(string)                                    // simple print, allowed to float up
 	Prompt(string) string                           // ask the user a question(after erasing the progress), then return the response
-	ExitWithSuccess(string, ExitCode)               // exit after printing
-	ExitWithError(string, ExitCode)                 // exit after printing
+	Exit(string, ExitCode)                          // exit after printing
 	SurrenderControl()                              // give up control, this should never return
 	InitiateProgressReporting(WorkController, bool) // start writing progress with another routine
 }
@@ -47,9 +46,8 @@ type outputMessageType uint8
 
 func (outputMessageType) Progress() outputMessageType { return outputMessageType(0) } // should be printed on the same line over and over again, not allowed to float up
 func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
-func (outputMessageType) Success() outputMessageType  { return outputMessageType(2) } // exit after printing
-func (outputMessageType) Error() outputMessageType    { return outputMessageType(3) } // always fatal, exit after printing
-func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(4) } // ask the user a question after erasing the progress
+func (outputMessageType) Exit() outputMessageType     { return outputMessageType(2) } // exit after printing
+func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(3) } // ask the user a question after erasing the progress
 
 // defines the output and how it should be handled
 type outputMessage struct {
@@ -93,25 +91,14 @@ func (lcm *lifecycleMgr) Prompt(msg string) string {
 	return <-expectedInputChannel
 }
 
-func (lcm *lifecycleMgr) ExitWithSuccess(msg string, exitCode ExitCode) {
+func (lcm *lifecycleMgr) Exit(msg string, exitCode ExitCode) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
-		msgType:    eMessageType.Success(),
+		msgType:    eMessageType.Exit(),
 		exitCode:   exitCode,
 	}
 
 	// stall forever until the success message is printed and program exits
-	lcm.SurrenderControl()
-}
-
-func (lcm *lifecycleMgr) ExitWithError(msg string, exitCode ExitCode) {
-	lcm.msgQueue <- outputMessage{
-		msgContent: msg,
-		msgType:    eMessageType.Error(),
-		exitCode:   exitCode,
-	}
-
-	// stall forever until the error message is printed and program exits
 	lcm.SurrenderControl()
 }
 
@@ -135,14 +122,9 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	// NOTE: fmt.printf is being avoided on purpose (for memory optimization)
 	for {
 		switch msgToPrint := <-lcm.msgQueue; msgToPrint.msgType {
-		case eMessageType.Error():
+		case eMessageType.Exit():
 			// simply print and quit
-			fmt.Println("\n" + "FATAL ERROR: " + msgToPrint.msgContent)
-			os.Exit(int(msgToPrint.exitCode))
-
-		case eMessageType.Success():
-			// simply print and quit
-			fmt.Println(msgToPrint.msgContent)
+			fmt.Println("\n" + msgToPrint.msgContent)
 			os.Exit(int(msgToPrint.exitCode))
 
 		case eMessageType.Progress():

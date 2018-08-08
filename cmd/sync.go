@@ -181,7 +181,7 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
 	}
 }
 
@@ -198,7 +198,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		common.PanicIfErr(err)
 
 		if jobDone {
-			lcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+			lcm.Exit(string(jsonOutput), common.EExitCode.Success())
 		} else {
 			lcm.Info(string(jsonOutput))
 			return
@@ -209,7 +209,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-		lcm.ExitWithSuccess(fmt.Sprintf(
+		lcm.Exit(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
@@ -365,12 +365,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.ExitWithError("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.ExitWithError("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
 			}
 
 			glcm.SurrenderControl()

@@ -61,16 +61,16 @@ func init() {
 			// verifying the location type
 			location := inferArgumentLocation(sourcePath)
 			if location != location.Blob() {
-				glcm.ExitWithError("invalid path passed for listing. given source is of type "+location.String()+" while expect is container / container path ", common.EExitCode.Error())
+				glcm.Exit("invalid path passed for listing. given source is of type "+location.String()+" while expect is container / container path ", common.EExitCode.Error())
 			}
 
 			var output common.OutputFormat
 			output.Parse(outputRaw)
 			err := HandleListContainerCommand(sourcePath, output)
 			if err == nil {
-				glcm.ExitWithSuccess("", common.EExitCode.Success())
+				glcm.Exit("", common.EExitCode.Success())
 			} else {
-				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+				glcm.Exit(err.Error(), common.EExitCode.Error())
 			}
 
 		},

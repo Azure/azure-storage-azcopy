@@ -61,9 +61,9 @@ If the with-status flag is set, then the list of transfers in the job with the g
 		Run: func(cmd *cobra.Command, args []string) {
 			err := HandleShowCommand(commandLineInput)
 			if err == nil {
-				glcm.ExitWithSuccess("", common.EExitCode.Success())
+				glcm.Exit("", common.EExitCode.Success())
 			} else {
-				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+				glcm.Exit(err.Error(), common.EExitCode.Error())
 			}
 		},
 	}
@@ -103,7 +103,7 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
 func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 	if listTransfersResponse.ErrorMsg != "" {
-		glcm.ExitWithError("request failed with following message "+listTransfersResponse.ErrorMsg, common.EExitCode.Error())
+		glcm.Exit("request failed with following message "+listTransfersResponse.ErrorMsg, common.EExitCode.Error())
 		return
 	}
 
@@ -117,7 +117,7 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
 func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 	if summary.ErrorMsg != "" {
-		glcm.ExitWithError("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
+		glcm.Exit("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
 	}
 
 	glcm.Info(fmt.Sprintf(
