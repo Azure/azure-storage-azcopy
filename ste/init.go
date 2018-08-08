@@ -222,6 +222,13 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
 	if !found {
+		// Strip '?' if present as first character of the source sas / destination sas
+		if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
+			req.SourceSAS = req.SourceSAS[1:]
+		}
+		if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
+			req.DestinationSAS = req.DestinationSAS[1:]
+		}
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
@@ -253,7 +260,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	if !completeJobOrdered(jm) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("cannot resumr job with JobId %s . It hasn't been ordered completely", req.JobID),
+			ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s . It hasn't been ordered completely", req.JobID),
 		}
 	}
 
@@ -265,6 +272,43 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
+	// If the credential type if SharedSAS, to resume the Job destinationSAS / sourceSAS needs to be provided
+	// Depending on the FromType, sourceSAS or destinationSAS is checked.
+	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+		var errorMsg = ""
+		switch jpm.Plan().FromTo {
+		case common.EFromTo.LocalBlob():
+			fallthrough
+		case common.EFromTo.LocalFile():
+			if len(req.DestinationSAS) == 0 {
+				errorMsg = "destinationSAS is not provided with resume Command. Please provide the destinationSAS to resume the Job"
+			}
+		case common.EFromTo.BlobLocal():
+			fallthrough
+		case common.EFromTo.FileLocal():
+			fallthrough
+		case common.EFromTo.BlobTrash():
+			fallthrough
+		case common.EFromTo.FileTrash():
+			if len(req.SourceSAS) == 0 {
+				errorMsg = "sourceSAS is not provided with resume Command. Please provide the sourceSAS to resume the Job"
+			}
+		case common.EFromTo.BlobBlob():
+			fallthrough
+		case common.EFromTo.FileBlob():
+			if len(req.SourceSAS) == 0 ||
+				len(req.DestinationSAS) == 0 {
+				errorMsg = "sourceSAS and destinationSAS both needs to be provided to resume the Job"
+			}
+		}
+		if len(errorMsg) != 0 {
+			return common.CancelPauseResumeResponse{
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s. %s", req.JobID, errorMsg),
+			}
+		}
+	}
+
 	// After creating the Job mgr, set the include / exclude list of transfer.
 	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
