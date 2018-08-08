@@ -30,7 +30,7 @@ import (
 
 // upload related
 const UploadMaxTries = 20
-const UploadTryTimeout = time.Minute * 1
+const UploadTryTimeout = time.Minute * 10
 const UploadRetryDelay = time.Second * 1
 const UploadMaxRetryDelay = time.Second * 3
 

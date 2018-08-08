@@ -37,7 +37,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
 
 	case common.ERpcCmd.CancelJob():
-		*(responseData.(*common.CancelPauseResumeResponse)) = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelling())
+		*(responseData.(*common.CancelPauseResumeResponse)) = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelled())
 
 	case common.ERpcCmd.ResumeJob():
 		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(*requestData.(*common.ResumeJobRequest))

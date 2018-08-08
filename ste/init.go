@@ -164,22 +164,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	// No need to check the job completely ordered or not
-	// since FE checks and asks for user consent to proceed.
-	// TODO: remove the commented portion
-	//jobCompletelyOrdered := func(jm IJobMgr) bool {
-	//	// determine whether final part for job with JobId has been ordered or not.
-	//	completeJobOrdered := false
-	//	for p := PartNumber(0); true; p++ {
-	//		jpm, found := jm.JobPartMgr(p)
-	//		if !found {
-	//			break
-	//		}
-	//		completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
-	//	}
-	//	return completeJobOrdered
-	//}(jm)
-
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
 	if !found {
@@ -217,19 +201,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// hence sending the response immediately. Response CancelPauseResumeResponse
 		// returned has CancelledPauseResumed set to false, because that will let
 		// Job immediately stop.
-
-		// No need to check the job completely ordered or not
-		// since FE checks and asks for user consent to proceed.
-		// TODO: remove the commented portion
-
-		//if !jobCompletelyOrdered {
-		//	jr = common.CancelPauseResumeResponse{
-		//		CancelledPauseResumed: false,
-		//		ErrorMsg:              fmt.Sprintf("cancelled the job but it cannot be resumed because the enumeration of the source was not complete"),
-		//	}
-		//	return jr
-		//}
-		// If the job is completely ordered, then it follow the graceful cancellation of job path
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
@@ -421,11 +392,18 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	part0PlanStatus := jp0.Plan().JobStatus()
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		return js
+	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	part0PlanStatus := jp0.Plan().JobStatus()
-	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed() ||
-		part0PlanStatus == common.EJobStatus.Cancelled()) {
+	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
 		js.JobStatus = part0PlanStatus
 	}
 	return js
