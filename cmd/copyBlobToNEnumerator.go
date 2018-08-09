@@ -86,7 +86,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		srcServiceURL := azblob.NewServiceURL(srcBlobURLPartExtension.getServiceURL(), srcBlobPipeline)
-		// List containers, find specific containers and add transfers for these containers.
+		// List containers and add transfers for these containers.
 		if err := enumerateContainersInAccount(
 			ctx,
 			srcServiceURL,

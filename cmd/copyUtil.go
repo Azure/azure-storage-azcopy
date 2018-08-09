@@ -933,6 +933,7 @@ func (parts blobURLPartsExtension) getContainerURL() url.URL {
 
 func (parts blobURLPartsExtension) getServiceURL() url.URL {
 	parts.ContainerName = ""
+	parts.BlobName = ""
 	return parts.URL()
 }
 
@@ -968,30 +969,81 @@ type fileURLPartsExtension struct {
 
 // isFileAccountLevelSearch check if it's an account level search for file service.
 // And returns search prefix(part before wildcard) and pattern when it's account level search.
-func (parts fileURLPartsExtension) isFileAccountLevelSearch() (isFileAccountLevelSearch bool, prefix, pattern string) {
+func (parts fileURLPartsExtension) isFileAccountLevelSearch() (isFileAccountLevelSearch bool, prefix string) {
 	// If it's account level URL which need search share, there could be two cases:
 	// a. https://<account-name>(/)
 	// b. https://<account-name>/shareprefix*
 	if parts.ShareName == "" ||
-		(strings.HasSuffix(parts.ShareName, wildCard) && parts.DirectoryOrFilePath == "") {
+		strings.Contains(parts.ShareName, wildCard) {
 		isFileAccountLevelSearch = true
 		// For case 1-a, search for all shares.
 		if parts.ShareName == "" {
-			pattern = "*"
 			return
 		}
 
 		wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.ShareName)
 		// wild card exists prefix will be the content of share name till the wildcard index
-		// Example: https://<account-name>/c-2*
-		// prefix = /c-2 and pattern = /c-2*
-		// All the shares have the prefix "c-2"
+		// Example 1: for URL https://<account-name>/s-2*, sharePrefix = s-2
+		// Example 2: for URL https://<account-name>/s-2*/d/f*, sharePrefix = s-2
 		prefix = parts.ShareName[:wildCardIndex]
-		pattern = parts.ShareName
 		return
 	}
 	// Otherwise, it's not account level search.
 	return
+}
+
+// searchPrefixFromFileURL aligns to blobURL's method searchPrefixFromBlobURL
+// Note: This method doesn't validate if the provided URL points to a FileURL, and will treat the input without
+// wildcard as directory URL.
+func (parts fileURLPartsExtension) searchPrefixFromFileURL() (prefix, pattern string) {
+	// If the DirectoryOrFilePath is empty, it means the url provided is of a share,
+	// then all files inside share needs to be included, so pattern is set to *
+	if parts.DirectoryOrFilePath == "" {
+		pattern = "*"
+		return
+	}
+	// Check for wildcards and get the index of first wildcard
+	// If the wild card does not exists, then index returned is -1
+	wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.DirectoryOrFilePath)
+	if wildCardIndex < 0 {
+		// If no wild card exits and url represents a directory
+		// prefix is the path of directory after the share.
+		// Example: https://<share-name>/d-1?<signature>, prefix = /d-1
+		// Example: https://<share-name>/d-1/d-2?<signature>, prefix = /d-1/d-2
+		prefix = parts.DirectoryOrFilePath
+		// check for separator at the end of directory
+		if prefix[len(prefix)-1] != '/' {
+			prefix += "/"
+		}
+		// since the url is a directory, then all files inside the directory
+		// needs to be downloaded, so the pattern is "*"
+		pattern = "*"
+		return
+	}
+	// wild card exists prefix will be the content of file name till the wildcard index
+	// Example: https://<share-name>/vd-1/vd-2/abc*
+	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
+	// All the file inside the share in dir vd-2 that have the prefix "abc"
+	prefix = parts.DirectoryOrFilePath[:wildCardIndex]
+	pattern = parts.DirectoryOrFilePath
+	return
+}
+
+// Aligns to blobURL's getParentSourcePath
+func (parts fileURLPartsExtension) getParentSourcePath() string {
+	parentSourcePath := parts.DirectoryOrFilePath
+	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		}
+	}
+
+	return parentSourcePath
 }
 
 // getDirURLAndSearchPrefixFromFileURL gets the sub dir and file search prefix based on provided File service resource URL.
@@ -1026,4 +1078,15 @@ func (parts fileURLPartsExtension) getDirURLAndSearchPrefixFromFileURL(p pipelin
 	parts.DirectoryOrFilePath = dirOrFilePath[:lastSlashIndex]
 	dirURL = azfile.NewDirectoryURL(parts.URL(), p)
 	return
+}
+
+func (parts fileURLPartsExtension) getShareURL() url.URL {
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
+}
+
+func (parts fileURLPartsExtension) getServiceURL() url.URL {
+	parts.ShareName = ""
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
 }

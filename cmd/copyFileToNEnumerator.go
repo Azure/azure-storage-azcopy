@@ -20,6 +20,20 @@ type copyFileToNEnumerator struct {
 func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
+	// attempt to parse the source and destination url
+	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
+	if err != nil {
+		return errors.New("cannot parse source URL")
+	}
+	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
+	if err != nil {
+		return errors.New("cannot parse destination URL")
+	}
+
+	// append the sas at the end of query params.
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
+
 	// Create pipeline for source Azure File service.
 	// Note: only anonymous credential is supported for file source(i.e. SAS) now.
 	// e.CredentialInfo is for destination
@@ -28,63 +42,13 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if err != nil {
 		return err
 	}
-
-	// attempt to parse the source and destination url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
-	if err != nil {
-		return errors.New("cannot parse source URL")
-	}
-	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
-
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
-	if err != nil {
-		return errors.New("cannot parse destination URL")
-	}
-	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
-
 	if err := e.initDestPipeline(ctx); err != nil {
 		return err
 	}
 
 	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
-	// Case-1: Source is account, currently only support blob destination
-	if isAccountLevel, searchPrefix, _ := srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
-		if !cca.recursive {
-			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
-		}
 
-		// Validate If destination is service level account.
-		if err := e.validateDestIsService(ctx, *destURL); err != nil {
-			return err
-		}
-
-		// Switch URL https://<account-name>/shareprefix* to ServiceURL "https://<account-name>"
-		tmpSrcFileURLPart := srcFileURLPartExtension
-		tmpSrcFileURLPart.ShareName = ""
-		srcServiceURL := azfile.NewServiceURL(tmpSrcFileURLPart.URL(), srcFilePipeline)
-
-		// List shares
-		err = e.enumerateSharesInAccount(ctx, srcServiceURL, *destURL, searchPrefix, cca)
-		if err != nil {
-			return err
-		}
-
-		// If part number is 0 && number of transfer queued is 0
-		// it means that no job part has been dispatched and there are no
-		// transfer in Job to dispatch a JobPart.
-		if e.PartNum == 0 && len(e.Transfers) == 0 {
-			return fmt.Errorf("no transfer queued to copy. Please verify the source / destination")
-		}
-
-		// dispatch the JobPart as Final Part of the Job
-		err := e.dispatchFinalPart(cca)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// Case-2: Source is single file
+	// Case-1: Source is single file
 	// Verify if source is a single file
 	srcFileURL := azfile.NewFileURL(*sourceURL, srcFilePipeline)
 	fileProperties, err := srcFileURL.GetProperties(ctx)
@@ -105,24 +69,70 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return e.dispatchFinalPart(cca)
 	}
 
-	// Case-3: Source is a file share or directory
-	// Switch URL https://<account-name>/share/prefix* to ShareURL "https://<account-name>/share"
-	dirURL, searchPrefix := srcFileURLPartExtension.getDirURLAndSearchPrefixFromFileURL(srcFilePipeline)
-	if searchPrefix == "" && !cca.recursive {
-		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
-	}
-	err = e.createDestBucket(ctx, *destURL, nil)
-	if err != nil {
-		return err
-	}
-	err = e.enumerateDirectoriesAndFilesInShare(
-		ctx,
-		dirURL,
-		*destURL,
-		searchPrefix,
-		cca)
-	if err != nil {
-		return err
+	// Case-2: Source is account, currently only support blob destination
+	if isAccountLevel, sharePrefix := srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
+		if !cca.recursive {
+			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
+		}
+
+		// Validate If destination is service level account.
+		if err := e.validateDestIsService(ctx, *destURL); err != nil {
+			return err
+		}
+
+		srcServiceURL := azfile.NewServiceURL(srcFileURLPartExtension.getServiceURL(), srcFilePipeline)
+		// List shares and add transfers for these shares.
+		if err := enumerateSharesInAccount(
+			ctx,
+			srcServiceURL,
+			sharePrefix,
+			func(shareItem azfile.ShareItem) error {
+				// Whatever the destination type is, it should be equivalent to account level,
+				// so directly append container name to it.
+				tmpDestURL := urlExtension{URL: *destURL}.generateObjectPath(shareItem.Name)
+				// create bucket for destination, in case bucket doesn't exist.
+				if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
+					return err
+				}
+
+				// After enumerating the shares according to share prefix in account level,
+				// do share level enumerating and add transfers.
+				searchPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
+
+				// Two cases for exclude/include which need to match share names in account:
+				// a. https://<fileservice>/share*/file*.vhd
+				// b. https://<fileservice>/ which equals to https://<fileservice>/*
+				return e.addTransfersFromDirectory(
+					ctx,
+					srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL(),
+					tmpDestURL,
+					searchPrefix,
+					fileNamePattern,
+					"",
+					true,
+					cca)
+			}); err != nil {
+			return err
+		}
+	} else { // Case-3: Source is a file share or directory
+		searchPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
+		if searchPrefix == "" && !cca.recursive {
+			return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
+		}
+		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
+			return err
+		}
+		if err := e.addTransfersFromDirectory(
+			ctx,
+			azfile.NewShareURL(srcFileURLPartExtension.getShareURL(), srcFilePipeline).NewRootDirectoryURL(),
+			*destURL,
+			searchPrefix,
+			fileNamePattern,
+			srcFileURLPartExtension.getParentSourcePath(),
+			false,
+			cca); err != nil {
+			return err
+		}
 	}
 
 	// If part number is 0 && number of transfer queued is 0
@@ -136,91 +146,57 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	return e.dispatchFinalPart(cca)
 }
 
-// enumerateSharesInAccount enumerates containers in blob service account.
-func (e *copyFileToNEnumerator) enumerateSharesInAccount(ctx context.Context, srcServiceURL azfile.ServiceURL, destBaseURL url.URL,
-	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
-	for marker := (azfile.Marker{}); marker.NotDone(); {
-		listSvcResp, err := srcServiceURL.ListSharesSegment(ctx, marker,
-			azfile.ListSharesOptions{Prefix: srcSearchPattern})
-		if err != nil {
-			return fmt.Errorf("cannot list shares for copy, %v", err)
+// addTransfersFromDirectory enumerates blobs in container, and adds matched blob into transfer.
+func (e *copyFileToNEnumerator) addTransfersFromDirectory(
+	ctx context.Context, srcDirectoryURL azfile.DirectoryURL, destBaseURL url.URL,
+	fileOrDirNamePrefix, fileNamePattern, parentSourcePath string, includExcludeShare bool, cca *cookedCopyCmdArgs) error {
+
+	fileFilter := func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool {
+		fileURLPart := azfile.NewFileURLParts(fileURL.URL())
+		// check if file name matches pattern
+		if !gCopyUtil.matchBlobNameAgainstPattern(fileNamePattern, fileURLPart.DirectoryOrFilePath, cca.recursive) {
+			return false
 		}
 
-		// Process the shares returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, shareItem := range listSvcResp.ShareItems {
-			// Whatever the destination type is, it should be equivalent to account level,
-			// directoy append share name to it.
-			tmpDestURL := destBaseURL
-			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, shareItem.Name)
-			shareRootDirURL := srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL()
-
-			// Transfer azblob's metadata to common metadata, note common metadata can be transferred to other types of metadata.
-			// Doesn't copy bucket's metadata as AzCopy-v1 do.
-			e.createDestBucket(ctx, tmpDestURL, nil)
-
-			// List source share
-			// TODO: List in parallel to speed up.
-			e.enumerateDirectoriesAndFilesInShare(
-				ctx,
-				shareRootDirURL,
-				tmpDestURL,
-				"",
-				cca)
+		includeExcludeMatchPath := common.IffString(includExcludeShare,
+			fileURLPart.ShareName+"/"+fileURLPart.DirectoryOrFilePath,
+			fileURLPart.DirectoryOrFilePath)
+		// Check the file should be included or not.
+		if !gCopyUtil.resourceShouldBeIncluded(parentSourcePath, e.Include, includeExcludeMatchPath) {
+			return false
 		}
-		marker = listSvcResp.NextMarker
+
+		// Check the file should be excluded or not.
+		if gCopyUtil.resourceShouldBeExcluded(parentSourcePath, e.Exclude, includeExcludeMatchPath) {
+			return false
+		}
+
+		return true
 	}
-	return nil
-}
 
-// enumerateDirectoriesAndFilesInShare enumerates blobs in container.
-func (e *copyFileToNEnumerator) enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.DirectoryURL, destBaseURL url.URL,
-	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
-	for marker := (azfile.Marker{}); marker.NotDone(); {
-		listDirResp, err := srcDirURL.ListFilesAndDirectoriesSegment(ctx, marker,
-			azfile.ListFilesAndDirectoriesOptions{Prefix: srcSearchPattern})
-		if err != nil {
-			return fmt.Errorf("cannot list files for copy, %v", err)
-		}
+	// enumerate blob in containers, and add matched blob into transfer.
+	return enumerateDirectoriesAndFilesInShare(
+		ctx,
+		srcDirectoryURL,
+		fileOrDirNamePrefix,
+		cca.recursive,
+		fileFilter,
+		func(fileItem azfile.FileItem, fileURL azfile.FileURL) error {
+			fileURLPart := azfile.NewFileURLParts(fileURL.URL())
+			fileRelativePath := gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
 
-		// Process the files returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, fileItem := range listDirResp.FileItems {
-			srcFileURL := srcDirURL.NewFileURL(fileItem.Name)
-			srcFileProperties, err := srcFileURL.GetProperties(ctx) // TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
+			// TODO: Remove get attribute, when file's list method can return property and metadata.
+			p, err := fileURL.GetProperties(ctx)
 			if err != nil {
 				return err
 			}
 
-			tmpDestURL := destBaseURL
-			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, fileItem.Name)
-			err = e.addTransferInternal(
-				srcFileURL.URL(),
-				tmpDestURL,
-				srcFileProperties,
+			return e.addTransferInternal(
+				fileURL.URL(),
+				urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
+				p,
 				cca)
-			if err != nil {
-				return err // TODO: Ensure for list errors, directly return or do logging but not return, make the list mechanism much robust
-			}
-		}
-
-		// Process the directories if the recursive mode is on
-		if cca.recursive {
-			for _, dirItem := range listDirResp.DirectoryItems {
-				tmpSubDirURL := srcDirURL.NewDirectoryURL(dirItem.Name)
-				tmpDestURL := destBaseURL
-				tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, dirItem.Name)
-				// Recursive with prefix set to ""
-				e.enumerateDirectoriesAndFilesInShare(
-					ctx,
-					tmpSubDirURL,
-					tmpDestURL,
-					"",
-					cca)
-			}
-		}
-
-		marker = listDirResp.NextMarker
-	}
-	return nil
+		})
 }
 
 func (e *copyFileToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
@@ -238,7 +214,8 @@ func (e *copyFileToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 		ContentDisposition: properties.ContentDisposition(),
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
-		ContentMD5:         contentMD5[:]},
+		ContentMD5:         contentMD5[:],
+		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata())},
 		cca)
 }
 

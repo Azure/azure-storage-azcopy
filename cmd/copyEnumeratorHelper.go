@@ -152,21 +152,24 @@ func enumerateSharesInAccount(ctx context.Context, srcServiceURL azfile.ServiceU
 // b. File with pure file prefix: fileprefix
 // c. File with pur parent directories: /d1/d2/
 func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.DirectoryURL,
-	filePrefix string, recursive bool, filter func(fileItem azfile.FileItem) bool,
-	callback func(fileItem azfile.FileItem) error) error {
+	filePrefix string, recursive bool,
+	filter func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool,
+	callback func(fileItem azfile.FileItem, fileURL azfile.FileURL) error) error {
 
 	// Process the filePrefix, if the file prefix starts with parent directory,
 	// then it wishes to enumerate the directory with specific sub-directory,
 	// append the sub-directory to the src directory URL.
 	// e.g.: searching https://<azfile>/share/basedir, and prefix is /d1/d2/file
 	// the new source directory URL will be https://<azfile>/share/basedir/d1/d2
-	if len(filePrefix) > 0 && filePrefix[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
-		filePrefix = filePrefix[1:]
-	}
-	if lastSepIndex := strings.LastIndex(filePrefix, common.AZCOPY_PATH_SEPARATOR_STRING); lastSepIndex > 0 {
-		subDirStr := filePrefix[:lastSepIndex]
-		srcDirURL = srcDirURL.NewDirectoryURL(subDirStr)
-		filePrefix = filePrefix[lastSepIndex+1:]
+	if len(filePrefix) > 0 {
+		if filePrefix[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+			filePrefix = filePrefix[1:]
+		}
+		if lastSepIndex := strings.LastIndex(filePrefix, common.AZCOPY_PATH_SEPARATOR_STRING); lastSepIndex > 0 {
+			subDirStr := filePrefix[:lastSepIndex]
+			srcDirURL = srcDirURL.NewDirectoryURL(subDirStr)
+			filePrefix = filePrefix[lastSepIndex+1:]
+		}
 	}
 
 	// After preprocess, file prefix will no more contains '/'. It will be the prefix of
@@ -180,11 +183,12 @@ func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.D
 
 		// Process the files returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, fileItem := range listDirResp.FileItems {
-			if !filter(fileItem) {
+			tmpFileURL := srcDirURL.NewFileURL(fileItem.Name)
+			if !filter(fileItem, tmpFileURL) {
 				continue
 			}
 
-			if err := callback(fileItem); err != nil {
+			if err := callback(fileItem, tmpFileURL); err != nil {
 				return err
 			}
 		}
