@@ -220,6 +220,18 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// Set the number of chunk for the current transfer.
 		jptm.SetNumberOfChunks(numChunks)
 
+		// If the number of chunks exceeds MaxNumberOfBlocksPerBlob, then uploading blob with
+		// given blockSize will fail.
+		if numChunks > common.MaxNumberOfBlocksPerBlob {
+			jptm.LogUploadError(info.Source, info.Destination,
+				fmt.Sprintf("BlockSize %d for uploading source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, blobSize),
+				0)
+			jptm.Cancel()
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			srcMmf.Unmap()
+			return
+		}
 		// creating a slice to contain the blockIds
 		blockIds := make([]string, numChunks)
 		blockIdCount := int32(0)

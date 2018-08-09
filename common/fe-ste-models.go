@@ -461,10 +461,11 @@ func (ct *CredentialType) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
-	DefaultBlockBlobBlockSize = 100 * 1024 * 1024
+	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
 	//DefaultAppendBlobBlockSize = 4 * 1024 * 1024
 	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize = 4 * 1024 * 1024
+	MaxNumberOfBlocksPerBlob  = 50000
 )
 
 // This struct represent a single transfer entry with source and destination details

@@ -386,7 +386,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
+	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "Use this block size when source to Azure Storage or from Azure Storage.")
 	// hidden filters
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")
