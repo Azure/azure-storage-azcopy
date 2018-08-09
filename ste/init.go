@@ -272,33 +272,28 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
-	// If the credential type if SharedSAS, to resume the Job destinationSAS / sourceSAS needs to be provided
+	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
 	// Depending on the FromType, sourceSAS or destinationSAS is checked.
 	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
 		var errorMsg = ""
 		switch jpm.Plan().FromTo {
-		case common.EFromTo.LocalBlob():
-			fallthrough
-		case common.EFromTo.LocalFile():
+		case common.EFromTo.LocalBlob(),
+			common.EFromTo.LocalFile():
 			if len(req.DestinationSAS) == 0 {
-				errorMsg = "destinationSAS is not provided with resume Command. Please provide the destinationSAS to resume the Job"
+				errorMsg = "The destinationSAS switch must be provided to resume the job"
 			}
-		case common.EFromTo.BlobLocal():
-			fallthrough
-		case common.EFromTo.FileLocal():
-			fallthrough
-		case common.EFromTo.BlobTrash():
-			fallthrough
-		case common.EFromTo.FileTrash():
+		case common.EFromTo.BlobLocal(),
+			common.EFromTo.FileLocal(),
+			common.EFromTo.BlobTrash(),
+			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {
-				errorMsg = "sourceSAS is not provided with resume Command. Please provide the sourceSAS to resume the Job"
+				errorMsg = "The sourceSAS switch must be provided to resume the job"
 			}
-		case common.EFromTo.BlobBlob():
-			fallthrough
-		case common.EFromTo.FileBlob():
+		case common.EFromTo.BlobBlob(),
+			common.EFromTo.FileBlob():
 			if len(req.SourceSAS) == 0 ||
 				len(req.DestinationSAS) == 0 {
-				errorMsg = "sourceSAS and destinationSAS both needs to be provided to resume the Job"
+				errorMsg = "Both the sourceSAS and destinationSAS switches must be provided to resume the job"
 			}
 		}
 		if len(errorMsg) != 0 {
