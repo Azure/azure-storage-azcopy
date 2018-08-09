@@ -86,39 +86,13 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		srcServiceURL := azblob.NewServiceURL(srcBlobURLPartExtension.getServiceURL(), srcBlobPipeline)
+		blobPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		// List containers and add transfers for these containers.
-		if err := enumerateContainersInAccount(
-			ctx,
-			srcServiceURL,
-			containerPrefix,
-			func(containerItem azblob.ContainerItem) error {
-				// Whatever the destination type is, it should be equivalent to account level,
-				// so directly append container name to it.
-				tmpDestURL := urlExtension{URL: *destURL}.generateObjectPath(containerItem.Name)
-				// create bucket for destination, in case bucket doesn't exist.
-				if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
-					return err
-				}
-
-				// After enumerating the containers according to container prefix in account level,
-				// do container level enumerating and add transfers.
-				searchPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
-
-				// Two cases for exclude/include which need to match container names in account:
-				// a. https://<blobservice>/container*/blob*.vhd
-				// b. https://<blobservice>/ which equals to https://<blobservice>/*
-				return e.addTransfersFromContainer(
-					ctx,
-					srcServiceURL.NewContainerURL(containerItem.Name),
-					tmpDestURL,
-					searchPrefix,
-					blobNamePattern,
-					"",
-					true,
-					cca)
-			}); err != nil {
+		if err := e.addTransferFromAccount(ctx, srcServiceURL, *destURL,
+			containerPrefix, blobPrefix, blobNamePattern, cca); err != nil {
 			return err
 		}
+
 	} else { // Case-3: Source is a blob container or directory
 		searchPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if searchPrefix == "*" && !cca.recursive {
@@ -129,8 +103,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return err
 		}
 
-		if err := e.addTransfersFromContainer(
-			ctx,
+		if err := e.addTransfersFromContainer(ctx,
 			azblob.NewContainerURL(srcBlobURLPartExtension.getContainerURL(), srcBlobPipeline),
 			*destURL,
 			searchPrefix,
@@ -151,6 +124,38 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// dispatch the JobPart as Final Part of the Job
 	return e.dispatchFinalPart(cca)
+}
+
+// addTransferFromAccount enumerates containers, and adds matched blob into transfer.
+func (e *copyBlobToNEnumerator) addTransferFromAccount(ctx context.Context,
+	srcServiceURL azblob.ServiceURL, destBaseURL url.URL,
+	containerPrefix, blobPrefix, blobNamePattern string, cca *cookedCopyCmdArgs) error {
+	return enumerateContainersInAccount(
+		ctx,
+		srcServiceURL,
+		containerPrefix,
+		func(containerItem azblob.ContainerItem) error {
+			// Whatever the destination type is, it should be equivalent to account level,
+			// so directly append container name to it.
+			tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(containerItem.Name)
+			// create bucket for destination, in case bucket doesn't exist.
+			if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
+				return err
+			}
+
+			// Two cases for exclude/include which need to match container names in account:
+			// a. https://<blobservice>/container*/blob*.vhd
+			// b. https://<blobservice>/ which equals to https://<blobservice>/*
+			return e.addTransfersFromContainer(
+				ctx,
+				srcServiceURL.NewContainerURL(containerItem.Name),
+				tmpDestURL,
+				blobPrefix,
+				blobNamePattern,
+				"",
+				true,
+				cca)
+		})
 }
 
 // addTransfersFromContainer enumerates blobs in container, and adds matched blob into transfer.

@@ -152,7 +152,7 @@ func enumerateSharesInAccount(ctx context.Context, srcServiceURL azfile.ServiceU
 // b. File with pure file prefix: fileprefix
 // c. File with pur parent directories: /d1/d2/
 func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.DirectoryURL,
-	filePrefix string, recursive bool,
+	fileOrDirPrefix string, recursive bool,
 	filter func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool,
 	callback func(fileItem azfile.FileItem, fileURL azfile.FileURL) error) error {
 
@@ -161,14 +161,14 @@ func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.D
 	// append the sub-directory to the src directory URL.
 	// e.g.: searching https://<azfile>/share/basedir, and prefix is /d1/d2/file
 	// the new source directory URL will be https://<azfile>/share/basedir/d1/d2
-	if len(filePrefix) > 0 {
-		if filePrefix[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
-			filePrefix = filePrefix[1:]
+	if len(fileOrDirPrefix) > 0 {
+		if fileOrDirPrefix[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+			fileOrDirPrefix = fileOrDirPrefix[1:]
 		}
-		if lastSepIndex := strings.LastIndex(filePrefix, common.AZCOPY_PATH_SEPARATOR_STRING); lastSepIndex > 0 {
-			subDirStr := filePrefix[:lastSepIndex]
+		if lastSepIndex := strings.LastIndex(fileOrDirPrefix, common.AZCOPY_PATH_SEPARATOR_STRING); lastSepIndex > 0 {
+			subDirStr := fileOrDirPrefix[:lastSepIndex]
 			srcDirURL = srcDirURL.NewDirectoryURL(subDirStr)
-			filePrefix = filePrefix[lastSepIndex+1:]
+			fileOrDirPrefix = fileOrDirPrefix[lastSepIndex+1:]
 		}
 	}
 
@@ -176,7 +176,7 @@ func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.D
 	// file or dir in current dir level.
 	for marker := (azfile.Marker{}); marker.NotDone(); {
 		listDirResp, err := srcDirURL.ListFilesAndDirectoriesSegment(ctx, marker,
-			azfile.ListFilesAndDirectoriesOptions{Prefix: filePrefix})
+			azfile.ListFilesAndDirectoriesOptions{Prefix: fileOrDirPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list files and directories, %v", err)
 		}

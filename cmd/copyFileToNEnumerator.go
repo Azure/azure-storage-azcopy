@@ -49,11 +49,10 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
 
 	// Case-1: Source is single file
-	// Verify if source is a single file
 	srcFileURL := azfile.NewFileURL(*sourceURL, srcFilePipeline)
-	fileProperties, err := srcFileURL.GetProperties(ctx)
+	// Verify if source is a single file
 	// Note: Currently only support single to single, and not support single to directory.
-	if err == nil {
+	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
 		if endWithSlashOrBackSlash(destURL.Path) {
 			return errors.New("invalid source and destination combination for service to service copy: " +
 				"destination must point to a single file, when source is a single file.")
@@ -81,39 +80,13 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		srcServiceURL := azfile.NewServiceURL(srcFileURLPartExtension.getServiceURL(), srcFilePipeline)
+		fileOrDirectoryPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
 		// List shares and add transfers for these shares.
-		if err := enumerateSharesInAccount(
-			ctx,
-			srcServiceURL,
-			sharePrefix,
-			func(shareItem azfile.ShareItem) error {
-				// Whatever the destination type is, it should be equivalent to account level,
-				// so directly append container name to it.
-				tmpDestURL := urlExtension{URL: *destURL}.generateObjectPath(shareItem.Name)
-				// create bucket for destination, in case bucket doesn't exist.
-				if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
-					return err
-				}
-
-				// After enumerating the shares according to share prefix in account level,
-				// do share level enumerating and add transfers.
-				searchPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
-
-				// Two cases for exclude/include which need to match share names in account:
-				// a. https://<fileservice>/share*/file*.vhd
-				// b. https://<fileservice>/ which equals to https://<fileservice>/*
-				return e.addTransfersFromDirectory(
-					ctx,
-					srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL(),
-					tmpDestURL,
-					searchPrefix,
-					fileNamePattern,
-					"",
-					true,
-					cca)
-			}); err != nil {
+		if err := e.addTransferFromAccount(ctx, srcServiceURL, *destURL, sharePrefix, fileOrDirectoryPrefix,
+			fileNamePattern, cca); err != nil {
 			return err
 		}
+
 	} else { // Case-3: Source is a file share or directory
 		searchPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
 		if searchPrefix == "" && !cca.recursive {
@@ -122,8 +95,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
 			return err
 		}
-		if err := e.addTransfersFromDirectory(
-			ctx,
+		if err := e.addTransfersFromDirectory(ctx,
 			azfile.NewShareURL(srcFileURLPartExtension.getShareURL(), srcFilePipeline).NewRootDirectoryURL(),
 			*destURL,
 			searchPrefix,
@@ -146,10 +118,44 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	return e.dispatchFinalPart(cca)
 }
 
-// addTransfersFromDirectory enumerates blobs in container, and adds matched blob into transfer.
-func (e *copyFileToNEnumerator) addTransfersFromDirectory(
-	ctx context.Context, srcDirectoryURL azfile.DirectoryURL, destBaseURL url.URL,
-	fileOrDirNamePrefix, fileNamePattern, parentSourcePath string, includExcludeShare bool, cca *cookedCopyCmdArgs) error {
+// addTransferFromAccount enumerates shares in account, and adds matched file into transfer.
+func (e *copyFileToNEnumerator) addTransferFromAccount(ctx context.Context,
+	srcServiceURL azfile.ServiceURL, destBaseURL url.URL,
+	sharePrefix, fileOrDirectoryPrefix, fileNamePattern string, cca *cookedCopyCmdArgs) error {
+	return enumerateSharesInAccount(
+		ctx,
+		srcServiceURL,
+		sharePrefix,
+		func(shareItem azfile.ShareItem) error {
+			// Whatever the destination type is, it should be equivalent to account level,
+			// so directly append share name to it.
+			tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(shareItem.Name)
+			// create bucket for destination, in case bucket doesn't exist.
+			if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
+				return err
+			}
+
+			// Two cases for exclude/include which need to match share names in account:
+			// a. https://<fileservice>/share*/file*.vhd
+			// b. https://<fileservice>/ which equals to https://<fileservice>/*
+			return e.addTransfersFromDirectory(
+				ctx,
+				srcServiceURL.NewShareURL(shareItem.Name).NewRootDirectoryURL(),
+				tmpDestURL,
+				fileOrDirectoryPrefix,
+				fileNamePattern,
+				"",
+				true,
+				cca)
+		})
+}
+
+// addTransfersFromDirectory enumerates files in directory and sub directoreis,
+// and adds matched file into transfer.
+func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
+	srcDirectoryURL azfile.DirectoryURL, destBaseURL url.URL,
+	fileOrDirNamePrefix, fileNamePattern, parentSourcePath string,
+	includExcludeShare bool, cca *cookedCopyCmdArgs) error {
 
 	fileFilter := func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool {
 		fileURLPart := azfile.NewFileURLParts(fileURL.URL())
@@ -174,7 +180,7 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(
 		return true
 	}
 
-	// enumerate blob in containers, and add matched blob into transfer.
+	// enumerate files and sub directories in directory, and add matched files into transfer.
 	return enumerateDirectoriesAndFilesInShare(
 		ctx,
 		srcDirectoryURL,
