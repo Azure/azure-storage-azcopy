@@ -73,8 +73,8 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         finally:
             os.makedirs(dest)
 
-        result = util.Command("copy").add_arguments(wildcardSrc).add_arguments(dest).add_flags("log-level",
-                                                                                               "info").execute_azcopy_copy_command()
+        result = util.Command("copy").add_arguments(wildcardSrc).add_arguments(dest). \
+            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the downloaded file
