@@ -56,12 +56,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.ExitWithError("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.ExitWithError("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
 			}
 
 			glcm.SurrenderControl()

@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -80,12 +81,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.ExitWithError("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
 			}
 
 			err = cooked.process()
 			if err != nil {
-				glcm.ExitWithError("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
 			}
 		},
 		// hide features not relevant to BFS

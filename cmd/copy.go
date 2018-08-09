@@ -742,7 +742,7 @@ func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
 	}
 }
 
@@ -759,7 +759,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		common.PanicIfErr(err)
 
 		if jobDone {
-			lcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+			lcm.Exit(string(jsonOutput), common.EExitCode.Success())
 		} else {
 			lcm.Info(string(jsonOutput))
 			return
@@ -770,7 +770,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-		lcm.ExitWithSuccess(fmt.Sprintf(
+		lcm.Exit(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
@@ -879,12 +879,12 @@ Download an entire directory:
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.ExitWithError("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.ExitWithError("failed to perform copy command due to error: "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("failed to perform copy command due to error: "+err.Error(), common.EExitCode.Error())
 			}
 
 			glcm.SurrenderControl()

@@ -51,9 +51,9 @@ Display information on all jobs.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := HandleListJobsCommand()
 			if err == nil {
-				glcm.ExitWithSuccess("", common.EExitCode.Success())
+				glcm.Exit("", common.EExitCode.Success())
 			} else {
-				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+				glcm.Exit(err.Error(), common.EExitCode.Error())
 			}
 		},
 	}

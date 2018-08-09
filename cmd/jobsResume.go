@@ -76,7 +76,7 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
 	}
 }
 
@@ -90,7 +90,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
-		lcm.ExitWithSuccess(fmt.Sprintf(
+		lcm.Exit(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
@@ -154,7 +154,7 @@ Resume the existing job with the given job ID.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := resumeCmdArgs.process()
 			if err != nil {
-				glcm.ExitWithError(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
+				glcm.Exit(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
 			}
 		},
 	}
@@ -288,7 +288,7 @@ func (rca resumeCmdArgs) process() error {
 		&resumeJobResponse)
 
 	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.ExitWithError(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
+		glcm.Exit(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
 	}
 
 	controller := resumeJobController{jobID: jobID}

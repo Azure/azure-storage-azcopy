@@ -53,6 +53,6 @@ func Execute(azsAppPathFolder string) {
 	azcopyAppPathFolder = azsAppPathFolder
 
 	if err := rootCmd.Execute(); err != nil {
-		glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+		glcm.Exit(err.Error(), common.EExitCode.Error())
 	}
 }
