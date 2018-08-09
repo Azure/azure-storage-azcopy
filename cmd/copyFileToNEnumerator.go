@@ -62,7 +62,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return err
 		}
 		// directly use destURL as destination
-		if err := e.addTransferInternal(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
+		if err := e.addFileToNTransfer(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart(cca)
@@ -159,7 +159,7 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 
 	fileFilter := func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool {
 		fileURLPart := azfile.NewFileURLParts(fileURL.URL())
-		// check if file name matches pattern
+		// Check if file name matches pattern.
 		if !gCopyUtil.matchBlobNameAgainstPattern(fileNamePattern, fileURLPart.DirectoryOrFilePath, cca.recursive) {
 			return false
 		}
@@ -197,7 +197,7 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 				return err
 			}
 
-			return e.addTransferInternal(
+			return e.addFileToNTransfer(
 				fileURL.URL(),
 				urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
 				p,
@@ -205,14 +205,14 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 		})
 }
 
-func (e *copyFileToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
+func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	// TODO: This is temp work around for Azure file's content MD5, can be removed whe new File SDK get released.
 	contentMD5 := properties.ContentMD5()
 
 	return e.addTransfer(common.CopyTransfer{
-		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
-		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
+		Source:             gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
+		Destination:        gCopyUtil.stripSASFromFileShareUrl(destURL).String(),
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),

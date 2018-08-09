@@ -66,7 +66,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		// directly use destURL as destination
-		if err := e.addTransferInternal2(srcBlobURL.URL(), *destURL, blobProperties, cca); err != nil {
+		if err := e.addBlobToNTransfer2(srcBlobURL.URL(), *destURL, blobProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart(cca)
@@ -193,7 +193,7 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 		blobFilter,
 		func(blobItem azblob.BlobItem) error {
 			blobRelativePath := gCopyUtil.getRelativePath(blobNamePrefix, blobItem.Name)
-			return e.addTransferInternal(
+			return e.addBlobToNTransfer(
 				srcContainerURL.NewBlobURL(blobItem.Name).URL(),
 				urlExtension{URL: destBaseURL}.generateObjectPath(blobRelativePath),
 				&blobItem.Properties,
@@ -202,7 +202,7 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 		})
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
+func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
 		glcm.Info(fmt.Sprintf(
@@ -234,7 +234,7 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 		cca)
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
+func (e *copyBlobToNEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType() != azblob.BlobBlockBlob {
 		glcm.Info(fmt.Sprintf(
