@@ -5,10 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
@@ -16,15 +14,9 @@ import (
 // copyBlobToNEnumerator enumerates blob source, and submit request for copy blob to N,
 // where N stands for blob/file/blobFS (Currently only blob is supported).
 // The source could be a single blob/container/blob account
-type copyBlobToNEnumerator common.CopyJobPartOrderRequest
-
-// destPreProceed is used for destination pre-operations: e.g. create container/share/bucket and etc.
-type destPreProceed struct {
-	destBlobPipeline pipeline.Pipeline
-	// info for other dest type
+type copyBlobToNEnumerator struct {
+	copyS2SEnumerator
 }
-
-var destInfo destPreProceed
 
 func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
@@ -53,8 +45,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if err != nil {
 		return err
 	}
-
-	if err = e.initDestPreProceed(ctx); err != nil {
+	if err := e.initDestPipeline(ctx); err != nil {
 		return err
 	}
 
@@ -69,7 +60,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return errors.New("invalid source and destination combination for service to service copy: " +
 				"destination must point to a single file, when source is a single file.")
 		}
-		err := e.createBucket(ctx, *destURL, nil)
+		err := e.createDestBucket(ctx, *destURL, nil)
 		if err != nil {
 			return err
 		}
@@ -89,7 +80,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
 		}
 
-		// Validate IF destination is service level account.
+		// Validate If destination is service level account.
 		if err := e.validateDestIsService(ctx, *destURL); err != nil {
 			return err
 		}
@@ -105,13 +96,17 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				// so directly append container name to it.
 				tmpDestURL := urlExtension{URL: *destURL}.generateObjectPath(containerItem.Name)
 				// create bucket for destination, in case bucket doesn't exist.
-				if err := e.createBucket(ctx, tmpDestURL, nil); err != nil {
+				if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
 					return err
 				}
 
 				// After enumerating the containers according to container prefix in account level,
 				// do container level enumerating and add transfers.
 				searchPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
+
+				// Two cases for exclude/include which need to match container names in account:
+				// a. https://<blobservice>/container*/blob*.vhd
+				// b. https://<blobservice>/ which equals to https://<blobservice>/*
 				return e.addTransfersFromContainer(
 					ctx,
 					srcServiceURL.NewContainerURL(containerItem.Name),
@@ -119,6 +114,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					searchPrefix,
 					blobNamePattern,
 					"",
+					true,
 					cca)
 			}); err != nil {
 			return err
@@ -129,7 +125,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
 		}
 		// create bucket for destination, in case bucket doesn't exist.
-		if err := e.createBucket(ctx, *destURL, nil); err != nil {
+		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
 			return err
 		}
 
@@ -140,6 +136,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			searchPrefix,
 			blobNamePattern,
 			srcBlobURLPartExtension.getParentSourcePath(),
+			false,
 			cca); err != nil {
 			return err
 		}
@@ -156,71 +153,9 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	return e.dispatchFinalPart(cca)
 }
 
-// initDestPreProceed inits common dest objects for e.g. destination pre-operations
-// like create container/share/bucket and etc.
-// The info such as blob pipeline which is created once and can be reused for multiple times.
-func (e *copyBlobToNEnumerator) initDestPreProceed(ctx context.Context) error {
-	switch e.FromTo {
-	// Currently, e.CredentialInfo is always for the target needs to trigger copy API.
-	// In this case, blob destination will use it which needs to call StageBlockFromURL later.
-	case common.EFromTo.BlobBlob():
-		p, err := createBlobPipeline(ctx, e.CredentialInfo)
-		if err != nil {
-			return err
-		}
-		destInfo.destBlobPipeline = p
-	}
-	return nil
-}
-
-// validateDestIsService check if destination is an URL point to service.
-func (e *copyBlobToNEnumerator) validateDestIsService(ctx context.Context, destURL url.URL) error {
-	// TODO: validate other type's destination URLs, e.g: BlobFS, File.
-	switch e.FromTo {
-	case common.EFromTo.BlobBlob():
-		destBlobPipeline, err := createBlobPipeline(ctx, e.CredentialInfo)
-		if err != nil {
-			return err
-		}
-		destServiceURL := azblob.NewServiceURL(destURL, destBlobPipeline)
-		if _, err := destServiceURL.GetProperties(ctx); err != nil {
-			return fmt.Errorf("invalid source and destination combination for service to service copy: "+
-				"destination must point to service account when source is a service account, %v", err)
-		}
-	}
-
-	return nil
-}
-
-// createBucket creats bucket level object for the destination, e.g. container for blob, share for file, and etc.
-// TODO: Create share/bucket and etc. Currently only support blob destination.
-// TODO: Ensure if metadata in bucket level need be copied, currently not copy metadata in bucket level as azcopy-v1 do.
-func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
-	switch e.FromTo {
-	case common.EFromTo.BlobBlob():
-		if destInfo.destBlobPipeline == nil {
-			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
-		}
-		tmpContainerURL := blobURLPartsExtension{azblob.NewBlobURLParts(destURL)}.getContainerURL()
-		containerURL := azblob.NewContainerURL(tmpContainerURL, destInfo.destBlobPipeline)
-		// Create the container, in case of it doesn't exist.
-		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
-		if err != nil {
-			// Skip the error, when container already exists, or hasn't permission to create container(container might already exists).
-			if stgErr, ok := err.(azblob.StorageError); !ok ||
-				(stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists &&
-					stgErr.Response().StatusCode != http.StatusForbidden) {
-				return fmt.Errorf("fail to create container, %v", err)
-			}
-			// the case error is container already exists
-		}
-	}
-	return nil
-}
-
 // addTransfersFromContainer enumerates blobs in container, and adds matched blob into transfer.
 func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
-	blobNamePrefix, blobNamePattern, parentSourcePath string, cca *cookedCopyCmdArgs) error {
+	blobNamePrefix, blobNamePattern, parentSourcePath string, includExcludeContainer bool, cca *cookedCopyCmdArgs) error {
 
 	blobFilter := func(blobItem azblob.BlobItem) bool {
 		// If the blobName doesn't matches the blob name pattern, then blob is not included
@@ -229,13 +164,16 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 			return false
 		}
 
+		includeExcludeMatchPath := common.IffString(includExcludeContainer,
+			azblob.NewBlobURLParts(srcContainerURL.URL()).ContainerName+"/"+blobItem.Name,
+			blobItem.Name)
 		// Check the blob should be included or not.
-		if !gCopyUtil.resourceShouldBeIncluded(parentSourcePath, e.Include, blobItem.Name) {
+		if !gCopyUtil.resourceShouldBeIncluded(parentSourcePath, e.Include, includeExcludeMatchPath) {
 			return false
 		}
 
 		// Check the blob should be excluded or not.
-		if gCopyUtil.resourceShouldBeExcluded(parentSourcePath, e.Exclude, blobItem.Name) {
+		if gCopyUtil.resourceShouldBeExcluded(parentSourcePath, e.Exclude, includeExcludeMatchPath) {
 			return false
 		}
 
@@ -318,11 +256,11 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, pr
 }
 
 func (e *copyBlobToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
+	return addTransfer(&(e.CopyJobPartOrderRequest), transfer, cca)
 }
 
 func (e *copyBlobToNEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
+	return dispatchFinalPart(&(e.CopyJobPartOrderRequest), cca)
 }
 
 func (e *copyBlobToNEnumerator) partNum() common.PartNumber {

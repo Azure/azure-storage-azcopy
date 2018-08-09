@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
@@ -61,6 +63,9 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 	return nil
 }
 
+//////////////////////////////////////////////////////////////////////////////////////////
+// Blob service enumerators.
+//////////////////////////////////////////////////////////////////////////////////////////
 // enumerateBlobsInContainer enumerates blobs in container.
 func enumerateBlobsInContainer(ctx context.Context, containerURL azblob.ContainerURL,
 	blobPrefix string, filter func(blobItem azblob.BlobItem) bool,
@@ -113,6 +118,92 @@ func enumerateContainersInAccount(ctx context.Context, srcServiceURL azblob.Serv
 			}
 		}
 		marker = listSvcResp.NextMarker
+	}
+	return nil
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// File service enumerators.
+//////////////////////////////////////////////////////////////////////////////////////////
+// enumerateSharesInAccount enumerates shares in file service account.
+func enumerateSharesInAccount(ctx context.Context, srcServiceURL azfile.ServiceURL,
+	sharePrefix string, callback func(shareItem azfile.ShareItem) error) error {
+	for marker := (azfile.Marker{}); marker.NotDone(); {
+		listSvcResp, err := srcServiceURL.ListSharesSegment(ctx, marker,
+			azfile.ListSharesOptions{Prefix: sharePrefix})
+		if err != nil {
+			return fmt.Errorf("cannot list shares, %v", err)
+		}
+
+		// Process the shares returned in this result segment (if the segment is empty, the loop body won't execute)
+		for _, shareItem := range listSvcResp.ShareItems {
+			if err := callback(shareItem); err != nil {
+				return err
+			}
+		}
+		marker = listSvcResp.NextMarker
+	}
+	return nil
+}
+
+// enumerateDirectoriesAndFilesInShare enumerates files in share.
+// filePrefix could be:
+// a. File with parent directories and file prefix: /d1/d2/fileprefix
+// b. File with pure file prefix: fileprefix
+// c. File with pur parent directories: /d1/d2/
+func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.DirectoryURL,
+	filePrefix string, recursive bool, filter func(fileItem azfile.FileItem) bool,
+	callback func(fileItem azfile.FileItem) error) error {
+
+	// Process the filePrefix, if the file prefix starts with parent directory,
+	// then it wishes to enumerate the directory with specific sub-directory,
+	// append the sub-directory to the src directory URL.
+	// e.g.: searching https://<azfile>/share/basedir, and prefix is /d1/d2/file
+	// the new source directory URL will be https://<azfile>/share/basedir/d1/d2
+	if len(filePrefix) > 0 && filePrefix[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+		filePrefix = filePrefix[1:]
+	}
+	if lastSepIndex := strings.LastIndex(filePrefix, common.AZCOPY_PATH_SEPARATOR_STRING); lastSepIndex > 0 {
+		subDirStr := filePrefix[:lastSepIndex]
+		srcDirURL = srcDirURL.NewDirectoryURL(subDirStr)
+		filePrefix = filePrefix[lastSepIndex+1:]
+	}
+
+	// After preprocess, file prefix will no more contains '/'. It will be the prefix of
+	// file or dir in current dir level.
+	for marker := (azfile.Marker{}); marker.NotDone(); {
+		listDirResp, err := srcDirURL.ListFilesAndDirectoriesSegment(ctx, marker,
+			azfile.ListFilesAndDirectoriesOptions{Prefix: filePrefix})
+		if err != nil {
+			return fmt.Errorf("cannot list files and directories, %v", err)
+		}
+
+		// Process the files returned in this result segment (if the segment is empty, the loop body won't execute)
+		for _, fileItem := range listDirResp.FileItems {
+			if !filter(fileItem) {
+				continue
+			}
+
+			if err := callback(fileItem); err != nil {
+				return err
+			}
+		}
+
+		// Process the directories if the recursive mode is on
+		if recursive {
+			for _, dirItem := range listDirResp.DirectoryItems {
+				// Recursive with prefix set to ""
+				enumerateDirectoriesAndFilesInShare(
+					ctx,
+					srcDirURL.NewDirectoryURL(dirItem.Name),
+					"",
+					recursive,
+					filter,
+					callback)
+			}
+		}
+
+		marker = listDirResp.NextMarker
 	}
 	return nil
 }
