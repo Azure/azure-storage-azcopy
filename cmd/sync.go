@@ -198,7 +198,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		common.PanicIfErr(err)
 
 		if jobDone {
-			lcm.Exit(string(jsonOutput), common.EExitCode.Success())
+			exitCode := common.EExitCode.Success()
+			if summary.TransfersFailed > 0 {
+				exitCode = common.EExitCode.Error()
+			}
+			lcm.Exit(string(jsonOutput), exitCode)
 		} else {
 			lcm.Info(string(jsonOutput))
 			return
@@ -208,7 +212,10 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
-
+		exitCode := common.EExitCode.Success()
+		if summary.TransfersFailed > 0 {
+			exitCode = common.EExitCode.Error()
+		}
 		lcm.Exit(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
@@ -216,7 +223,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), common.EExitCode.Success())
+			summary.JobStatus), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -379,7 +386,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
+	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "Use this block size when source to Azure Storage or from Azure Storage.")
 	// hidden filters
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")

@@ -110,21 +110,25 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 	defer file.Close()
 
-	// if block size from the front-end is set to 0, block size is set to default block size
+	// If block size from the front-end is set to 0
+	// store the block-size as 0. While getting the transfer Info
+	// auto correction logic will apply. If the block-size stored is not 0
+	// it means that user provided some block-size and  auto-correct will not
+	// apply.
 	blockSize := order.BlobAttributes.BlockSizeInBytes
-	if blockSize == 0 { // TODO: Fix below
-		blockSize = common.DefaultBlockBlobBlockSize
-		/*switch order.BlobAttributes.BlobType {
-		case common.BlobType{}.Block():
-			blockSize = common.DefaultBlockBlobBlockSize
-		case common.BlobType{}.Append():
-			blockSize = common.DefaultAppendBlobBlockSize
-		case common.BlobType{}.Page():
-			blockSize = common.DefaultPageBlobChunkSize
-		default:
-			panic(errors.New("unrecognized blob type"))
-		}*/
-	}
+	//if blockSize == 0 { // TODO: Fix below
+	//	blockSize = common.DefaultBlockBlobBlockSize
+	//	/*switch order.BlobAttributes.BlobType {
+	//	case common.BlobType{}.Block():
+	//		blockSize = common.DefaultBlockBlobBlockSize
+	//	case common.BlobType{}.Append():
+	//		blockSize = common.DefaultAppendBlobBlockSize
+	//	case common.BlobType{}.Page():
+	//		blockSize = common.DefaultPageBlobChunkSize
+	//	default:
+	//		panic(errors.New("unrecognized blob type"))
+	//	}*/
+	//}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
 		Version:             DataSchemaVersion,
@@ -207,7 +211,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			// SrcBlobTierLength:           uint16(len(order.Transfers[t].BlobTier)),
 			// TODO: + Metadata
 
-			atomicTransferStatus: common.ETransferStatus.NotStarted(), // Default
+			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry

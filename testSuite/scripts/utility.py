@@ -511,7 +511,7 @@ def execute_azcopy_command_get_output(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         #print("command failed with error code ", exec.returncode, " and message " + exec.output)
-        return None
+        return exec.output
     else:
         return output
 

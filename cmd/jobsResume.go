@@ -89,7 +89,10 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
-
+		exitCode := common.EExitCode.Success()
+		if summary.TransfersFailed > 0 {
+			exitCode = common.EExitCode.Error()
+		}
 		lcm.Exit(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
@@ -97,7 +100,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), common.EExitCode.Success())
+			summary.JobStatus), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line

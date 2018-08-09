@@ -147,10 +147,22 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		}
 		src = sUrl.String()
 	}
+
+	sourceSize := plan.Transfer(jptm.transferIndex).SourceSize
+	var blockSize = dstBlobData.BlockSize
+	// If the blockSize is 0, then User didn't provide any blockSize
+	// We need to set the blockSize in such way that number of blocks per blob
+	// does not exceeds 50000 (max number of block per blob)
+	if blockSize == 0 {
+		blockSize = uint32(common.DefaultBlockBlobBlockSize)
+		for size := uint32(common.DefaultBlockBlobBlockSize); uint32(sourceSize/int64(size)) > common.MaxNumberOfBlocksPerBlob; size = 2 * size {
+			blockSize = size
+		}
+	}
 	return TransferInfo{
-		BlockSize:      dstBlobData.BlockSize,
+		BlockSize:      blockSize,
 		Source:         src,
-		SourceSize:     plan.Transfer(jptm.transferIndex).SourceSize,
+		SourceSize:     sourceSize,
 		Destination:    dst,
 		SrcHTTPHeaders: srcHTTPHeaders,
 		SrcMetadata:    srcMetadata,

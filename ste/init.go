@@ -164,19 +164,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	jobCompletelyOrdered := func(jm IJobMgr) bool {
-		// determine whether final part for job with JobId has been ordered or not.
-		completeJobOrdered := false
-		for p := PartNumber(0); true; p++ {
-			jpm, found := jm.JobPartMgr(p)
-			if !found {
-				break
-			}
-			completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
-		}
-		return completeJobOrdered
-	}(jm)
-
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
 	if !found {
@@ -214,14 +201,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// hence sending the response immediately. Response CancelPauseResumeResponse
 		// returned has CancelledPauseResumed set to false, because that will let
 		// Job immediately stop.
-		if !jobCompletelyOrdered {
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("cancelled the job but it cannot be resumed because the enumeration of the source was not complete"),
-			}
-			return jr
-		}
-		// If the job is completely ordered, then it follow the graceful cancellation of job path
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
@@ -243,6 +222,13 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
 	if !found {
+		// Strip '?' if present as first character of the source sas / destination sas
+		if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
+			req.SourceSAS = req.SourceSAS[1:]
+		}
+		if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
+			req.DestinationSAS = req.DestinationSAS[1:]
+		}
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
@@ -274,7 +260,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	if !completeJobOrdered(jm) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("cannot resumr job with JobId %s . It hasn't been ordered completely", req.JobID),
+			ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s . It hasn't been ordered completely", req.JobID),
 		}
 	}
 
@@ -286,6 +272,38 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
+	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
+	// Depending on the FromType, sourceSAS or destinationSAS is checked.
+	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+		var errorMsg = ""
+		switch jpm.Plan().FromTo {
+		case common.EFromTo.LocalBlob(),
+			common.EFromTo.LocalFile():
+			if len(req.DestinationSAS) == 0 {
+				errorMsg = "The destinationSAS switch must be provided to resume the job"
+			}
+		case common.EFromTo.BlobLocal(),
+			common.EFromTo.FileLocal(),
+			common.EFromTo.BlobTrash(),
+			common.EFromTo.FileTrash():
+			if len(req.SourceSAS) == 0 {
+				errorMsg = "The sourceSAS switch must be provided to resume the job"
+			}
+		case common.EFromTo.BlobBlob(),
+			common.EFromTo.FileBlob():
+			if len(req.SourceSAS) == 0 ||
+				len(req.DestinationSAS) == 0 {
+				errorMsg = "Both the sourceSAS and destinationSAS switches must be provided to resume the job"
+			}
+		}
+		if len(errorMsg) != 0 {
+			return common.CancelPauseResumeResponse{
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s. %s", req.JobID, errorMsg),
+			}
+		}
+	}
+
 	// After creating the Job mgr, set the include / exclude list of transfer.
 	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
@@ -413,11 +431,18 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	part0PlanStatus := jp0.Plan().JobStatus()
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		return js
+	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	part0PlanStatus := jp0.Plan().JobStatus()
-	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed() ||
-		part0PlanStatus == common.EJobStatus.Cancelled()) {
+	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
 		js.JobStatus = part0PlanStatus
 	}
 	return js

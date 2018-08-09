@@ -759,7 +759,11 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		common.PanicIfErr(err)
 
 		if jobDone {
-			lcm.Exit(string(jsonOutput), common.EExitCode.Success())
+			exitCode := common.EExitCode.Success()
+			if summary.TransfersFailed > 0 {
+				exitCode = common.EExitCode.Error()
+			}
+			lcm.Exit(string(jsonOutput), exitCode)
 		} else {
 			lcm.Info(string(jsonOutput))
 			return
@@ -769,7 +773,10 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
-
+		exitCode := common.EExitCode.Success()
+		if summary.TransfersFailed > 0 {
+			exitCode = common.EExitCode.Error()
+		}
 		lcm.Exit(fmt.Sprintf(
 			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
@@ -777,7 +784,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), common.EExitCode.Success())
+			summary.JobStatus), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -894,7 +901,7 @@ Download an entire directory:
 
 	// define the flags relevant to the cp command
 	// Visible flags
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
@@ -930,7 +937,7 @@ Download an entire directory:
 	// TODO remove after preview release
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("exclude")
-	cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
+	//cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
 	cpCmd.PersistentFlags().MarkHidden("output")
 
