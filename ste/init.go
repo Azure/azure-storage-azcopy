@@ -280,20 +280,20 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		case common.EFromTo.LocalBlob(),
 			common.EFromTo.LocalFile():
 			if len(req.DestinationSAS) == 0 {
-				errorMsg = "The destinationSAS switch must be provided to resume the job"
+				errorMsg = "The destination-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobLocal(),
 			common.EFromTo.FileLocal(),
 			common.EFromTo.BlobTrash(),
 			common.EFromTo.FileTrash():
 			if len(req.SourceSAS) == 0 {
-				errorMsg = "The sourceSAS switch must be provided to resume the job"
+				errorMsg = "The source-sas switch must be provided to resume the job"
 			}
 		case common.EFromTo.BlobBlob(),
 			common.EFromTo.FileBlob():
 			if len(req.SourceSAS) == 0 ||
 				len(req.DestinationSAS) == 0 {
-				errorMsg = "Both the sourceSAS and destinationSAS switches must be provided to resume the job"
+				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
 			}
 		}
 		if len(errorMsg) != 0 {
