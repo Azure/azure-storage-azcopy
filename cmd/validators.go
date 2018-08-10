@@ -59,13 +59,17 @@ func inferFromTo(src, dst string) common.FromTo {
 	// Try to infer the 1st argument
 	srcLocation := inferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
-		glcm.Info("Can't infer source location of " + src + ". Please specify the --FromTo switch")
+		glcm.Info("Can't infer source location of " +
+			common.URLStringExtension(src).RedactSigQueryParamForLogging() +
+			". Please specify the --FromTo switch")
 		return common.EFromTo.Unknown()
 	}
 
 	dstLocation := inferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
-		glcm.Info("Can't infer destination location of " + dst + ". Please specify the --FromTo switch")
+		glcm.Info("Can't infer destination location of " +
+			common.URLStringExtension(dst).RedactSigQueryParamForLogging() +
+			". Please specify the --FromTo switch")
 		return common.EFromTo.Unknown()
 	}
 

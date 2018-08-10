@@ -789,6 +789,7 @@ func (util copyHandlerUtil) getPossibleFileNameFromURL(path string) string {
 // getDeepestDirOrFileURLFromString returns the deepest valid DirectoryURL or FileURL can be picked out from the provided URL.
 // When provided URL is endwith *, get parent directory of file whose name is with *.
 // When provided URL without *, the url could be a file or a directory, in this case make request to get valid DirectoryURL or FileURL.
+// TODO: deprecated, remove this method
 func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context, givenURL url.URL, p pipeline.Pipeline) (*azfile.DirectoryURL, *azfile.FileURL, *azfile.FileGetPropertiesResponse, bool) {
 	url := givenURL
 	path := url.Path
@@ -804,7 +805,9 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 			if gResp, err := fileURL.GetProperties(ctx); err == nil {
 				return nil, &fileURL, gResp, true
 			} else {
-				glcm.Info("Fail to parse " + url.String() + " as a file for error " + err.Error() + ", given URL: " + givenURL.String())
+				glcm.Info("Fail to parse " +
+					common.URLExtension{URL: url}.RedactSigQueryParamForLogging() +
+					" as a file for error " + err.Error() + ", given URL: " + givenURL.String())
 			}
 		}
 	}
@@ -812,7 +815,9 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 	if _, err := dirURL.GetProperties(ctx); err == nil {
 		return &dirURL, nil, nil, true
 	} else {
-		glcm.Info("Fail to parse " + url.String() + " as a directory for error " + err.Error() + ", given URL: " + givenURL.String())
+		glcm.Info("Fail to parse " +
+			common.URLExtension{URL: url}.RedactSigQueryParamForLogging() +
+			" as a directory for error " + err.Error() + ", given URL: " + givenURL.String())
 	}
 
 	return nil, nil, nil, false
