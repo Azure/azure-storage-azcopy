@@ -30,15 +30,13 @@ var azcopyAppPathFolder string
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "azcopy",
-	Short: "AzCopy is a CLI tool that moves data into/out of Azure Storage.",
+	Short: "AzCopy is a command line tool that moves data into/out of Azure Storage.",
 	Long: "AzCopy " + common.AzcopyVersion +
 		`
-Project: github.com/Azure/azure-storage-azcopy
+Project URL: github.com/Azure/azure-storage-azcopy
 
-AzCopy is a CLI tool that moves data into/out of Azure Storage.
-For this preview release, only the Azure Data Lake Storage Gen2 service is supported.
-Please refer to the Github README for more information.
-If you encounter any issue, please report it on Github.
+AzCopy is a command line tool that moves data into/out of Azure Storage.
+To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy
 
 The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
 `,
