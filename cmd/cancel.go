@@ -90,7 +90,7 @@ func init() {
 			}
 		},
 		// hide features not relevant to BFS
-		// TODO remove after preview release
+		// TODO remove after preview release.
 		Hidden: true,
 	}
 	rootCmd.AddCommand(cancelCmd)
