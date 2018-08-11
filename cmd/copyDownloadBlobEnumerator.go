@@ -117,10 +117,13 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// blobNamePattern represents the regular expression which the blobName should Match
 	searchPrefix, blobNamePattern := blobURLPartsExtension{blobUrlParts}.searchPrefixFromBlobURL() // TODO: replace blobURLParts with blobURLPartsExtension after util refactor finished.
 
-	// If blobNamePattern is "*", means that all the contents inside the given source url needs to be downloaded
+	// If blobNamePattern is "*", means that all the contents inside the given source url recursively needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
 	// All the blobs inside a container or virtual directory will be downloaded only when the recursive flag is set to true
-	if blobNamePattern == "*" && !cca.recursive {
+	// blobNamePattern is also "*"  in case when container is provided with wildCard "*"
+	// For Example: https://container/*. In this case, recursive flag is not required.
+	// Also blobs immediately inside container that do not exists inside any virtual folder will be downloaded.
+	if blobUrlParts.BlobName != "*" && blobNamePattern == "*" && !cca.recursive {
 		return fmt.Errorf("cannot download the enitre container / virtual directory. Please use recursive flag for this download scenario")
 	}
 
