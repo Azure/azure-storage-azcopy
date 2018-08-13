@@ -462,7 +462,7 @@ func (ct *CredentialType) Parse(s string) error {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
-	//DefaultAppendBlobBlockSize = 4 * 1024 * 1024
+	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize = 4 * 1024 * 1024
 	MaxNumberOfBlocksPerBlob  = 50000
