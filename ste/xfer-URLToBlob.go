@@ -56,11 +56,6 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	chunkSize := int64(info.BlockSize)
 
 	// TODO: Validate Block Size, ensure it's validate for both source and destination
-	chunkSize = common.Iffint64(
-		chunkSize > common.DefaultBlockBlobBlockSize,
-		common.DefaultBlockBlobBlockSize,
-		chunkSize)
-
 	if jptm.ShouldLog(pipeline.LogInfo) {
 		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Chunk size %d", chunkSize))
 	}
@@ -137,6 +132,18 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 		jptm.SetNumberOfChunks(numChunks)
 
+		// If the number of chunks exceeds MaxNumberOfBlocksPerBlob, then copying blob with
+		// given blockSize will fail.
+		if numChunks > common.MaxNumberOfBlocksPerBlob {
+			jptm.LogS2SCopyError(info.Source, info.Destination,
+				fmt.Sprintf("BlockSize %d for copying source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize),
+				0)
+			jptm.Cancel()
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+
 		// TODO: Dispatch according to blob types
 
 		// creating a slice to contain the block IDs
@@ -177,7 +184,6 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer bbc.jptm.ReleaseAConnection()
 
-		info := bbc.jptm.Info()
 		// This function allows routine to manage behavior of unexpected panics.
 		// The panic error along with transfer details are logged.
 		// The transfer is marked as failed and is reported as done.
@@ -207,7 +213,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 					// Other errors report that uncommitted blocks are there
-					bbc.jptm.LogError(info.Destination, "Delete Uncommitted blocks ", err)
+					bbc.jptm.LogError(bbc.destBlobURL.String(), "Delete Uncommitted blocks ", err)
 				}
 			}
 			bbc.jptm.ReportTransferDone()
@@ -239,12 +245,12 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		if err != nil {
 			// check if the transfer was cancelled while Stage Block was in process.
 			if bbc.jptm.WasCanceled() {
-				bbc.jptm.LogError(info.Destination, "Chunk Upload Failed ", err)
+				bbc.jptm.LogError(bbc.destBlobURL.String(), "Chunk copy from URL failed ", err)
 			} else {
 				// cancel entire transfer because this chunk has failed
 				bbc.jptm.Cancel()
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				bbc.jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
+				bbc.jptm.LogS2SCopyError(bbc.srcURL.String(), bbc.destBlobURL.String(), msg, status)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
@@ -280,7 +286,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			_, err := destBlockBlobURL.CommitBlockList(bbc.jptm.Context(), bbc.blockIDs, bbc.srcHTTPHeaders, bbc.srcMetadata, azblob.BlobAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				bbc.jptm.LogS2SCopyError(info.Source, info.Destination, "Commit block list"+msg, status)
+				bbc.jptm.LogS2SCopyError(bbc.srcURL.String(), bbc.destBlobURL.String(), "Commit block list"+msg, status)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 				transferDone()
 				return

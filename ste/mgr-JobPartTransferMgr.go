@@ -155,8 +155,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	// does not exceeds 50000 (max number of block per blob)
 	if blockSize == 0 {
 		blockSize = uint32(common.DefaultBlockBlobBlockSize)
-		for size := uint32(common.DefaultBlockBlobBlockSize); uint32(sourceSize/int64(size)) > common.MaxNumberOfBlocksPerBlob; size = 2 * size {
-			blockSize = size
+		for ; uint32(sourceSize/int64(blockSize)) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
 		}
 	}
 	return TransferInfo{
