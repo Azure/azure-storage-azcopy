@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -86,7 +87,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		srcServiceURL := azblob.NewServiceURL(srcBlobURLPartExtension.getServiceURL(), srcBlobPipeline)
-		blobPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
+		blobPrefix, blobNamePattern, _ := srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		// List containers and add transfers for these containers.
 		if err := e.addTransferFromAccount(ctx, srcServiceURL, *destURL,
 			containerPrefix, blobPrefix, blobNamePattern, cca); err != nil {
@@ -94,8 +95,8 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 	} else { // Case-3: Source is a blob container or directory
-		searchPrefix, blobNamePattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
-		if searchPrefix == "*" && !cca.recursive {
+		blobPrefix, blobNamePattern, isWildcardSearch := srcBlobURLPartExtension.searchPrefixFromBlobURL()
+		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
 		}
 		// create bucket for destination, in case bucket doesn't exist.
@@ -106,10 +107,11 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		if err := e.addTransfersFromContainer(ctx,
 			azblob.NewContainerURL(srcBlobURLPartExtension.getContainerURL(), srcBlobPipeline),
 			*destURL,
-			searchPrefix,
+			blobPrefix,
 			blobNamePattern,
 			srcBlobURLPartExtension.getParentSourcePath(),
 			false,
+			isWildcardSearch,
 			cca); err != nil {
 			return err
 		}
@@ -154,13 +156,14 @@ func (e *copyBlobToNEnumerator) addTransferFromAccount(ctx context.Context,
 				blobNamePattern,
 				"",
 				true,
+				true,
 				cca)
 		})
 }
 
 // addTransfersFromContainer enumerates blobs in container, and adds matched blob into transfer.
 func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
-	blobNamePrefix, blobNamePattern, parentSourcePath string, includExcludeContainer bool, cca *cookedCopyCmdArgs) error {
+	blobNamePrefix, blobNamePattern, parentSourcePath string, includExcludeContainer, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
 
 	blobFilter := func(blobItem azblob.BlobItem) bool {
 		// If the blobName doesn't matches the blob name pattern, then blob is not included
@@ -192,7 +195,14 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 		blobNamePrefix,
 		blobFilter,
 		func(blobItem azblob.BlobItem) error {
-			blobRelativePath := gCopyUtil.getRelativePath(blobNamePrefix, blobItem.Name)
+			var blobRelativePath = ""
+			// As downloading logic temporarily, refactor after scenario ensured.
+			if isWildcardSearch {
+				blobRelativePath = strings.Replace(blobItem.Name, blobNamePrefix[:strings.LastIndex(blobNamePrefix, common.AZCOPY_PATH_SEPARATOR_STRING)+1], "", 1)
+			} else {
+				blobRelativePath = gCopyUtil.getRelativePath(blobNamePrefix, blobItem.Name)
+			}
+
 			return e.addBlobToNTransfer(
 				srcContainerURL.NewBlobURL(blobItem.Name).URL(),
 				urlExtension{URL: destBaseURL}.generateObjectPath(blobRelativePath),

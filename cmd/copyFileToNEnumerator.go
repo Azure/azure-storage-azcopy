@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
@@ -80,7 +81,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 		srcServiceURL := azfile.NewServiceURL(srcFileURLPartExtension.getServiceURL(), srcFilePipeline)
-		fileOrDirectoryPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
+		fileOrDirectoryPrefix, fileNamePattern, _ := srcFileURLPartExtension.searchPrefixFromFileURL()
 		// List shares and add transfers for these shares.
 		if err := e.addTransferFromAccount(ctx, srcServiceURL, *destURL, sharePrefix, fileOrDirectoryPrefix,
 			fileNamePattern, cca); err != nil {
@@ -88,8 +89,8 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 
 	} else { // Case-3: Source is a file share or directory
-		searchPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
-		if searchPrefix == "" && !cca.recursive {
+		searchPrefix, fileNamePattern, isWildcardSearch := srcFileURLPartExtension.searchPrefixFromFileURL()
+		if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
 		}
 		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
@@ -102,6 +103,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			fileNamePattern,
 			srcFileURLPartExtension.getParentSourcePath(),
 			false,
+			isWildcardSearch,
 			cca); err != nil {
 			return err
 		}
@@ -146,6 +148,7 @@ func (e *copyFileToNEnumerator) addTransferFromAccount(ctx context.Context,
 				fileNamePattern,
 				"",
 				true,
+				true,
 				cca)
 		})
 }
@@ -155,7 +158,7 @@ func (e *copyFileToNEnumerator) addTransferFromAccount(ctx context.Context,
 func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 	srcDirectoryURL azfile.DirectoryURL, destBaseURL url.URL,
 	fileOrDirNamePrefix, fileNamePattern, parentSourcePath string,
-	includExcludeShare bool, cca *cookedCopyCmdArgs) error {
+	includExcludeShare, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
 
 	fileFilter := func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool {
 		fileURLPart := azfile.NewFileURLParts(fileURL.URL())
@@ -189,7 +192,14 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 		fileFilter,
 		func(fileItem azfile.FileItem, fileURL azfile.FileURL) error {
 			fileURLPart := azfile.NewFileURLParts(fileURL.URL())
-			fileRelativePath := gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
+			var fileRelativePath = ""
+			// As downloading blob logic temporarily, refactor after scenario ensured.
+			if isWildcardSearch {
+				fileRelativePath = strings.Replace(fileURLPart.DirectoryOrFilePath,
+					fileOrDirNamePrefix[:strings.LastIndex(fileOrDirNamePrefix, common.AZCOPY_PATH_SEPARATOR_STRING)+1], "", 1)
+			} else {
+				fileRelativePath = gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
+			}
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata.
 			p, err := fileURL.GetProperties(ctx)

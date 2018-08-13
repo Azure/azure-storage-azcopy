@@ -864,8 +864,9 @@ type blobURLPartsExtension struct {
 	azblob.BlobURLParts
 }
 
-func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern string) {
-	// If the blobName is empty, it means  the url provided is of a container,
+// searchPrefixFromBlobURL gets search prefix and patterns from Blob URL.
+func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern string, isWildcardSearch bool) {
+	// If the blobName is empty, it means the url provided is of a container,
 	// then all blobs inside containers needs to be included, so pattern is set to *
 	if parts.BlobName == "" {
 		pattern = "*"
@@ -891,12 +892,15 @@ func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern st
 		pattern = "*"
 		return
 	}
+
+	isWildcardSearch = true
 	// wild card exists prefix will be the content of blob name till the wildcard index
 	// Example: https://<container-name>/vd-1/vd-2/abc*
 	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
 	// All the blob inside the container in virtual dir vd-2 that have the prefix "abc"
 	prefix = parts.BlobName[:wildCardIndex]
 	pattern = parts.BlobName
+
 	return
 }
 
@@ -935,6 +939,10 @@ func (parts blobURLPartsExtension) getServiceURL() url.URL {
 	parts.ContainerName = ""
 	parts.BlobName = ""
 	return parts.URL()
+}
+
+func (parts blobURLPartsExtension) isContainerURL() bool {
+	return parts.ContainerName != "" && parts.BlobName == ""
 }
 
 // Get the source path without the wildcards
@@ -995,7 +1003,7 @@ func (parts fileURLPartsExtension) isFileAccountLevelSearch() (isFileAccountLeve
 // searchPrefixFromFileURL aligns to blobURL's method searchPrefixFromBlobURL
 // Note: This method doesn't validate if the provided URL points to a FileURL, and will treat the input without
 // wildcard as directory URL.
-func (parts fileURLPartsExtension) searchPrefixFromFileURL() (prefix, pattern string) {
+func (parts fileURLPartsExtension) searchPrefixFromFileURL() (prefix, pattern string, isWildcardSearch bool) {
 	// If the DirectoryOrFilePath is empty, it means the url provided is of a share,
 	// then all files inside share needs to be included, so pattern is set to *
 	if parts.DirectoryOrFilePath == "" {
@@ -1020,12 +1028,15 @@ func (parts fileURLPartsExtension) searchPrefixFromFileURL() (prefix, pattern st
 		pattern = "*"
 		return
 	}
+
+	isWildcardSearch = true
 	// wild card exists prefix will be the content of file name till the wildcard index
 	// Example: https://<share-name>/vd-1/vd-2/abc*
 	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
 	// All the file inside the share in dir vd-2 that have the prefix "abc"
 	prefix = parts.DirectoryOrFilePath[:wildCardIndex]
 	pattern = parts.DirectoryOrFilePath
+
 	return
 }
 

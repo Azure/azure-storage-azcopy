@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
@@ -61,8 +62,8 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return fmt.Errorf("the destination must be an existing directory in this download scenario")
 	}
 
-	searchPrefix, fileNamePattern := srcFileURLPartExtension.searchPrefixFromFileURL()
-	if searchPrefix == "" && !cca.recursive {
+	searchPrefix, fileNamePattern, isWildcardSearch := srcFileURLPartExtension.searchPrefixFromFileURL()
+	if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
 	}
 	// TODO: Ensure whether to create share here or in Xfer
@@ -73,6 +74,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		searchPrefix,
 		fileNamePattern,
 		srcFileURLPartExtension.getParentSourcePath(),
+		isWildcardSearch,
 		cca); err != nil {
 		return err
 	}
@@ -93,7 +95,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 func (e *copyDownloadFileEnumerator) addTransfersFromDirectory(
 	ctx context.Context, srcDirectoryURL azfile.DirectoryURL,
 	destBasePath, fileOrDirNamePrefix, fileNamePattern, parentSourcePath string,
-	cca *cookedCopyCmdArgs) error {
+	isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
 
 	fileFilter := func(fileItem azfile.FileItem, fileURL azfile.FileURL) bool {
 		fileURLPart := azfile.NewFileURLParts(fileURL.URL())
@@ -124,7 +126,14 @@ func (e *copyDownloadFileEnumerator) addTransfersFromDirectory(
 		fileFilter,
 		func(fileItem azfile.FileItem, fileURL azfile.FileURL) error {
 			fileURLPart := azfile.NewFileURLParts(fileURL.URL())
-			fileRelativePath := gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
+			var fileRelativePath = ""
+			// As downloading blob logic temporarily, refactor after scenario ensured.
+			if isWildcardSearch {
+				fileRelativePath = strings.Replace(fileURLPart.DirectoryOrFilePath,
+					fileOrDirNamePrefix[:strings.LastIndex(fileOrDirNamePrefix, common.AZCOPY_PATH_SEPARATOR_STRING)+1], "", 1)
+			} else {
+				fileRelativePath = gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
+			}
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata.
 			p, err := fileURL.GetProperties(ctx)
