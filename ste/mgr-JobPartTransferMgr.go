@@ -158,6 +158,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		for ; uint32(sourceSize/int64(blockSize)) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
 		}
 	}
+	blockSize = common.Iffuint32(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+
 	return TransferInfo{
 		BlockSize:      blockSize,
 		Source:         src,
@@ -256,7 +258,7 @@ func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
 
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
-	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] "+msg, common.LogLevel(level), plan.PartNum, jptm.transferIndex))
+	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] ", common.LogLevel(level), plan.PartNum, jptm.transferIndex)+msg)
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
@@ -281,9 +283,12 @@ const (
 )
 
 func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
-	jptm.Log(pipeline.LogError, fmt.Sprintf("%v: %s: %03d : %s\n   Dst: %s",
-		errorCode, common.URLStringExtension(source).RedactSigQueryParamForLogging(),
-		status, errorMsg, common.URLStringExtension(destination).RedactSigQueryParamForLogging()))
+	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSigQueryParamForLogging() +
+		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSigQueryParamForLogging()
+	jptm.Log(pipeline.LogError, msg)
+	//jptm.Log(pipeline.LogError, fmt.Sprintf("%v: %s: %03d : %s\n   Dst: %s",
+	//	errorCode, common.URLStringExtension(source).RedactSigQueryParamForLogging(),
+	//	status, errorMsg, common.URLStringExtension(destination).RedactSigQueryParamForLogging()))
 }
 
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
