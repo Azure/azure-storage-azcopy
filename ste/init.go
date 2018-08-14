@@ -482,8 +482,17 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
 			// getting transfer header of transfer at index index for given jobId and part number
 			transferEntry := jpp.Transfer(t)
-			// if the expected status is not to list all transfer and status of current transfer is not equal to the expected status, then we skip this transfer
-			if r.OfStatus != common.ETransferStatus.All() && transferEntry.TransferStatus() != r.OfStatus {
+			// If the expected status is not to list all transfer and
+			// if the transfer status is not equal to the given status
+			// skip the transfer.
+			// If the given status is failed and the current transfer status is <= -1,
+			// it means transfer failed and could have failed because of some other reason.
+			// In this case we don't skip the transfer.
+			// For Example: In case with-status is Failed, transfers with status "BlobAlreadyExistsFailure"
+			// will also be included.
+			if r.OfStatus != common.ETransferStatus.All() &&
+				((transferEntry.TransferStatus() != r.OfStatus) &&
+					!(r.OfStatus == common.ETransferStatus.Failed() && transferEntry.TransferStatus() <= -1)) {
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.
