@@ -842,12 +842,31 @@ func (util copyHandlerUtil) replaceBackSlashWithSlash(urlStr string) string {
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+type urlExtension struct {
+	url.URL
+}
+
+func (u urlExtension) redactSigQueryParamForLogging() string {
+	if ok, rawQuery := gCopyUtil.redactSigQueryParam(u.RawQuery); ok {
+		u.RawQuery = rawQuery
+	}
+
+	return u.String()
+}
+
+func (u urlExtension) generateObjectPath(objectName string) url.URL {
+	u.Path = gCopyUtil.generateObjectPath(u.Path, objectName)
+	return u.URL
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
 type blobURLPartsExtension struct {
 	azblob.BlobURLParts
 }
 
-func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern string) {
-	// If the blobName is empty, it means  the url provided is of a container,
+// searchPrefixFromBlobURL gets search prefix and patterns from Blob URL.
+func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern string, isWildcardSearch bool) {
+	// If the blobName is empty, it means the url provided is of a container,
 	// then all blobs inside containers needs to be included, so pattern is set to *
 	if parts.BlobName == "" {
 		pattern = "*"
@@ -873,37 +892,38 @@ func (parts blobURLPartsExtension) searchPrefixFromBlobURL() (prefix, pattern st
 		pattern = "*"
 		return
 	}
+
+	isWildcardSearch = true
 	// wild card exists prefix will be the content of blob name till the wildcard index
 	// Example: https://<container-name>/vd-1/vd-2/abc*
 	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
 	// All the blob inside the container in virtual dir vd-2 that have the prefix "abc"
 	prefix = parts.BlobName[:wildCardIndex]
 	pattern = parts.BlobName
+
 	return
 }
 
 // isBlobAccountLevelSearch check if it's an account level search for blob service.
-// And returns search prefix(part before wildcard) and pattern when it's account level search.
-func (parts blobURLPartsExtension) isBlobAccountLevelSearch() (isBlobAccountLevelSearch bool, prefix, pattern string) {
+// And returns search prefix(part before wildcard) for container and pattern is the blob pattern to match.
+func (parts blobURLPartsExtension) isBlobAccountLevelSearch() (isBlobAccountLevelSearch bool, containerPrefix string) {
 	// If it's account level URL which need search container, there could be two cases:
 	// a. https://<account-name>(/)
-	// b. https://<account-name>/containerprefix*
+	// b. https://<account-name>/containerprefix*(/*)
 	if parts.ContainerName == "" ||
-		(strings.HasSuffix(parts.ContainerName, wildCard) && parts.BlobName == "") {
+		strings.Contains(parts.ContainerName, wildCard) {
 		isBlobAccountLevelSearch = true
-		// For case 1-a, search for all containers.
+		// For case container name is empty, search for all containers.
 		if parts.ContainerName == "" {
-			pattern = "*"
 			return
 		}
 
 		wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.ContainerName)
+
 		// wild card exists prefix will be the content of container name till the wildcard index
-		// Example: https://<account-name>/c-2*
-		// prefix = /c-2 and pattern = /c-2*
-		// All the containers have the prefix "c-2"
-		prefix = parts.ContainerName[:wildCardIndex]
-		pattern = parts.ContainerName
+		// Example 1: for URL https://<account-name>/c-2*, containerPrefix = c-2
+		// Example 2: for URL https://<account-name>/c-2*/vd/b*, containerPrefix = c-2
+		containerPrefix = parts.ContainerName[:wildCardIndex]
 		return
 	}
 	// Otherwise, it's not account level search.
@@ -915,6 +935,41 @@ func (parts blobURLPartsExtension) getContainerURL() url.URL {
 	return parts.URL()
 }
 
+func (parts blobURLPartsExtension) getServiceURL() url.URL {
+	parts.ContainerName = ""
+	parts.BlobName = ""
+	return parts.URL()
+}
+
+func (parts blobURLPartsExtension) isContainerURL() bool {
+	return parts.ContainerName != "" && parts.BlobName == ""
+}
+
+// Get the source path without the wildcards
+// This is defined since the files mentioned with exclude flag
+// & include flag are relative to the Source
+// If the source has wildcards, then files are relative to the
+// parent source path which is the path of last directory in the source
+// without wildcards
+// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
+// For Example: src = "/home/*" parentSourcePath = "/home"
+func (parts blobURLPartsExtension) getParentSourcePath() string {
+	parentSourcePath := parts.BlobName
+	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		}
+	}
+
+	return parentSourcePath
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type fileURLPartsExtension struct {
 	azfile.FileURLParts
@@ -922,30 +977,84 @@ type fileURLPartsExtension struct {
 
 // isFileAccountLevelSearch check if it's an account level search for file service.
 // And returns search prefix(part before wildcard) and pattern when it's account level search.
-func (parts fileURLPartsExtension) isFileAccountLevelSearch() (isFileAccountLevelSearch bool, prefix, pattern string) {
+func (parts fileURLPartsExtension) isFileAccountLevelSearch() (isFileAccountLevelSearch bool, prefix string) {
 	// If it's account level URL which need search share, there could be two cases:
 	// a. https://<account-name>(/)
 	// b. https://<account-name>/shareprefix*
 	if parts.ShareName == "" ||
-		(strings.HasSuffix(parts.ShareName, wildCard) && parts.DirectoryOrFilePath == "") {
+		strings.Contains(parts.ShareName, wildCard) {
 		isFileAccountLevelSearch = true
 		// For case 1-a, search for all shares.
 		if parts.ShareName == "" {
-			pattern = "*"
 			return
 		}
 
 		wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.ShareName)
 		// wild card exists prefix will be the content of share name till the wildcard index
-		// Example: https://<account-name>/c-2*
-		// prefix = /c-2 and pattern = /c-2*
-		// All the shares have the prefix "c-2"
+		// Example 1: for URL https://<account-name>/s-2*, sharePrefix = s-2
+		// Example 2: for URL https://<account-name>/s-2*/d/f*, sharePrefix = s-2
 		prefix = parts.ShareName[:wildCardIndex]
-		pattern = parts.ShareName
 		return
 	}
 	// Otherwise, it's not account level search.
 	return
+}
+
+// searchPrefixFromFileURL aligns to blobURL's method searchPrefixFromBlobURL
+// Note: This method doesn't validate if the provided URL points to a FileURL, and will treat the input without
+// wildcard as directory URL.
+func (parts fileURLPartsExtension) searchPrefixFromFileURL() (prefix, pattern string, isWildcardSearch bool) {
+	// If the DirectoryOrFilePath is empty, it means the url provided is of a share,
+	// then all files inside share needs to be included, so pattern is set to *
+	if parts.DirectoryOrFilePath == "" {
+		pattern = "*"
+		return
+	}
+	// Check for wildcards and get the index of first wildcard
+	// If the wild card does not exists, then index returned is -1
+	wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.DirectoryOrFilePath)
+	if wildCardIndex < 0 {
+		// If no wild card exits and url represents a directory
+		// prefix is the path of directory after the share.
+		// Example: https://<share-name>/d-1?<signature>, prefix = /d-1
+		// Example: https://<share-name>/d-1/d-2?<signature>, prefix = /d-1/d-2
+		prefix = parts.DirectoryOrFilePath
+		// check for separator at the end of directory
+		if prefix[len(prefix)-1] != '/' {
+			prefix += "/"
+		}
+		// since the url is a directory, then all files inside the directory
+		// needs to be downloaded, so the pattern is "*"
+		pattern = "*"
+		return
+	}
+
+	isWildcardSearch = true
+	// wild card exists prefix will be the content of file name till the wildcard index
+	// Example: https://<share-name>/vd-1/vd-2/abc*
+	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
+	// All the file inside the share in dir vd-2 that have the prefix "abc"
+	prefix = parts.DirectoryOrFilePath[:wildCardIndex]
+	pattern = parts.DirectoryOrFilePath
+
+	return
+}
+
+// Aligns to blobURL's getParentSourcePath
+func (parts fileURLPartsExtension) getParentSourcePath() string {
+	parentSourcePath := parts.DirectoryOrFilePath
+	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		}
+	}
+
+	return parentSourcePath
 }
 
 // getDirURLAndSearchPrefixFromFileURL gets the sub dir and file search prefix based on provided File service resource URL.
@@ -980,4 +1089,15 @@ func (parts fileURLPartsExtension) getDirURLAndSearchPrefixFromFileURL(p pipelin
 	parts.DirectoryOrFilePath = dirOrFilePath[:lastSlashIndex]
 	dirURL = azfile.NewDirectoryURL(parts.URL(), p)
 	return
+}
+
+func (parts fileURLPartsExtension) getShareURL() url.URL {
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
+}
+
+func (parts fileURLPartsExtension) getServiceURL() url.URL {
+	parts.ShareName = ""
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
 }

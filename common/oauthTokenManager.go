@@ -85,6 +85,7 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 	fmt.Println(*deviceCode.Message)
 
 	// Wait here until the user is authenticated
+	// TODO: check if this can complete
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to login due to error: %s", err.Error())
@@ -97,6 +98,8 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 	}
 
 	if persist {
+		// TODO: consider to retry the save token process for multi-instance case.
+		// TODO: consider to store token, every time refresh token.
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %s", err.Error())

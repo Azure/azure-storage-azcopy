@@ -5,10 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
+	"strings"
 
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
@@ -16,128 +15,106 @@ import (
 // copyBlobToNEnumerator enumerates blob source, and submit request for copy blob to N,
 // where N stands for blob/file/blobFS (Currently only blob is supported).
 // The source could be a single blob/container/blob account
-type copyBlobToNEnumerator common.CopyJobPartOrderRequest
-
-// destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
-type destHelperInfo struct {
-	destBlobPipeline pipeline.Pipeline
-	// info for other dest type
+type copyBlobToNEnumerator struct {
+	copyS2SEnumerator
 }
-
-var destInfo destHelperInfo
 
 func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
-
-	// Create pipeline for source Blob service.
-	// For copy source with blob type, only anonymous credential is supported now(i.e. SAS or public).
-	// So directoy create anonymous credential for source.
-	// Note: If traditional copy(download first, then upload need be supported), more logic should be added to parse and validate
-	// credential for both source and destination.
-	srcCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	srcBlobPipeline, err := createBlobPipeline(ctx, srcCredInfo)
-	if err != nil {
-		return err
-	}
-	err = e.initiateDestHelperInfo(ctx)
-	if err != nil {
-		return err
-	}
 
 	// attempt to parse the source and destination url
 	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
-	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
-
 	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
 	if err != nil {
 		return errors.New("cannot parse destination URL")
 	}
+
+	// append the sas at the end of query params.
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
 	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
 
-	srcBlobURLPartExtension := blobURLPartsExtension{azblob.NewBlobURLParts(*sourceURL)}
-	// Case-1: Source is account, currently only support blob destination
-	if isAccountLevel, searchPrefix, pattern := srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
-		if pattern == "*" && !cca.recursive {
-			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
-		}
-
-		// Switch URL https://<account-name>/containerprefix* to ServiceURL "https://<account-name>"
-		tmpSrcBlobURLPart := srcBlobURLPartExtension
-		tmpSrcBlobURLPart.ContainerName = ""
-		srcServiceURL := azblob.NewServiceURL(tmpSrcBlobURLPart.URL(), srcBlobPipeline)
-		// Validate destination
-		// TODO: other type destination URLs, e.g: BlobFS, File and etc
-		destServiceURL := azblob.NewServiceURL(*destURL, srcBlobPipeline)
-		_, err = destServiceURL.GetProperties(ctx)
-		if err != nil {
-			return errors.New("invalid source and destination combination for service to service copy: " +
-				"destination must point to service account when source is a service account.")
-		}
-
-		// List containers
-		err = e.enumerateContainersInAccount(ctx, srcServiceURL, *destURL, searchPrefix, cca)
-		if err != nil {
-			return err
-		}
-
-		// If part number is 0 && number of transfer queued is 0
-		// it means that no job part has been dispatched and there are no
-		// transfer in Job to dispatch a JobPart.
-		if e.PartNum == 0 && len(e.Transfers) == 0 {
-			return fmt.Errorf("no transfer queued to copy. Please verify the source / destination")
-		}
-
-		// dispatch the JobPart as Final Part of the Job
-		err := e.dispatchFinalPart(cca)
-		if err != nil {
-			return err
-		}
-		return nil
+	// Create pipeline for source Blob service.
+	// For copy source with blob type, only anonymous credential is supported now(i.e. SAS or public).
+	// So directoy create anonymous credential for source.
+	// Note: If traditional copy(download first, then upload need be supported), more logic should be added to parse and validate
+	// credential for both source and destination.
+	srcBlobPipeline, err := createBlobPipeline(ctx,
+		common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
+	if err := e.initDestPipeline(ctx); err != nil {
+		return err
 	}
 
-	// Case-2: Source is single blob
+	srcBlobURLPartExtension := blobURLPartsExtension{azblob.NewBlobURLParts(*sourceURL)}
+
+	// Case-1: Source is a single blob
 	// Verify if source is a single blob
 	srcBlobURL := azblob.NewBlobURL(*sourceURL, srcBlobPipeline)
-	blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{})
 	// Note: Currently only support single to single, and not support single to directory.
-	if err == nil {
+	if blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
 		if endWithSlashOrBackSlash(destURL.Path) {
 			return errors.New("invalid source and destination combination for service to service copy: " +
 				"destination must point to a single file, when source is a single file.")
 		}
-		err := e.createBucket(ctx, *destURL, nil)
+		err := e.createDestBucket(ctx, *destURL, nil)
 		if err != nil {
 			return err
 		}
 
 		// directly use destURL as destination
-		if err := e.addTransferInternal2(srcBlobURL.URL(), *destURL, blobProperties, cca); err != nil {
+		if err := e.addBlobToNTransfer2(srcBlobURL.URL(), *destURL, blobProperties, cca); err != nil {
 			return err
 		}
 		return e.dispatchFinalPart(cca)
 	}
 
-	// Case-3: Source is a blob container or directory
-	// Switch URL https://<account-name>/container/blobprefix* to ContainerURL "https://<account-name>/container"
-	searchPrefix, pattern := srcBlobURLPartExtension.searchPrefixFromBlobURL()
-	if pattern == "*" && !cca.recursive {
-		return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
-	}
-	err = e.createBucket(ctx, *destURL, nil)
-	if err != nil {
-		return err
-	}
-	err = e.enumerateBlobsInContainer(
-		ctx,
-		azblob.NewContainerURL(srcBlobURLPartExtension.getContainerURL(), srcBlobPipeline),
-		*destURL,
-		searchPrefix,
-		cca)
-	if err != nil {
-		return err
+	// Case-2: Source is account level, e.g.:
+	// a: https://<blob-service>/container
+	// b: https://<blob-service>/containerprefix*/vd/blob
+	if isAccountLevel, containerPrefix := srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
+		if !cca.recursive {
+			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
+		}
+
+		// Validate If destination is service level account.
+		if err := e.validateDestIsService(ctx, *destURL); err != nil {
+			return err
+		}
+
+		srcServiceURL := azblob.NewServiceURL(srcBlobURLPartExtension.getServiceURL(), srcBlobPipeline)
+		blobPrefix, blobNamePattern, _ := srcBlobURLPartExtension.searchPrefixFromBlobURL()
+		// List containers and add transfers for these containers.
+		if err := e.addTransferFromAccount(ctx, srcServiceURL, *destURL,
+			containerPrefix, blobPrefix, blobNamePattern, cca); err != nil {
+			return err
+		}
+
+	} else { // Case-3: Source is a blob container or directory
+		blobPrefix, blobNamePattern, isWildcardSearch := srcBlobURLPartExtension.searchPrefixFromBlobURL()
+		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
+			return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
+		}
+		// create bucket for destination, in case bucket doesn't exist.
+		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
+			return err
+		}
+
+		if err := e.addTransfersFromContainer(ctx,
+			azblob.NewContainerURL(srcBlobURLPartExtension.getContainerURL(), srcBlobPipeline),
+			*destURL,
+			blobPrefix,
+			blobNamePattern,
+			srcBlobURLPartExtension.getParentSourcePath(),
+			false,
+			isWildcardSearch,
+			cca); err != nil {
+			return err
+		}
 	}
 
 	// If part number is 0 && number of transfer queued is 0
@@ -151,120 +128,91 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	return e.dispatchFinalPart(cca)
 }
 
-// destination helper info for destination pre-operations: e.g. create container/share/bucket and etc.
-// The info, such as blob pipeline is created once, and reused multiple times.
-func (e *copyBlobToNEnumerator) initiateDestHelperInfo(ctx context.Context) error {
-	switch e.FromTo {
-	// Currently, e.CredentialInfo is always for the target needs to trigger copy API.
-	// In this case, blob destination will use it which needs to call StageBlockFromURL later.
-	case common.EFromTo.BlobBlob():
-		p, err := createBlobPipeline(ctx, e.CredentialInfo)
-		if err != nil {
-			return err
-		}
-		destInfo.destBlobPipeline = p
-	}
-	return nil
-}
-
-// createBucket creats bucket level object for the destination, e.g. container for blob, share for file, and etc.
-// TODO: Create share/bucket and etc. Currently only support blob destination.
-// TODO: Ensure if metadata in bucket level need be copied, currently not copy metadata in bucket level as azcopy-v1 do.
-func (e *copyBlobToNEnumerator) createBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
-	switch e.FromTo {
-	case common.EFromTo.BlobBlob():
-		if destInfo.destBlobPipeline == nil {
-			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
-		}
-		tmpContainerURL := blobURLPartsExtension{azblob.NewBlobURLParts(destURL)}.getContainerURL()
-		containerURL := azblob.NewContainerURL(tmpContainerURL, destInfo.destBlobPipeline)
-		// Create the container, in case of it doesn't exist.
-		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
-		if err != nil {
-			// Skip the error, when container already exists, or hasn't permission to create container(container might already exists).
-			if stgErr, ok := err.(azblob.StorageError); !ok ||
-				(stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists &&
-					stgErr.Response().StatusCode != http.StatusForbidden) {
-				return fmt.Errorf("fail to create container, %v", err)
-			}
-			// the case error is container already exists
-		}
-	}
-	return nil
-}
-
-// enumerateContainersInAccount enumerates containers in blob service account.
-func (e *copyBlobToNEnumerator) enumerateContainersInAccount(ctx context.Context, srcServiceURL azblob.ServiceURL, destBaseURL url.URL,
-	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		listSvcResp, err := srcServiceURL.ListContainersSegment(ctx, marker,
-			azblob.ListContainersSegmentOptions{Prefix: srcSearchPattern})
-		if err != nil {
-			return fmt.Errorf("cannot list containers for copy, %v", err)
-		}
-
-		// Process the containers returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, containerItem := range listSvcResp.ContainerItems {
+// addTransferFromAccount enumerates containers, and adds matched blob into transfer.
+func (e *copyBlobToNEnumerator) addTransferFromAccount(ctx context.Context,
+	srcServiceURL azblob.ServiceURL, destBaseURL url.URL,
+	containerPrefix, blobPrefix, blobNamePattern string, cca *cookedCopyCmdArgs) error {
+	return enumerateContainersInAccount(
+		ctx,
+		srcServiceURL,
+		containerPrefix,
+		func(containerItem azblob.ContainerItem) error {
 			// Whatever the destination type is, it should be equivalent to account level,
-			// directly append container name to it.
-			tmpDestURL := destBaseURL
-			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, containerItem.Name)
-			containerURL := srcServiceURL.NewContainerURL(containerItem.Name)
+			// so directly append container name to it.
+			tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(containerItem.Name)
+			// create bucket for destination, in case bucket doesn't exist.
+			if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
+				return err
+			}
 
-			// Transfer azblob's metadata to common metadata, note common metadata can be transferred to other types of metadata.
-			e.createBucket(ctx, tmpDestURL, nil)
-
-			// List source container
-			// TODO: List in parallel to speed up.
-			e.enumerateBlobsInContainer(
+			// Two cases for exclude/include which need to match container names in account:
+			// a. https://<blobservice>/container*/blob*.vhd
+			// b. https://<blobservice>/ which equals to https://<blobservice>/*
+			return e.addTransfersFromContainer(
 				ctx,
-				containerURL,
+				srcServiceURL.NewContainerURL(containerItem.Name),
 				tmpDestURL,
+				blobPrefix,
+				blobNamePattern,
 				"",
+				true,
+				true,
 				cca)
-		}
-		marker = listSvcResp.NextMarker
-	}
-	return nil
+		})
 }
 
-// enumerateBlobsInContainer enumerates blobs in container.
-func (e *copyBlobToNEnumerator) enumerateBlobsInContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
-	srcSearchPattern string, cca *cookedCopyCmdArgs) error {
-	for marker := (azblob.Marker{}); marker.NotDone(); {
-		listContainerResp, err := srcContainerURL.ListBlobsFlatSegment(ctx, marker,
-			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: srcSearchPattern})
-		if err != nil {
-			return fmt.Errorf("cannot list blobs for copy, %v", err)
+// addTransfersFromContainer enumerates blobs in container, and adds matched blob into transfer.
+func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
+	blobNamePrefix, blobNamePattern, parentSourcePath string, includExcludeContainer, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
+
+	blobFilter := func(blobItem azblob.BlobItem) bool {
+		// If the blobName doesn't matches the blob name pattern, then blob is not included
+		// queued for transfer.
+		if !gCopyUtil.matchBlobNameAgainstPattern(blobNamePattern, blobItem.Name, cca.recursive) {
+			return false
 		}
 
-		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobItem := range listContainerResp.Segment.BlobItems {
-			// If the blob represents a folder as per the conditions mentioned in the
-			// api doesBlobRepresentAFolder, then skip the blob.
-			if gCopyUtil.doesBlobRepresentAFolder(blobItem) {
-				continue
+		includeExcludeMatchPath := common.IffString(includExcludeContainer,
+			azblob.NewBlobURLParts(srcContainerURL.URL()).ContainerName+"/"+blobItem.Name,
+			blobItem.Name)
+		// Check the blob should be included or not.
+		if !gCopyUtil.resourceShouldBeIncluded(parentSourcePath, e.Include, includeExcludeMatchPath) {
+			return false
+		}
+
+		// Check the blob should be excluded or not.
+		if gCopyUtil.resourceShouldBeExcluded(parentSourcePath, e.Exclude, includeExcludeMatchPath) {
+			return false
+		}
+
+		return true
+	}
+
+	// enumerate blob in containers, and add matched blob into transfer.
+	return enumerateBlobsInContainer(
+		ctx,
+		srcContainerURL,
+		blobNamePrefix,
+		blobFilter,
+		func(blobItem azblob.BlobItem) error {
+			var blobRelativePath = ""
+			// As downloading logic temporarily, refactor after scenario ensured.
+			if isWildcardSearch {
+				blobRelativePath = strings.Replace(blobItem.Name, blobNamePrefix[:strings.LastIndex(blobNamePrefix, common.AZCOPY_PATH_SEPARATOR_STRING)+1], "", 1)
+			} else {
+				blobRelativePath = gCopyUtil.getRelativePath(blobNamePrefix, blobItem.Name)
 			}
-			// TODO: special char (naming resolution) for special directions
-			blobRelativePath := gCopyUtil.getRelativePath(srcSearchPattern, blobItem.Name)
-			tmpDestURL := destBaseURL
-			tmpDestURL.Path = gCopyUtil.generateObjectPath(tmpDestURL.Path, blobRelativePath)
-			err = e.addTransferInternal(
+
+			return e.addBlobToNTransfer(
 				srcContainerURL.NewBlobURL(blobItem.Name).URL(),
-				tmpDestURL,
+				urlExtension{URL: destBaseURL}.generateObjectPath(blobRelativePath),
 				&blobItem.Properties,
 				blobItem.Metadata,
 				cca)
-			if err != nil {
-				return err // TODO: Ensure for list errors, directly return or do logging but not return, make the list mechanism much robust
-			}
-		}
-		marker = listContainerResp.NextMarker
-	}
-	return nil
+		})
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
+func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType != azblob.BlobBlockBlob {
 		glcm.Info(fmt.Sprintf(
@@ -296,7 +244,7 @@ func (e *copyBlobToNEnumerator) addTransferInternal(srcURL, destURL url.URL, pro
 		cca)
 }
 
-func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
+func (e *copyBlobToNEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	if properties.BlobType() != azblob.BlobBlockBlob {
 		glcm.Info(fmt.Sprintf(
@@ -323,11 +271,11 @@ func (e *copyBlobToNEnumerator) addTransferInternal2(srcURL, destURL url.URL, pr
 }
 
 func (e *copyBlobToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
-	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
+	return addTransfer(&(e.CopyJobPartOrderRequest), transfer, cca)
 }
 
 func (e *copyBlobToNEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
+	return dispatchFinalPart(&(e.CopyJobPartOrderRequest), cca)
 }
 
 func (e *copyBlobToNEnumerator) partNum() common.PartNumber {

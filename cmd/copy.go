@@ -673,7 +673,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobBlob():
-		e := copyBlobToNEnumerator(jobPartOrder)
+		e := copyBlobToNEnumerator{
+			copyS2SEnumerator: copyS2SEnumerator{
+				CopyJobPartOrderRequest: jobPartOrder,
+			},
+		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
