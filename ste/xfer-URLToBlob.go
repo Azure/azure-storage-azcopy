@@ -67,7 +67,6 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -82,7 +81,6 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.LogS2SCopyError(info.Source, info.Destination, "Blob Already Exists ", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -217,7 +215,6 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 				bbc.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled. not picking up chunk %d", chunkId))
 			}
-			bbc.jptm.AddToBytesDone(adjustedChunkSize)
 			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
@@ -249,9 +246,6 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
 
-			//adding the chunk size to the bytes transferred to report the progress.
-			bbc.jptm.AddToBytesDone(adjustedChunkSize)
-
 			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
@@ -260,9 +254,6 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			}
 			return
 		}
-
-		//adding the chunk size to the bytes transferred to report the progress.
-		bbc.jptm.AddToBytesDone(adjustedChunkSize)
 
 		// step 4: check if this is the last chunk
 		if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {

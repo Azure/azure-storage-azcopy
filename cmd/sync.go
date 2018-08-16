@@ -217,13 +217,14 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			exitCode = common.EExitCode.Error()
 		}
 		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\nTotalBytesTransferred: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), exitCode)
+			summary.TransfersSkipped,
+			summary.JobStatus, summary.TotalBytesTransferred), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -236,16 +237,17 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// compute the average throughput for the last time interval
 	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
 	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0) * 8
 
 	// reset the interval timer and byte count
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, 2-sec Throughput (Mb/s): %v",
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
 		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+		summary.TransfersSkipped,
 		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
 }
 

@@ -28,10 +28,6 @@ type IJobPartMgr interface {
 	ReportTransferDone() uint32
 	IsForceWriteTrue() bool
 	ScheduleChunks(chunkFunc chunkFunc)
-	AddToBytesDone(value int64) int64
-	AddToBytesToTransfer(value int64) int64
-	BytesDone() int64
-	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	SAS() (string, string)
@@ -212,14 +208,6 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
-
-	// bytes transferred defines the number of bytes of a job part that are uploaded / downloaded successfully or failed.
-	// bytesDone is used to represent the progress of Job more precisely.
-	bytesDone int64
-
-	// totalBytesToTransfer defines the total number of bytes of JobPart that needs to uploaded or downloaded.
-	// It is the sum of size of all the transfer of a job part.
-	totalBytesToTransfer int64
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
@@ -275,11 +263,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
-		jpm.AddToBytesToTransfer(jppt.SourceSize)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone()            // Don't schedule an already-completed/failed transfer
-			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the bytes done
+			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
 			continue
 		}
 
@@ -292,8 +278,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// If source doesn't exists, skip the transfer
 			_, ok := includeTransfer[src]
 			if !ok {
-				jpm.ReportTransferDone()            // Don't schedule transfer which is not mentioned to be included
-				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
+				jpm.ReportTransferDone() // Don't schedule transfer which is not mentioned to be included
 				continue
 			}
 		}
@@ -307,8 +292,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 			// skip the transfer
 			_, ok := excludeTransfer[src]
 			if ok {
-				jpm.ReportTransferDone()            // Don't schedule transfer which is mentioned to be excluded
-				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
+				jpm.ReportTransferDone() // Don't schedule transfer which is mentioned to be excluded
 				continue
 			}
 		}
@@ -565,22 +549,6 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 	//jpm.createPipeline() //TODO: Ensure with @Jeff and @Prateek, as pipeline is created per jobPartMgr, it is moved to ScheduleTransfers
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
-}
-
-func (jpm *jobPartMgr) AddToBytesDone(value int64) int64 {
-	return atomic.AddInt64(&jpm.bytesDone, value)
-}
-
-func (jpm *jobPartMgr) AddToBytesToTransfer(value int64) int64 {
-	return atomic.AddInt64(&jpm.totalBytesToTransfer, value)
-}
-
-func (jpm *jobPartMgr) BytesDone() int64 {
-	return atomic.LoadInt64(&jpm.bytesDone)
-}
-
-func (jpm *jobPartMgr) BytesToTransfer() int64 {
-	return atomic.LoadInt64(&jpm.totalBytesToTransfer)
 }
 
 func (jpm *jobPartMgr) IsForceWriteTrue() bool {

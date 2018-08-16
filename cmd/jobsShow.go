@@ -138,8 +138,6 @@ func PrintJobTransfers(outputForamt common.OutputFormat, listTransfersResponse c
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
 func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.ListJobSummaryResponse) {
-	// Reset tge JobProgressPercentage
-	summary.JobProgressPercentage = 0
 	// Reset the bytes over the wire counter
 	summary.BytesOverWire = 0
 
