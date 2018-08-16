@@ -103,6 +103,15 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		if err != nil {
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			// Since the transfer failed, the file created above should be deleted
+			// If there was an error while opening / creating the file, delete will fail.
+			// But delete is required when error occurred while truncating the file and
+			// in this case file should be deleted.
+			err = deleteFile(info.Destination)
+			if err != nil {
+				// If there was an error deleting the file, log the error
+				jptm.LogError(info.Destination, "Delete File Error ", err)
+			}
 			jptm.ReportTransferDone()
 			return
 		}
@@ -293,7 +302,7 @@ func createFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 		return nil, err
 	}
 	if truncateError := f.Truncate(fileSize); truncateError != nil {
-		return nil, err
+		return nil, truncateError
 	}
 	return f, nil
 }
