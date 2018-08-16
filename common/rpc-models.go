@@ -138,8 +138,9 @@ type ListJobSummaryResponse struct {
 	TotalTransfers        uint32
 	TransfersCompleted    uint32
 	TransfersFailed       uint32
-	JobProgressPercentage float64
+	TransfersSkipped      uint32
 	BytesOverWire         uint64
+	TotalBytesTransferred uint64
 	FailedTransfers       []TransferDetail
 }
 

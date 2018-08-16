@@ -180,8 +180,6 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			if fru.jptm.ShouldLog(pipeline.LogDebug) {
 				fru.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Chunk of cancelled transfer not picked "))
 			}
-			// add range updated to bytes done for progress
-			fru.jptm.AddToBytesDone(calculatedRangeInterval)
 			// report the chunk done
 			// if it is the last range that was scheduled to be appended to the file
 			// report transfer done
@@ -209,8 +207,6 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				fru.jptm.Cancel()
 				fru.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
-			// add range updated to bytes done for progress
-			fru.jptm.AddToBytesDone(calculatedRangeInterval)
 			// report the number of range done
 			lastRangeDone, _ := fru.jptm.ReportChunkDone()
 			// if the current range is the last range to be appended for the transfer
@@ -225,9 +221,6 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			fru.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Append Range Successful for startrange %d "+
 				"and rangeInterval %d", startRange, calculatedRangeInterval))
 		}
-
-		// add range updated to bytes done for progress
-		fru.jptm.AddToBytesDone(calculatedRangeInterval)
 
 		//report the chunkDone
 		lastRangeDone, _ := fru.jptm.ReportChunkDone()

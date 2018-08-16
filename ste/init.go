@@ -333,6 +333,22 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
 		}
+
+		// Iterate through all transfer of the Job Parts and reset the transfer status
+		jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
+			jpp := jpm.Plan()
+			// Iterate through this job part's transfers
+			for t := uint32(0); t < jpp.NumTransfers; t++ {
+				// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
+				jppt := jpp.Transfer(t)
+				// If the transfer status is less than -1, it means the transfer failed because of some reason.
+				// Transfer Status needs to reset.
+				if jppt.TransferStatus() <= -1 {
+					jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+				}
+			}
+		})
+
 		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
 		//}()
 		jr = common.CancelPauseResumeResponse{
@@ -380,12 +396,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		FailedTransfers:    []common.TransferDetail{},
 	}
 
-	totalBytesToTransfer := int64(0)
-	totalBytesTransferred := int64(0)
-
 	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
-		totalBytesToTransfer += jpm.BytesToTransfer()
-		totalBytesTransferred += jpm.BytesDone()
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalTransfers += jpp.NumTransfers
@@ -398,9 +409,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
+				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
-				common.ETransferStatus.BlobTierFailure(),
-				common.ETransferStatus.BlobAlreadyExistsFailure():
+				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
@@ -410,6 +421,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 						Src:            src,
 						Dst:            dst,
 						TransferStatus: common.ETransferStatus.Failed()}) // TODO: Optimize
+			case common.ETransferStatus.BlobAlreadyExistsFailure(),
+				common.ETransferStatus.FileAlreadyExistsFailure():
+				js.TransfersSkipped++
 			}
 		}
 	})
@@ -425,8 +439,6 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
 	}
 
-	// calculating the progress of Job and rounding the progress upto 4 decimal.
-	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred*100)/float64(totalBytesToTransfer), 4)
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later

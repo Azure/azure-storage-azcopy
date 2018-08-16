@@ -33,7 +33,6 @@ type IJobPartTransferMgr interface {
 	ReportTransferDone() uint32
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
-	AddToBytesDone(value int64) int64
 	Cancel()
 	WasCanceled() bool
 	// TODO: added for debugging purpose. remove later
@@ -189,10 +188,6 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer *common.MMF) (headers
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(dataFileToXfer)
-}
-
-func (jptm *jobPartTransferMgr) AddToBytesDone(value int64) int64 {
-	return jptm.jobPartMgr.AddToBytesDone(value)
 }
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.

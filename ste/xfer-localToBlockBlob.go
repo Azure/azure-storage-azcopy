@@ -76,7 +76,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -92,7 +91,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.LogUploadError(info.Source, info.Destination, "Blob already exists", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -102,7 +100,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	srcFile, err := os.Open(info.Source)
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -118,7 +115,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		if err != nil {
 			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error-"+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -318,7 +314,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if bbu.jptm.ShouldLog(pipeline.LogDebug) {
 				bbu.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled; skipping chunk %d", chunkId))
 			}
-			bbu.jptm.AddToBytesDone(adjustedChunkSize)
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogDebug) {
 					bbu.jptm.Log(pipeline.LogDebug,
@@ -356,9 +351,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 			}
 
-			//adding the chunk size to the bytes transferred to report the progress.
-			bbu.jptm.AddToBytesDone(adjustedChunkSize)
-
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
 				if bbu.jptm.ShouldLog(pipeline.LogDebug) {
 					bbu.jptm.Log(pipeline.LogDebug,
@@ -368,9 +360,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			}
 			return
 		}
-
-		//adding the chunk size to the bytes transferred to report the progress.
-		bbu.jptm.AddToBytesDone(adjustedChunkSize)
 
 		// step 4: check if this is the last chunk
 		if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
@@ -495,9 +484,6 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 		jptm.SetStatus(common.ETransferStatus.Success())
 	}
 
-	// adding the bytes transferred to report the progress of transfer.
-	jptm.AddToBytesDone(jptm.Info().SourceSize)
-
 	// updating number of transfers done for job part order
 	jptm.ReportTransferDone()
 
@@ -535,8 +521,6 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 		// If the calling page is the last page of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		pageDone := func() {
-			// adding the page size to the bytes transferred.
-			pbu.jptm.AddToBytesDone(calculatedPageSize)
 			if lastPage, _ := pbu.jptm.ReportChunkDone(); lastPage {
 				if pbu.jptm.ShouldLog(pipeline.LogDebug) {
 					pbu.jptm.Log(pipeline.LogDebug,

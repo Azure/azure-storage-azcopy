@@ -177,6 +177,50 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.aadEndpoint = raw.aadEndpoint
 	// generate a unique job ID
 	cooked.jobID = common.NewJobID()
+
+	// check for the flag value relative to fromTo location type
+	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
+	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
+	switch cooked.fromTo {
+	case common.EFromTo.LocalBlob(),
+		common.EFromTo.LocalFile():
+		if cooked.preserveLastModifiedTime {
+			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+		}
+	case common.EFromTo.BlobLocal(),
+		common.EFromTo.FileLocal():
+		if cooked.followSymlinks {
+			return cooked, fmt.Errorf("follow-symlinks flag is set to true while downloading")
+		}
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is set while downloading")
+		}
+		if cooked.noGuessMimeType {
+			return cooked, fmt.Errorf("no-guess-mime-type is set while downloading")
+		}
+		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
+		}
+	case common.EFromTo.BlobBlob(),
+		common.EFromTo.FileBlob():
+		if cooked.preserveLastModifiedTime {
+			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from sevice to service")
+		}
+		if cooked.followSymlinks {
+			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from sevice to service")
+		}
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is set while copying from sevice to service")
+		}
+		if cooked.noGuessMimeType {
+			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from sevice to service")
+		}
+		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from sevice to service")
+		}
+	}
 	return cooked, nil
 }
 
@@ -782,13 +826,14 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			exitCode = common.EExitCode.Error()
 		}
 		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\n Number of Transfers Skipped: %v\n Final Job Status: %v\n TotalBytesTransferred: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), exitCode)
+			summary.TransfersSkipped,
+			summary.JobStatus, summary.TotalBytesTransferred), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -799,9 +844,9 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	}
 
 	// compute the average throughput for the last time interval
-	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
 	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 
 	// reset the interval timer and byte count
 	cca.intervalStartTime = time.Now()
@@ -809,18 +854,19 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 	// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 	if throughPut == 0 {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s",
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s",
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+			summary.TransfersSkipped,
 			summary.TotalTransfers,
 			scanningString))
 	} else {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped %v Total %s, 2-sec Throughput (Mb/s): %v",
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-			summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+			summary.TransfersSkipped, summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
 	}
 }
 

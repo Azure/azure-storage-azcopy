@@ -34,7 +34,6 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -49,7 +48,6 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			jptm.LogError(info.Destination, "File Already Exists", err)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -174,8 +172,6 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 		// If the transfer status is less than 0, it means transfer either got failed or cancelled
 		// Perform the clean up
 		chunkDone := func() {
-			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
-			bffd.jptm.AddToBytesDone(adjustedRangeSize)
 			lastChunk, _ := bffd.jptm.ReportChunkDone()
 			if lastChunk {
 				if bffd.jptm.ShouldLog(pipeline.LogInfo) {
@@ -232,8 +228,6 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				chunkDone()
 				return
 			}
-
-			bffd.jptm.AddToBytesDone(adjustedRangeSize)
 
 			lastChunk, _ := bffd.jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk
