@@ -4,7 +4,6 @@ ENV GOPATH /go
 ENV PATH ${GOPATH}/bin:$PATH
 RUN go get -u github.com/golang/dep/cmd/dep
 RUN go get -u github.com/golang/lint/golint
-RUN go get -u github.com/mitchellh/gox
 
 # Prepare enviroment for OSX cross compilation. 
 # These steps are referenced from https://github.com/karalabe/xgo/blob/master/docker/base/Dockerfile (licensed with MIT)
