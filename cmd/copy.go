@@ -182,10 +182,17 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
-	case common.EFromTo.LocalBlob(),
-		common.EFromTo.LocalFile():
+	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+		}
+	case common.EFromTo.LocalFile():
+		if cooked.preserveLastModifiedTime {
+			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+		}
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is set while downloading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
