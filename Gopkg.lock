@@ -11,17 +11,17 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:90b8691a808783101d3a1f6137dff26e76930585b1427cf966193a58c4d20309"
+  digest = "1:75b36c8cc8d49e2b33c9e3c3583cea94ec7a26667637ccfab55ca0637665a2d7"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = [
     "2016-05-31/azblob",
-    "2018-03-28/azblob"
+    "2018-03-28/azblob",
   ]
   pruneopts = "UT"
-  revision = "eaae161d9d5e07363f04ddb19d84d57efc66d1a1"
+  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
 
 [[projects]]
-  digest = "1:81b7c442e83f8b22844d1c5abdb53721df2f0c463a3e2bd6ba62f8b527766af3"
+  digest = "1:08032073e38c5051f85fab2184b4c41a818a6777c7b77b2db5dc10abd37eb5c1"
   name = "github.com/Azure/azure-storage-file-go"
   packages = ["2017-07-29/azfile"]
   pruneopts = "UT"
@@ -29,23 +29,24 @@
   version = "0.2.0"
 
 [[projects]]
-  digest = "1:fca3885aedbea8cfa5aff3616f1f7794e5b1989c2e5e55ffeb2605dbf3328696"
+  digest = "1:63338b441142be9b2af072dfb8bda052f5f888ec2178bbf6e06f52e59006a916"
   name = "github.com/Azure/go-autorest"
   packages = [
     "autorest/adal",
-    "autorest/date"
+    "autorest/date",
+    "version",
   ]
   pruneopts = "UT"
-  revision = "894522ed0d5cab8d143c39116ddc5f605a1931ee"
-  version = "v10.13.0"
+  revision = "39013ecb48eaf6ced3f4e3e1d95515140ce6b3cf"
+  version = "v10.15.2"
 
 [[projects]]
   branch = "master"
-  digest = "1:3b037533aea8b5f352ba10b9bef5bb1223a2e5255ef7f116d30e38d2f3e943ab"
+  digest = "1:6fe8b3870bcdbe9132640765291d4b2952e18b37e5f3f78db87afdc32b492d65"
   name = "github.com/JeffreyRichter/enum"
   packages = ["enum"]
   pruneopts = "UT"
-  revision = "7442b5f6e9f53e7658880bd67da9402700acd72e"
+  revision = "2567042f9cda26772f0afe08bab6e5105745f298"
 
 [[projects]]
   digest = "1:76dc72490af7174349349838f2fe118996381b31ea83243812a97e5a0fd5ed55"
@@ -65,7 +66,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ac64f01acc5eeea9dde40e326de6b6471e501392ec06524c3b51033aa50789bc"
+  digest = "1:a361611b8c8c75a1091f00027767f7779b29cb37c456a71b8f2604c88057ab40"
   name = "github.com/hashicorp/hcl"
   packages = [
     ".",
@@ -77,7 +78,7 @@
     "hcl/token",
     "json/parser",
     "json/scanner",
-    "json/token"
+    "json/token",
   ]
   pruneopts = "UT"
   revision = "ef8a98b0bbce4a65b5aa4c368430a80ddc533168"
@@ -132,11 +133,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8eb17c2ec4df79193ae65b621cd1c0c4697db3bc317fe6afdc76d7f2746abd05"
+  digest = "1:c7354463195544b1ab3c1f1fadb41430947f5d28dfbf2cdbd38268c5717a5a03"
   name = "github.com/mitchellh/go-homedir"
   packages = ["."]
   pruneopts = "UT"
-  revision = "3864e76763d94a6df2f9960b16a20a33da9f9a66"
+  revision = "58046073cbffe2f25d425fe1331102f55cf719de"
 
 [[projects]]
   branch = "master"
@@ -155,11 +156,11 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:37ace7f35375adec11634126944bdc45a673415e2fcc07382d03b75ec76ea94c"
+  digest = "1:bd1ae00087d17c5a748660b8e89e1043e1e5479d0fea743352cda2f8dd8c4f84"
   name = "github.com/spf13/afero"
   packages = [
     ".",
-    "mem"
+    "mem",
   ]
   pruneopts = "UT"
   revision = "787d034dfe70e44075ccc060d346146ef53270ad"
@@ -174,7 +175,7 @@
   version = "v1.2.0"
 
 [[projects]]
-  digest = "1:872fa275c31e1f9db31d66fa9b1d4a7bb9a080ff184e6977da01f36bfbe07f11"
+  digest = "1:645cabccbb4fa8aab25a956cbcbdf6a6845ca736b2c64e197ca7cbb9d210b939"
   name = "github.com/spf13/cobra"
   packages = ["."]
   pruneopts = "UT"
@@ -183,38 +184,38 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:080e5f630945ad754f4b920e60b4d3095ba0237ebf88dc462eb28002932e3805"
+  digest = "1:8a020f916b23ff574845789daee6818daf8d25a4852419aae3f0b12378ba432a"
   name = "github.com/spf13/jwalterweatherman"
   packages = ["."]
   pruneopts = "UT"
-  revision = "7c0cea34c8ece3fbeb2b27ab9b59511d360fb394"
+  revision = "14d3d4c518341bea657dd8a226f5121c0ff8c9f2"
 
 [[projects]]
-  digest = "1:9424f440bba8f7508b69414634aef3b2b3a877e522d8a4624692412805407bb7"
+  digest = "1:dab83a1bbc7ad3d7a6ba1a1cc1760f25ac38cdf7d96a5cdd55cd915a4f5ceaf9"
   name = "github.com/spf13/pflag"
   packages = ["."]
   pruneopts = "UT"
-  revision = "583c0c0531f06d5278b7d917446061adc344b5cd"
-  version = "v1.0.1"
-
-[[projects]]
-  digest = "1:59e7dceb53b4a1e57eb1eb0bf9951ff0c25912df7660004a789b62b4e8cdca3b"
-  name = "github.com/spf13/viper"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "b5e8006cbee93ec955a89ab31e0e3ce3204f3736"
+  revision = "9a97c102cda95a86cec2345a6f09f55a939babf5"
   version = "v1.0.2"
 
 [[projects]]
+  digest = "1:4fc8a61287ccfb4286e1ca5ad2ce3b0b301d746053bf44ac38cf34e40ae10372"
+  name = "github.com/spf13/viper"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "907c19d40d9a6c9bb55f040ff4ae45271a4754b9"
+  version = "v1.1.0"
+
+[[projects]]
   branch = "master"
-  digest = "1:d773e525476aefa22ea944a5425a9bfb99819b2e67eeb9b1966454fd57522bbf"
+  digest = "1:05662433b3a13c921587a6e622b5722072edff83211efd1cd79eeaeedfd83f07"
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = "UT"
-  revision = "ac767d655b305d4e9612f5f6e33120b9176c4ad4"
+  revision = "1c9583448a9c3aa0f9a6a5241bf73c0bd8aafded"
 
 [[projects]]
-  digest = "1:038003d098ffc345c4c5c6d47bcc6920b2649ee0c0d557162e54e75c76cadf8b"
+  digest = "1:8029e9743749d4be5bc9f7d42ea1659471767860f0cdc34d37c3111bd308a295"
   name = "golang.org/x/text"
   packages = [
     "internal/gen",
@@ -222,7 +223,7 @@
     "internal/ucd",
     "transform",
     "unicode/cldr",
-    "unicode/norm"
+    "unicode/norm",
   ]
   pruneopts = "UT"
   revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
@@ -259,7 +260,7 @@
     "github.com/mitchellh/go-homedir",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",
-    "gopkg.in/check.v1"
+    "gopkg.in/check.v1",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
