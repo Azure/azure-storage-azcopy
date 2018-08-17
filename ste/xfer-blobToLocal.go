@@ -85,7 +85,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 				err = deleteFile(info.Destination)
 				if err != nil {
 					// If there was an error deleting the file, log the error
-					jptm.LogError(info.Destination, "Deleting the file ", err)
+					jptm.LogError(info.Destination, "Delete File Error ", err)
 				}
 			}
 			if jptm.ShouldLog(pipeline.LogInfo) {
