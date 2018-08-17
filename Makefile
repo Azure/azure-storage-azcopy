@@ -31,7 +31,7 @@ build: setup ## build binaries for the project
 	GOARCH=amd64 GOOS=windows $(call with_docker,go build -o "azcopy_windows_amd64",-e GOARCH -e GOOS)
 
 build-osx: setup ## build osx binary specially, as it's using CGO
-	CC=o64-clang CXX=o64-clang++ GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 $(call with_docker,go build -o "azcopy_darwin_amd64")
+	CC=o64-clang CXX=o64-clang++ GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 $(call with_docker,go build -o "azcopy_darwin_amd64",-e CC -e CXX -e GOOS -e GOARCH -e CGO_ENABLED)
 
 smoke: setup ## set up smoke test
 	$(call with_docker,go build -o test-validator ./testSuite/)
