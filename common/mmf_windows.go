@@ -57,6 +57,12 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	}
 	defer syscall.CloseHandle(hMMF)
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
+
+	// pre-fetch the memory mapped file so that performance is better when it is read
+	err := prefetchVirtualMemory(&memoryRangeEntry{VirtualAddress: addr, NumberOfBytes: int(length)})
+	if err != nil {
+		panic(err)
+	}
 	m := []byte{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr
@@ -95,4 +101,37 @@ func (m *MMF) UnuseMMF() {
 // Slice() returns the memory mapped byte slice
 func (m *MMF) Slice() []byte {
 	return m.slice
+}
+
+type memoryRangeEntry struct {
+	VirtualAddress uintptr
+	NumberOfBytes  int
+}
+
+var procPrefetchVirtualMemory *syscall.Proc
+
+func init() {
+	// only load the DLL once
+	var modkernel32, _ = syscall.LoadDLL("kernel32.dll")
+	procPrefetchVirtualMemory, _ = modkernel32.FindProc("PrefetchVirtualMemory")
+}
+
+func prefetchVirtualMemory(virtualAddresses *memoryRangeEntry) (err error) {
+	// if the version of Windows does not support this functionality, just skip
+	if procPrefetchVirtualMemory == nil {
+		return nil
+	}
+
+	// make system call to prefetch the memory range
+	hProcess, _ := syscall.GetCurrentProcess()
+	r1, _, e1 := syscall.Syscall6(procPrefetchVirtualMemory.Addr(), 4, uintptr(hProcess), 1, uintptr(unsafe.Pointer(virtualAddresses)), 0, 0, 0)
+
+	if r1 == 0 {
+		if e1 != 0 {
+			return e1
+		} else {
+			return nil
+		}
+	}
+	return nil
 }
