@@ -167,9 +167,4 @@ func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.Li
 		summary.TransfersFailed,
 		summary.JobStatus,
 	))
-
-	// send each message separately so that the printing is smooth
-	for index := 0; index < len(summary.FailedTransfers); index++ {
-		glcm.Info(fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst))
-	}
 }
