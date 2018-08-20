@@ -52,8 +52,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
 	}
 	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
-	//TODO: Prefetch api for darwin x64 is different than the one for linux.
-	//syscall.Madvise(addr, syscall.MADV_SEQUENTIAL|syscall.MADV_WILLNEED)
+	syscall.Madvise(addr, syscall.MADV_SEQUENTIAL|syscall.MADV_WILLNEED)
 	return &MMF{slice: (addr), isMapped: true, lock: sync.RWMutex{}}, err
 }
 
