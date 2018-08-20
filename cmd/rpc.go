@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -16,21 +15,11 @@ import (
 var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
 	err := inprocSend(cmd, request, response)
 	//err := NewHttpClient("").send(cmd, request, response)
-	if err != nil {
-		panic(err)
-	}
+	common.PanicIfErr(err)
 }
 
 // Send method on HttpClient sends the data passed in the interface for given command type to the client url
 func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData interface{}) error {
-	// waiting for JobsAdmin to initialize before the request are send to transfer engine.
-	select {
-	case <-ste.JobsAdminInitialized:
-		break
-	default:
-		time.Sleep(time.Millisecond * 500)
-	}
-
 	switch rpcCmd {
 	case common.ERpcCmd.CopyJobPartOrder():
 		*(responseData.(*common.CopyJobPartOrderResponse)) = ste.ExecuteNewCopyJobPartOrder(*requestData.(*common.CopyJobPartOrderRequest))
@@ -48,7 +37,7 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 		responseData = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Paused())
 
 	case common.ERpcCmd.CancelJob():
-		*(responseData.(*common.CancelPauseResumeResponse)) = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelling())
+		*(responseData.(*common.CancelPauseResumeResponse)) = ste.CancelPauseJobOrder(requestData.(common.JobID), common.EJobStatus.Cancelled())
 
 	case common.ERpcCmd.ResumeJob():
 		*(responseData.(*common.CancelPauseResumeResponse)) = ste.ResumeJobOrder(*requestData.(*common.ResumeJobRequest))
@@ -99,9 +88,8 @@ func (httpClient *HTTPClient) send(rpcCmd common.RpcCmd, requestData interface{}
 	if err != nil {
 		return fmt.Errorf("error reading response for the request")
 	}
-	if err = json.Unmarshal(responseJson, responseData); err != nil {
-		panic(err)
-	}
+	err = json.Unmarshal(responseJson, responseData)
+	common.PanicIfErr(err)
 	return nil
 }
 

@@ -112,7 +112,7 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			marker = lResp.NextMarker
 		}
 
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 		}
 
-		err = e.dispatchFinalPart()
+		err = e.dispatchFinalPart(cca)
 		if err != nil {
 			return err
 		}
@@ -177,10 +177,26 @@ func (e *removeFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *co
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *removeFileEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
+func (e *removeFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }
 
-func (e *removeFileEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+// TODO: Optimize for resource consumption cases. Can change to DFS with recursive method simply.
+// Temporarily keep this implementation as discussion.
+type directoryStack []azfile.DirectoryURL
+
+func (s *directoryStack) Push(d azfile.DirectoryURL) {
+	*s = append(*s, d)
+}
+
+func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
+	l := len(*s)
+
+	if l == 0 {
+		return nil, false
+	} else {
+		e := (*s)[l-1]
+		*s = (*s)[:l-1]
+		return &e, true
+	}
 }

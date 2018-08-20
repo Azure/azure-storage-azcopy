@@ -47,6 +47,8 @@ func init() {
 			}
 			return nil
 		},
+		// hide oauth feature temporarily
+		Hidden: true,
 	}
 
 	rootCmd.AddCommand(logoutCmd)

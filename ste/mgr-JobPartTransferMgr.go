@@ -33,7 +33,6 @@ type IJobPartTransferMgr interface {
 	ReportTransferDone() uint32
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
-	AddToBytesDone(value int64) int64
 	Cancel()
 	WasCanceled() bool
 	// TODO: added for debugging purpose. remove later
@@ -42,7 +41,9 @@ type IJobPartTransferMgr interface {
 	ReleaseAConnection()
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
+	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
+	LogTransferStart(source, destination, description string)
 	common.ILogger
 }
 
@@ -54,6 +55,9 @@ type TransferInfo struct {
 
 	SrcHTTPHeaders azblob.BlobHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
 	SrcMetadata    common.Metadata
+
+	// Transfer info for blob only
+	SrcBlobType azblob.BlobType
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
@@ -105,7 +109,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata := plan.TransferSrcHTTPHeadersAndMetadata(jptm.transferIndex)
+	srcHTTPHeaders, srcMetadata, srcBlobType := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
@@ -142,13 +146,27 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		}
 		src = sUrl.String()
 	}
+
+	sourceSize := plan.Transfer(jptm.transferIndex).SourceSize
+	var blockSize = dstBlobData.BlockSize
+	// If the blockSize is 0, then User didn't provide any blockSize
+	// We need to set the blockSize in such way that number of blocks per blob
+	// does not exceeds 50000 (max number of block per blob)
+	if blockSize == 0 {
+		blockSize = uint32(common.DefaultBlockBlobBlockSize)
+		for ; uint32(sourceSize/int64(blockSize)) > common.MaxNumberOfBlocksPerBlob; blockSize = 2 * blockSize {
+		}
+	}
+	blockSize = common.Iffuint32(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
+
 	return TransferInfo{
-		BlockSize:      dstBlobData.BlockSize,
+		BlockSize:      blockSize,
 		Source:         src,
-		SourceSize:     plan.Transfer(jptm.transferIndex).SourceSize,
+		SourceSize:     sourceSize,
 		Destination:    dst,
 		SrcHTTPHeaders: srcHTTPHeaders,
 		SrcMetadata:    srcMetadata,
+		SrcBlobType:    srcBlobType,
 	}
 }
 
@@ -170,10 +188,6 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer *common.MMF) (headers
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(dataFileToXfer)
-}
-
-func (jptm *jobPartTransferMgr) AddToBytesDone(value int64) int64 {
-	return jptm.jobPartMgr.AddToBytesDone(value)
 }
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
@@ -239,7 +253,7 @@ func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
 
 func (jptm *jobPartTransferMgr) Log(level pipeline.LogLevel, msg string) {
 	plan := jptm.jobPartMgr.Plan()
-	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: "+msg+" [P#%d-T#%d]", common.LogLevel(level), plan.PartNum, jptm.transferIndex))
+	jptm.jobPartMgr.Log(level, fmt.Sprintf("%s: [P#%d-T#%d] ", common.LogLevel(level), plan.PartNum, jptm.transferIndex)+msg)
 }
 
 func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
@@ -255,17 +269,47 @@ func (jptm *jobPartTransferMgr) ErrorCodeAndString(err error) (int, string) {
 	}
 }
 
+type transferErrorCode string
+
+const (
+	transferErrorCodeUploadFailed   transferErrorCode = "UPLOADFAILED"
+	transferErrorCodeDownloadFailed transferErrorCode = "DOWNLOADFAILED"
+	transferErrorCodeCopyFailed     transferErrorCode = "COPYFAILED"
+)
+
+func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
+	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSigQueryParamForLogging() +
+		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSigQueryParamForLogging()
+	jptm.Log(pipeline.LogError, msg)
+	//jptm.Log(pipeline.LogError, fmt.Sprintf("%v: %s: %03d : %s\n   Dst: %s",
+	//	errorCode, common.URLStringExtension(source).RedactSigQueryParamForLogging(),
+	//	status, errorMsg, common.URLStringExtension(destination).RedactSigQueryParamForLogging()))
+}
+
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
-	jptm.Log(pipeline.LogError, fmt.Sprintf("UPLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+	jptm.logTransferError(transferErrorCodeUploadFailed, source, destination, errorMsg, status)
 }
 
 func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg string, status int) {
-	jptm.Log(pipeline.LogError, fmt.Sprintf("DOWNLOADFAILED: %s: %03d : %s\n   Dst: %s", source, status, errorMsg, destination))
+	jptm.logTransferError(transferErrorCodeDownloadFailed, source, destination, errorMsg, status)
+}
+
+func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg string, status int) {
+	jptm.logTransferError(transferErrorCodeCopyFailed, source, destination, errorMsg, status)
 }
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	status, msg := ErrorEx{err}.ErrorCodeAndString()
-	jptm.Log(pipeline.LogError, fmt.Sprintf("%s: %d: %s-%s", resource, status, context, msg))
+	jptm.Log(pipeline.LogError,
+		fmt.Sprintf("%s: %d: %s-%s", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg))
+}
+
+func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
+	jptm.Log(pipeline.LogInfo,
+		fmt.Sprintf("Starting transfer: Source %q Destination %q. %s",
+			common.URLStringExtension(source).RedactSigQueryParamForLogging(),
+			common.URLStringExtension(destination).RedactSigQueryParamForLogging(),
+			description))
 }
 
 func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }

@@ -208,15 +208,15 @@ Create the File System represented by the given resource URL.
 		Run: func(cmd *cobra.Command, args []string) {
 			cookedArgs, err := rawArgs.cook()
 			if err != nil {
-				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+				glcm.Exit(err.Error(), common.EExitCode.Error())
 			}
 
 			err = cookedArgs.process()
 			if err != nil {
-				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+				glcm.Exit(err.Error(), common.EExitCode.Error())
 			}
 
-			glcm.ExitWithSuccess("Successfully created the resource.", common.EExitCode.Success())
+			glcm.Exit("Successfully created the resource.", common.EExitCode.Success())
 		},
 	}
 

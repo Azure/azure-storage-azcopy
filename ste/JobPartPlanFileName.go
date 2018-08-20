@@ -56,20 +56,14 @@ func (jpfn JobPartPlanFileName) Delete() error {
 func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 	// opening the file with given filename
 	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, 0644) // TODO: Check this permission
-	if err != nil {
-		panic(err)
-	}
+	common.PanicIfErr(err)
 	// Ensure the file gets closed (although we can continue to use the MMF)
 	defer file.Close()
 
 	fileInfo, err := file.Stat()
-	if err != nil {
-		panic(err)
-	}
+	common.PanicIfErr(err)
 	mmf, err := common.NewMMF(file, true, 0, fileInfo.Size())
-	if err != nil {
-		panic(err)
-	}
+	common.PanicIfErr(err)
 	return (*JobPartPlanMMF)(mmf)
 }
 
@@ -93,9 +87,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		slice := reflect.SliceHeader{Data: rv.Pointer(), Len: int(structSize), Cap: int(structSize)}
 		byteSlice := *(*[]byte)(unsafe.Pointer(&slice))
 		err := binary.Write(writer, binary.LittleEndian, byteSlice)
-		if err != nil {
-			panic(err)
-		}
+		common.PanicIfErr(err)
 		return int64(structSize)
 	}
 
@@ -118,21 +110,25 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 	defer file.Close()
 
-	// if block size from the front-end is set to 0, block size is set to default block size
+	// If block size from the front-end is set to 0
+	// store the block-size as 0. While getting the transfer Info
+	// auto correction logic will apply. If the block-size stored is not 0
+	// it means that user provided some block-size and  auto-correct will not
+	// apply.
 	blockSize := order.BlobAttributes.BlockSizeInBytes
-	if blockSize == 0 { // TODO: Fix below
-		blockSize = common.DefaultBlockBlobBlockSize
-		/*switch order.BlobAttributes.BlobType {
-		case common.BlobType{}.Block():
-			blockSize = common.DefaultBlockBlobBlockSize
-		case common.BlobType{}.Append():
-			blockSize = common.DefaultAppendBlobBlockSize
-		case common.BlobType{}.Page():
-			blockSize = common.DefaultPageBlobChunkSize
-		default:
-			panic(errors.New("unrecognized blob type"))
-		}*/
-	}
+	//if blockSize == 0 { // TODO: Fix below
+	//	blockSize = common.DefaultBlockBlobBlockSize
+	//	/*switch order.BlobAttributes.BlobType {
+	//	case common.BlobType{}.Block():
+	//		blockSize = common.DefaultBlockBlobBlockSize
+	//	case common.BlobType{}.Append():
+	//		blockSize = common.DefaultAppendBlobBlockSize
+	//	case common.BlobType{}.Page():
+	//		blockSize = common.DefaultPageBlobChunkSize
+	//	default:
+	//		panic(errors.New("unrecognized blob type"))
+	//	}*/
+	//}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
 		Version:             DataSchemaVersion,
@@ -211,10 +207,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcCacheControlLength:       int16(len(order.Transfers[t].CacheControl)),
 			SrcContentMD5Length:         int16(len(order.Transfers[t].ContentMD5)),
 			SrcMetadataLength:           int16(srcMetadataLength),
+			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			// SrcBlobTierLength:           uint16(len(order.Transfers[t].BlobTier)),
 			// TODO: + Metadata
 
-			atomicTransferStatus: common.ETransferStatus.NotStarted(), // Default
+			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
 		}
 		eof += writeValue(file, &jppt) // Write the transfer entry
@@ -224,7 +221,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
-			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength)
+			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength + jppt.SrcBlobTypeLength)
 	}
 
 	// All the transfers were written; now write each each transfer's src/dst strings
@@ -236,71 +233,56 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 		// Write the src & dst strings to the job part plan file
 		bytesWritten, err := file.WriteString(order.Transfers[t].Source)
-		if err != nil {
-			panic(err)
-		}
+		common.PanicIfErr(err)
 		// write the destination string in memory map file
 		eof += int64(bytesWritten)
 		bytesWritten, err = file.WriteString(order.Transfers[t].Destination)
-		if err != nil {
-			panic(err)
-		}
+		common.PanicIfErr(err)
 		eof += int64(bytesWritten)
 
 		// For S2S copy, write the src properties
 		if len(order.Transfers[t].ContentType) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		if len(order.Transfers[t].ContentEncoding) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentEncoding)
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		if len(order.Transfers[t].ContentLanguage) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentLanguage)
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		if len(order.Transfers[t].ContentDisposition) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentDisposition)
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		if len(order.Transfers[t].CacheControl) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].CacheControl)
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		if order.Transfers[t].ContentMD5 != nil {
 			bytesWritten, err = file.WriteString(string(order.Transfers[t].ContentMD5))
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		// For S2S copy, write the src metadata
 		if order.Transfers[t].Metadata != nil {
 			metadataStr, err := order.Transfers[t].Metadata.Marshal()
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
 
 			bytesWritten, err = file.WriteString(metadataStr)
-			if err != nil {
-				panic(err)
-			}
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
+		if len(order.Transfers[t].BlobType) != 0 {
+			bytesWritten, err = file.WriteString(string(order.Transfers[t].BlobType))
+			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
 		// if len(order.Transfers[t].BlobTier) != 0 {

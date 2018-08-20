@@ -147,7 +147,6 @@ def init():
         return
     else:
         test_dir_path += "\\test_data"
-    print("test container url ", util.test_container_url)
 
 def cleanup():
     # delete the log files
@@ -161,38 +160,62 @@ def cleanup():
 def main():
     print("Smoke tests starting...")
     init()
-    suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    test_class_to_run = [Block_Upload_User_Scenarios,
+                         Blob_Download_User_Scenario,
+                         PageBlob_Upload_User_Scenarios,
+                         BlobFs_Upload_OAuth_User_Scenarios,
+                         BlobFs_Download_OAuth_User_Scenarios,
+                         Azcopy_Operation_User_Scenario,
+                         FileShare_Download_User_Scenario,
+                         FileShare_Upload_User_Scenario,
+                         BlobFs_Upload_ShareKey_User_Scenarios,
+                         BlobFs_Download_SharedKey_User_Scenarios,
+                         Service_2_Service_Copy_User_Scenario]
+    suites_list = []
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    loader = unittest.TestLoader()
+    for test_class in test_class_to_run:
+        suite = loader.loadTestsFromTestCase(test_class)
+        suites_list.append(suite)
+    big_suite = unittest.TestSuite(suites_list)
+    runner = unittest.TextTestRunner(verbosity=2)
+    results = runner.run(big_suite)
+    if results.wasSuccessful() is False:
+        sys.exit(1)
 
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_OAuth_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_OAuth_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)    
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(Azcopy_Operation_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Download_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Upload_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_ShareKey_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_SharedKey_User_Scenarios)
-    unittest.TextTestRunner(verbosity=2).run(suite)
-
-    suite = unittest.TestLoader().loadTestsFromTestCase(Service_2_Service_Copy_User_Scenario)
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    # suite = unittest.TestLoader().loadTestsFromTestCase(Block_Upload_User_Scenarios)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(Blob_Download_User_Scenario)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(PageBlob_Upload_User_Scenarios)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_OAuth_User_Scenarios)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_OAuth_User_Scenarios)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(Azcopy_Operation_User_Scenario)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Download_User_Scenario)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(FileShare_Upload_User_Scenario)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Upload_ShareKey_User_Scenarios)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(BlobFs_Download_SharedKey_User_Scenarios)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
+    #
+    # suite = unittest.TestLoader().loadTestsFromTestCase(Service_2_Service_Copy_User_Scenario)
+    # unittest.TextTestRunner(verbosity=2).run(suite)
 
     cleanup()
 

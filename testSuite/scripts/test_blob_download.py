@@ -434,8 +434,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # but recursive flag is set to false, so no files will be downloaded
         dir_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command_get_output()
-        self.assertEquals(result, None)
+            add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command()
+        self.assertEquals(result, False)
 
         # create the resource sas
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")

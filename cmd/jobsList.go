@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -33,10 +34,9 @@ type ListResponse struct {
 func init() {
 	// lsCmd represents the listJob command
 	lsCmd := &cobra.Command{
-		Use:        "listJobs",
-		Aliases:    []string{"lsJobs", "lsjobs", "listjobs"},
-		SuggestFor: []string{"lsJbs", "lsJob", "lsobs"},
-		Short:      "Display information on all jobs",
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "Display information on all jobs",
 		Long: `
 Display information on all jobs.`,
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -51,14 +51,14 @@ Display information on all jobs.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := HandleListJobsCommand()
 			if err == nil {
-				glcm.ExitWithSuccess("", common.EExitCode.Success())
+				glcm.Exit("", common.EExitCode.Success())
 			} else {
-				glcm.ExitWithError(err.Error(), common.EExitCode.Error())
+				glcm.Exit(err.Error(), common.EExitCode.Error())
 			}
 		},
 	}
 
-	rootCmd.AddCommand(lsCmd)
+	jobsCmd.AddCommand(lsCmd)
 }
 
 // HandleListJobsCommand sends the ListJobs request to transfer engine
@@ -76,8 +76,9 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 	}
 
 	glcm.Info("Existing Jobs ")
-	for index := 0; index < len(listJobResponse.JobIDs); index++ {
-		glcm.Info(listJobResponse.JobIDs[index].String())
+	for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
+		jobDetail := listJobResponse.JobIDDetails[index]
+		glcm.Info(fmt.Sprintf("JobId: %s\nCommand: %s", jobDetail.JobId.String(), jobDetail.CommandString))
 	}
 	return nil
 }

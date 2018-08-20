@@ -53,15 +53,18 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// then chunk size will be 4 MB.
 	if chunkSize > common.DefaultAzureFileChunkSize {
 		chunkSize = common.DefaultAzureFileChunkSize
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo,
-				fmt.Sprintf("specified block size %d is larger than maximum file chunk size, use 4MB as chunk size.", info.BlockSize))
+		if jptm.ShouldLog(pipeline.LogWarning) {
+			jptm.Log(pipeline.LogWarning,
+				fmt.Sprintf("Block size %d larger than maximum file chunk size, 4 MB chunk size used", info.BlockSize))
 		}
+	}
+
+	if jptm.ShouldLog(pipeline.LogInfo) {
+		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Chunk size %d", chunkSize))
 	}
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -73,12 +76,9 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := fileURL.GetProperties(jptm.Context())
 		if err == nil {
 			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
-			}
+			jptm.LogUploadError(info.Source, info.Destination, "Blob Already Exists ", 0)
 			// Mark the transfer as failed with FileAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -87,21 +87,15 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// step 2: Map file upload before transferring chunks and get info from map file.
 	srcFile, err := os.Open(info.Source)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error opening the source file %d", info.SourceSize))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, "File Open Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
 	srcFileInfo, err := srcFile.Stat()
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo, fmt.Sprintf("error getting the source file Info of file %d", info.SourceSize))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, "File Stat Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -111,12 +105,9 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		// file needs to be memory mapped only when the file size is greater than 0.
 		srcMmf, err = common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("error memory mapping the source file %s. Failed with error %s", srcFile.Name(), err.Error()))
-			}
+			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
 			srcFile.Close()
 			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -129,10 +120,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// 3a: Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
 	err = createParentDirToRoot(jptm.Context(), fileURL, p)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo,
-				fmt.Sprintf("failed since Create parent directory for file failed due to %s", err.Error()))
-		}
+		jptm.LogUploadError(info.Source, info.Destination, "Parent Directory Create Error "+err.Error(), 0)
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
@@ -142,10 +130,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 		err = srcFile.Close()
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
-			}
+			jptm.LogError(info.Source, "File Close Error ", err)
 		}
 		return
 	}
@@ -153,10 +138,8 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	// 3b: Create Azure file with the source size.
 	_, err = fileURL.Create(jptm.Context(), fileSize, fileHTTPHeaders, metaData)
 	if err != nil {
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo,
-				fmt.Sprintf("failed since Create failed due to %s", err.Error()))
-		}
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogUploadError(info.Source, info.Destination, "File Create Error "+msg, status)
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
@@ -166,10 +149,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 		err = srcFile.Close()
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
-			}
+			jptm.LogError(info.Source, "File Close Error ", err)
 		}
 		return
 	}
@@ -181,10 +161,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.ReportTransferDone()
 		err = srcFile.Close()
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
-			}
+			jptm.LogError(info.Source, "File Close Error ", err)
 		}
 		return
 	}
@@ -212,26 +189,21 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 }
 
 func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.MMF, fileURL azfile.FileURL, pacer *pacer, startRange int64, pageSize int64) chunkFunc {
+	info := jptm.Info()
 	return func(workerId int) {
 		// rangeDone is the function called after success / failure of each range.
 		// If the calling range is the last range of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		rangeDone := func() {
-			// adding the range size to the bytes transferred.
-			jptm.AddToBytesDone(pageSize)
 			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d which is finalizing transfer", workerId))
+				if jptm.ShouldLog(pipeline.LogDebug) {
+					jptm.Log(pipeline.LogDebug, "Finalizing transfer")
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
 				srcMmf.Unmap()
 				err := srcFile.Close()
 				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("got an error while closing file %s because of %s", srcFile.Name(), err.Error()))
-					}
+					jptm.LogError(info.Source, "File Close Error ", err)
 				}
 				// If the transfer status is less than or equal to 0
 				// then transfer was either failed or cancelled
@@ -249,9 +221,9 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 		}
 
 		if jptm.WasCanceled() {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("is cancelled. Hence not picking up range %d", startRange))
+			if jptm.ShouldLog(pipeline.LogDebug) {
+				jptm.Log(pipeline.LogDebug,
+					fmt.Sprintf("Range %d not picked, transfer is cancelled", startRange))
 			}
 			rangeDone()
 		} else {
@@ -276,9 +248,9 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 			// If all the bytes in the rangeBytes is 0, then we do not need to perform the PutPage
 			// Updating number of chunks done.
 			if allBytesZero {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo,
-						fmt.Sprintf("has worker %d which is not performing UploadRange for range from %d to %d since all the bytes are zero", workerId, startRange, startRange+pageSize))
+				if jptm.ShouldLog(pipeline.LogDebug) {
+					jptm.Log(pipeline.LogDebug,
+						fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero", startRange, startRange+pageSize))
 				}
 				rangeDone()
 				return
@@ -288,15 +260,13 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 			_, err := fileURL.UploadRange(jptm.Context(), startRange, body)
 			if err != nil {
 				if jptm.WasCanceled() {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d which failed to UploadRange from %d to %d because transfer was cancelled", workerId, startRange, startRange+pageSize))
+					if jptm.ShouldLog(pipeline.LogDebug) {
+						jptm.Log(pipeline.LogDebug,
+							fmt.Sprintf("Failed to UploadRange from %d to %d, transfer was cancelled", startRange, startRange+pageSize))
 					}
 				} else {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo,
-							fmt.Sprintf("has worker %d which failed to UploadRange from %d to %d because of following error %s", workerId, startRange, startRange+pageSize, err.Error()))
-					}
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogUploadError(info.Source, info.Destination, "Upload Range Error "+msg, status)
 					// cancelling the transfer
 					jptm.Cancel()
 					jptm.SetStatus(common.ETransferStatus.Failed())
@@ -305,8 +275,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 				return
 			}
 			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo,
-					fmt.Sprintf("has workedId %d which successfully complete PUT range request from range %d to %d", workerId, startRange, startRange+pageSize))
+				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
 			}
 			rangeDone()
 		}

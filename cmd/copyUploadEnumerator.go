@@ -22,10 +22,8 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// attempt to parse the destination url
 	destinationURL, err := url.Parse(cca.destination)
-	if err != nil {
-		// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
-		panic(err)
-	}
+	// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
+	common.PanicIfErr(err)
 
 	// list the source files and directories
 	listOfFilesAndDirectories, err := filepath.Glob(cca.source)
@@ -40,7 +38,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return errors.New("cannot find source to upload")
 		}
 
-		if !f.IsDir() {
+		if f.Mode().IsRegular() {
 			// Check if the files are passed with include flag
 			// then source needs to be directory, if it is a file
 			// then error is returned
@@ -76,7 +74,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			if err != nil {
 				return err
 			}
-			return e.dispatchFinalPart()
+			return e.dispatchFinalPart(cca)
 		}
 	}
 	// if the user specifies a virtual directory ex: /container_name/extra_path
@@ -110,9 +108,10 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			// directories are uploaded only if recursive is on
 			if f.IsDir() && cca.recursive {
 				// walk goes through the entire directory tree
-				err = filepath.Walk(fileOrDirectoryPath, func(pathToFile string, f os.FileInfo, err error) error {
+				filepath.Walk(fileOrDirectoryPath, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {
-						return err
+						glcm.Info(fmt.Sprintf("Accessing %s failed with error %s", pathToFile, err.Error()))
+						return nil
 					}
 					if f.IsDir() {
 						// For Blob and Azure Files, empty directories are not uploaded
@@ -122,7 +121,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// a directory
 						// TODO: Currently not implemented the upload of empty directories for BlobFS
 						return nil
-					} else {
+					} else if f.Mode().IsRegular() { // If the resource is file
 						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
 						// this replacement is done to handle the windows file paths where path separator "\\"
 						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
@@ -153,10 +152,35 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						if err != nil {
 							return err
 						}
+					} else if f.Mode()&os.ModeSymlink != 0 {
+						// If follow symlink is set to false, then symlinks are not evaluated.
+						if !cca.followSymlinks {
+							return nil
+						}
+						evaluatedSymlinkPath, err := filepath.EvalSymlinks(pathToFile)
+						if err != nil {
+							glcm.Info(fmt.Sprintf("error evaluating the symlink path %s", evaluatedSymlinkPath))
+							return nil
+						}
+						// If the path is a windows file system path, replace '\\' with '/'
+						// to maintain the consistency with other system paths.
+						if common.AZCOPY_PATH_SEPARATOR_CHAR == '\\' {
+							evaluatedSymlinkPath = strings.Replace(evaluatedSymlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						}
+						tList, errorList := util.getSymlinkTransferList(evaluatedSymlinkPath, fileOrDirectoryPath, parentSourcePath, cleanContainerPath, destinationURL, e.Include, e.Exclude)
+						// Iterate though the list of all transfers and add it to the CopyJobPartOrder Request
+						for _, tl := range tList {
+							e.addTransfer(tl, cca)
+						}
+						// Iterate through all the errors occurred while traversing the symlinks and
+						// put them into the lifecycle manager
+						for _, err := range errorList {
+							glcm.Info(err.Error())
+						}
 					}
 					return nil
 				})
-			} else if !f.IsDir() {
+			} else if f.Mode().IsRegular() {
 				// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
 				// this replacement is done to handle the windows file paths where path separator "\\"
 				fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
@@ -186,17 +210,13 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if e.PartNum == 0 && len(e.Transfers) == 0 {
 		return errors.New("nothing can be uploaded, please use --recursive to upload directories")
 	}
-	return e.dispatchFinalPart()
+	return e.dispatchFinalPart(cca)
 }
 
 func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyUploadEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *copyUploadEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *copyUploadEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }

@@ -21,36 +21,20 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
 
-var azcopyAppPathFolder string
-
-// rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
-	Use:   "azcopy",
-	Short: "AzCopy is a command line tool that moves data into/out of Azure Storage.",
-	Long: "AzCopy " + common.AzcopyVersion +
-		`
-Project URL: github.com/Azure/azure-storage-azcopy
-
-AzCopy is a command line tool that moves data into/out of Azure Storage.
-To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy
-
-The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
-`,
+// jobs command is used to encapsulate all sub-commands related to managing jobs
+// it is declared as a global variable here so that its sub-commands can add themselves to it
+// jobs command itself is not runnable
+var jobsCmd = &cobra.Command{
+	Use:     "jobs",
+	Short:   "Sub-commands related to managing jobs.",
+	Long:    "Sub-commands related to managing jobs.",
+	Example: "azcopy jobs show [jobID]",
 }
 
-// hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
-var glcm = common.GetLifecycleMgr()
-
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder string) {
-	azcopyAppPathFolder = azsAppPathFolder
-
-	if err := rootCmd.Execute(); err != nil {
-		glcm.Exit(err.Error(), common.EExitCode.Error())
-	}
+func init() {
+	// add jobs command as a top level command
+	rootCmd.AddCommand(jobsCmd)
 }

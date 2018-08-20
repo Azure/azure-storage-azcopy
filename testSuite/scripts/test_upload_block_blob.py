@@ -270,7 +270,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersFailed, 20)
+        self.assertEquals(x.TransfersSkipped, 20)
         self.assertEquals(x.TransfersCompleted, 0)
 
         # uploading a sub-directory inside the above dir with 20 files inside the sub-directory.
@@ -308,7 +308,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in json format')
         self.assertEquals(x.TransfersCompleted, 20)
-        self.assertEquals(x.TransfersFailed, 20)
+        self.assertEquals(x.TransfersSkipped, 20)
 
 
     def test_force_flag_set_to_false_download(self):
@@ -352,7 +352,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('erorr parsing the output in Json Format')
-        self.assertEquals(x.TransfersFailed, 20)
+        # Since all files exists locally and overwrite flag is set to false, all 20 transfers will be skipped
+        self.assertEquals(x.TransfersSkipped, 20)
         self.assertEquals(x.TransfersCompleted, 0)
 
         # removing 5 files with suffix from 10 to 14
@@ -374,7 +375,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersFailed, 15)
+        self.assertEquals(x.TransfersSkipped, 15)
         self.assertEquals(x.TransfersCompleted, 5)
 
 
@@ -781,3 +782,88 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # the resource sas should be the second argument for azcopy validator.
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest).execute_azcopy_verify()
         self.assertTrue(result)
+
+    def test_upload_hidden_file(self):
+        # Create directory for storing the hidden files
+        dir_name = "dir_hidden_files"
+        dir_path = os.path.join(util.test_directory_path, dir_name)
+        try:
+            shutil.rmtree(dir_path)
+        except:
+            print("")
+        finally:
+            os.mkdir(dir_path)
+        for i in range(0, 10):
+            file_name = "hidden_" + str(i) + ".txt"
+            util.create_hidden_file(dir_path, file_name, "hidden file text")
+
+        result = util.Command("copy").add_arguments(dir_path).add_arguments(util.test_container_url). \
+            add_flags("log-level", "Info").add_flags("recursive", "true").add_flags("output", "json").execute_azcopy_copy_command_get_output()
+
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersCompleted, 10)
+        self.assertEquals(x.TransfersFailed, 0)
+
+    def test_upload_download_file_non_ascii_characters(self):
+        file_name = u"Espa\u00F1a"
+        #file_name = "abc.txt"
+        file_path = util.create_file_in_path(util.test_directory_path, file_name, "non ascii characters")
+        # Upload the file
+        result = util.Command("copy").add_arguments(file_path).add_arguments(util.test_container_url).\
+                add_flags("log-level", "Info").add_flags("output", "json").execute_azcopy_copy_command_get_output()
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+
+        self.assertEquals(x.TransfersCompleted, 1)
+        self.assertEquals(x.TransfersFailed, 0)
+
+        #download the file
+        dir_path = os.path.join(util.test_directory_path, "non-ascii-dir")
+        try:
+            shutil.rmtree(dir_path)
+        except:
+            print("")
+        finally:
+            os.mkdir(dir_path)
+        destination_url = util.get_resource_sas(file_name)
+        result = util.Command("copy").add_arguments(destination_url).add_arguments(dir_path).\
+                add_flags("log-level", "Info").add_flags("output", "json").execute_azcopy_copy_command_get_output()
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        self.assertEquals(x.TransfersCompleted, 1)
+        self.assertEquals(x.TransfersFailed, 0)
+
+    def test_long_file_path_upload_with_nested_directories(self):
+        dir_name = "dir_lfpupwnds"
+        dir_path = util.create_test_n_files(1024, 10, dir_name)
+        parent_dir = dir_name
+        for i in range(0, 30):
+            sub_dir_name = "s_" + str(i)
+            parent_dir = os.path.join(parent_dir, sub_dir_name)
+            util.create_test_n_files(1024, 10, parent_dir)
+
+        # Upload the file
+        result = util.Command("copy").add_arguments(dir_path).add_arguments(util.test_container_url). \
+            add_flags("log-level", "Info").add_flags("output", "json").add_flags("recursive", "true").execute_azcopy_copy_command_get_output()
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+
+        self.assertEquals(x.TransfersCompleted, 310)
+        self.assertEquals(x.TransfersFailed, 0)

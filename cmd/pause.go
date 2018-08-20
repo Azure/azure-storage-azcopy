@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"errors"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -64,10 +65,10 @@ func HandlePauseCommand(jobIdString string) {
 	jobID, err := common.ParseJobID(jobIdString)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		glcm.ExitWithError("invalid jobId string passed. Failed while parsing string to jobId", common.EExitCode.Error())
+		glcm.Exit("invalid jobId string passed. Failed while parsing string to jobId", common.EExitCode.Error())
 	}
 
 	var pauseJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.PauseJob(), jobID, &pauseJobResponse)
-	glcm.ExitWithSuccess("Job "+jobID.String()+" paused successfully", common.EExitCode.Success())
+	glcm.Exit("Job "+jobID.String()+" paused successfully", common.EExitCode.Success())
 }

@@ -36,7 +36,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type syncCommandArguments struct {
+type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
@@ -46,12 +46,10 @@ type syncCommandArguments struct {
 	include      string
 	exclude      string
 	output       string
-	// commandString hold the user given command which is logged to the Job log file
-	commandString string
 }
 
 // validates and transform raw input into cooked input
-func (raw syncCommandArguments) cook() (cookedSyncCmdArgs, error) {
+func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
 	fromTo := inferFromTo(raw.src, raw.dst)
@@ -138,26 +136,56 @@ type cookedSyncCmdArgs struct {
 
 	// used to calculate job summary
 	jobStartTime time.Time
+
+	// this flag is set by the enumerator
+	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
+	isEnumerationComplete bool
 }
 
-func (cca *cookedSyncCmdArgs) PrintJobStartedMsg() {
+// wraps call to lifecycle manager to wait for the job to complete
+// if blocking is specified to true, then this method will never return
+// if blocking is specified to false, then another goroutine spawns and wait out the job
+func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
+	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-}
+	currentDir, _ := os.Getwd()
+	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, currentDir))
 
-func (cca *cookedSyncCmdArgs) CancelJob() {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
-	}
-}
-
-func (cca *cookedSyncCmdArgs) InitializeProgressCounters() {
+	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
+
+	// hand over control to the lifecycle manager if blocking
+	if blocking {
+		glcm.InitiateProgressReporting(cca, true)
+		glcm.SurrenderControl()
+	} else {
+		// non-blocking, return after spawning a go routine to watch the job
+		glcm.InitiateProgressReporting(cca, true)
+	}
 }
 
-func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
+func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
+	// prompt for confirmation, except when:
+	// 1. output is in json format
+	// 2. enumeration is complete
+	if !(cca.output == common.EOutputFormat.Json() || cca.isEnumerationComplete) {
+		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+
+		// read a line from stdin, if the answer is not yes, then abort cancel by returning
+		if !strings.EqualFold(answer, "y") {
+			return
+		}
+	}
+
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -167,15 +195,16 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
 		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		if err != nil {
-			// something serious has gone wrong if we cannot marshal a json
-			panic(err)
-		}
+		common.PanicIfErr(err)
 
 		if jobDone {
-			glcm.ExitWithSuccess(string(jsonOutput), common.EExitCode.Success())
+			exitCode := common.EExitCode.Success()
+			if summary.TransfersFailed > 0 {
+				exitCode = common.EExitCode.Error()
+			}
+			lcm.Exit(string(jsonOutput), exitCode)
 		} else {
-			glcm.Info(string(jsonOutput))
+			lcm.Info(string(jsonOutput))
 			return
 		}
 	}
@@ -183,15 +212,19 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
-
-		glcm.ExitWithSuccess(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+		exitCode := common.EExitCode.Success()
+		if summary.TransfersFailed > 0 {
+			exitCode = common.EExitCode.Error()
+		}
+		lcm.Exit(fmt.Sprintf(
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\nTotalBytesTransferred: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), common.EExitCode.Success())
+			summary.TransfersSkipped,
+			summary.JobStatus, summary.TotalBytesTransferred), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -202,18 +235,19 @@ func (cca *cookedSyncCmdArgs) PrintJobProgressStatus() {
 	}
 
 	// compute the average throughput for the last time interval
-	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
 	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
 	// reset the interval timer and byte count
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (MB/s): %v",
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, 2-sec Throughput (Mb/s): %v",
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
 		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
+		summary.TransfersSkipped,
 		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
 }
 
@@ -322,7 +356,7 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 }
 
 func init() {
-	raw := syncCommandArguments{}
+	raw := rawSyncCmdArgs{}
 	// syncCmd represents the sync command
 	var syncCmd = &cobra.Command{
 		Use:     "sync",
@@ -340,12 +374,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.ExitWithError("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.ExitWithError("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
 			}
 
 			glcm.SurrenderControl()
@@ -354,7 +388,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 8*1024*1024, "Use this block size when source to Azure Storage or from Azure Storage.")
+	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "Use this block size when source to Azure Storage or from Azure Storage.")
 	// hidden filters
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")

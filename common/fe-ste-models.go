@@ -344,6 +344,20 @@ func (ts *TransferStatus) Parse(s string) error {
 	return err
 }
 
+// Implementing MarshalJSON() method for type Transfer Status
+func (ts TransferStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ts.String())
+}
+
+// Implementing UnmarshalJSON() method for type Transfer Status
+func (ts *TransferStatus) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return ts.Parse(s)
+}
+
 func (ts *TransferStatus) AtomicLoad() TransferStatus {
 	return TransferStatus(atomic.LoadInt32((*int32)(ts)))
 }
@@ -461,10 +475,11 @@ func (ct *CredentialType) Parse(s string) error {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
-	DefaultBlockBlobBlockSize = 100 * 1024 * 1024
-	//DefaultAppendBlobBlockSize = 4 * 1024 * 1024
+	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
+	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
 	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize = 4 * 1024 * 1024
+	MaxNumberOfBlocksPerBlob  = 50000
 )
 
 // This struct represent a single transfer entry with source and destination details
@@ -482,6 +497,9 @@ type CopyTransfer struct {
 	CacheControl       string
 	ContentMD5         []byte
 	Metadata           Metadata
+
+	// Properties for blob copy only
+	BlobType azblob.BlobType
 	//BlobTier           string //TODO
 }
 

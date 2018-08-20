@@ -29,8 +29,6 @@ import (
 	"net/http"
 	"time"
 
-	"strings"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -56,7 +54,6 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 	initJobsAdmin(steCtx, concurrentConnections, targetRateInMBps, azcopyAppPathFolder)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
-	JobsAdminInitialized <- true
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
 
 	deserialize := func(request *http.Request, v interface{}) {
@@ -167,51 +164,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		jm, _ = JobsAdmin.JobMgr(jobID)
 	}
 
-	completeJobOrdered := func(jm IJobMgr) bool {
-		// completeJobOrdered determines whether final part for job with JobId has been ordered or not.
-		completeJobOrdered := false
-		for p := PartNumber(0); true; p++ {
-			jpm, found := jm.JobPartMgr(p)
-			if !found {
-				break
-			}
-			completeJobOrdered = completeJobOrdered || jpm.Plan().IsFinalPart
-		}
-		return completeJobOrdered
-	}
-
-	jobCompletelyOrdered := completeJobOrdered(jm)
-	// TODO reconsider this functionality, as it conflicts with cancel from stdin
-	// If the job has not been ordered completely, then if cancelled, Job cannot be resumed later
-	// The user is asked for a Yes / No to cancel or not
-	if !jobCompletelyOrdered {
-		var confirmCancel string
-		// The message is displayed to the User and asked for Yes / No Input to cancel the Job
-		fmt.Println("\nThe Job is not completely ordered yet. Cancelling the Job " +
-			"now won't let the Job to be resumed later. Enter 'Yes' to cancel or 'No' to resume to the Job")
-		// The flow goes in to the Indefinite loop reading the standard Input
-		// The loop doesn't break unless the user provide Yes or No for Input
-		for {
-			// read the standard input
-			fmt.Scanln(&confirmCancel)
-			// If the user provides "Yes" to cancel the Job
-			// then Job is cancelled
-			if strings.EqualFold(confirmCancel, "Yes") {
-				break
-			} else if strings.EqualFold(confirmCancel, "No") {
-				// If the user provides "No" to cancel the Job
-				// then it returns CancelPauseResumeResponse
-				// and the Job is resumed
-				return common.CancelPauseResumeResponse{
-					CancelledPauseResumed: true,
-					ErrorMsg:              "",
-				}
-			} else {
-				fmt.Println("Provide Input as Yes / No")
-			}
-		}
-	}
-
 	// Search for the Part 0 of the Job, since the Part 0 status concludes the actual status of the Job
 	jpm, found := jm.JobPartMgr(0)
 	if !found {
@@ -249,15 +201,6 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 		// hence sending the response immediately. Response CancelPauseResumeResponse
 		// returned has CancelledPauseResumed set to false, because that will let
 		// Job immediately stop.
-		if !jobCompletelyOrdered {
-			jr = common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				// TODO this causes a fatal error on the front end, it should exit gracefully since cancel is successful
-				ErrorMsg: fmt.Sprintf("cancelling the Job since the Job Order wasn't completely cancelled"),
-			}
-			return jr
-		}
-		// If the job is completely ordered, then it follow the graceful cancellation of job path
 		fallthrough
 	case common.EJobStatus.Paused(): // Logically, It's OK to pause an already-paused job
 		jpp0.SetJobStatus(desiredJobStatus)
@@ -279,6 +222,13 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
 	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
 	if !found {
+		// Strip '?' if present as first character of the source sas / destination sas
+		if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
+			req.SourceSAS = req.SourceSAS[1:]
+		}
+		if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
+			req.DestinationSAS = req.DestinationSAS[1:]
+		}
 		// Job with JobId does not exists
 		// Search the plan files in Azcopy folder
 		// and resurrect the Job
@@ -310,7 +260,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 	if !completeJobOrdered(jm) {
 		return common.CancelPauseResumeResponse{
 			CancelledPauseResumed: false,
-			ErrorMsg:              fmt.Sprintf("cannot resumr job with JobId %s . It hasn't been ordered completely", req.JobID),
+			ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s . It hasn't been ordered completely", req.JobID),
 		}
 	}
 
@@ -322,20 +272,56 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 			ErrorMsg:              fmt.Sprintf("JobID=%v, Part#=0 not found", req.JobID),
 		}
 	}
+	// If the credential type is is Anonymous, to resume the Job destinationSAS / sourceSAS needs to be provided
+	// Depending on the FromType, sourceSAS or destinationSAS is checked.
+	if req.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
+		var errorMsg = ""
+		switch jpm.Plan().FromTo {
+		case common.EFromTo.LocalBlob(),
+			common.EFromTo.LocalFile():
+			if len(req.DestinationSAS) == 0 {
+				errorMsg = "The destination-sas switch must be provided to resume the job"
+			}
+		case common.EFromTo.BlobLocal(),
+			common.EFromTo.FileLocal(),
+			common.EFromTo.BlobTrash(),
+			common.EFromTo.FileTrash():
+			if len(req.SourceSAS) == 0 {
+				errorMsg = "The source-sas switch must be provided to resume the job"
+			}
+		case common.EFromTo.BlobBlob(),
+			common.EFromTo.FileBlob():
+			if len(req.SourceSAS) == 0 ||
+				len(req.DestinationSAS) == 0 {
+				errorMsg = "Both the source-sas and destination-sas switches must be provided to resume the job"
+			}
+		}
+		if len(errorMsg) != 0 {
+			return common.CancelPauseResumeResponse{
+				CancelledPauseResumed: false,
+				ErrorMsg:              fmt.Sprintf("cannot resume job with JobId %s. %s", req.JobID, errorMsg),
+			}
+		}
+	}
 
+	// After creating the Job mgr, set the include / exclude list of transfer.
+	jm.SetIncludeExclude(req.IncludeTransfer, req.ExcludeTransfer)
 	jpp0 := jpm.Plan()
 	switch jpp0.JobStatus() {
 	// Cannot resume a Job which is in Cancelling state
 	// Cancelling is an intermediary state
 	case common.EJobStatus.Cancelling():
-		break
+		jpp0.SetJobStatus(common.EJobStatus.Cancelled())
+		fallthrough
 
 	// Resume all the failed / In Progress Transfers.
 	case common.EJobStatus.InProgress(),
 		common.EJobStatus.Completed(),
 		common.EJobStatus.Cancelled(),
 		common.EJobStatus.Paused():
-
+		//go func() {
+		// Navigate through transfers and schedule them independently
+		// This is done to avoid FE to get blocked until all the transfers have been scheduled
 		// Get credential info from RPC request, and set in InMemoryTransitJobState.
 		jm.setInMemoryTransitJobState(
 			InMemoryTransitJobState{
@@ -347,7 +333,24 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		if jm.ShouldLog(pipeline.LogInfo) {
 			jm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v resumed", req.JobID))
 		}
-		jm.ResumeTransfers(steCtx, req.IncludeTransfer, req.ExcludeTransfer) // Reschedule all job part's transfers
+
+		// Iterate through all transfer of the Job Parts and reset the transfer status
+		jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
+			jpp := jpm.Plan()
+			// Iterate through this job part's transfers
+			for t := uint32(0); t < jpp.NumTransfers; t++ {
+				// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
+				jppt := jpp.Transfer(t)
+				// If the transfer status is less than -1, it means the transfer failed because of some reason.
+				// Transfer Status needs to reset.
+				if jppt.TransferStatus() <= common.ETransferStatus.Failed() {
+					jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+				}
+			}
+		})
+
+		jm.ResumeTransfers(steCtx) // Reschedule all job part's transfers
+		//}()
 		jr = common.CancelPauseResumeResponse{
 			CancelledPauseResumed: true,
 			ErrorMsg:              "",
@@ -393,12 +396,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		FailedTransfers:    []common.TransferDetail{},
 	}
 
-	totalBytesToTransfer := int64(0)
-	totalBytesTransferred := int64(0)
-
 	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
-		totalBytesToTransfer += jpm.BytesToTransfer()
-		totalBytesTransferred += jpm.BytesDone()
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		js.TotalTransfers += jpp.NumTransfers
@@ -411,9 +409,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
+				js.TotalBytesTransferred += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
-				common.ETransferStatus.BlobTierFailure(),
-				common.ETransferStatus.BlobAlreadyExistsFailure():
+				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
 				// getting the source and destination for failed transfer at position - index
 				src, dst := jpp.TransferSrcDstStrings(t)
@@ -423,9 +421,17 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 						Src:            src,
 						Dst:            dst,
 						TransferStatus: common.ETransferStatus.Failed()}) // TODO: Optimize
+			case common.ETransferStatus.BlobAlreadyExistsFailure(),
+				common.ETransferStatus.FileAlreadyExistsFailure():
+				js.TransfersSkipped++
 			}
 		}
 	})
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
 
 	// get zero'th part of the job part plan.
 	jp0, ok := jm.JobPartMgr(0)
@@ -433,17 +439,22 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
 	}
 
-	// calculating the progress of Job and rounding the progress upto 4 decimal.
-	js.JobProgressPercentage = ToFixed(float64(totalBytesTransferred*100)/float64(totalBytesToTransfer), 4)
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	part0PlanStatus := jp0.Plan().JobStatus()
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		return js
+	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
 	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
-	part0PlanStatus := jp0.Plan().JobStatus()
-	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed() ||
-		part0PlanStatus == common.EJobStatus.Cancelled()) {
+	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
 		js.JobStatus = part0PlanStatus
 	}
 	return js
@@ -483,8 +494,17 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
 			// getting transfer header of transfer at index index for given jobId and part number
 			transferEntry := jpp.Transfer(t)
-			// if the expected status is not to list all transfer and status of current transfer is not equal to the expected status, then we skip this transfer
-			if r.OfStatus != common.ETransferStatus.All() && transferEntry.TransferStatus() != r.OfStatus {
+			// If the expected status is not to list all transfer and
+			// if the transfer status is not equal to the given status
+			// skip the transfer.
+			// If the given status is failed and the current transfer status is <= -1,
+			// it means transfer failed and could have failed because of some other reason.
+			// In this case we don't skip the transfer.
+			// For Example: In case with-status is Failed, transfers with status "BlobAlreadyExistsFailure"
+			// will also be included.
+			if r.OfStatus != common.ETransferStatus.All() &&
+				((transferEntry.TransferStatus() != r.OfStatus) &&
+					!(r.OfStatus == common.ETransferStatus.Failed() && transferEntry.TransferStatus() <= common.ETransferStatus.Failed())) {
 				continue
 			}
 			// getting source and destination of a transfer at index index for given jobId and part number.
@@ -505,12 +525,17 @@ func ListJobs() common.ListJobsResponse {
 	if len(jobIds) == 0 {
 		return common.ListJobsResponse{ErrorMessage: "no Jobs exists in Azcopy history"}
 	}
-	return common.ListJobsResponse{ErrorMessage: "", JobIDs: JobsAdmin.JobIDs()}
-}
-
-// todo use this in case of panic
-func assertOK(err error) {
-	if err != nil {
-		panic(err)
+	listJobResponse := common.ListJobsResponse{JobIDDetails: []common.JobIDDetails{}}
+	for _, jobId := range jobIds {
+		jm, found := JobsAdmin.JobMgr(jobId)
+		if !found {
+			continue
+		}
+		jpm, found := jm.JobPartMgr(0)
+		if !found {
+			continue
+		}
+		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails, common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString()})
 	}
+	return listJobResponse
 }

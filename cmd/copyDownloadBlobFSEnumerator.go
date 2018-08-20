@@ -9,6 +9,10 @@ import (
 	"net/http"
 	"time"
 
+	"strings"
+
+	"strconv"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -19,95 +23,116 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 	ctx := context.Background()
 
-	// Create blob FS pipeline.
+	// create blob FS pipeline.
 	p, err := createBlobFSPipeline(ctx, e.CredentialInfo)
 	if err != nil {
 		return err
 	}
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(cca.source)
+	sourceURL, err := url.Parse(cca.source)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
 
-	// parse the given into fileUrl Parts.
-	// fileUrl can be further used to get the filesystem name , directory path and other pieces of Info.
-	fsUrlParts := azbfs.NewBfsURLParts(*sourceUrl)
+	// parse the given source URL into fsUrlParts, which separates the filesystem name and directory/file path
+	fsUrlParts := azbfs.NewBfsURLParts(*sourceURL)
 
-	// Create the directory Url and list the entities inside the path
-	directoryUrl := azbfs.NewDirectoryURL(*sourceUrl, p)
+	// we do not know if the source is a file or a directory
+	// we assume it is a directory and get its properties
+	directoryURL := azbfs.NewDirectoryURL(*sourceURL, p)
+	props, err := directoryURL.GetProperties(ctx)
 
-	// keep the continuation marker as empty
-	continuationMarker := ""
-	// firstListing is temporary bool variables which tracks whether listing of the Url
-	// is done for the first time or not.
-	// since first time continuation marker is also empty
-	// so add this bool flag which doesn't terminates the loop on first listing.
-	firstListing := true
-
-	dListResp, err := directoryUrl.ListDirectorySegment(ctx, &continuationMarker, true)
-	if err != nil {
-		return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
-	}
-
-	// Loop will continue unless the continuationMarker received in the response is empty
-	for continuationMarker != "" || firstListing {
-		firstListing = false
-		continuationMarker = dListResp.XMsContinuation()
-		// Get only the files inside the given path
-		// since azcopy creates the parent directory in the path of file
-		// so directories will be created unless the directory is empty.
-		// TODO: currently empty directories are not created
-		resources := dListResp.Files()
-		for _, path := range resources {
-			var destination = ""
-			// If the destination is not directory that is existing
-			// It is expected that the resource to be downloaded is downloaded at the destination provided
-			if util.isPathALocalDirectory(cca.destination) {
-				destination = util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name))
-			} else {
-				destination = cca.destination
-			}
-			// convert the time of path to time format
-			// If path.LastModified is nil then lastModified time is set to current time
-			lModifiedTime := time.Now()
-			// else parse the modified to time format and persist it as lastModifiedTime
-			if path.LastModified != nil {
-				lModifiedTime, err = time.Parse(http.TimeFormat, *path.LastModified)
-				if err != nil {
-					return fmt.Errorf("error parsing the modified %s time for file / dir %s. Failed with error %s", *path.LastModified, *path.Name, err.Error())
-				}
-			}
-			// Queue the transfer
-			e.addTransfer(common.CopyTransfer{
-				Source:           directoryUrl.FileSystemURL().NewDirectoryURL(*path.Name).String(),
-				Destination:      destination,
-				LastModifiedTime: lModifiedTime,
-				SourceSize:       *path.ContentLength,
-			}, cca)
+	// if the source URL is actually a file
+	// then we should short-circuit and simply download that file
+	if err == nil && strings.EqualFold(props.XMsResourceType(), "file") {
+		var destination = ""
+		// if the destination is an existing directory, then put the file under it
+		// otherwise assume the user has provided a specific path for the destination file
+		if util.isPathALocalDirectory(cca.destination) {
+			destination = util.generateLocalPath(cca.destination, util.getPossibleFileNameFromURL(fsUrlParts.DirectoryOrFilePath))
+		} else {
+			destination = cca.destination
 		}
-		dListResp, err = directoryUrl.ListDirectorySegment(ctx, &continuationMarker, true)
+
+		fileSize, err := strconv.ParseInt(props.ContentLength(), 10, 64)
 		if err != nil {
-			return fmt.Errorf("error listing the files inside the given source url %s", directoryUrl.String())
+			panic(err)
+		}
+
+		// Queue the transfer
+		e.addTransfer(common.CopyTransfer{
+			Source:           cca.source,
+			Destination:      destination,
+			LastModifiedTime: e.parseLmt(props.LastModified()),
+			SourceSize:       fileSize,
+		}, cca)
+
+	} else {
+		// if downloading entire file system, then create a local directory with the file system's name
+		if fsUrlParts.DirectoryOrFilePath == "" {
+			cca.destination = util.generateLocalPath(cca.destination, fsUrlParts.FileSystemName)
+		}
+
+		// initialize an empty continuation marker
+		continuationMarker := ""
+
+		// list out the directory and download its files
+		// loop will continue unless the continuationMarker received in the response is empty
+		for {
+			dListResp, err := directoryURL.ListDirectorySegment(ctx, &continuationMarker, true)
+			if err != nil {
+				return fmt.Errorf("error listing the files inside the given source url %s", directoryURL.String())
+			}
+
+			// get only the files inside the given path
+			// TODO: currently empty directories are not created, consider creating them
+			for _, path := range dListResp.Files() {
+				// Queue the transfer
+				e.addTransfer(common.CopyTransfer{
+					Source:           directoryURL.FileSystemURL().NewDirectoryURL(*path.Name).String(),
+					Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name)),
+					LastModifiedTime: e.parseLmt(*path.LastModified),
+					SourceSize:       *path.ContentLength,
+				}, cca)
+			}
+
+			// update the continuation token for the next list operation
+			continuationMarker = dListResp.XMsContinuation()
+
+			// determine whether listing should be done
+			if continuationMarker == "" {
+				break
+			}
 		}
 	}
+
 	// dispatch the JobPart as Final Part of the Job
-	err = e.dispatchFinalPart()
+	err = e.dispatchFinalPart(cca)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
+func (e *copyDownloadBlobFSEnumerator) parseLmt(lastModifiedTime string) time.Time {
+	// if last modified time is available, parse it
+	// otherwise use the current time as last modified time
+	lmt := time.Now()
+	if lastModifiedTime != "" {
+		parsedLmt, err := time.Parse(http.TimeFormat, lastModifiedTime)
+		if err == nil {
+			lmt = parsedLmt
+		}
+	}
+
+	return lmt
+}
+
 func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 
-func (e *copyDownloadBlobFSEnumerator) dispatchFinalPart() error {
-	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e))
-}
-
-func (e *copyDownloadBlobFSEnumerator) partNum() common.PartNumber {
-	return e.PartNum
+func (e *copyDownloadBlobFSEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+	return dispatchFinalPart((*common.CopyJobPartOrderRequest)(e), cca)
 }

@@ -44,9 +44,12 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	downloadChunkSize := int64(info.BlockSize)
 	numChunks := uint32(0)
 
+	if jptm.ShouldLog(pipeline.LogInfo) {
+		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Chunk size %d", downloadChunkSize))
+	}
+
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -58,12 +61,9 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := os.Stat(info.Destination)
 		if err == nil {
 			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("skipping the transfer since blob already exists"))
-			}
+			jptm.LogDownloadError(info.Source, info.Destination, "Blob Already Exists ", 0)
 			// Mark the transfer as failed with FileAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -73,9 +73,8 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	if fileSize == 0 {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
-			}
+			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation Error ", 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -84,15 +83,12 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		if plmt {
 			err := os.Chtimes(jptm.Info().Destination, lMTime, lMTime)
 			if err != nil {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" failed while preserving last modified time for destionation %s", info.Destination))
-				}
+				// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+				jptm.LogDownloadError(info.Source, info.Destination, "Preserve Modified Time Error ", 0)
 				//delete the file if transfer failed
 				err := os.Remove(info.Destination)
 				if err != nil {
-					if jptm.ShouldLog(pipeline.LogError) {
-						jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
-					}
+					jptm.LogError(info.Destination, "Delete File Error ", err)
 				}
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				return
@@ -110,25 +106,22 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	} else { // 3b: source has content
 		dstFile, err := createFileOfSize(info.Destination, fileSize)
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file could not be created locally. Failed with error "+err.Error())
-			}
+			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
 		}
 		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
 		if err != nil {
+			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
+			jptm.LogDownloadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
 			dstFile.Close()
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "transfer failed because dst file did not memory mapped successfully")
-			}
+
 			//delete the file if transfer failed
 			err := os.Remove(info.Destination)
 			if err != nil {
-				if jptm.ShouldLog(pipeline.LogError) {
-					jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", info.Destination, err.Error()))
-				}
+				jptm.LogError(info.Destination, "Delete File Error ", err)
 			}
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -151,25 +144,26 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, chunkIDCount, info.Destination, dstFile, dstMMF, startIndex, adjustedChunkSize))
+			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, dstFile, dstMMF, startIndex, adjustedChunkSize))
 			chunkIDCount++
 		}
 	}
 }
 
-func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, chunkID int32, destinationPath string, destinationFile *os.File, destinationMMF *common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, destinationFile *os.File, destinationMMF *common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
+		info := jptm.Info()
 		chunkDone := func() {
 			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
-			jptm.AddToBytesDone(adjustedChunkSize)
 			lastChunk, _ := jptm.ReportChunkDone()
 			if lastChunk {
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
+				if jptm.ShouldLog(pipeline.LogDebug) {
+					jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
 				destinationMMF.Unmap()
 				err := destinationFile.Close()
 				if err != nil {
+					jptm.LogError(info.Destination, "Closing File Error ", err)
 					if jptm.ShouldLog(pipeline.LogInfo) {
 						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
 					}
@@ -179,11 +173,9 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				// then transfer failed or cancelled
 				// the downloaded file needs to be deleted
 				if jptm.TransferStatus() <= 0 {
-					err := os.Remove(destinationPath)
+					err := os.Remove(info.Destination)
 					if err != nil {
-						if jptm.ShouldLog(pipeline.LogError) {
-							jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", destinationPath, err.Error()))
-						}
+						jptm.LogError(info.Destination, "Delete File Error ", err)
 					}
 				}
 			}
@@ -196,9 +188,8 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 			if err != nil {
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkID %d because writing to file for startIndex of %d has failed", workerId, chunkID, startIndex))
-					}
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
 				chunkDone()
@@ -214,49 +205,40 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
 					jptm.Cancel()
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is canceling job and chunkID %d because reading the downloaded chunk failed. Failed with error %s", workerId, chunkID, err.Error()))
-					}
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
 				}
 				chunkDone()
 				return
 			}
 
-			jptm.AddToBytesDone(adjustedChunkSize)
-
 			lastChunk, _ := jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is concluding download Transfer of job after processing chunkID %d", workerId, chunkID))
+				if jptm.ShouldLog(pipeline.LogDebug) {
+					jptm.Log(pipeline.LogDebug, "DOWNLOAD SUCCESSFUL")
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d is finalizing Transfer", workerId))
-				}
+
 				jptm.ReportTransferDone()
 
 				destinationMMF.Unmap()
 				err := destinationFile.Close()
 				if err != nil {
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed closing the file %s", workerId, destinationFile.Name()))
-					}
+					jptm.LogError(info.Destination, "Closing File Error ", err)
 				}
 
 				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {
 					err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
-						if jptm.ShouldLog(pipeline.LogInfo) {
-							jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which failed while preserving last modified time for destionation %s", workerId, destinationFile.Name()))
-						}
+						jptm.LogError(info.Destination, "Preserved Modified Time Error ", err)
 						return
 					}
 					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which successfully preserve the last modified time for destinaton %s", workerId, destinationFile.Name()))
+						jptm.Log(pipeline.LogInfo, fmt.Sprintf("Preserved modified time for %s", info.Destination))
 					}
 				}
 			}

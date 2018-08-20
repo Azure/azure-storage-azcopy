@@ -1,9 +1,8 @@
 PROJECT_NAME = azure-storage-azcopy
 WORK_DIR = /go/src/github.com/Azure/${PROJECT_NAME}
-GOX_ARCH = linux/amd64 windows/amd64
 
 define with_docker
-	WORK_DIR=$(WORK_DIR) docker-compose run --rm $(PROJECT_NAME) $(1)
+	WORK_DIR=$(WORK_DIR) docker-compose run $(2) --rm $(PROJECT_NAME) $(1)
 endef
 
 login: setup ## get a shell into the container
@@ -27,10 +26,12 @@ test: setup ## run go tests
 	$(call with_docker,go test -race -short -cover ./cmd)
 
 build: setup ## build binaries for the project
-	$(call with_docker,gox -osarch="$(GOX_ARCH)")
+    # the environment variables need to be passed into the container explicitly
+	GOARCH=amd64 GOOS=linux $(call with_docker,go build -o "azcopy_linux_amd64",-e GOARCH -e GOOS)
+	GOARCH=amd64 GOOS=windows $(call with_docker,go build -o "azcopy_windows_amd64",-e GOARCH -e GOOS)
 
 build-osx: setup ## build osx binary specially, as it's using CGO
-	CC=o64-clang CXX=o64-clang++ GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 $(call with_docker,go build -o "azs_darwin_amd64")
+	CC=o64-clang CXX=o64-clang++ GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 $(call with_docker,go build -o "azcopy_darwin_amd64",-e CC -e CXX -e GOOS -e GOARCH -e CGO_ENABLED)
 
 smoke: setup ## set up smoke test
 	$(call with_docker,go build -o test-validator ./testSuite/)

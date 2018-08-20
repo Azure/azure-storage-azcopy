@@ -82,6 +82,16 @@ func (jpph *JobPartPlanHeader) Transfer(transferIndex uint32) *JobPartPlanTransf
 	return (*JobPartPlanTransfer)(unsafe.Pointer((uintptr(unsafe.Pointer(jpph)) + unsafe.Sizeof(*jpph) + uintptr(jpph.CommandStringLength)) + (unsafe.Sizeof(JobPartPlanTransfer{}) * uintptr(transferIndex))))
 }
 
+// CommandString returns the command string given by user when job was created
+func (jpph *JobPartPlanHeader) CommandString() string {
+	commandSlice := []byte{}
+	sh := (*reflect.SliceHeader)(unsafe.Pointer(&commandSlice))
+	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(unsafe.Sizeof(*jpph)) // Address of Job Part Plan + Command String Length
+	sh.Len = int(jpph.CommandStringLength)
+	sh.Cap = sh.Len
+	return string(commandSlice)
+}
+
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
 func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string) {
 	jppt := jpph.Transfer(transferIndex)
@@ -111,8 +121,9 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 	return string(tempSlice)
 }
 
-// TransferSrcHTTPHeadersAndMetadata returns the SrcHTTPHeaders for a transfer at given transferIndex in JobPartOrder
-func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata) {
+// TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
+// TODO: Refactor return type to an object
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -145,10 +156,13 @@ func (jpph *JobPartPlanHeader) TransferSrcHTTPHeadersAndMetadata(transferIndex u
 	if t.SrcMetadataLength != 0 {
 		tmpMetaData := jpph.getString(offset, t.SrcMetadataLength)
 		metadata, err = common.UnMarshalToCommonMetadata(tmpMetaData)
-		if err != nil { // should not happen in normal case
-			panic(err)
-		}
+		common.PanicIfErr(err)
 		offset += int64(t.SrcMetadataLength)
+	}
+	if t.SrcBlobTypeLength != 0 {
+		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
+		blobType = azblob.BlobType(tmpBlobTypeStr)
+		offset += int64(t.SrcBlobTypeLength)
 	}
 
 	return
@@ -226,6 +240,7 @@ type JobPartPlanTransfer struct {
 	SrcCacheControlLength       int16
 	SrcContentMD5Length         int16
 	SrcMetadataLength           int16
+	SrcBlobTypeLength           int16
 	//SrcBlobTierLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.

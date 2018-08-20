@@ -38,6 +38,7 @@ func main() {
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
 		cmd.Execute(azcopyAppPathFolder)
+		return
 	}
 
 	// Perform os specific initialization
@@ -59,8 +60,8 @@ func main() {
 		}
 		defaultConcurrentConnections = int(val)
 	}
-	go ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
+	ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
 
 	cmd.Execute(azcopyAppPathFolder)
-	glcm.ExitWithSuccess("", common.EExitCode.Success())
+	glcm.Exit("", common.EExitCode.Success())
 }

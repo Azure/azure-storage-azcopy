@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -22,15 +23,11 @@ var _ IJobPartMgr = &jobPartMgr{}
 
 type IJobPartMgr interface {
 	Plan() *JobPartPlanHeader
-	ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int)
+	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	IsForceWriteTrue() bool
 	ScheduleChunks(chunkFunc chunkFunc)
-	AddToBytesDone(value int64) int64
-	AddToBytesToTransfer(value int64) int64
-	BytesDone() int64
-	BytesToTransfer() int64
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	SAS() (string, string)
@@ -68,6 +65,43 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
+func newAzcopyHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
+			Dial /*Context*/ : (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).Dial, /*Context*/
+			MaxIdleConns:           0, // No limit
+			MaxIdleConnsPerHost:    1000,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     false,
+			MaxResponseHeaderBytes: 0,
+			//ResponseHeaderTimeout:  time.Duration{},
+			//ExpectContinueTimeout:  time.Duration{},
+		},
+	}
+}
+
+// newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
+func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factory {
+	return pipeline.FactoryFunc(func(next pipeline.Policy, po *pipeline.PolicyOptions) pipeline.PolicyFunc {
+		return func(ctx context.Context, request pipeline.Request) (pipeline.Response, error) {
+			r, err := pipelineHTTPClient.Do(request.WithContext(ctx))
+			if err != nil {
+				err = pipeline.NewError(err, "HTTP request failed")
+			}
+			return pipeline.NewHTTPResponse(r), err
+		}
+	})
+}
+
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
 func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
@@ -84,8 +118,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		NewVersionPolicyFactory(),
 		azblob.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
@@ -108,7 +141,7 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		NewPacerPolicyFactory(p),
 		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
 // newFilePipeline creates a Pipeline using the specified credentials and options.
@@ -127,8 +160,7 @@ func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: nil, Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -176,25 +208,18 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
-
-	// bytes transferred defines the number of bytes of a job part that are uploaded / downloaded successfully or failed.
-	// bytesDone is used to represent the progress of Job more precisely.
-	bytesDone int64
-
-	// totalBytesToTransfer defines the total number of bytes of JobPart that needs to uploaded or downloaded.
-	// It is the sum of size of all the transfer of a job part.
-	totalBytesToTransfer int64
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
 
 // ScheduleTransfers schedules this job part's transfers. It is called when a new job part is ordered & is also called to resume a paused Job
-func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer map[string]int, excludeTransfer map[string]int) {
+func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	jpm.atomicTransfersDone = 0 // Reset the # of transfers done back to 0
 	// partplan file is opened and mapped when job part is added
 	//jpm.planMMF = jpm.filename.Map() // Open the job part plan file & memory-map it in
 	plan := jpm.planMMF.Plan()
-
+	// get the list of include / exclude transfers
+	includeTransfer, excludeTransfer := jpm.jobMgr.IncludeExclude()
 	// *** Open the job part: process any job part plan-setting used by all transfers ***
 	dstData := plan.DstBlobData
 
@@ -238,11 +263,9 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
 		jppt := plan.Transfer(t)
-		jpm.AddToBytesToTransfer(jppt.SourceSize)
 		ts := jppt.TransferStatus()
 		if ts == common.ETransferStatus.Success() {
-			jpm.ReportTransferDone()            // Don't schedule an already-completed/failed transfer
-			jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the bytes done
+			jpm.ReportTransferDone() // Don't schedule an already-completed/failed transfer
 			continue
 		}
 
@@ -255,8 +278,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 			// If source doesn't exists, skip the transfer
 			_, ok := includeTransfer[src]
 			if !ok {
-				jpm.ReportTransferDone()            // Don't schedule transfer which is not mentioned to be included
-				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
+				jpm.ReportTransferDone() // Don't schedule transfer which is not mentioned to be included
 				continue
 			}
 		}
@@ -270,8 +292,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 			// skip the transfer
 			_, ok := excludeTransfer[src]
 			if ok {
-				jpm.ReportTransferDone()            // Don't schedule transfer which is mentioned to be excluded
-				jpm.AddToBytesDone(jppt.SourceSize) // Since transfer is not scheduled, hence increasing the number of bytes done
+				jpm.ReportTransferDone() // Don't schedule transfer which is mentioned to be excluded
 				continue
 			}
 		}
@@ -295,7 +316,16 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context, includeTransfer
 		if jpm.ShouldLog(pipeline.LogInfo) {
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("scheduling JobID=%v, Part#=%d, Transfer#=%d, priority=%v", plan.JobID, plan.PartNum, t, plan.Priority))
 		}
+
 		JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
+
+		// This sets the atomic variable atomicAllTransfersScheduled to 1
+		// atomicAllTransfersScheduled variables is used in case of resume job
+		// Since iterating the JobParts and scheduling transfer is independent
+		// a variable is required which defines whether last part is resumed or not
+		if plan.IsFinalPart {
+			jpm.jobMgr.ConfirmAllTransfersScheduled()
+		}
 	}
 }
 
@@ -521,22 +551,6 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
-func (jpm *jobPartMgr) AddToBytesDone(value int64) int64 {
-	return atomic.AddInt64(&jpm.bytesDone, value)
-}
-
-func (jpm *jobPartMgr) AddToBytesToTransfer(value int64) int64 {
-	return atomic.AddInt64(&jpm.totalBytesToTransfer, value)
-}
-
-func (jpm *jobPartMgr) BytesDone() int64 {
-	return atomic.LoadInt64(&jpm.bytesDone)
-}
-
-func (jpm *jobPartMgr) BytesToTransfer() int64 {
-	return atomic.LoadInt64(&jpm.totalBytesToTransfer)
-}
-
 func (jpm *jobPartMgr) IsForceWriteTrue() bool {
 	return jpm.Plan().ForceWrite
 }
@@ -581,7 +595,7 @@ func (jpm *jobPartMgr) ReportTransferDone() (transfersDone uint32) {
 	return transfersDone
 }
 
-//func (jpm *jobPartMgr) CancelJob() { jpm.jobMgr.Cancel() }
+//func (jpm *jobPartMgr) Cancel() { jpm.jobMgr.Cancel() }
 func (jpm *jobPartMgr) Close() {
 	jpm.planMMF.Unmap()
 	// Clear other fields to all for GC

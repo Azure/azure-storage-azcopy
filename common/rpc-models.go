@@ -17,7 +17,7 @@ func (RpcCmd) CopyJobPartOrder() RpcCmd { return RpcCmd("CopyJobPartOrder") }
 func (RpcCmd) ListJobs() RpcCmd         { return RpcCmd("ListJobs") }
 func (RpcCmd) ListJobSummary() RpcCmd   { return RpcCmd("ListJobSummary") }
 func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd("ListJobTransfers") }
-func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("CancelJob") }
+func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("Cancel") }
 func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
 
@@ -93,6 +93,7 @@ type CopyJobPartOrderResponse struct {
 type ListRequest struct {
 	JobID    JobID
 	OfStatus string // TODO: OfStatus with string type sounds not good, change it to enum
+	Output   OutputFormat
 }
 
 // This struct represents the optional attribute for blob request header
@@ -108,10 +109,15 @@ type BlobTransferAttributes struct {
 	BlockSizeInBytes         uint32
 }
 
+type JobIDDetails struct {
+	JobId         JobID
+	CommandString string
+}
+
 // ListJobsResponse represent the Job with JobId and
 type ListJobsResponse struct {
 	ErrorMessage string
-	JobIDs       []JobID
+	JobIDDetails []JobIDDetails
 }
 
 // ListContainerResponse represents the list of blobs within the container.
@@ -132,8 +138,9 @@ type ListJobSummaryResponse struct {
 	TotalTransfers        uint32
 	TransfersCompleted    uint32
 	TransfersFailed       uint32
-	JobProgressPercentage float64
+	TransfersSkipped      uint32
 	BytesOverWire         uint64
+	TotalBytesTransferred uint64
 	FailedTransfers       []TransferDetail
 }
 

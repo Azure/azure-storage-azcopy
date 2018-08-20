@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"os"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/spf13/cobra"
@@ -48,24 +50,37 @@ type resumeJobController struct {
 	jobStartTime time.Time
 }
 
-func (cca *resumeJobController) PrintJobStartedMsg() {
+// wraps call to lifecycle manager to wait for the job to complete
+// if blocking is specified to true, then this method will never return
+// if blocking is specified to false, then another goroutine spawns and wait out the job
+func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
+	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-}
-
-func (cca *resumeJobController) CancelJob() {
-	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
-	if err != nil {
-		glcm.ExitWithError("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
-	}
-}
-
-func (cca *resumeJobController) InitializeProgressCounters() {
+	currentDir, _ := os.Getwd()
+	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, currentDir))
+	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = 0
+
+	// hand over control to the lifecycle manager if blocking
+	if blocking {
+		glcm.InitiateProgressReporting(cca, true)
+		glcm.SurrenderControl()
+	} else {
+		// non-blocking, return after spawning a go routine to watch the job
+		glcm.InitiateProgressReporting(cca, true)
+	}
 }
 
-func (cca *resumeJobController) PrintJobProgressStatus() {
+func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
+	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
+	if err != nil {
+		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+	}
+}
+
+func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
@@ -74,15 +89,19 @@ func (cca *resumeJobController) PrintJobProgressStatus() {
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
-
-		glcm.ExitWithSuccess(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+		exitCode := common.EExitCode.Success()
+		if summary.TransfersFailed > 0 {
+			exitCode = common.EExitCode.Error()
+		}
+		lcm.Exit(fmt.Sprintf(
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\nTotalBytesTransferred: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
-			summary.JobStatus), common.EExitCode.Success())
+			summary.TransfersSkipped,
+			summary.JobStatus, summary.TotalBytesTransferred), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -92,26 +111,18 @@ func (cca *resumeJobController) PrintJobProgressStatus() {
 		scanningString = "(scanning...)"
 	}
 
-	// compute the average throughput for the last time interval
-	bytesInMB := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
-	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMB/timeElapsed, 0)
-
 	// reset the interval timer and byte count
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
 	// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-	progressStr := fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s",
+	progressStr := fmt.Sprintf("%v Done, %v Failed, %v Skipped, %v Pending, %v Total%s",
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
+		summary.TransfersSkipped,
 		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
 		summary.TotalTransfers,
 		scanningString)
-	if throughPut != 0 {
-		progressStr = fmt.Sprintf("%s, 2-sec Throughput (MB/s): %v", progressStr, ste.ToFixed(throughPut, 4))
-	}
-
 	glcm.Progress(progressStr)
 }
 
@@ -120,7 +131,7 @@ func init() {
 
 	// resumeCmd represents the resume command
 	resumeCmd := &cobra.Command{
-		Use:        "resume jobID",
+		Use:        "resume [jobID]",
 		SuggestFor: []string{"resme", "esume", "resue"},
 		Short:      "Resume the existing job with the given job ID",
 		Long: `
@@ -139,12 +150,12 @@ Resume the existing job with the given job ID.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			err := resumeCmdArgs.process()
 			if err != nil {
-				glcm.ExitWithError(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
+				glcm.Exit(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
 			}
 		},
 	}
 
-	rootCmd.AddCommand(resumeCmd)
+	jobsCmd.AddCommand(resumeCmd)
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.includeTransfer, "include", "", "Filter: only include these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
@@ -155,6 +166,11 @@ Resume the existing job with the given job ID.`,
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "source sas of the source for given JobId")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination sas of the destination for given JobId")
+
+	// hide oauth feature temporarily
+	resumeCmd.PersistentFlags().MarkHidden("oauth-user")
+	resumeCmd.PersistentFlags().MarkHidden("tenant-id")
+	resumeCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }
 
 type resumeCmdArgs struct {
@@ -252,7 +268,7 @@ func (rca resumeCmdArgs) process() error {
 		}
 		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 	}
-	glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
+	//glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
 
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse
@@ -268,11 +284,11 @@ func (rca resumeCmdArgs) process() error {
 		&resumeJobResponse)
 
 	if !resumeJobResponse.CancelledPauseResumed {
-		glcm.ExitWithError(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
+		glcm.Exit(resumeJobResponse.ErrorMsg, common.EExitCode.Error())
 	}
 
 	controller := resumeJobController{jobID: jobID}
-	glcm.WaitUntilJobCompletion(&controller)
+	controller.waitUntilJobCompletion(true)
 
 	return nil
 }

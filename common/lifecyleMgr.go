@@ -3,9 +3,11 @@ package common
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,13 +28,12 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Progress(string)
-	Info(string)
-	ExitWithSuccess(string, ExitCode)
-	ExitWithError(string, ExitCode)
-	SurrenderControl()
-	ReadStandardInputToCancelJob()
-	WaitUntilJobCompletion(JobController)
+	Progress(string)                                // print on the same line over and over again, not allowed to float up
+	Info(string)                                    // simple print, allowed to float up
+	Prompt(string) string                           // ask the user a question(after erasing the progress), then return the response
+	Exit(string, ExitCode)                          // exit after printing
+	SurrenderControl()                              // give up control, this should never return
+	InitiateProgressReporting(WorkController, bool) // start writing progress with another routine
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -46,21 +47,23 @@ type outputMessageType uint8
 
 func (outputMessageType) Progress() outputMessageType { return outputMessageType(0) } // should be printed on the same line over and over again, not allowed to float up
 func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
-func (outputMessageType) Success() outputMessageType  { return outputMessageType(2) } // exit after printing
-func (outputMessageType) Error() outputMessageType    { return outputMessageType(3) } // always fatal, exit after printing
+func (outputMessageType) Exit() outputMessageType     { return outputMessageType(2) } // exit after printing
+func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(3) } // ask the user a question after erasing the progress
 
 // defines the output and how it should be handled
 type outputMessage struct {
-	msgContent string
-	msgType    outputMessageType
-	exitCode   ExitCode // only for when the application is meant to exit after printing (i.e. Error or Final)
+	msgContent   string
+	msgType      outputMessageType
+	exitCode     ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
+	inputChannel chan<- string // support getting a response from the user
 }
 
 // single point of control for all outputs
 type lifecycleMgr struct {
-	msgQueue      chan outputMessage
-	progressCache string // useful for keeping job progress on the last line
-	cancelChannel chan os.Signal
+	msgQueue       chan outputMessage
+	progressCache  string // useful for keeping job progress on the last line
+	cancelChannel  chan os.Signal
+	waitEverCalled int32
 }
 
 func (lcm *lifecycleMgr) Progress(msg string) {
@@ -77,25 +80,26 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	}
 }
 
-func (lcm *lifecycleMgr) ExitWithSuccess(msg string, exitCode ExitCode) {
+func (lcm *lifecycleMgr) Prompt(msg string) string {
+	expectedInputChannel := make(chan string, 1)
+	lcm.msgQueue <- outputMessage{
+		msgContent:   msg,
+		msgType:      eMessageType.Prompt(),
+		inputChannel: expectedInputChannel,
+	}
+
+	// block until input comes from the user
+	return <-expectedInputChannel
+}
+
+func (lcm *lifecycleMgr) Exit(msg string, exitCode ExitCode) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
-		msgType:    eMessageType.Success(),
+		msgType:    eMessageType.Exit(),
 		exitCode:   exitCode,
 	}
 
 	// stall forever until the success message is printed and program exits
-	lcm.SurrenderControl()
-}
-
-func (lcm *lifecycleMgr) ExitWithError(msg string, exitCode ExitCode) {
-	lcm.msgQueue <- outputMessage{
-		msgContent: msg,
-		msgType:    eMessageType.Error(),
-		exitCode:   exitCode,
-	}
-
-	// stall forever until the error message is printed and program exits
 	lcm.SurrenderControl()
 }
 
@@ -119,14 +123,9 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	// NOTE: fmt.printf is being avoided on purpose (for memory optimization)
 	for {
 		switch msgToPrint := <-lcm.msgQueue; msgToPrint.msgType {
-		case eMessageType.Error():
+		case eMessageType.Exit():
 			// simply print and quit
-			fmt.Println("\n" + "FATAL ERROR: " + msgToPrint.msgContent)
-			os.Exit(int(msgToPrint.exitCode))
-
-		case eMessageType.Success():
-			// simply print and quit
-			fmt.Println(msgToPrint.msgContent)
+			fmt.Println("\n" + msgToPrint.msgContent)
 			os.Exit(int(msgToPrint.exitCode))
 
 		case eMessageType.Progress():
@@ -155,69 +154,101 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 			} else {
 				fmt.Println(msgToPrint.msgContent)
 			}
-		}
-	}
-}
 
-// ReadStandardInputToCancelJob is a function that reads the standard Input
-// If Input given is "cancel", it cancels the current job.
-func (lcm *lifecycleMgr) ReadStandardInputToCancelJob() {
-	for {
-		consoleReader := bufio.NewReader(os.Stdin)
-		// ReadString reads input until the first occurrence of \n in the input,
-		input, err := consoleReader.ReadString('\n')
-		if err != nil {
-			return
-		}
+		case eMessageType.Prompt():
+			if lcm.progressCache != "" { // a progress status is already on the last line
+				// print the prompt from the beginning on current line
+				fmt.Print("\r")
+				fmt.Print(msgToPrint.msgContent)
 
-		//remove the delimiter "\n"
-		input = strings.Trim(input, "\n")
-		// remove trailing white spaces
-		input = strings.Trim(input, " ")
-		// converting the input characters to lower case characters
-		// this is done to avoid case sensitiveness.
-		input = strings.ToLower(input)
+				// it is possible that the prompt is shorter than the progress status
+				// in this case we must erase the left over characters from the progress status
+				matchLengthWithSpaces(len(lcm.progressCache), len(msgToPrint.msgContent))
 
-		switch input {
-		case "cancel":
-			// send a kill signal to the cancel channel.
-			lcm.cancelChannel <- os.Kill
-		default:
-			panic(fmt.Errorf("command %s not supported by azcopy", input))
+			} else {
+				fmt.Print(msgToPrint.msgContent)
+			}
+
+			// read the response to the prompt and send it back through the channel
+			msgToPrint.inputChannel <- lcm.readInCleanLineFromStdIn()
 		}
 	}
 }
 
 // for the lifecycleMgr to babysit a job, it must be given a controller to get information about the job
-type JobController interface {
-	PrintJobStartedMsg()         // print an initial message to indicate that the work has started
-	CancelJob()                  // handle to cancel the work
-	InitializeProgressCounters() // initialize states needed to track progress (such as start time of the work)
-	PrintJobProgressStatus()     // print the progress status, optionally exit the application if work is done
+type WorkController interface {
+	Cancel(mgr LifecycleMgr)               // handle to cancel the work
+	ReportProgressOrExit(mgr LifecycleMgr) // print the progress status, optionally exit the application if work is done
 }
 
-func (lcm *lifecycleMgr) WaitUntilJobCompletion(jc JobController) {
-	// CancelChannel will be notified when os receives os.Interrupt and os.Kill signals
-	// waiting for signals from either CancelChannel or timeOut Channel.
-	// if no signal received, will fetch/display a job status update then sleep for a bit
-	signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
-
-	// print message to indicate work has started
-	jc.PrintJobStartedMsg()
-
-	// set up the job controller so that it's ready to report progress of the job
-	jc.InitializeProgressCounters()
-
-	for {
-		select {
-		case <-lcm.cancelChannel:
-			jc.CancelJob()
-		default:
-			jc.PrintJobProgressStatus()
-		}
-
-		// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
-		time.Sleep(2 * time.Second)
+// isInteractive indicates whether the application was spawned by an actual user on the command
+func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController, isInteractive bool) {
+	if !atomic.CompareAndSwapInt32(&lcm.waitEverCalled, 0, 1) {
+		return
 	}
 
+	// this go routine never returns
+	// it will terminate the whole process eventually when the work is complete
+	go func() {
+		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
+		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
+
+		// if the application was launched by another process, allow input from stdin to trigger a cancellation
+		if !isInteractive {
+			// dispatch a routine to read the stdin
+			// if input is the word 'cancel' then stop the current job by sending a kill signal to cancel channel
+			go func() {
+				for {
+					input := lcm.readInCleanLineFromStdIn()
+
+					// if the word 'cancel' was passed in, then cancel the current job by sending a signal to the cancel channel
+					if strings.EqualFold(input, "cancel") {
+						// send a kill signal to the cancel channel.
+						lcm.cancelChannel <- os.Kill
+
+						// exit the loop as soon as cancel is received
+						// there is no need to wait on the stdin anymore
+						break
+					}
+				}
+			}()
+		}
+
+		for {
+			select {
+			case <-lcm.cancelChannel:
+				jc.Cancel(lcm)
+			default:
+				jc.ReportProgressOrExit(lcm)
+			}
+
+			// wait a bit before fetching job status again, as fetching has costs associated with it on the backend
+			time.Sleep(2 * time.Second)
+		}
+	}()
+}
+
+// reads in a single line from stdin
+// trims the new line, and also the extra spaces around the content
+func (lcm *lifecycleMgr) readInCleanLineFromStdIn() string {
+	consoleReader := bufio.NewReader(os.Stdin)
+
+	// reads input until the first occurrence of \n in the input,
+	input, err := consoleReader.ReadString('\n')
+	// When the user cancel the job more than one time before providing the
+	// input there will be an EOF Error.
+	if err == io.EOF {
+		return ""
+	}
+
+	// remove the delimiter "\n" and spaces before/after the content
+	input = strings.TrimSpace(input)
+	return strings.Trim(input, " ")
+}
+
+// captures the common logic of exiting if there's an expected error
+func PanicIfErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

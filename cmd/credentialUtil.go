@@ -191,18 +191,6 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
 		nil), nil
-
-	return azblob.NewPipeline(
-		credential,
-		azblob.PipelineOptions{
-			Retry: azblob.RetryOptions{
-				Policy:        azblob.RetryPolicyExponential,
-				MaxTries:      ste.UploadMaxTries,
-				TryTimeout:    ste.UploadTryTimeout,
-				RetryDelay:    ste.UploadRetryDelay,
-				MaxRetryDelay: ste.UploadMaxRetryDelay,
-			},
-		}), nil
 }
 
 func createBlobCredential(ctx context.Context, credInfo common.CredentialInfo) azblob.Credential {
