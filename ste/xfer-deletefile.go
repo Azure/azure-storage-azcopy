@@ -20,7 +20,6 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -39,7 +38,6 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 			}
 		}
 		jptm.SetStatus(status)
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 	}
 

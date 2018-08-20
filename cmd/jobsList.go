@@ -78,7 +78,7 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 	glcm.Info("Existing Jobs ")
 	for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
 		jobDetail := listJobResponse.JobIDDetails[index]
-		glcm.Info(fmt.Sprintf("JobId: %s Command: %s", jobDetail.JobId.String(), jobDetail.CommandString))
+		glcm.Info(fmt.Sprintf("JobId: %s\nCommand: %s", jobDetail.JobId.String(), jobDetail.CommandString))
 	}
 	return nil
 }

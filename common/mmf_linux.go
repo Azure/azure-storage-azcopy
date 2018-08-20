@@ -1,3 +1,5 @@
+// +build linux darwin
+
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,10 +24,8 @@ package common
 
 import (
 	"os"
-	"reflect"
 	"sync"
 	"syscall"
-	"unsafe"
 )
 
 type MMF struct {
@@ -47,28 +47,13 @@ type MMF struct {
 }
 
 func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
-	prot, access := uint32(syscall.PAGE_READONLY), uint32(syscall.FILE_MAP_READ) // Assume read-only
+	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
 	if writable {
-		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
+		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
 	}
-	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, uint32(int64(length)>>32), uint32(int64(length)&0xffffffff), nil)
-	if hMMF == 0 {
-		return nil, os.NewSyscallError("CreateFileMapping", errno)
-	}
-	defer syscall.CloseHandle(hMMF)
-	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
-
-	// pre-fetch the memory mapped file so that performance is better when it is read
-	err := prefetchVirtualMemory(&memoryRangeEntry{VirtualAddress: addr, NumberOfBytes: int(length)})
-	if err != nil {
-		panic(err)
-	}
-	m := []byte{}
-	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
-	h.Data = addr
-	h.Len = int(length)
-	h.Cap = h.Len
-	return &MMF{slice: m, isMapped: true, lock: sync.RWMutex{}}, nil
+	addr, err := syscall.Mmap(int(file.Fd()), offset, int(length), prot, flags)
+	syscall.Madvise(addr, syscall.MADV_SEQUENTIAL|syscall.MADV_WILLNEED)
+	return &MMF{slice: (addr), isMapped: true, lock: sync.RWMutex{}}, err
 }
 
 // To unmap, we need exclusive (write) access to the MMF and
@@ -76,9 +61,8 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 // the MMF is unusable.
 func (m *MMF) Unmap() {
 	m.lock.Lock()
-	addr := uintptr(unsafe.Pointer(&(([]byte)(m.slice)[0])))
-	m.slice = []byte{}
-	err := syscall.UnmapViewOfFile(addr)
+	err := syscall.Munmap(m.slice)
+	m.slice = nil
 	PanicIfErr(err)
 	m.isMapped = false
 	m.lock.Unlock()
@@ -101,37 +85,4 @@ func (m *MMF) UnuseMMF() {
 // Slice() returns the memory mapped byte slice
 func (m *MMF) Slice() []byte {
 	return m.slice
-}
-
-type memoryRangeEntry struct {
-	VirtualAddress uintptr
-	NumberOfBytes  int
-}
-
-var procPrefetchVirtualMemory *syscall.Proc
-
-func init() {
-	// only load the DLL once
-	var modkernel32, _ = syscall.LoadDLL("kernel32.dll")
-	procPrefetchVirtualMemory, _ = modkernel32.FindProc("PrefetchVirtualMemory")
-}
-
-func prefetchVirtualMemory(virtualAddresses *memoryRangeEntry) (err error) {
-	// if the version of Windows does not support this functionality, just skip
-	if procPrefetchVirtualMemory == nil {
-		return nil
-	}
-
-	// make system call to prefetch the memory range
-	hProcess, _ := syscall.GetCurrentProcess()
-	r1, _, e1 := syscall.Syscall6(procPrefetchVirtualMemory.Addr(), 4, uintptr(hProcess), 1, uintptr(unsafe.Pointer(virtualAddresses)), 0, 0, 0)
-
-	if r1 == 0 {
-		if e1 != 0 {
-			return e1
-		} else {
-			return nil
-		}
-	}
-	return nil
 }

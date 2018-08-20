@@ -270,7 +270,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersFailed, 20)
+        self.assertEquals(x.TransfersSkipped, 20)
         self.assertEquals(x.TransfersCompleted, 0)
 
         # uploading a sub-directory inside the above dir with 20 files inside the sub-directory.
@@ -308,7 +308,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in json format')
         self.assertEquals(x.TransfersCompleted, 20)
-        self.assertEquals(x.TransfersFailed, 20)
+        self.assertEquals(x.TransfersSkipped, 20)
 
 
     def test_force_flag_set_to_false_download(self):
@@ -352,7 +352,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('erorr parsing the output in Json Format')
-        self.assertEquals(x.TransfersFailed, 20)
+        # Since all files exists locally and overwrite flag is set to false, all 20 transfers will be skipped
+        self.assertEquals(x.TransfersSkipped, 20)
         self.assertEquals(x.TransfersCompleted, 0)
 
         # removing 5 files with suffix from 10 to 14
@@ -374,7 +375,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersFailed, 15)
+        self.assertEquals(x.TransfersSkipped, 15)
         self.assertEquals(x.TransfersCompleted, 5)
 
 
