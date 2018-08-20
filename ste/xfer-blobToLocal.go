@@ -46,7 +46,6 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -62,7 +61,6 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.LogDownloadError(info.Source, info.Destination, "Blob already exists", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -87,7 +85,7 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 				err = deleteFile(info.Destination)
 				if err != nil {
 					// If there was an error deleting the file, log the error
-					jptm.LogError(info.Destination, "Deleting the file ", err)
+					jptm.LogError(info.Destination, "Delete File Error ", err)
 				}
 			}
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -105,6 +103,15 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		if err != nil {
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			// Since the transfer failed, the file created above should be deleted
+			// If there was an error while opening / creating the file, delete will fail.
+			// But delete is required when error occurred while truncating the file and
+			// in this case file should be deleted.
+			err = deleteFile(info.Destination)
+			if err != nil {
+				// If there was an error deleting the file, log the error
+				jptm.LogError(info.Destination, "Delete File Error ", err)
+			}
 			jptm.ReportTransferDone()
 			return
 		}
@@ -172,8 +179,6 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 		//}(jptm)
 
 		chunkDone := func() {
-			// adding the bytes transferred or skipped of a transfer to determine the progress of transfer.
-			jptm.AddToBytesDone(adjustedChunkSize)
 			lastChunk, _ := jptm.ReportChunkDone()
 			if lastChunk {
 				if jptm.ShouldLog(pipeline.LogDebug) {
@@ -223,8 +228,6 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 				chunkDone()
 				return
 			}
-
-			jptm.AddToBytesDone(adjustedChunkSize)
 
 			lastChunk, _ := jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk
@@ -299,7 +302,7 @@ func createFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 		return nil, err
 	}
 	if truncateError := f.Truncate(fileSize); truncateError != nil {
-		return nil, err
+		return nil, truncateError
 	}
 	return f, nil
 }

@@ -65,7 +65,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// If the transfer was cancelled, then reporting transfer as done and increasing the bytestransferred by the size of the source.
 	if jptm.WasCanceled() {
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -80,7 +79,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.LogUploadError(info.Source, info.Destination, "Blob Already Exists ", 0)
 			// Mark the transfer as failed with FileAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -91,7 +89,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "File Open Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -99,7 +96,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "File Stat Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.AddToBytesDone(info.SourceSize)
 		jptm.ReportTransferDone()
 		return
 	}
@@ -112,7 +108,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
 			srcFile.Close()
 			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.AddToBytesDone(info.SourceSize)
 			jptm.ReportTransferDone()
 			return
 		}
@@ -200,8 +195,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 		// If the calling range is the last range of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		rangeDone := func() {
-			// adding the range size to the bytes transferred.
-			jptm.AddToBytesDone(pageSize)
 			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
 				if jptm.ShouldLog(pipeline.LogDebug) {
 					jptm.Log(pipeline.LogDebug, "Finalizing transfer")

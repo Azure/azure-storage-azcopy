@@ -344,6 +344,20 @@ func (ts *TransferStatus) Parse(s string) error {
 	return err
 }
 
+// Implementing MarshalJSON() method for type Transfer Status
+func (ts TransferStatus) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ts.String())
+}
+
+// Implementing UnmarshalJSON() method for type Transfer Status
+func (ts *TransferStatus) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return ts.Parse(s)
+}
+
 func (ts *TransferStatus) AtomicLoad() TransferStatus {
 	return TransferStatus(atomic.LoadInt32((*int32)(ts)))
 }

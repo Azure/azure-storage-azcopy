@@ -24,17 +24,20 @@ import (
 	"errors"
 	"fmt"
 
+	"encoding/json"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
 
 type ListReq struct {
 	JobID    common.JobID
-	StatusOf common.TransferStatus
+	OfStatus string
+	Output   string
 }
 
 func init() {
-	commandLineInput := common.ListRequest{}
+	commandLineInput := ListReq{}
 
 	// shJob represents the ls command
 	shJob := &cobra.Command{
@@ -59,7 +62,14 @@ If the with-status flag is set, then the list of transfers in the job with the g
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			err := HandleShowCommand(commandLineInput)
+			listRequest := common.ListRequest{}
+			listRequest.JobID = commandLineInput.JobID
+			listRequest.OfStatus = commandLineInput.OfStatus
+			err := listRequest.Output.Parse(commandLineInput.Output)
+			if err != nil {
+				glcm.Exit(fmt.Errorf("error parsing the given output format %s", commandLineInput.Output).Error(), common.EExitCode.Error())
+			}
+			err = HandleShowCommand(listRequest)
 			if err == nil {
 				glcm.Exit("", common.EExitCode.Success())
 			} else {
@@ -71,7 +81,9 @@ If the with-status flag is set, then the list of transfers in the job with the g
 	jobsCmd.AddCommand(shJob)
 
 	// filters
-	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: NotStarted, Started, Success, Failed")
+	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: Started, Success, Failed")
+	// filters
+	shJob.PersistentFlags().StringVar(&commandLineInput.Output, "output", "text", "format of the command's output, the choices include: text, json")
 }
 
 // handles the list command
@@ -82,7 +94,7 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 		resp := common.ListJobSummaryResponse{}
 		rpcCmd = common.ERpcCmd.ListJobSummary()
 		Rpc(rpcCmd, &listRequest.JobID, &resp)
-		PrintJobProgressSummary(resp)
+		PrintJobProgressSummary(listRequest.Output, resp)
 	} else {
 		lsRequest := common.ListJobTransfersRequest{}
 		lsRequest.JobID = listRequest.JobID
@@ -95,13 +107,23 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 		resp := common.ListJobTransfersResponse{}
 		rpcCmd = common.ERpcCmd.ListJobTransfers()
 		Rpc(rpcCmd, lsRequest, &resp)
-		PrintJobTransfers(resp)
+		PrintJobTransfers(listRequest.Output, resp)
 	}
 	return nil
 }
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
-func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
+func PrintJobTransfers(outputForamt common.OutputFormat, listTransfersResponse common.ListJobTransfersResponse) {
+	if outputForamt == common.EOutputFormat.Json() {
+		var exitCode = common.EExitCode.Success()
+		if listTransfersResponse.ErrorMsg != "" {
+			exitCode = common.EExitCode.Error()
+		}
+		jsonOutput, err := json.MarshalIndent(listTransfersResponse, "", "  ")
+		common.PanicIfErr(err)
+		glcm.Exit(string(jsonOutput), exitCode)
+		return
+	}
 	if listTransfersResponse.ErrorMsg != "" {
 		glcm.Exit("request failed with following message "+listTransfersResponse.ErrorMsg, common.EExitCode.Error())
 		return
@@ -115,11 +137,28 @@ func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
-func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
+func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.ListJobSummaryResponse) {
+	// Reset the bytes over the wire counter
+	summary.BytesOverWire = 0
+
+	// If the output format is Json, check the summary's error Message.
+	// If there is an error message, then the exit code is error
+	// else the exit code is success.
+	// Marshal the summary and print in the Json format.
+	if outputFormat == common.EOutputFormat.Json() {
+		var exitCode = common.EExitCode.Success()
+		if summary.ErrorMsg != "" {
+			exitCode = common.EExitCode.Error()
+		}
+		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		common.PanicIfErr(err)
+		glcm.Exit(string(jsonOutput), exitCode)
+		return
+	}
+
 	if summary.ErrorMsg != "" {
 		glcm.Exit("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
 	}
-
 	glcm.Info(fmt.Sprintf(
 		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
 		summary.JobID.String(),
@@ -128,9 +167,4 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 		summary.TransfersFailed,
 		summary.JobStatus,
 	))
-
-	// send each message separately so that the printing is smooth
-	for index := 0; index < len(summary.FailedTransfers); index++ {
-		glcm.Info(fmt.Sprintf("transfer-%d	source: %s	destination: %s", index, summary.FailedTransfers[index].Src, summary.FailedTransfers[index].Dst))
-	}
 }
