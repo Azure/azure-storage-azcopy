@@ -33,11 +33,11 @@ func init() {
 	raw := rawCopyCmdArgs{blockBlobTier: common.EBlockBlobTier.None().String(), pageBlobTier: common.EPageBlobTier.None().String()}
 	// deleteCmd represents the delete command
 	var deleteCmd = &cobra.Command{
-		Use:        "remove",
+		Use:        "remove [resourceURL]",
 		Aliases:    []string{"rm", "r"},
 		SuggestFor: []string{"delete", "del"},
-		Short:      "Coming soon: remove(rm) deletes blobs or containers in Azure Storage.",
-		Long:       `Coming soon: remove(rm) deletes blobs or containers in Azure Storage.`,
+		Short:      "Deletes blobs or containers in Azure Storage",
+		Long:       `Deletes blobs or containers in Azure Storage.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return fmt.Errorf("remove command only takes 1 arguments. Passed %d arguments", len(args))
@@ -66,9 +66,6 @@ func init() {
 
 			glcm.SurrenderControl()
 		},
-		// hide features not relevant to BFS
-		// TODO remove after preview release
-		Hidden: true,
 	}
 	rootCmd.AddCommand(deleteCmd)
 

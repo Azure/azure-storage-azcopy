@@ -42,8 +42,8 @@ func init() {
 	listContainerCmd := &cobra.Command{
 		Use:     "list [containerURL]",
 		Aliases: []string{"ls"},
-		Short:   "List the blobs in a given container.",
-		Long:    `List the blobs in a given container.`,
+		Short:   "List the entities in a given resource",
+		Long:    `List the entities in a given resource. Only Blob containers are supported at the moment.`,
 		Example: "azcopy container list [containerURL]",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the listContainer command requires necessarily to have an argument
@@ -75,7 +75,7 @@ func init() {
 
 		},
 	}
-	containerCmd.AddCommand(listContainerCmd)
+	rootCmd.AddCommand(listContainerCmd)
 	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "outputRaw", "text", "format of the command's outputRaw, the choices include: text, json")
 }
 

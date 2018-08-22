@@ -945,6 +945,11 @@ Download an entire directory:
 			if err != nil {
 				glcm.Exit("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
 			}
+
+			if cooked.output == common.EOutputFormat.Text() {
+				glcm.Info("Scanning...")
+			}
+
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
