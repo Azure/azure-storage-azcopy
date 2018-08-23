@@ -34,7 +34,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	if userSpecifiedFromTo == "" {
 		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
 		if inferredFromTo == common.EFromTo.Unknown() {
-			return common.EFromTo.Unknown(), errors.New("Invalid source/destination combination. Pleasee use the --FromTo switch")
+			return common.EFromTo.Unknown(), fmt.Errorf("Unable to infer the source '%s' / destination '%s' combination. Please use the --FromTo switch ", src, dst)
 		}
 		return inferredFromTo, nil
 	}

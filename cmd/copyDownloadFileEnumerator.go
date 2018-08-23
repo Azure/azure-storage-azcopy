@@ -64,7 +64,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	searchPrefix, fileNamePattern, isWildcardSearch := srcFileURLPartExtension.searchPrefixFromFileURL()
 	if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
-		return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
+		return fmt.Errorf("cannot copy the entire share or directory without recursive flag. Please use --recursive flag")
 	}
 	// TODO: Ensure whether to create share here or in Xfer
 
