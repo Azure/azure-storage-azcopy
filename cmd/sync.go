@@ -53,9 +53,12 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
 	fromTo := inferFromTo(raw.src, raw.dst)
+	if fromTo == common.EFromTo.Unknown() {
+		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
+	}
 	if fromTo != common.EFromTo.LocalBlob() &&
 		fromTo != common.EFromTo.BlobLocal() {
-		return cooked, fmt.Errorf("invalid type of source and destination passed for this passed")
+		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, fromTo)
 	}
 	cooked.source = raw.src
 	cooked.destination = raw.dst
