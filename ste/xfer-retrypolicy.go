@@ -380,15 +380,18 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					// but they should be retried. So redefined the retry policy for azcopy to retry for such errors as well.
 
 					// TODO make sure Storage error can be cast to different package's error object
-					if stErr, ok := err.(azblob.StorageError); ok {
+					// TODO: Discuss the error handling of Go Blob SDK.
+					// Temporarily use ServiceCode to verify if the error is related to storage service-side,
+					// Note: ServiceCode is set only when error related to storage service happened.
+					if stErr, ok := err.(azblob.StorageError); ok && stErr.ServiceCode() != "" {
 						// retry only in case of temporary storage errors.
 						if stErr.Temporary() {
-							action = "Retry: StorageError and Temporary()"
+							action = "Retry: StorageError with error service code and Temporary()"
 						} else {
-							action = "NoRetry: expected storage error"
+							action = "NoRetry: StorageError with error service code and not Temporary()"
 						}
 					} else if _, ok := err.(net.Error); ok {
-						action = "Retry: net.Error and Temporary() or Timeout()"
+						action = "Retry: net.Error"
 					} else {
 						action = "NoRetry: unrecognized error"
 					}
