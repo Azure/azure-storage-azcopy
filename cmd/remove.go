@@ -36,8 +36,8 @@ func init() {
 		Use:        "remove [resourceURL]",
 		Aliases:    []string{"rm", "r"},
 		SuggestFor: []string{"delete", "del"},
-		Short:      "Deletes blobs or containers in Azure Storage",
-		Long:       `Deletes blobs or containers in Azure Storage.`,
+		Short:      "Deletes blobs or files in Azure Storage",
+		Long:       `Deletes blobs or files in Azure Storage.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return fmt.Errorf("remove command only takes 1 arguments. Passed %d arguments", len(args))
