@@ -25,7 +25,6 @@ import (
 	"io"
 	"net/url"
 	"os"
-	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -99,8 +98,24 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.ReportTransferDone()
 
 	} else { // 3b: source has content
-		dstFile, err := createFileOfSize(info.Destination, blobSize)
+		dstFile, err := common.CreateFileOfSize(info.Destination, blobSize)
 		if err != nil {
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			// Since the transfer failed, the file created above should be deleted
+			// If there was an error while opening / creating the file, delete will fail.
+			// But delete is required when error occurred while truncating the file and
+			// in this case file should be deleted.
+			err = deleteFile(info.Destination)
+			if err != nil {
+				// If there was an error deleting the file, log the error
+				jptm.LogError(info.Destination, "Delete File Error ", err)
+			}
+			jptm.ReportTransferDone()
+			return
+		}
+		dstFileInfo, err := dstFile.Stat()
+		if err != nil || (dstFileInfo.Size() != blobSize) {
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			// Since the transfer failed, the file created above should be deleted
@@ -260,25 +275,9 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 	}
 }
 
-func createParentDirectoryIfNotExist(destinationPath string) error {
-	// check if parent directory exists
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, common.AZCOPY_PATH_SEPARATOR_STRING)]
-	_, err := os.Stat(parentDirectory)
-	// if the parent directory does not exist, create it and all its parents
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(parentDirectory, os.ModePerm)
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	return nil
-}
-
 // create an empty file and its parent directories, without any content
 func createEmptyFile(destinationPath string) error {
-	createParentDirectoryIfNotExist(destinationPath)
+	common.CreateParentDirectoryIfNotExist(destinationPath)
 	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return err
@@ -290,19 +289,4 @@ func createEmptyFile(destinationPath string) error {
 // deletes the file
 func deleteFile(destinationPath string) error {
 	return os.Remove(destinationPath)
-}
-
-// create a file, given its path and length
-
-func createFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
-	createParentDirectoryIfNotExist(destinationPath)
-
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return nil, err
-	}
-	if truncateError := f.Truncate(fileSize); truncateError != nil {
-		return nil, truncateError
-	}
-	return f, nil
 }

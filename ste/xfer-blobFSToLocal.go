@@ -90,7 +90,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		jptm.ReportTransferDone()
 
 	} else { // 3b: source has content
-		dstFile, err := createFileOfSize(info.Destination, sourceSize)
+		dstFile, err := common.CreateFileOfSize(info.Destination, sourceSize)
 		if err != nil {
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+msg, status)
