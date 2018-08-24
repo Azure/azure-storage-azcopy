@@ -103,7 +103,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
 	// has to wait and enumeration of transfer gets blocked till then.
 	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 2000
+	const PartsChannelSize = 10000
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
