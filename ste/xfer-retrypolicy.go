@@ -240,9 +240,11 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					if stErr, ok := err.(azbfs.StorageError); ok {
 						// retry only in case of temporary storage errors.
 						if stErr.Temporary() {
-							action = "Retry: StorageError and Temporary()"
+							action = "Retry: StorageError with error service code and Temporary()"
+						} else if stErr.Response() != nil && isSuccessStatusCode(stErr.Response()) { // This is a temporarily work around.
+							action = "Retry: StorageError with success status code"
 						} else {
-							action = "NoRetry: expected storage error"
+							action = "NoRetry: StorageError not Temporary() and without retriable status code"
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error and Temporary() or Timeout()"
@@ -381,14 +383,14 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 
 					// TODO make sure Storage error can be cast to different package's error object
 					// TODO: Discuss the error handling of Go Blob SDK.
-					// Temporarily use ServiceCode to verify if the error is related to storage service-side,
-					// Note: ServiceCode is set only when error related to storage service happened.
-					if stErr, ok := err.(azblob.StorageError); ok && stErr.ServiceCode() != "" {
+					if stErr, ok := err.(azblob.StorageError); ok {
 						// retry only in case of temporary storage errors.
 						if stErr.Temporary() {
 							action = "Retry: StorageError with error service code and Temporary()"
+						} else if stErr.Response() != nil && isSuccessStatusCode(stErr.Response()) { // This is a temporarily work around.
+							action = "Retry: StorageError with success status code"
 						} else {
-							action = "NoRetry: StorageError with error service code and not Temporary()"
+							action = "NoRetry: StorageError not Temporary() and without retriable status code"
 						}
 					} else if _, ok := err.(net.Error); ok {
 						action = "Retry: net.Error"
@@ -424,6 +426,20 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 			return response, err // Not retryable or too many retries; return the last response/error
 		}
 	})
+}
+
+var successStatusCodes = []int{http.StatusOK, http.StatusCreated, http.StatusAccepted, http.StatusNoContent, http.StatusPartialContent}
+
+func isSuccessStatusCode(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	for _, i := range successStatusCodes {
+		if i == resp.StatusCode {
+			return true
+		}
+	}
+	return false
 }
 
 // According to https://github.com/golang/go/wiki/CompilerOptimizations, the compiler will inline this method and hopefully optimize all calls to it away
