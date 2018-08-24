@@ -78,7 +78,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// b: https://<blob-service>/containerprefix*/vd/blob
 	if isAccountLevel, containerPrefix := srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
 		if !cca.recursive {
-			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
+			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
 
 		// Validate If destination is service level account.
@@ -97,7 +97,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	} else { // Case-3: Source is a blob container or directory
 		blobPrefix, blobNamePattern, isWildcardSearch := srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
-			return fmt.Errorf("cannot copy the entire container or directory without recursive flag, please use recursive flag")
+			return fmt.Errorf("cannot copy the entire container or directory without recursive flag. Please use --recursive flag")
 		}
 		// create bucket for destination, in case bucket doesn't exist.
 		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
