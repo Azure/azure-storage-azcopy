@@ -97,13 +97,14 @@ func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 	if err != nil {
 		return nil, err
 	}
-	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
-	if err != nil {
-		return nil, err
-	}
-	//if truncateError := f.Truncate(fileSize); truncateError != nil {
-	//	return nil, truncateError
+	//err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
+	//if err != nil {
+	//	return nil, err
 	//}
+	// TODO: Need to appropriate fallocate api for darwin
+	if truncateError := f.Truncate(fileSize); truncateError != nil {
+		return nil, truncateError
+	}
 	return f, nil
 }
 
