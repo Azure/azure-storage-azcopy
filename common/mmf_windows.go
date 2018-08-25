@@ -23,6 +23,7 @@ package common
 import (
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"unsafe"
@@ -132,6 +133,36 @@ func prefetchVirtualMemory(virtualAddresses *memoryRangeEntry) (err error) {
 		} else {
 			return nil
 		}
+	}
+	return nil
+}
+
+// create a file, given its path and length
+func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
+	CreateParentDirectoryIfNotExist(destinationPath)
+
+	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return nil, err
+	}
+	if truncateError := f.Truncate(fileSize); truncateError != nil {
+		return nil, truncateError
+	}
+	return f, nil
+}
+
+func CreateParentDirectoryIfNotExist(destinationPath string) error {
+	// check if parent directory exists
+	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, AZCOPY_PATH_SEPARATOR_STRING)]
+	_, err := os.Stat(parentDirectory)
+	// if the parent directory does not exist, create it and all its parents
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(parentDirectory, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
 	}
 	return nil
 }

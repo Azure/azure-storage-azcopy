@@ -104,7 +104,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.ReportTransferDone()
 
 	} else { // 3b: source has content
-		dstFile, err := createFileOfSize(info.Destination, fileSize)
+		dstFile, err := common.CreateFileOfSize(info.Destination, fileSize)
 		if err != nil {
 			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
