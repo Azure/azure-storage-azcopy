@@ -3,6 +3,8 @@ package common
 import (
 	"net/url"
 	"strings"
+
+	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -46,4 +48,20 @@ func redactSigQueryParam(rawQuery string) (bool, string) {
 		}
 	}
 	return sigFound, values.Encode()
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type FileURLPartsExtension struct {
+	azfile.FileURLParts
+}
+
+func (parts FileURLPartsExtension) GetShareURL() url.URL {
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
+}
+
+func (parts FileURLPartsExtension) GetServiceURL() url.URL {
+	parts.ShareName = ""
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
 }
