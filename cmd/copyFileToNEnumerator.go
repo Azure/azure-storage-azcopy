@@ -72,7 +72,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// Case-2: Source is account, currently only support blob destination
 	if isAccountLevel, sharePrefix := srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
 		if !cca.recursive {
-			return fmt.Errorf("cannot copy the entire account without recursive flag, please use recursive flag")
+			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
 
 		// Validate If destination is service level account.
@@ -91,7 +91,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	} else { // Case-3: Source is a file share or directory
 		searchPrefix, fileNamePattern, isWildcardSearch := srcFileURLPartExtension.searchPrefixFromFileURL()
 		if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
-			return fmt.Errorf("cannot copy the entire share or directory without recursive flag, please use recursive flag")
+			return fmt.Errorf("cannot copy the entire share or directory without recursive flag. Please use --recursive flag")
 		}
 		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
 			return err

@@ -125,7 +125,10 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 		switch msgToPrint := <-lcm.msgQueue; msgToPrint.msgType {
 		case eMessageType.Exit():
 			// simply print and quit
-			fmt.Println("\n" + msgToPrint.msgContent)
+			// if no message is intended, avoid adding new lines
+			if msgToPrint.msgContent != "" {
+				fmt.Println("\n" + msgToPrint.msgContent)
+			}
 			os.Exit(int(msgToPrint.exitCode))
 
 		case eMessageType.Progress():

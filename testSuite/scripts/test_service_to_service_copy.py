@@ -39,15 +39,30 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_container_url, "Blob")
 
-    def test_copy_file_from_blob_container_to_blob_container_wildcard(self):
+    def test_copy_file_from_blob_container_to_blob_container_wildcard_recursive(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob")
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
+
+    def test_copy_file_from_blob_container_to_blob_container_wildcard_non_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
     
     def test_copy_n_files_from_blob_dir_to_blob_dir(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_n_files_from_x_dir_to_x_dir(src_container_url, "Blob", dst_container_url, "Blob")
+
+    def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
+
+    def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_non_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
 
     def test_copy_files_from_blob_account_to_blob_account(self):
         self.util_test_copy_files_from_x_account_to_x_account(
@@ -177,13 +192,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         util.Command("clean").add_arguments(dstBucketURL).add_flags("serviceType", dstType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
 
-
     def util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(
         self,
         srcBucketURL,
         srcType,
         dstBucketURL,
-        dstType):
+        dstType,
+        recursive=True):
         # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
@@ -202,12 +217,16 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # Copy file using azcopy from srcURL to destURL
-        result = util.Command("copy").add_arguments(srcFileWildcardURL).add_arguments(dstBucketURL). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        if recursive:
+            result = util.Command("copy").add_arguments(srcFileWildcardURL).add_arguments(dstBucketURL). \
+                add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        else:
+            result = util.Command("copy").add_arguments(srcFileWildcardURL).add_arguments(dstBucketURL). \
+                add_flags("log-level", "info").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Downloading the copied files for validation
-        validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_wildcard" % (srcType, dstType)
+        validate_dir_name = "validate_copy_file_from_%s_bucket_to_%s_bucket_wildcard_recursive_%s" % (srcType, dstType, recursive)
         local_validate_dest = util.create_test_dir(validate_dir_name)
         dst_file_url = util.get_object_sas(dstBucketURL, filename)
         result = util.Command("copy").add_arguments(dst_file_url).add_arguments(local_validate_dest). \
@@ -266,6 +285,71 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # Verifying the downloaded blob
         # here is the special behavior need confirm
         result = self.util_are_dir_trees_equal(src_dir_path, os.path.join(local_validate_dest, src_dir_name, src_dir_name))
+        #result = self.util_are_dir_trees_equal(src_dir_path, local_validate_dest)
+        self.assertTrue(result)
+
+        # clean up both source and destination bucket
+        util.Command("clean").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
+            add_flags("resourceType", "Bucket").execute_azcopy_create()
+
+        util.Command("clean").add_arguments(dstBucketURL).add_flags("serviceType", dstType). \
+            add_flags("resourceType", "Bucket").execute_azcopy_create()
+
+    def util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(self,
+        srcBucketURL,
+        srcType,
+        dstBucketURL,
+        dstType,
+        n=10,
+        sizeInKB=1,
+        recursive=True):
+        # create source bucket
+        result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
+            add_flags("resourceType", "Bucket").execute_azcopy_create()
+        self.assertTrue(result)
+
+        # create file of size n KBs in newly created directory.
+        src_dir_name = "copy_%d_%dKB_files_from_%s_dir_to_%s_dir_recursive_%s" % (n, sizeInKB, srcType, dstType, recursive)
+        src_dir_path = util.create_test_n_files(sizeInKB*1024, n, src_dir_name)
+        src_sub_dir_name = src_dir_name + "/" + "subdir"
+        util.create_test_n_files(sizeInKB*1024,1, src_sub_dir_name)
+
+        # Upload files using azcopy.
+        # TODO: Note for S3/Google need special logic
+        result = util.Command("copy").add_arguments(src_dir_path).add_arguments(srcBucketURL). \
+            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        srcDirWildcardURL = util.get_object_sas(srcBucketURL, src_dir_name+"/*")
+        dstDirURL = util.get_object_sas(dstBucketURL, src_dir_name)
+        if recursive:
+            # Copy files using azcopy from srcURL to destURL
+            result = util.Command("copy").add_arguments(srcDirWildcardURL).add_arguments(dstDirURL). \
+                add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            self.assertTrue(result)
+        else:
+            # Copy files using azcopy from srcURL to destURL
+            result = util.Command("copy").add_arguments(srcDirWildcardURL).add_arguments(dstDirURL). \
+                add_flags("log-level", "info").execute_azcopy_copy_command()
+            self.assertTrue(result) 
+
+        # Downloading the copied files for validation
+        validate_dir_name = "validate_copy_%d_%dKB_files_from_%s_dir_to_%s_dir" % (n, sizeInKB, srcType, dstType)
+        local_validate_dest = util.create_test_dir(validate_dir_name)
+        result = util.Command("copy").add_arguments(dstDirURL).add_arguments(local_validate_dest). \
+            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # Verifying the downloaded blob
+        # here is the special behavior need confirm
+        if recursive:
+            result = self.util_are_dir_trees_equal(src_dir_path, os.path.join(local_validate_dest, src_dir_name))
+        else:
+            dirs_cmp = filecmp.dircmp(src_dir_path, os.path.join(local_validate_dest, src_dir_name))
+            if len(dirs_cmp.left_only) > 0 and len(dirs_cmp.common_files) == n:
+                result = True
+            else:
+                result = False
         #result = self.util_are_dir_trees_equal(src_dir_path, local_validate_dest)
         self.assertTrue(result)
 

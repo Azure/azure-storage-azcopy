@@ -34,7 +34,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	if userSpecifiedFromTo == "" {
 		// If user didn't explicitly specify FromTo, use what was inferred (if possible)
 		if inferredFromTo == common.EFromTo.Unknown() {
-			return common.EFromTo.Unknown(), errors.New("Invalid source/destination combination. Pleasee use the --FromTo switch")
+			return common.EFromTo.Unknown(), fmt.Errorf("Unable to infer the source '%s' / destination '%s' combination. Please use the --FromTo switch ", src, dst)
 		}
 		return inferredFromTo, nil
 	}
@@ -86,17 +86,19 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.PipeBlob()
 	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Pipe():
 		return common.EFromTo.BlobPipe()
-	case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.File():
-		return common.EFromTo.PipeFile()
-	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Pipe():
-		return common.EFromTo.FilePipe()
 	case srcLocation == common.ELocation.Local() && dstLocation == common.ELocation.BlobFS():
 		return common.EFromTo.LocalBlobFS()
 	case srcLocation == common.ELocation.BlobFS() && dstLocation == common.ELocation.Local():
 		return common.EFromTo.BlobFSLocal()
 	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.BlobBlob()
-		// TODO: Hide File to Blob direction.
+		//TODO: Add PipeFile and FilePipe support.
+		// case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.File():
+		// 	return common.EFromTo.PipeFile()
+		// case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Pipe():
+		// 	return common.EFromTo.FilePipe()
+
+		// TODO: Add File to Blob direction, when service side support is ready.
 		// case srcLocation == ELocation.File() && dstLocation == ELocation.Blob():
 		// 	return common.EFromTo.FileBlob()
 	}

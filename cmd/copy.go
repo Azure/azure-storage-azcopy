@@ -21,9 +21,7 @@
 package cmd
 
 import (
-	"bufio"
-	"bytes"
-	"context"
+			"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,8 +30,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync/atomic"
-	"time"
+		"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -54,7 +51,8 @@ const downloadTryTimeout = time.Minute * 10
 const downloadRetryDelay = time.Second * 1
 const downloadMaxRetryDelay = time.Second * 3
 
-const numOfSimultaneousUploads = 5
+const pipingUploadParallelism = 5
+const pipingDefaultBlockSize = 8 * 1024 * 1024
 
 const pipeLocation = "~pipe~"
 
@@ -305,7 +303,14 @@ func (cca *cookedCopyCmdArgs) isRedirection() bool {
 
 func (cca *cookedCopyCmdArgs) process() error {
 	if cca.isRedirection() {
-		return cca.processRedirectionCopy()
+		err := cca.processRedirectionCopy()
+
+		if err != nil {
+			return err
+		}
+
+		// if no error, the operation is now complete
+		glcm.Exit("", common.EExitCode.Success())
 	}
 	return cca.processCopyJobPartOrders()
 }
@@ -350,9 +355,9 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(context.Background(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
 	if err != nil {
-		// todo:???
+		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
 	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
@@ -368,10 +373,9 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize uint32) error {
-	type uploadTask struct {
-		buffer        []byte
-		blockSize     int
-		blockIdBase64 string
+	// if no block size is set, then use default value
+	if blockSize == 0 {
+		blockSize = pipingDefaultBlockSize
 	}
 
 	// step 0: initialize pipeline
@@ -394,102 +398,15 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 		return fmt.Errorf("fatal: cannot parse destination blob URL due to error: %s", err.Error())
 	}
 
-	// step 2: set up source (stdin) and destination (block blob)
-	stdInReader := bufio.NewReader(os.Stdin)
+	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
+	_, err = azblob.UploadStreamToBlockBlob(context.TODO(), os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
+		//BufferSize: pipingDefaultBlockSize,
+		BufferSize: pipingDefaultBlockSize,
+		MaxBuffers: pipingUploadParallelism,
+	})
 
-	// step 3: set up channels which are used to sync up go routines for parallel upload
-	uploadContext, cancelOperation := context.WithCancel(context.Background())
-	fullChannel := make(chan uploadTask, numOfSimultaneousUploads)  // represent buffers filled up and waiting to be uploaded
-	emptyChannel := make(chan uploadTask, numOfSimultaneousUploads) // represent buffers ready to be filled up
-	errChannel := make(chan error, numOfSimultaneousUploads)        // in case error happens, workers need to communicate the err back
-	finishedChunkCount := uint32(0)                                 // used to keep track of how many chunks are completed
-	total := uint32(0)                                              // used to keep track of total number of chunks, it is incremented as more data is read in from stdin
-	blockIdList := []string{}
-	isReadComplete := false
-
-	// step 4: prep empty buffers and dispatch upload workers
-	for i := 0; i < numOfSimultaneousUploads; i++ {
-		emptyChannel <- uploadTask{buffer: make([]byte, blockSize), blockSize: 0, blockIdBase64: ""}
-
-		go func(fullChannel <-chan uploadTask, emptyChannel chan<- uploadTask, errorChannel chan<- error, workerId int) {
-			// wait on fullChannel, if anything comes off, upload it as block
-			for full := range fullChannel {
-				resp, err := blockBlobUrl.StageBlock(
-					uploadContext,
-					full.blockIdBase64,
-					io.NewSectionReader(bytes.NewReader(full.buffer), 0, int64(full.blockSize)),
-					azblob.LeaseAccessConditions{})
-
-				// error, push to error channel
-				if err != nil {
-					errChannel <- err
-					return
-				} else {
-					resp.Response().Body.Close()
-
-					// success, increment finishedChunkCount
-					atomic.AddUint32(&finishedChunkCount, 1)
-
-					// after upload, put the task back onto emptyChannel, so that the buffer can be reused
-					emptyChannel <- full
-				}
-			}
-		}(fullChannel, emptyChannel, errChannel, i)
-	}
-
-	// the main goroutine serves as the dispatcher
-	// it reads in data from stdin and puts uploadTask on fullChannel
-	for {
-		select {
-		case err := <-errChannel:
-			cancelOperation()
-			return err
-		default:
-			// if we have finished reading stdin, then wait until finishedChunkCount hits total
-			if isReadComplete {
-				if atomic.LoadUint32(&finishedChunkCount) == total {
-					close(fullChannel)
-					_, err := blockBlobUrl.CommitBlockList(uploadContext, blockIdList, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
-
-					if err != nil {
-						return err
-					}
-
-					return nil
-				} else {
-					// sleep a bit and check again, in case an err appears on the errChannel
-					time.Sleep(time.Millisecond)
-				}
-
-			} else {
-				select {
-				case empty := <-emptyChannel:
-
-					// read in more data from the Stdin and put onto fullChannel
-					n, err := io.ReadFull(stdInReader, empty.buffer)
-
-					if err == nil || err == io.ErrUnexpectedEOF { // read in data successfully
-						// prep buffer for workers
-						empty.blockSize = n
-						empty.blockIdBase64 = copyHandlerUtil{}.blockIDIntToBase64(int(total))
-						// keep track of the block IDs in sequence
-						blockIdList = append(blockIdList, empty.blockIdBase64)
-						total += 1
-						fullChannel <- empty
-
-					} else if err == io.EOF { // reached the end of input
-						isReadComplete = true
-
-					} else { // unexpected error happened, print&return
-						return err
-					}
-				default:
-					time.Sleep(time.Millisecond)
-				}
-			}
-		}
-	}
+	return err
 }
 
 // validateCredentialType validate if given credential type is supported with specific copy scenario
@@ -945,6 +862,11 @@ Download an entire directory:
 			if err != nil {
 				glcm.Exit("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
 			}
+
+			if cooked.output == common.EOutputFormat.Text() {
+				glcm.Info("Scanning...")
+			}
+
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {

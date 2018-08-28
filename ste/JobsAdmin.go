@@ -103,7 +103,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
 	// has to wait and enumeration of transfer gets blocked till then.
 	// TODO : PartsChannelSize Needs to be discussed and can change.
-	const PartsChannelSize = 400
+	const PartsChannelSize = 10000
 
 	// partsCh is the channel in which all JobParts are put
 	// for scheduling transfers. When the next JobPart order arrives
@@ -149,12 +149,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	go ja.scheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process transfers/chunks
 	for cc := 0; cc < concurrentConnections; cc++ {
-		go ja.ChunkProcessor(cc)
-		// Spawn half the number of concurrent connections to process the transfer from the transfer channel
-		if cc > concurrentConnections/2 {
-			continue
-		}
-		go ja.TransferProcessor(cc)
+		go ja.transferAndChunkProcessor(cc)
 	}
 }
 
@@ -183,7 +178,8 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	}
 }
 
-func (ja *jobsAdmin) TransferProcessor(workerID int) {
+// general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs
+func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 	startTransfer := func(jptm IJobPartTransferMgr) {
 		if jptm.WasCanceled() {
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -201,31 +197,8 @@ func (ja *jobsAdmin) TransferProcessor(workerID int) {
 
 	for {
 		// We check for suicides first to shrink goroutine pool
-		// Then, we check transfers: normal & low priority
-		select {
-		case <-ja.xferChannels.suicideCh:
-			return
-		default:
-			select {
-			case jptm := <-ja.xferChannels.normalTransferCh:
-				startTransfer(jptm)
-			default:
-				select {
-				case jptm := <-ja.xferChannels.lowTransferCh:
-					startTransfer(jptm)
-				default:
-					time.Sleep(1 * time.Millisecond) // Sleep before looping around
-				}
-			}
-		}
-	}
-}
-
-// general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs
-func (ja *jobsAdmin) ChunkProcessor(workerID int) {
-	for {
-		// We check for suicides first to shrink goroutine pool
 		// Then, we check chunks: normal & low priority
+		// Then, we check transfers: normal & low priority
 		select {
 		case <-ja.xferChannels.suicideCh:
 			return
@@ -238,7 +211,17 @@ func (ja *jobsAdmin) ChunkProcessor(workerID int) {
 				case chunkFunc := <-ja.xferChannels.lowChunkCh:
 					chunkFunc(workerID)
 				default:
-					time.Sleep(1 * time.Millisecond) // Sleep before looping around
+					select {
+					case jptm := <-ja.xferChannels.normalTransferCh:
+						startTransfer(jptm)
+					default:
+						select {
+						case jptm := <-ja.xferChannels.lowTransferCh:
+							startTransfer(jptm)
+						default:
+							time.Sleep(1 * time.Millisecond) // Sleep before looping around
+						}
+					}
 				}
 			}
 		}

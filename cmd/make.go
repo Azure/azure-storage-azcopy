@@ -189,10 +189,8 @@ func init() {
 		Use:        "make [resourceURL]",
 		Aliases:    []string{"mk", "mkdir"},
 		SuggestFor: []string{"mak", "makeCmd"},
-		Short:      "Create a File System on the Azure Data Lake Storage Gen2 service",
-		Long: `
-Create the File System represented by the given resource URL.
-`,
+		Short:      "Create a container/share/filesystem",
+		Long: `Create a container/share/filesystem represented by the given resource URL.`,
 		Example: `
   - azcopy make "https://[account-name].[blob,file,dfs].core.windows.net/[top-level-resource-name]"
 `,
