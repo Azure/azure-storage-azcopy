@@ -66,11 +66,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e80f4bf9a9a31b4b52b1483ee3c0fa058fd48194217ce2bac65bc3eb9483de5f"
+  digest = "1:ed3694e74931ec334bc8872504ae5ca53d52d2f0e38f6356dbb7ccc9805328a9"
   name = "github.com/jiacfan/keychain"
   packages = ["."]
   pruneopts = "UT"
-  revision = "87f2c10ffbabfba1246a4f54fc986a4ffdace045"
+  revision = "55285221316b0547171a4258015906e3a4da4721"
 
 [[projects]]
   branch = "master"
