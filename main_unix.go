@@ -64,7 +64,7 @@ func ProcessOSSpecificInitialization() (uint64, error) {
 // Azcopy folder in local appdata contains all the files created by azcopy locally.
 func GetAzCopyAppPath() string {
 	localAppData := os.Getenv("HOME")
-	azcopyAppDataFolder := path.Join(localAppData, "/.azcopy")
+	azcopyAppDataFolder := path.Join(localAppData, ".azcopy")
 	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		return ""
 	}
