@@ -818,22 +818,22 @@ Copy(cp) moves data between two places. Local <=> Azure Data Lake Storage Gen2 a
 Please refer to the examples for more information.
 `,
 		Example: `Upload a single file:
-  - azcopy cp "/path/to/file.txt" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
+  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
 
 Upload an entire directory:
-  - azcopy cp "/path/to/dir" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
 
 Upload files using wildcards:
-  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory]"
+  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]"
 
 Upload files and/or directories using wildcards:
-  - azcopy cp "/path/*foo/*bar*" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
 
 Download a single file:
-  - azcopy cp "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/source/file]" "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/file]" "/path/to/file.txt"
 
 Download an entire directory:
-  - azcopy cp "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/source/dir]" "/path/to/file.txt" --recursive=true
+  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/dir]" "/path/to/file.txt" --recursive=true
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
