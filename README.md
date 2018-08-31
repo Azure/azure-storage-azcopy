@@ -2,12 +2,12 @@
 
 ## About
 
-AzCopy (v10 Preview) is the next-generation command-line utility designed for copying data to/from Microsoft Azure Blob, and File, using simple commands designed for optimal performance. You can copy data between a file system and a storage account, or between storage accounts.
+AzCopy (v10 Preview) is the next-generation command-line utility designed for copying data to/from Microsoft Azure Blob and File, using simple commands designed for optimal performance. You can copy data between a file system and a storage account, or between storage accounts.
 
 ## Features
 
 * Copy data from Azure Blob containers/File shares to File system, and vice versa
-* Copy block blob data between an Azure account to another
+* Copy block blobs between two Azure Storage accounts
 * Sync a directory in local file system to Azure Blob and File shares, or vice versa
 * List/Remove files and blobs in a given path
 * Supports glob patterns in path, --include and --exclude flags
@@ -16,61 +16,81 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 ## Installation
 
 1. Download the AzCopy executable using one of the following links:
-    * Windows x64
-    * Linux x64
-    * MacOS x64
+    * [Windows x64](https://aka.ms/downloadazcopy-v10-windows)
+    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux)
+    * [MacOS x64](https://aka.ms/downloadazcopy-v10-mac)
 
 2. Unzip and get started
     
-    unzip azcopy-v10.0.1.zip
-    cd azcopy-v10.0.1
-    ./azcopy 
+    * unzip azcopy_linux_amd64_10.0.0.zip
+    * cd azcopy_linux_amd64_10.0.0
+    * ./azcopy
 
 ## Manual
 
 ### Authenticating with Azure Storage
 
-AzCopy requires the use of SAS tokens when copying data into/out of Azure Storage. Simply generate a SAS token/URI from the Azure Portal, Storage Explorer or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path).
+AzCopy requires the use of SAS tokens when copying data into/out of Azure Storage. Simply generate a SAS token/URI from the Azure Portal, Storage Explorer, or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path).
+
+### Getting started
+
+AzCopy is self-documenting. To list the available commands, run:
+```
+./azcopy -h
+```
+
+To view the help page and examples, run:
+```
+./azcopy <cmd> -h
+```
 
 ### Simple command-line syntax
+```
+# The general syntax
+./azcopy <cmd> <arguments> --<flag-name>=<flag-value>
+ 
+ # Example:
+./azcopy cp <source path> <destination path> --<flag-name>=<flag-value>
+./azcopy cp "/path/to/local" "https://account.blob.core.windows.net/container?sastoken" --recursive=true
+ ```
 
-    ./azcopy <command> <source path> <destination path>
-    ./azcopy cp /path/to/local  https://account.blob.core.windows.net/container?sastoken
+To see more examples:
+```
+./azcopy cp -h
+```
 
-To see help menu for the available commands, run following commands:
+Each transfer operation will create a `Job` for AzCopy to act on. You can view the history of jobs using the following command:
+```
+./azcopy jobs list
+```
 
-    ./azcopy cp
-    ./azcopy make
-    ./azcopy rm
-    ./azcopy sync
-    ./azcopy ls
-
-Each transfer operation will create a `Job` for AzCopy to act on. You can view history of jobs using the following command:
-
-    ./azcopy jobs list
-
-You can also resume a failed/cancelled job using its identifier along with the SAS token.
-
-    ./azcopy jobs resume <jobid> --source-sas ?sastokenhere
-
-Job database is located under ~/.azcopy directory on Linux, and %USERPROFILE%\AppData\Local\AzCopy on Windows. You can clear the database after AzCopy completes the transfer.
+The job logs and data are located under the $HOME/.azcopy directory on Linux, and %USERPROFILE%\.azcopy on Windows. You can clear the job data/logs if you wish after AzCopy completes the transfers.
 
 ### Copy data to Azure storage
+The copy command can be used to transfer data from the source to the destination. The locat can be a:
+1. local path
+2. URL to Azure Blob/Virtual Directory/Container
+3. URL to Azure File/Directory/File Share
+```
+./azcopy <command> <source path> <destination path>
+```
 
 The following command will upload `1file.txt` to the Block Blob at `https://myaccount.blob.core.windows.net/mycontainer/1file.txt`.
-
-    ./azcopy cp /data/1file.txt "https://myaccount.blob.core.windows.net/mycontainer/1file.txt?sastokenhere"
+```
+./azcopy cp /data/1file.txt "https://myaccount.blob.core.windows.net/mycontainer/1file.txt?sastokenhere"
+```
 
 The following command will upload all files under `directory1` recursively to the path at `https://myaccount.blob.core.windows.net/mycontainer/directory1`.
-
-    ./azcopy cp /data/directory1 "https://myaccount.blob.core.windows.net/mycontainer/directory1?sastokenhere" --recursive
+```
+./azcopy cp /data/directory1 "https://myaccount.blob.core.windows.net/mycontainer/directory1?sastokenhere" --recursive=true
+```
 
 The following command will upload all files directly under `directory1` without recursing into sub-directories, to the path at `https://myaccount.blob.core.windows.net/mycontainer/directory1`.
+```
+./azcopy cp /data/directory1/* "https://myaccount.blob.core.windows.net/mycontainer/directory1?sastokenhere"
+```
 
-    ./azcopy cp /data/directory1/* "https://myaccount.blob.core.windows.net/mycontainer/directory1?sastokenhere"
-
-
-To upload into File storage, simply change the URI to Azure File URI with SAS token.
+To upload into File storage, simply change the URI to Azure File URI with corresponding SAS token.
 
 ### Copy VHD image to Azure Storage
 
@@ -79,22 +99,26 @@ AzCopy by default uploads data into Block Blobs. However if a source file has `.
 ### Copy data from Azure to local file systems
 
 The following will download all Blob container contents into the local file system creating the directory `mycontainer` in the destination.
-
-    ./azcopy cp "https://myaccount.blob.core.windows.net/mycontainer?sastokenhere" /data/ --recursive
+```
+./azcopy cp "https://myaccount.blob.core.windows.net/mycontainer?sastokenhere" /data/ --recursive=true
+```
 
 The following will download all Blob container contents into the local file system. `mycontainer` directory will not be created in the destination because the globbing pattern looks for all paths inside `mycontainer` in the source rather than the `mycontainer` container itself.
-
-    ./azcopy cp "https://myaccount.blob.core.windows.net/mycontainer/*?sastokenhere" /data/ --recursive
+```
+./azcopy cp "https://myaccount.blob.core.windows.net/mycontainer/*?sastokenhere" /data/ --recursive=true
+```
 
 The following command will download all txt files in the source to the `directory1` path. Note that AzCopy will scan the entire source and filter for `.txt` files. This may take a while when you have thousands/millions of files in the source.
-
-    ./azcopy cp "https://myaccount.blob.core.windows.net/mycontainer/directory1/*.txt?sastokenhere" /data/directory1
+```
+./azcopy cp "https://myaccount.blob.core.windows.net/mycontainer/directory1/*.txt?sastokenhere" /data/directory1
+```
 
 ### Copy data between Azure Storage accounts (currently supports Block Blobs only)
 
 Copying data between two Azure Storage accounts make use of the PutBlockFromURL API, and does not use the client machine's network bandwidth. Data is copied between two Azure Storage servers. AzCopy simply orchestrates the copy operation.
-
-    ./azcopy cp "https://myaccount.blob.core.windows.net/?sastokenhere" "https://myotheraccount.blob.core.windows.net/?sastokenhere" --recursive
+```
+./azcopy cp "https://myaccount.blob.core.windows.net/?sastokenhere" "https://myotheraccount.blob.core.windows.net/?sastokenhere" --recursive=true
+```
 
 ### Advanced Use Cases
 
@@ -112,6 +136,20 @@ AzCopy creates a log file for all the jobs. Look for clues in the logs to unders
 
 ### View and resume jobs
 
+To view the job stats, run:
+```
+./azcopy jobs show <job-id>
+```
+
+To see the transfers of a specific status(Success or Failed), run:
+```
+./azcopy jobs show <job-id> --with-status=Failed
+```
+
+You can resume a failed/cancelled job using its identifier along with the SAS token(s), which are not persisted for security reasons.
+```
+./azcopy jobs resume <jobid> --source-sas ?sastokenhere --destination-sas ?sastokenhere
+```
 
 ### Raise an Issue
 
