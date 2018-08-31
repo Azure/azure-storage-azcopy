@@ -25,6 +25,8 @@ import (
 	"os"
 	"runtime"
 
+	"path"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
@@ -47,15 +49,15 @@ type ILoggerResetable interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func NewAppLogger(minimumLevelToLog pipeline.LogLevel) ILoggerCloser {
+func NewAppLogger(minimumLevelToLog pipeline.LogLevel, logFileFolder string) ILoggerCloser {
 	// TODO: Put start date time in file name
 	// TODO: log life time management.
-	appLogFile, err := os.OpenFile("azcopy.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
-	PanicIfErr(err)
+	//appLogFile, err := os.OpenFile(path.Join(logFileFolder, "azcopy.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
+	//PanicIfErr(err)
 	return &appLogger{
 		minimumLevelToLog: minimumLevelToLog,
-		file:              appLogFile,
-		logger:            log.New(appLogFile, "", log.LstdFlags|log.LUTC),
+		//file:              appLogFile,
+		//logger:            log.New(appLogFile, "", log.LstdFlags|log.LUTC),
 	}
 }
 
@@ -75,19 +77,22 @@ func (al *appLogger) ShouldLog(level pipeline.LogLevel) bool {
 }
 
 func (al *appLogger) CloseLog() {
-	al.logger.Println("Closing Log")
-	err := al.file.Close()
-	PanicIfErr(err)
+	// TODO consider delete completely to get rid of app logger
+	//al.logger.Println("Closing Log")
+	//err := al.file.Close()
+	//PanicIfErr(err)
 }
 
 func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
-	if al.ShouldLog(loglevel) {
-		al.logger.Println(msg)
-	}
+	// TODO consider delete completely to get rid of app logger
+	//if al.ShouldLog(loglevel) {
+	//	al.logger.Println(msg)
+	//}
 }
 
 func (al *appLogger) Panic(err error) {
-	al.logger.Panic(err)
+	// TODO consider delete completely to get rid of app logger
+	//al.logger.Panic(err)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -98,11 +103,12 @@ type jobLogger struct {
 	jobID             JobID
 	minimumLevelToLog pipeline.LogLevel // The maximum customer-desired log level for this job
 	file              *os.File          // The job's log file
+	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
 	appLogger         ILogger
 }
 
-func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) ILoggerResetable {
+func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, logFileFolder string) ILoggerResetable {
 	if appLogger == nil {
 		panic("You must pass a appLogger when creating a JobLogger")
 	}
@@ -111,13 +117,13 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger) IL
 		jobID:             jobID,
 		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
-		//file:              jobLogFile,
-		//logger:            log.New(jobLogFile, "", log.LstdFlags|log.LUTC),
+		logFileFolder:     logFileFolder,
 	}
 }
 
 func (jl *jobLogger) OpenLog() {
-	file, err := os.OpenFile(jl.jobID.String()+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
+	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+".log"),
+		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
 	PanicIfErr(err)
 
 	jl.file = file

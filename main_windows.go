@@ -21,9 +21,9 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"syscall"
 )
 
@@ -46,8 +46,8 @@ func ProcessOSSpecificInitialization() (int, error) {
 
 // GetAzCopyAppPath returns the path of Azcopy in local appdata.
 func GetAzCopyAppPath() string {
-	localAppData := os.Getenv("LOCALAPPDATA")
-	azcopyAppDataFolder := fmt.Sprintf("%s%s%s", localAppData, string(os.PathSeparator), "Azcopy")
+	userProfile := os.Getenv("USERPROFILE")
+	azcopyAppDataFolder := path.Join(userProfile, ".azcopy")
 	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err) {
 		return ""
 	}

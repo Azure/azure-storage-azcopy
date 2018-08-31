@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"path"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -119,10 +121,16 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// Create suicide channel which is used to scale back on the number of workers
 	suicideCh := make(chan SuicideJob, concurrentConnections)
 
+	planDir := path.Join(azcopyAppPathFolder, "plans")
+	if err := os.Mkdir(planDir, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		common.PanicIfErr(err)
+	}
+
 	ja := &jobsAdmin{
-		logger:        common.NewAppLogger(pipeline.LogInfo),
+		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyAppPathFolder),
 		jobIDToJobMgr: newJobIDToJobMgr(),
-		planDir:       azcopyAppPathFolder,
+		logDir:        azcopyAppPathFolder,
+		planDir:       planDir,
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
 		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
@@ -236,6 +244,7 @@ type jobsAdmin struct {
 	logger        common.ILoggerCloser
 	jobIDToJobMgr jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
+	logDir              string // Where log files are stored
 	planDir             string // Initialize to directory where Job Part Plans are stored
 	coordinatorChannels CoordinatorChannels
 	xferChannels        XferChannels
@@ -296,7 +305,10 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	level common.LogLevel, commandString string) IJobMgr {
 
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
-		func() IJobMgr { return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString) }) // Return existing or new IJobMgr to caller
+		func() IJobMgr {
+			// Return existing or new IJobMgr to caller
+			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
+		})
 }
 
 func (ja *jobsAdmin) ScheduleTransfer(priority common.JobPriority, jptm IJobPartTransferMgr) {

@@ -21,7 +21,7 @@
 package cmd
 
 import (
-			"context"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +30,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
-		"time"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -680,8 +680,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	currentDir, _ := os.Getwd()
-	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, currentDir))
+	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, azcopyAppPathFolder))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -750,14 +749,15 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			exitCode = common.EExitCode.Error()
 		}
 		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\n Number of Transfers Skipped: %v\n Final Job Status: %v\n TotalBytesTransferred: %v\n",
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TransfersSkipped,
-			summary.JobStatus, summary.TotalBytesTransferred), exitCode)
+			summary.TotalBytesTransferred,
+			summary.JobStatus), exitCode)
 	}
 
 	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
@@ -819,22 +819,22 @@ Copy(cp) moves data between two places. Local <=> Azure Data Lake Storage Gen2 a
 Please refer to the examples for more information.
 `,
 		Example: `Upload a single file:
-  - azcopy cp "/path/to/file.txt" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
+  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
 
 Upload an entire directory:
-  - azcopy cp "/path/to/dir" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
 
 Upload files using wildcards:
-  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory]"
+  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]"
 
 Upload files and/or directories using wildcards:
-  - azcopy cp "/path/*foo/*bar*" "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
 
 Download a single file:
-  - azcopy cp "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/source/file]" "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/file]" "/path/to/file.txt"
 
 Download an entire directory:
-  - azcopy cp "https://[account].dfs.core.windows.net/[existing-filesystem]/[path/to/source/dir]" "/path/to/file.txt" --recursive=true
+  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/dir]" "/path/to/file.txt" --recursive=true
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
