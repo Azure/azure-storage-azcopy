@@ -56,6 +56,33 @@ func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthToken
 	}
 }
 
+// GetTokenInfo gets token info, it follows rule:
+// 1. If there is token passed from environment variable(note this is only for testing purpose),
+//    use token passed from environment variable.
+// 2. Otherwise, try to get token from cache.
+// This method either successfully return token, or return error.
+func (uotm *UserOAuthTokenManager) GetTokenInfo() (*OAuthTokenInfo, error) {
+	var tokenInfo *OAuthTokenInfo
+	var err error
+	if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+		// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
+		// Note: Whenever environment variable is set in the context, it will overwrite the cached token info.
+		if err != nil { // this is the case when env var exists while get token info failed
+			return nil, err
+		}
+	} else { // Scenario: session mode which get token from cache
+		if tokenInfo, err = uotm.GetCachedTokenInfo(); err != nil {
+			return nil, err
+		}
+	}
+
+	if tokenInfo == nil || tokenInfo.IsEmpty() {
+		return nil, errors.New("invalid state, cannot get valid token info")
+	}
+
+	return tokenInfo, nil
+}
+
 // LoginWithDefaultADEndpoint interactively logins in with specified tenantID, persist indicates whether to
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string, persist bool) (*OAuthTokenInfo, error) {
@@ -78,7 +105,8 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 		ApplicationID,
 		Resource)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login due to error: %s", err.Error())
+		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, due to error: %v",
+			tenantID, activeDirectoryEndpoint, err)
 	}
 
 	// Display the authentication message
@@ -88,7 +116,8 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 	// TODO: check if this can complete
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login due to error: %s", err.Error())
+		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, due to error: %v",
+			tenantID, activeDirectoryEndpoint, err)
 	}
 
 	oAuthTokenInfo := OAuthTokenInfo{
@@ -99,10 +128,9 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 
 	if persist {
 		// TODO: consider to retry the save token process for multi-instance case.
-		// TODO: consider to store token, every time refresh token.
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %s", err.Error())
+			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %v", err)
 		}
 	}
 

@@ -79,40 +79,50 @@ func init() {
 	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "outputRaw", "text", "format of the command's outputRaw, the choices include: text, json")
 }
 
-// handles the list container command
-func HandleListContainerCommand(source string, outputFormat common.OutputFormat) error {
+// HandleListContainerCommand handles the list container command
+func HandleListContainerCommand(source string, outputFormat common.OutputFormat) (err error) {
+	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	util := copyHandlerUtil{}
+	credentialInfo := common.CredentialInfo{}
+	// Use source as resource URL, and it can be public access resource URL.
+	if credentialInfo.CredentialType, err = getBlobCredentialType(ctx, source, true); err != nil {
+		return err
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("List is using OAuth token for authentication.")
+
+		uotm := GetUserOAuthTokenManagerInstance()
+		if tokenInfo, err := uotm.GetTokenInfo(); err != nil {
+			return err
+		} else {
+			credentialInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
 	// Create Pipeline which will be used further in the blob operations.
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil)
+	p, err := createBlobPipeline(ctx, credentialInfo)
+	if err != nil {
+		return err
+	}
 
-	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(source)
+	sourceURL, err := url.Parse(source)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
 
+	util := copyHandlerUtil{} // TODO: util could be further refactored
 	// get the container url to be used for listing
-	literalContainerUrl := util.getContainerURLFromString(*sourceUrl)
-	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
+	literalContainerURL := util.getContainerURLFromString(*sourceURL)
+	containerURL := azblob.NewContainerURL(literalContainerURL, p)
 
 	// get the search prefix to query the service
 	searchPrefix := ""
 	// if the source is container url, then searchPrefix is empty
-	if !util.urlIsContainerOrShare(sourceUrl) {
-		searchPrefix = util.getBlobNameFromURL(sourceUrl.Path)
+	if !util.urlIsContainerOrShare(sourceURL) {
+		searchPrefix = util.getBlobNameFromURL(sourceURL.Path)
 	}
 	if len(searchPrefix) > 0 {
 		// if the user did not specify / at the end of the virtual directory, add it before doing the prefix search
@@ -126,7 +136,7 @@ func HandleListContainerCommand(source string, outputFormat common.OutputFormat)
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
-		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
+		listBlob, err := containerURL.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())
