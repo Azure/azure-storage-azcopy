@@ -184,6 +184,21 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
+// getCredentialType gets the proper credential type for job resume command.
+func (rca resumeCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
+	uotm := GetUserOAuthTokenManagerInstance()
+	// Check whether to use OAuthToken credential.
+	if hasCachedToken, _ := uotm.HasCachedToken(); rca.useInteractiveOAuthUserCredential ||
+		hasCachedToken || common.EnvVarOAuthTokenInfoExists() {
+		return common.ECredentialType.OAuthToken(), nil
+	}
+
+	// TODO: Note BFS's case is special, SharedKey should be removed.
+
+	// By default, use Anonymous credential.
+	return common.ECredentialType.Anonymous(), nil
+}
+
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
 func (rca resumeCmdArgs) process() error {
@@ -227,45 +242,28 @@ func (rca resumeCmdArgs) process() error {
 	}
 
 	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{
-		CredentialType: common.ECredentialType.Anonymous(),
-	}
-	// Check whether to use OAuthToken credential.
-	// Scenario-1: interactive login per copy command
-	// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
-	// Scenario-2: session mode which get token from cache
-	uotm := GetUserOAuthTokenManagerInstance()
-	hasCachedToken, err := uotm.HasCachedToken()
-	if rca.useInteractiveOAuthUserCredential || common.EnvVarOAuthTokenInfoExists() || hasCachedToken {
-		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
-		var oAuthTokenInfo *common.OAuthTokenInfo
-		// For Scenario-1, create token with interactive login if necessary.
+	credentialInfo := common.CredentialInfo{}
+	if credentialInfo.CredentialType, err = rca.getCredentialType(); err != nil {
+		return err
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("Resume is using OAuth token for authentication.")
+
+		var tokenInfo *common.OAuthTokenInfo
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Create token with interactive login if necessary.
 		if rca.useInteractiveOAuthUserCredential {
-			oAuthTokenInfo, err = uotm.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
-			if err != nil {
-				return fmt.Errorf(
-					"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
-					rca.tenantID,
-					err.Error())
-			}
-		} else if oAuthTokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
-			// Scenario-Test
-			glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo))
-			if err != nil { // this is the case when env var exists while get token info failed
-				return err
-			}
-		} else { // Scenario-2
-			oAuthTokenInfo, err = uotm.GetCachedTokenInfo()
-			if err != nil {
+			if tokenInfo, err = uotm.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false); err != nil {
 				return err
 			}
 		}
-		if oAuthTokenInfo == nil {
-			return errors.New("cannot get valid oauth token")
+		// Get token from env var or cache.
+		if tokenInfo, err = uotm.GetTokenInfo(); err != nil {
+			return err
 		}
-		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
+		credentialInfo.OAuthTokenInfo = *tokenInfo
 	}
-	//glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
 
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse

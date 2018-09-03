@@ -64,12 +64,12 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // getBlobCredentialType is used to get Blob's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
 // 1. For source or dest url, if the url contains SAS, indicating using anonymous credential(SAS).
-// 2. If it's source blob url, and it's a public resource, indicating using anonymous credential(public resource).
+// 2. If the blob URL can be public access resource, and validated as public resource, indicating using anonymous credential(public resource).
 // 3. If there is cached OAuth token, indicating using token credential.
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
 // The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
-func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource bool) (common.CredentialType, error) {
+func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
 	// TODO: Clean up user messages in errors.
@@ -104,7 +104,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 
 	if !hasCachedToken && !hasEnvVarOAuthTokenInfo { // no oauth token found, then directly return anonymous credential
 		return common.ECredentialType.Anonymous(), nil
-	} else if !isSource { // oauth token found, if it's destination, then it should not be public resource, return token credential
+	} else if !canBePublic { // oauth token found, if it can not be public resource, return token credential
 		return common.ECredentialType.OAuthToken(), nil
 	} else { // check if it's public resource, and return credential type correspondingly
 		// If has cached token, and no SAS token provided, it could be a public blob resource.
