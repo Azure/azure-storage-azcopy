@@ -424,6 +424,14 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			case common.ETransferStatus.BlobAlreadyExistsFailure(),
 				common.ETransferStatus.FileAlreadyExistsFailure():
 				js.TransfersSkipped++
+				// getting the source and destination for skipped transfer at position - index
+				src, dst := jpp.TransferSrcDstStrings(t)
+				js.SkippedTransfers = append(js.SkippedTransfers,
+					common.TransferDetail{
+						Src:            src,
+						Dst:            dst,
+						TransferStatus: jppt.TransferStatus(),
+					})
 			}
 		}
 	})

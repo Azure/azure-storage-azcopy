@@ -142,6 +142,7 @@ type ListJobSummaryResponse struct {
 	BytesOverWire         uint64
 	TotalBytesTransferred uint64
 	FailedTransfers       []TransferDetail
+	SkippedTransfers      []TransferDetail
 }
 
 type ListJobTransfersRequest struct {
