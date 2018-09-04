@@ -160,11 +160,12 @@ func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.Li
 		glcm.Exit("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
 	}
 	glcm.Info(fmt.Sprintf(
-		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\n",
 		summary.JobID.String(),
 		summary.TotalTransfers,
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
+		summary.TransfersSkipped,
 		summary.JobStatus,
 	))
 }
