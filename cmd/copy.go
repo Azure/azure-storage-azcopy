@@ -813,10 +813,9 @@ func init() {
 		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
-		Short:      "Move data between two places",
+		Short:      "Copies source data to a destination location",
 		Long: `
-Copy(cp) moves data between two places. Local <=> Azure Data Lake Storage Gen2 are the only scenarios officially supported at the moment.
-Please refer to the examples for more information.
+Copies source data to a destination location. Please refer to the examples for more information.
 `,
 		Example: `Upload a single file:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
