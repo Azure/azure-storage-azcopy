@@ -22,12 +22,16 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"net/http"
 	"os"
 	"strconv"
 
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
+
+	_ "net/http/pprof"
 )
 
 // get the lifecycle manager to print messages
@@ -46,6 +50,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	// Profiling add-on. Set AZCOPY_PROFILE to enable profiling.
+	// e.g. export AZCOPY_PROFILE="localhost:6060"
+	// This is only recommended to be used for debugging purpose.
+	// For more detaild, please refer to https://golang.org/pkg/net/http/pprof/
+	httpPprofEndpoint := os.Getenv("AZCOPY_PROFILE")
+	if httpPprofEndpoint != "" {
+		glcm.Info(fmt.Sprintf("pprof start serving via HTTP server with endpoint: %q", httpPprofEndpoint))
+		go func() {
+			log.Println(http.ListenAndServe(httpPprofEndpoint, nil))
+		}()
+	}
+
 	// Get the value of environment variable AZCOPY_CONCURRENCY_VALUE
 	// If the environment variable is set, it defines the number of concurrent connections
 	// transfer engine will spawn. If not set, transfer engine will spawn the default number
