@@ -8,10 +8,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
     def util_test_blobfs_download_1Kb_file(
         self,
-        explictFromTo=False,
-        forceOAuthLogin=False,
-        tenantID="",
-        aadEndpoint=""):
+        explictFromTo=False):
         # create file of size 1KB
         filename = "test_blob_d_1kb_file.txt"
         file_path = util.create_test_file(filename, 1024)
@@ -20,14 +17,8 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
             add_flags("log-level", "Info")
         util.process_oauth_command(
             cmd,
-            "LocalBlobFS" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+            "LocalBlobFS" if explictFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Validate the file uploaded file
@@ -46,14 +37,8 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
             add_flags("log-level", "Info")
         util.process_oauth_command(
             cmd,
-            "BlobFSLocal" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+            "BlobFSLocal" if explictFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # validate the downloaded file
@@ -62,10 +47,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
     def util_test_blobfs_download_64MB_file(
         self,
-        explictFromTo=False,
-        forceOAuthLogin=False,
-        tenantID="",
-        aadEndpoint=""):
+        explictFromTo=False):
         # create test file of size 64MB
         filename = "test_blob_d_64MB_file.txt"
         file_path = util.create_test_file(filename, 64*1024*1024)
@@ -74,14 +56,8 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
             add_flags("log-level", "Info")
         util.process_oauth_command(
             cmd,
-            "LocalBlobFS" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+            "LocalBlobFS" if explictFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Validate the file uploaded
@@ -100,14 +76,8 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
             add_flags("log-level", "Info")
         util.process_oauth_command(
             cmd,
-            "BlobFSLocal" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+            "BlobFSLocal" if explictFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # validate the downloaded file
@@ -116,10 +86,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
 
     def util_test_blobfs_download_100_1Kb_file(
         self,
-        explictFromTo=False,
-        forceOAuthLogin=False,
-        tenantID="",
-        aadEndpoint=""):
+        explictFromTo=False):
         # create dir with 100 1KB files inside it
         dir_name = "dir_blobfs_d_100_1K"
         dir_n_file_path = util.create_test_n_files(1024, 100, dir_name)
@@ -129,14 +96,8 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
             add_flags("log-level", "Info").add_flags("recursive","true")
         util.process_oauth_command(
             cmd,
-            "LocalBlobFS" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+            "LocalBlobFS" if explictFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Validate the uploaded directory
@@ -156,14 +117,8 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
             add_flags("log-level", "Info").add_flags("recursive", "true")
         util.process_oauth_command(
             cmd,
-            "BlobFSLocal" if explictFromTo else "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+            "BlobFSLocal" if explictFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # validate the downloaded directory

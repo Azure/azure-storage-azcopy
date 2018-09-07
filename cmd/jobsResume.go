@@ -158,16 +158,8 @@ Resume the existing job with the given job ID.`,
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
-	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "source sas of the source for given JobId")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination sas of the destination for given JobId")
-
-	// hide oauth feature temporarily
-	resumeCmd.PersistentFlags().MarkHidden("oauth-user")
-	resumeCmd.PersistentFlags().MarkHidden("tenant-id")
-	resumeCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }
 
 type resumeCmdArgs struct {
@@ -175,21 +167,20 @@ type resumeCmdArgs struct {
 	includeTransfer string
 	excludeTransfer string
 
-	// oauth options
-	useInteractiveOAuthUserCredential bool
-	tenantID                          string
-	aadEndpoint                       string
-
 	SourceSAS      string
 	DestinationSAS string
 }
 
-// getCredentialType gets the proper credential type for job resume command.
-func (rca resumeCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
+// getDestCredentialType gets the proper credential type for job resume command's copy destination.
+func (rca resumeCmdArgs) getDestCredentialType() (credentialType common.CredentialType, err error) {
+	// If SAS provided for destination, it's using Anonymous credential.
+	if rca.DestinationSAS != "" {
+		return common.ECredentialType.Anonymous(), nil
+	}
+
 	uotm := GetUserOAuthTokenManagerInstance()
-	// Check whether to use OAuthToken credential.
-	if hasCachedToken, _ := uotm.HasCachedToken(); rca.useInteractiveOAuthUserCredential ||
-		hasCachedToken || common.EnvVarOAuthTokenInfoExists() {
+	// If there is cached token or token passed from env var, it's using OAuthToken credential.
+	if hasCachedToken, _ := uotm.HasCachedToken(); hasCachedToken || common.EnvVarOAuthTokenInfoExists() {
 		return common.ECredentialType.OAuthToken(), nil
 	}
 
@@ -243,26 +234,20 @@ func (rca resumeCmdArgs) process() error {
 
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
-	if credentialInfo.CredentialType, err = rca.getCredentialType(); err != nil {
+	if credentialInfo.CredentialType, err = rca.getDestCredentialType(); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Resume is using OAuth token for authentication.")
 
-		var tokenInfo *common.OAuthTokenInfo
 		uotm := GetUserOAuthTokenManagerInstance()
-		// Create token with interactive login if necessary.
-		if rca.useInteractiveOAuthUserCredential {
-			if tokenInfo, err = uotm.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false); err != nil {
-				return err
-			}
-		}
 		// Get token from env var or cache.
-		if tokenInfo, err = uotm.GetTokenInfo(); err != nil {
+		if tokenInfo, err := uotm.GetTokenInfo(); err != nil {
 			return err
+		} else {
+			credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
-		credentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
 	// Send resume job request.
