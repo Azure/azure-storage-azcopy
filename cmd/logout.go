@@ -58,12 +58,9 @@ func init() {
 type logoutCmdArgs struct{}
 
 func (lca logoutCmdArgs) process() error {
-	userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-	err := userOAuthTokenManager.RemoveCachedToken()
-	if err != nil {
-		return fmt.Errorf(
-			"logout failed due to error: %s",
-			err.Error())
+	uotm := GetUserOAuthTokenManagerInstance()
+	if err := uotm.RemoveCachedToken(); err != nil {
+		return fmt.Errorf("logout failed due to error: %v", err)
 	}
 
 	return nil

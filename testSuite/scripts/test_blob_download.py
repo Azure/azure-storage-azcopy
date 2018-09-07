@@ -289,11 +289,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
     def test_download_1kb_blob_with_oauth(self):
         self.util_test_download_1kb_blob_with_oauth()
 
-    def util_test_download_1kb_blob_with_oauth(
-        self,
-        forceOAuthLogin=False,
-        tenantID="",
-        aadEndpoint=""):
+    def util_test_download_1kb_blob_with_oauth(self):
         # create file of size 1KB.
         filename = "test_1kb_blob_upload.txt"
         file_path = util.create_test_file(filename, 1024)
@@ -303,16 +299,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dest = util.test_oauth_container_url
         cmd = util.Command("copy").add_arguments(src).add_arguments(dest). \
             add_flags("log-level", "info").add_flags("recursive", "true")
-        util.process_oauth_command(
-            cmd,
-            "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+        util.process_oauth_command(cmd, "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded blob.
@@ -329,16 +317,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         src_validate = util.get_resource_from_oauth_container_validate(filename)
         dest = util.test_directory_path + "/test_1kb_blob_download.txt"
         cmd = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level", "info")
-        util.process_oauth_command(
-            cmd,
-            "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+        util.process_oauth_command(cmd, "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the downloaded blob
@@ -350,10 +330,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.util_test_recursive_download_blob_with_oauth()
 
     def util_test_recursive_download_blob_with_oauth(
-        self,
-        forceOAuthLogin=False,
-        tenantID="",
-        aadEndpoint=""):
+        self):
         # create directory and 5 files of 1KB inside that directory.
         dir_name = "util_test_recursive_download_blob_with_oauth_dir_" + str(10) + "_files"
         dir1_path = util.create_test_n_files(1024, 5, dir_name)
@@ -362,16 +339,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # upload the directory to container through azcopy with recursive set to true.
         cmd = util.Command("copy").add_arguments(dir1_path).add_arguments(dest).add_flags("log-level", "info") \
             .add_flags("recursive", "true")
-        util.process_oauth_command(
-            cmd,
-            "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+        util.process_oauth_command(cmd, "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the uploaded file.
@@ -389,16 +358,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # downloading the directory created from container through azcopy with recursive flag to true.
         cmd = util.Command("copy").add_arguments(src_download).add_arguments(util.test_directory_path).add_flags(
             "log-level", "info").add_flags("recursive", "true")
-        util.process_oauth_command(
-            cmd,
-            "",
-            forceOAuthLogin,
-            tenantID,
-            aadEndpoint)
-        if forceOAuthLogin:
-            result = cmd.execute_azcopy_command_interactive()
-        else:
-            result = cmd.execute_azcopy_copy_command()
+        util.process_oauth_command(cmd, "")
+        result = cmd.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify downloaded blob.

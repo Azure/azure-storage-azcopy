@@ -66,9 +66,9 @@ type loginCmdArgs struct {
 }
 
 func (lca loginCmdArgs) process() error {
-	userOAuthTokenManager := GetUserOAuthTokenManagerInstance()
-	_, err := userOAuthTokenManager.LoginWithADEndpoint(lca.tenantID, lca.aadEndpoint, true) // persist token = true
-	if err != nil {
+	uotm := GetUserOAuthTokenManagerInstance()
+	// Persist the token to cache, if login fulfilled succesfully.
+	if _, err := uotm.LoginWithADEndpoint(lca.tenantID, lca.aadEndpoint, true); err != nil {
 		return fmt.Errorf(
 			"login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
 			lca.tenantID,

@@ -46,6 +46,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	// Get the value of environment variable AZCOPY_CONCURRENCY_VALUE
 	// If the environment variable is set, it defines the number of concurrent connections
 	// transfer engine will spawn. If not set, transfer engine will spawn the default number
