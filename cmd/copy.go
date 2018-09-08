@@ -598,7 +598,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// path differently, replace the path separator with the
 		// the linux path separator '/'
 		if os.PathSeparator == '\\' {
-			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, "/", -1)
+			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 		}
 	}
 

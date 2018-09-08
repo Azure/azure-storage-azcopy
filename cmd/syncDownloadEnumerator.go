@@ -212,6 +212,72 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 	return nil
 }
 
+// checkAndQueue is an internal function which check the modified time of file locally
+// and on container and then decideds whether to queue transfer for upload or not.
+ func (e *syncDownloadEnumerator)checkAndQueue(ctx context.Context, p pipeline.Pipeline,
+ 												blobUrlParts azblob.BlobURLParts, cca *cookedSyncCmdArgs,
+ 												sourcePattern string , root string, pathToFile string, f os.FileInfo) error {
+
+ 	util := copyHandlerUtil{}
+
+	// localfileRelativePath is the path of file relative to root directory
+	// Example1: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\a.txt localfileRelativePath = \a.txt
+	// Example2: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
+	localfileRelativePath := strings.Replace(pathToFile, root, "", 1)
+	// remove the path separator at the start of relative path
+	if len(localfileRelativePath) > 0 && localfileRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+		localfileRelativePath = localfileRelativePath[1:]
+	}
+	// if the localfileRelativePath does not match the source pattern, then it is not compared
+	if !util.blobNameMatchesThePattern(sourcePattern, localfileRelativePath) {
+		return nil
+	}
+
+	// Appending the fileRelativePath to the sourceUrl
+	// root = C:\User\user1\dir-1  cca.source = https://<container-name>/<vir-d>?<sig>
+	// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
+	// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
+	filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
+	// Get the properties of given on container
+	blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
+	blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
+
+	if err != nil {
+		if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
+			return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", localfileRelativePath, err.Error())
+		}
+		// If the blobUrl.GetProperties failed with StatusNotFound, it means blob doesn't exists
+		// delete the blob locally
+		if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode == http.StatusNotFound) {
+			err := os.Remove(pathToFile)
+			if err != nil {
+				return fmt.Errorf("error deleting the file %s. Failed with error %s", pathToFile, err.Error())
+			}
+			e.FilesDeletedLocally++
+			return nil
+		}
+		return err
+	}
+	// If the local file modified time was after the remote blob
+	// then sync is  required
+	if err == nil && !blobProperties.LastModified().After(f.ModTime()) {
+		return nil
+	}
+
+	// File exists locally but the modified time of file locally was before the modified
+	// time of blob, so sync is required
+	err = e.addTransferToUpload(common.CopyTransfer{
+		Source:           util.stripSASFromBlobUrl(filedestinationUrl).String(),
+		Destination:      pathToFile,
+		LastModifiedTime: blobProperties.LastModified(),
+		SourceSize:       blobProperties.ContentLength(),
+	}, cca)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // compareLocalAgainstRemote iterates through each files/dir inside the source and compares
 // them against blobs on container. If the blobs doesn't exists but exists locally, then delete
 // the files locally
@@ -314,66 +380,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// rootPath = <container-name> sourcePattern = a*/*/*
 	blobUrlParts.BlobName, sourcePattern = util.sourceRootPathWithoutWildCards(blobUrlParts.BlobName)
 	//sourcePattern = strings.Replace(sourcePattern, "/", string(os.PathSeparator), -1)
-	// checkAndQueue is an internal function which check the modified time of file locally
-	// and on container and then decideds whether to queue transfer for upload or not.
-	checkAndQueue := func(root string, pathToFile string, f os.FileInfo) error {
-		// localfileRelativePath is the path of file relative to root directory
-		// Example1: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\a.txt localfileRelativePath = \a.txt
-		// Example2: root = C:\User\user1\dir-1  fileAbsolutePath = :\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
-		localfileRelativePath := strings.Replace(pathToFile, root, "", 1)
-		// remove the path separator at the start of relative path
-		if len(localfileRelativePath) > 0 && localfileRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
-			localfileRelativePath = localfileRelativePath[1:]
-		}
-		// if the localfileRelativePath does not match the source pattern, then it is not compared
-		if !util.blobNameMatchesThePattern(sourcePattern, localfileRelativePath) {
-			return nil
-		}
 
-		// Appending the fileRelativePath to the sourceUrl
-		// root = C:\User\user1\dir-1  cca.source = https://<container-name>/<vir-d>?<sig>
-		// fileAbsolutePath = C:\User\user1\dir-1\dir-2\a.txt localfileRelativePath = \dir-2\a.txt
-		// filedestinationUrl =  https://<container-name>/<vir-d>/dir-2/a.txt?<sig>
-		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, localfileRelativePath)
-		// Get the properties of given on container
-		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
-		blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
-
-		if err != nil {
-			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode != http.StatusNotFound) {
-				return fmt.Errorf("error sync up the blob %s because it failed to get the properties. Failed with error %s", localfileRelativePath, err.Error())
-			}
-			// If the blobUrl.GetProperties failed with StatusNotFound, it means blob doesn't exists
-			// delete the blob locally
-			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode == http.StatusNotFound) {
-				err := os.Remove(pathToFile)
-				if err != nil {
-					return fmt.Errorf("error deleting the file %s. Failed with error %s", pathToFile, err.Error())
-				}
-				e.FilesDeletedLocally++
-				return nil
-			}
-			return err
-		}
-		// If the local file modified time was after the remote blob
-		// then sync is  required
-		if err == nil && !blobProperties.LastModified().After(f.ModTime()) {
-			return nil
-		}
-
-		// File exists locally but the modified time of file locally was before the modified
-		// time of blob, so sync is required
-		err = e.addTransferToUpload(common.CopyTransfer{
-			Source:           util.stripSASFromBlobUrl(filedestinationUrl).String(),
-			Destination:      pathToFile,
-			LastModifiedTime: blobProperties.LastModified(),
-			SourceSize:       blobProperties.ContentLength(),
-		}, cca)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
 
 	listOfFilesAndDir, err := filepath.Glob(cca.destination)
 
@@ -412,7 +419,24 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 					}
 					if f.IsDir() {
 						return nil
-					} else {
+					} else if f.Mode()&os.ModeSymlink != 0 {
+						// If follow symlink is set to false, then symlinks are not evaluated.
+						if !cca.followSymlinks {
+							return nil
+						}
+						//evaluatedSymlinkPath, err := filepath.EvalSymlinks(pathToFile)
+						evaluatedSymlinkPath, err := util.evaluateSymlinkPath(pathToFile)
+						if err != nil {
+							glcm.Info(fmt.Sprintf("error evaluating the symlink path %s", evaluatedSymlinkPath))
+							return nil
+						}
+						// If the path is a windows file system path, replace '\\' with '/'
+						// to maintain the consistency with other system paths.
+						if common.AZCOPY_PATH_SEPARATOR_CHAR == '\\' {
+							evaluatedSymlinkPath = strings.Replace(evaluatedSymlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						}
+						e.getSymlinkTransferList(ctx, p, blobUrlParts, cca, sourcePattern, evaluatedSymlinkPath, cca.destination, fileOrDir, parentDestinationPath)
+					}else if f.Mode().IsRegular(){
 						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
 						// this replacement is done to handle the windows file paths where path separator "\\"
 						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
@@ -423,8 +447,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 						if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, pathToFile) {
 							return nil
 						}
-						return checkAndQueue(cca.destination, pathToFile, f)
+						return e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, cca.destination, pathToFile, f)
 					}
+					return nil
 				})
 			} else if !f.IsDir() {
 				// replace the OS path separator in fileOrDir string with AZCOPY_PATH_SEPARATOR
@@ -437,11 +462,127 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 				if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, fileOrDir) {
 					continue
 				}
-				err = checkAndQueue(cca.destination, fileOrDir, f)
+				err = e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, cca.destination, fileOrDir, f)
 			}
 		}
 	}
 	return nil, false
+}
+
+func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p pipeline.Pipeline,
+	blobUrlParts azblob.BlobURLParts, cca *cookedSyncCmdArgs, sourcePattern string,
+	symlinkPath, rootPath, source, parentSource string) error{
+
+	util := copyHandlerUtil{}
+	// replace the "\\" path separator with "/" separator
+	symlinkPath = strings.Replace(symlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+	listOfFilesDirs, err := filepath.Glob(symlinkPath)
+	if err != nil {
+		return fmt.Errorf(fmt.Sprintf("found cycle in symlink path %s", symlinkPath))
+	}
+	for _, files := range listOfFilesDirs {
+		// replace the windows path separator in the path with "/" path separator
+		files = strings.Replace(files, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		fInfo, err := os.Stat(files)
+		if err != nil {
+			return err
+		} else if fInfo.IsDir() {
+			filepath.Walk(files, func(path string, fileInfo os.FileInfo, err error) error {
+				if err != nil {
+					glcm.Info(err.Error())
+					return nil
+				} else if fileInfo.IsDir() {
+					return nil
+				} else if fileInfo.Mode().IsRegular() { // If the file is a regular file i.e not a directory and symlink.
+					// replace the windows path separator in the path with "/" path separator
+					path = strings.Replace(path, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+					// strip the original symlink path from the filePath
+					// For Example: C:\MountedD points to D:\ and path is D:\file1
+					// relativePath = file1
+					path := strings.Replace(path, symlinkPath, "", 1)
+
+					if len(path) > 0  && path[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						path = path[1:]
+					}
+
+					var sourcePath = ""
+					// concatenate the relative symlink path to the original source
+					if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						sourcePath = fmt.Sprintf("%s%s", source, path)
+					} else {
+						sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, path)
+					}
+
+					// check if the sourcePath needs to be include or not
+					if !util.resourceShouldBeIncluded(parentSource, e.Include, sourcePath) {
+						return nil
+					}
+					// check if the source has to be excluded or not
+					if util.resourceShouldBeExcluded(parentSource, e.Exclude, sourcePath) {
+						return nil
+					}
+					e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, rootPath, sourcePath, fileInfo)
+					return nil
+				} else if fileInfo.Mode()&os.ModeSymlink != 0 { // If the file is a symlink
+					// replace the windows path separator in the path with "/" path separator
+					path = strings.Replace(path, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+					// Evaulate the symlink path
+					sLinkPath, err := util.evaluateSymlinkPath(path)
+					if err != nil {
+						return err
+					}
+					// strip the original symlink path and concatenate the relativePath to the original sourcePath
+					// for Example: source = C:\MountedD sLinkPath = D:\MountedE
+					// relativePath = MountedE , sourcePath = C;\MountedD\MountedE
+					relativePath := strings.Replace(path, symlinkPath, "", 1)
+					var sourcePath = ""
+					// concatenate the relative symlink path to the original source
+					if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						sourcePath = fmt.Sprintf("%s%s", source, relativePath)
+					} else {
+						sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, relativePath)
+					}
+					return e.getSymlinkTransferList(ctx, p, blobUrlParts, cca, sourcePattern, sLinkPath, rootPath, sourcePath, parentSource)
+				}
+				return nil
+			})
+		} else if fInfo.Mode().IsRegular() {
+			// replace the windows path separator in the path with "/" path separator
+			files = strings.Replace(files, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			// strip the original symlink path from the filePath
+			// For Example: C:\MountedD points to D:\ and path is D:\file1
+			// relativePath = file1
+			files := strings.Replace(files, symlinkPath, "", 1)
+
+			if len(files) > 0  && files[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				files = files[1:]
+			}
+
+			var sourcePath = ""
+			// concatenate the relative symlink path to the original source
+			if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				sourcePath = fmt.Sprintf("%s%s", source, files)
+			} else {
+				sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, files)
+			}
+
+			// check if the sourcePath needs to be include or not
+			if !util.resourceShouldBeIncluded(parentSource, e.Include, sourcePath) {
+				continue
+			}
+			// check if the source has to be excluded or not
+			if util.resourceShouldBeExcluded(parentSource, e.Exclude, sourcePath) {
+				continue
+			}
+
+			e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, sourcePath, files, fInfo)
+		} else {
+			continue
+		}
+	}
+	return nil
 }
 
 // this function accepts the list of files/directories to transfer and processes them
