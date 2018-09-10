@@ -32,8 +32,9 @@ import (
 	"github.com/Azure/go-autorest/autorest/adal"
 )
 
-// ApplicationID represents 3rd party ApplicationID for AzCopy.
-const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa"
+// ApplicationID represents 1st party ApplicationID for AzCopy.
+//const ApplicationID = "a45c21f4-7066-40b4-97d8-14f4313c3caa" // 3rd party test ApplicationID for AzCopy.
+const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
 const Resource = "https://storage.azure.com"
