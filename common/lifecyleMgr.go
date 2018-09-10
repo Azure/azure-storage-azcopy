@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -21,6 +23,9 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 
 	// kick off the single routine that processes output
 	go lcmgr.processOutputMessage()
+
+	// Check if need to do CPU profiling, and do CPU profiling accordingly when azcopy life start.
+	lcmgr.checkAndStartCPUProfiling()
 
 	return
 }()
@@ -66,6 +71,51 @@ type lifecycleMgr struct {
 	waitEverCalled int32
 }
 
+func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
+	// CPU Profiling add-on. Set AZCOPY_PROFILE_CPU to enable CPU profiling,
+	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
+	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
+	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
+	cpuProfilePath := os.Getenv("AZCOPY_PROFILE_CPU")
+	if cpuProfilePath != "" {
+		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
+		f, err := os.Create(cpuProfilePath)
+		if err != nil {
+			lcm.Exit(fmt.Sprintf("Fail to create file for CPU profiling, %v", err), EExitCode.Error())
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			lcm.Exit(fmt.Sprintf("Fail to start CPU profiling, %v", err), EExitCode.Error())
+		}
+	}
+}
+
+func (lcm *lifecycleMgr) checkAndStopCPUProfiling() {
+	// Stop CPU profiling if there is ongoing CPU profiling.
+	pprof.StopCPUProfile()
+}
+
+func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
+	// Memory Profiling add-on. Set AZCOPY_PROFILE_MEM to enable memory profiling,
+	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
+	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
+	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
+	memProfilePath := os.Getenv("AZCOPY_PROFILE_MEM")
+	if memProfilePath != "" {
+		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
+		f, err := os.Create(memProfilePath)
+		if err != nil {
+			lcm.Exit(fmt.Sprintf("Fail to create file for memory profiling, %v", err), EExitCode.Error())
+		}
+		runtime.GC()
+		if err := pprof.WriteHeapProfile(f); err != nil {
+			lcm.Exit(fmt.Sprintf("Fail to start memory profiling, %v", err), EExitCode.Error())
+		}
+		if err := f.Close(); err != nil {
+			lcm.Info(fmt.Sprintf("Fail to close memory profiling file, %v", err))
+		}
+	}
+}
+
 func (lcm *lifecycleMgr) Progress(msg string) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
@@ -93,6 +143,12 @@ func (lcm *lifecycleMgr) Prompt(msg string) string {
 }
 
 func (lcm *lifecycleMgr) Exit(msg string, exitCode ExitCode) {
+	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
+	lcm.checkAndTriggerMemoryProfiling()
+
+	// Check if there is ongoing CPU profiling, and stop CPU profiling.
+	lcm.checkAndStopCPUProfiling()
+
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
 		msgType:    eMessageType.Exit(),
