@@ -118,6 +118,13 @@ func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFol
 			serialize(ResumeJobOrder(payload), writer)
 		})
 
+	http.HandleFunc(common.ERpcCmd.GetJobFromTo().Pattern(),
+		func(writer http.ResponseWriter, request *http.Request) {
+			var payload common.GetJobFromToRequest
+			deserialize(request, &payload)
+			serialize(GetJobFromTo(payload), writer)
+		})
+
 	// Listen for front-end requests
 	//if err := http.ListenAndServe("localhost:1337", nil); err != nil {
 	//	fmt.Print("Server already initialized")
@@ -220,28 +227,24 @@ func CancelPauseJobOrder(jobID common.JobID, desiredJobStatus common.JobStatus) 
 }
 
 func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeResponse {
-	jm, found := JobsAdmin.JobMgr(req.JobID) // Find Job being resumed
-	if !found {
-		// Strip '?' if present as first character of the source sas / destination sas
-		if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
-			req.SourceSAS = req.SourceSAS[1:]
-		}
-		if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
-			req.DestinationSAS = req.DestinationSAS[1:]
-		}
-		// Job with JobId does not exists
-		// Search the plan files in Azcopy folder
-		// and resurrect the Job
-		if !JobsAdmin.ResurrectJob(req.JobID, req.SourceSAS, req.DestinationSAS) {
-			return common.CancelPauseResumeResponse{
-				CancelledPauseResumed: false,
-				ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
-			}
-		}
-		// If the job manager was not found, then Job was resurrected
-		// Get the Job manager again for given JobId
-		jm, _ = JobsAdmin.JobMgr(req.JobID)
+	// Strip '?' if present as first character of the source sas / destination sas
+	if len(req.SourceSAS) > 0 && req.SourceSAS[0] == '?' {
+		req.SourceSAS = req.SourceSAS[1:]
 	}
+	if len(req.DestinationSAS) > 0 && req.DestinationSAS[0] == '?' {
+		req.DestinationSAS = req.DestinationSAS[1:]
+	}
+	// Always search the plan files in Azcopy folder,
+	// and resurrect the Job with provided credentials, to ensure SAS and etc get updated.
+	if !JobsAdmin.ResurrectJob(req.JobID, req.SourceSAS, req.DestinationSAS) {
+		return common.CancelPauseResumeResponse{
+			CancelledPauseResumed: false,
+			ErrorMsg:              fmt.Sprintf("no job with JobId %v exists", req.JobID),
+		}
+	}
+	// If the job manager was not found, then Job was resurrected
+	// Get the Job manager again for given JobId
+	jm, _ := JobsAdmin.JobMgr(req.JobID)
 
 	// Check whether Job has been completely ordered or not
 	completeJobOrdered := func(jm IJobMgr) bool {
@@ -516,7 +519,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 	return ljt
 }
 
-// listJobs returns the jobId of all the jobs existing in the current instance of azcopy
+// ListJobs returns the jobId of all the jobs existing in the current instance of azcopy
 func ListJobs() common.ListJobsResponse {
 	// Resurrect all the Jobs from the existing JobPart Plan files
 	JobsAdmin.ResurrectJobParts()
@@ -538,4 +541,42 @@ func ListJobs() common.ListJobsResponse {
 		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails, common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString()})
 	}
 	return listJobResponse
+}
+
+// GetJobFromTo api returns the job FromTo info.
+func GetJobFromTo(r common.GetJobFromToRequest) common.GetJobFromToResponse {
+	jm, found := JobsAdmin.JobMgr(r.JobID)
+	if !found {
+		// Job with JobId does not exists.
+		// Search the plan files in Azcopy folder and resurrect the Job.
+		if !JobsAdmin.ResurrectJob(r.JobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
+			return common.GetJobFromToResponse{
+				ErrorMsg: fmt.Sprintf("no job with JobID %v exists", r.JobID),
+			}
+		}
+		jm, _ = JobsAdmin.JobMgr(r.JobID)
+	}
+
+	// Get zero'th part of the job part plan.
+	jp0, ok := jm.JobPartMgr(0)
+	if !ok {
+		return common.GetJobFromToResponse{
+			ErrorMsg: fmt.Sprintf("error getting the job's FromTo with JobID %v", r.JobID),
+		}
+	}
+
+	// Use first transfer's source/destination as represent.
+	source, destination := jp0.Plan().TransferSrcDstStrings(0)
+	if source == "" && destination == "" {
+		return common.GetJobFromToResponse{
+			ErrorMsg: fmt.Sprintf("error getting the source/destination with JobID %v", r.JobID),
+		}
+	}
+
+	return common.GetJobFromToResponse{
+		ErrorMsg:    "",
+		FromTo:      jp0.Plan().FromTo,
+		Source:      source,
+		Destination: destination,
+	}
 }

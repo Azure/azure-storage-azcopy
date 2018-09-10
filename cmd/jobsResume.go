@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -171,25 +172,6 @@ type resumeCmdArgs struct {
 	DestinationSAS string
 }
 
-// getDestCredentialType gets the proper credential type for job resume command's copy destination.
-func (rca resumeCmdArgs) getDestCredentialType() (credentialType common.CredentialType, err error) {
-	// If SAS provided for destination, it's using Anonymous credential.
-	if rca.DestinationSAS != "" {
-		return common.ECredentialType.Anonymous(), nil
-	}
-
-	uotm := GetUserOAuthTokenManagerInstance()
-	// If there is cached token or token passed from env var, it's using OAuthToken credential.
-	if hasCachedToken, _ := uotm.HasCachedToken(); hasCachedToken || common.EnvVarOAuthTokenInfoExists() {
-		return common.ECredentialType.OAuthToken(), nil
-	}
-
-	// TODO: Note BFS's case is special, SharedKey should be removed.
-
-	// By default, use Anonymous credential.
-	return common.ECredentialType.Anonymous(), nil
-}
-
 // processes the resume command,
 // dispatches the resume Job order to the storage engine.
 func (rca resumeCmdArgs) process() error {
@@ -232,9 +214,25 @@ func (rca resumeCmdArgs) process() error {
 		}
 	}
 
+	// Get fromTo info, so we can decide what's the proper credential type to use.
+	var getJobFromToResponse common.GetJobFromToResponse
+	Rpc(common.ERpcCmd.GetJobFromTo(),
+		&common.GetJobFromToRequest{JobID: jobID},
+		&getJobFromToResponse)
+	if getJobFromToResponse.ErrorMsg != "" {
+		glcm.Exit(getJobFromToResponse.ErrorMsg, common.EExitCode.Error())
+	}
+
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
-	if credentialInfo.CredentialType, err = rca.getDestCredentialType(); err != nil {
+	// TODO: Replace context with root context
+	if credentialInfo.CredentialType, err = getCredentialType(context.TODO(), rawFromToInfo{
+		fromTo:         getJobFromToResponse.FromTo,
+		source:         getJobFromToResponse.Source,
+		destination:    getJobFromToResponse.Destination,
+		sourceSAS:      rca.SourceSAS,
+		destinationSAS: rca.DestinationSAS,
+	}); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,
