@@ -397,45 +397,6 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 	return err
 }
 
-// getCredentialType checks user provided commandline switches, and gets the proper credential type
-// for current copy command.
-func (cca cookedCopyCmdArgs) getCredentialType(ctx context.Context) (credentialType common.CredentialType, err error) {
-	credentialType = common.ECredentialType.Unknown()
-
-	// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
-	// verify credential type with cached token info, src or dest blob resource URL.
-	switch cca.fromTo {
-	case common.EFromTo.BlobBlob():
-		// For blob to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
-		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
-		fallthrough
-	case common.EFromTo.LocalBlob():
-		if credentialType, err = getBlobCredentialType(ctx, cca.destination, false); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobTrash():
-		// For BlobTrash direction, use source as resource URL, and it should not be public access resource.
-		if credentialType, err = getBlobCredentialType(ctx, cca.source, false); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.BlobLocal():
-		if credentialType, err = getBlobCredentialType(ctx, cca.source, true); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	case common.EFromTo.LocalBlobFS():
-		fallthrough
-	case common.EFromTo.BlobFSLocal():
-		if credentialType, err = getBlobFSCredentialType(); err != nil {
-			return common.ECredentialType.Unknown(), err
-		}
-	default:
-		credentialType = common.ECredentialType.Anonymous()
-		//glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
-	}
-
-	return credentialType, nil
-}
-
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
@@ -467,9 +428,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CredentialInfo: common.CredentialInfo{},
 	}
 
-	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// verifies credential type and initializes credential info.
-	if jobPartOrder.CredentialInfo.CredentialType, err = cca.getCredentialType(ctx); err != nil {
+	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+		fromTo:         cca.fromTo,
+		source:         cca.source,
+		destination:    cca.destination,
+		sourceSAS:      cca.sourceSAS,
+		destinationSAS: cca.destinationSAS,
+	}); err != nil {
 		return err
 	}
 

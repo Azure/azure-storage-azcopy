@@ -20,6 +20,7 @@ func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd("ListJobTransfers") }
 func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("Cancel") }
 func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
 func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
+func (RpcCmd) GetJobFromTo() RpcCmd     { return RpcCmd("GetJobFromTo") }
 
 func (c RpcCmd) String() string {
 	return enum.String(c, reflect.TypeOf(c))
@@ -175,4 +176,17 @@ type ListJobTransfersResponse struct {
 	ErrorMsg string
 	JobID    JobID
 	Details  []TransferDetail
+}
+
+// GetJobFromToRequest indicates request to get job's FromTo info from job part plan header
+type GetJobFromToRequest struct {
+	JobID JobID
+}
+
+// GetJobFromToResponse indicates response to get job's FromTo info.
+type GetJobFromToResponse struct {
+	ErrorMsg    string
+	FromTo      FromTo
+	Source      string
+	Destination string
 }
