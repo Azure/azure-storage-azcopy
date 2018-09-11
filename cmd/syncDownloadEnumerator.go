@@ -397,13 +397,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// For Example: dst = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
 	// For Example: dst = "/home/user/dir*" parentSourcePath = "/home/user"
 	// For Example: dst = "/home/*" parentSourcePath = "/home"
-	parentDestinationPath := cca.destination
-	wcIndex := util.firstIndexOfWildCard(parentDestinationPath)
-	if wcIndex != -1 {
-		parentDestinationPath = parentDestinationPath[:wcIndex]
-		pathSepIndex := strings.LastIndex(parentDestinationPath, common.AZCOPY_PATH_SEPARATOR_STRING)
-		parentDestinationPath = parentDestinationPath[:pathSepIndex]
-	}
+	parentDestinationPath, _ := util.sourceRootPathWithoutWildCards(cca.destination)
 
 	// Iterate through each file / dir inside the source
 	// and then checkAndQueue
@@ -413,9 +407,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 			// directories are uploaded only if recursive is on
 			if f.IsDir() && cca.recursive {
 				// walk goes through the entire directory tree
-				err = filepath.Walk(fileOrDir, func(pathToFile string, f os.FileInfo, err error) error {
+				filepath.Walk(fileOrDir, func(pathToFile string, f os.FileInfo, err error) error {
 					if err != nil {
-						return err
+						glcm.Info(fmt.Sprintf("error %s accessing the file %s", err.Error(), pathToFile))
 					}
 					if f.IsDir() {
 						return nil
@@ -432,10 +426,10 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 						}
 						// If the path is a windows file system path, replace '\\' with '/'
 						// to maintain the consistency with other system paths.
-						if common.AZCOPY_PATH_SEPARATOR_CHAR == '\\' {
-							evaluatedSymlinkPath = strings.Replace(evaluatedSymlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if os.PathSeparator == '\\' {
+							pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 						}
-						e.getSymlinkTransferList(ctx, p, blobUrlParts, cca, sourcePattern, evaluatedSymlinkPath, cca.destination, fileOrDir, parentDestinationPath)
+						e.getSymlinkTransferList(ctx, p, blobUrlParts, cca, sourcePattern, evaluatedSymlinkPath, fileOrDir, parentDestinationPath)
 					}else if f.Mode().IsRegular(){
 						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
 						// this replacement is done to handle the windows file paths where path separator "\\"
@@ -447,7 +441,10 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 						if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, pathToFile) {
 							return nil
 						}
-						return e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, cca.destination, pathToFile, f)
+						err = e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, cca.destination, pathToFile, f)
+						if err != nil {
+							glcm.Info(err.Error())
+						}
 					}
 					return nil
 				})
@@ -463,6 +460,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 					continue
 				}
 				err = e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, cca.destination, fileOrDir, f)
+				if err != nil {
+					glcm.Info(err.Error())
+				}
 			}
 		}
 	}
@@ -471,7 +471,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 
 func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p pipeline.Pipeline,
 	blobUrlParts azblob.BlobURLParts, cca *cookedSyncCmdArgs, sourcePattern string,
-	symlinkPath, rootPath, source, parentSource string) error{
+	symlinkPath, source, parentSource string) {
 
 	util := copyHandlerUtil{}
 	// replace the "\\" path separator with "/" separator
@@ -479,14 +479,16 @@ func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p p
 
 	listOfFilesDirs, err := filepath.Glob(symlinkPath)
 	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("found cycle in symlink path %s", symlinkPath))
+		glcm.Info(fmt.Sprintf("found cycle in symlink path %s", symlinkPath))
+		return
 	}
+
 	for _, files := range listOfFilesDirs {
 		// replace the windows path separator in the path with "/" path separator
 		files = strings.Replace(files, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 		fInfo, err := os.Stat(files)
 		if err != nil {
-			return err
+			glcm.Info(err.Error())
 		} else if fInfo.IsDir() {
 			filepath.Walk(files, func(path string, fileInfo os.FileInfo, err error) error {
 				if err != nil {
@@ -523,7 +525,10 @@ func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p p
 					if util.resourceShouldBeExcluded(parentSource, e.Exclude, sourcePath) {
 						return nil
 					}
-					e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, rootPath, sourcePath, fileInfo)
+					err = e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, parentSource, sourcePath, fileInfo)
+					if err != nil {
+						glcm.Info(err.Error())
+					}
 					return nil
 				} else if fileInfo.Mode()&os.ModeSymlink != 0 { // If the file is a symlink
 					// replace the windows path separator in the path with "/" path separator
@@ -531,12 +536,17 @@ func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p p
 					// Evaulate the symlink path
 					sLinkPath, err := util.evaluateSymlinkPath(path)
 					if err != nil {
-						return err
+						glcm.Info(err.Error())
+						return nil
 					}
 					// strip the original symlink path and concatenate the relativePath to the original sourcePath
 					// for Example: source = C:\MountedD sLinkPath = D:\MountedE
 					// relativePath = MountedE , sourcePath = C;\MountedD\MountedE
 					relativePath := strings.Replace(path, symlinkPath, "", 1)
+					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR{
+						relativePath = relativePath[1:]
+					}
+
 					var sourcePath = ""
 					// concatenate the relative symlink path to the original source
 					if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
@@ -544,7 +554,7 @@ func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p p
 					} else {
 						sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, relativePath)
 					}
-					return e.getSymlinkTransferList(ctx, p, blobUrlParts, cca, sourcePattern, sLinkPath, rootPath, sourcePath, parentSource)
+					e.getSymlinkTransferList(ctx, p, blobUrlParts, cca, sourcePattern, sLinkPath, sourcePath, parentSource)
 				}
 				return nil
 			})
@@ -577,12 +587,14 @@ func (e *syncDownloadEnumerator) getSymlinkTransferList(ctx context.Context, p p
 				continue
 			}
 
-			e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, sourcePath, files, fInfo)
+			err = e.checkAndQueue(ctx, p, blobUrlParts, cca, sourcePattern, sourcePath, files, fInfo)
+			if err != nil {
+				glcm.Info(err.Error())
+			}
 		} else {
 			continue
 		}
 	}
-	return nil
 }
 
 // this function accepts the list of files/directories to transfer and processes them
