@@ -95,8 +95,9 @@ type OutputFormat uint32
 
 var EOutputFormat = OutputFormat(0)
 
-func (OutputFormat) Text() OutputFormat { return OutputFormat(0) }
-func (OutputFormat) Json() OutputFormat { return OutputFormat(1) }
+func (OutputFormat) None() OutputFormat { return OutputFormat(0) }
+func (OutputFormat) Text() OutputFormat { return OutputFormat(1) }
+func (OutputFormat) Json() OutputFormat { return OutputFormat(2) }
 
 func (of *OutputFormat) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(of), s, true)

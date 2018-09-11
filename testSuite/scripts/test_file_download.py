@@ -26,8 +26,6 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
         self.assertTrue(result)
 
-        time.sleep(5)
-
         # downloading the uploaded file
         src = util.get_resource_sas_from_share(filename)
         dest = util.test_directory_path + "/test_1kb_file_download.txt"
@@ -58,8 +56,6 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         resource_url = util.get_resource_sas_from_share(filename)
         result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
         self.assertTrue(result)
-
-        time.sleep(5)
 
         # downloading the uploaded file
         src = util.get_resource_sas_from_share(filename)
@@ -102,8 +98,6 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         resource_url = util.get_resource_sas_from_share(filename)
         result = util.Command("testFile").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
         self.assertTrue(result)
-
-        time.sleep(5)
 
         # downloading the uploaded file
         src = util.get_resource_sas_from_share(filename)

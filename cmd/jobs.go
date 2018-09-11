@@ -29,7 +29,7 @@ import (
 // jobs command itself is not runnable
 var jobsCmd = &cobra.Command{
 	Use:     "jobs",
-	Short:   "Sub-commands related to managing jobs.",
+	Short:   "Sub-commands related to managing jobs",
 	Long:    "Sub-commands related to managing jobs.",
 	Example: "azcopy jobs show [jobID]",
 }
