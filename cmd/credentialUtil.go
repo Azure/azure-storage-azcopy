@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -35,7 +34,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 var once sync.Once
@@ -58,7 +56,7 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 }
 
 // ==============================================================================================
-// Credential type methods
+// Get credential type methods
 // ==============================================================================================
 
 // getBlobCredentialType is used to get Blob's credential type when user wishes to use OAuth session mode.
@@ -220,7 +218,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 // pipeline factory methods
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	credential := createBlobCredential(ctx, credInfo)
+	credential := common.CreateBlobCredential(ctx, credInfo, common.CreateCredentialOptions{
+		LogInfo:  glcm.Info,
+		LogError: glcm.Info,
+	})
 
 	return ste.NewBlobPipeline(
 		credential,
@@ -239,63 +240,11 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 		nil), nil
 }
 
-func createBlobCredential(ctx context.Context, credInfo common.CredentialInfo) azblob.Credential {
-	credential := azblob.NewAnonymousCredential()
-
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
-		}
-
-		// Create TokenCredential with refresher.
-		return azblob.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azblob.TokenCredential) time.Duration {
-				return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential)
-			})
-	}
-
-	return credential
-}
-
-func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azblob.TokenCredential) time.Duration {
-	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		common.ApplicationID,
-		common.Resource,
-		tokenInfo.Token)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	err = spt.RefreshWithContext(ctx)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	newToken := spt.Token()
-	tokenCredential.SetToken(newToken.AccessToken)
-
-	// Calculate wait duration, and schedule next refresh.
-	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-	if waitDuration < time.Second {
-		waitDuration = time.Nanosecond
-	}
-
-	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
-		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
-	}
-
-	return waitDuration
-}
-
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	credential := createBlobFSCredential(ctx, credInfo)
+	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CreateCredentialOptions{
+		LogInfo:  glcm.Info,
+		LogError: glcm.Info,
+	})
 
 	return azbfs.NewPipeline(
 		credential,
@@ -313,36 +262,6 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (
 		}), nil
 }
 
-func createBlobFSCredential(ctx context.Context, credInfo common.CredentialInfo) azbfs.Credential {
-	switch credInfo.CredentialType {
-	case common.ECredentialType.OAuthToken():
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
-		}
-
-		// Create TokenCredential with refresher.
-		return azbfs.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azbfs.TokenCredential) time.Duration {
-				return refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, credential)
-			})
-
-	case common.ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := os.Getenv("ACCOUNT_NAME")
-		key := os.Getenv("ACCOUNT_KEY")
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs SharedKey credential")
-		}
-		// create the shared key credentials
-		return azbfs.NewSharedKeyCredential(name, key)
-
-	default:
-		panic(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
-	}
-}
-
 func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
 	return azfile.NewPipeline(
 		azfile.NewAnonymousCredential(),
@@ -358,39 +277,4 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				Value: common.UserAgent,
 			},
 		}), nil
-}
-
-func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
-	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		common.ApplicationID,
-		common.Resource,
-		tokenInfo.Token)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	err = spt.RefreshWithContext(ctx)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	newToken := spt.Token()
-	tokenCredential.SetToken(newToken.AccessToken)
-
-	// Calculate wait duration, and schedule next refresh.
-	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-	if waitDuration < time.Second {
-		waitDuration = time.Nanosecond
-	}
-	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
-		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
-	}
-
-	return waitDuration
 }

@@ -21,9 +21,14 @@
 package common
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -40,6 +45,8 @@ const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 const Resource = "https://storage.azure.com"
 const DefaultTenantID = "microsoft.com"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
+const IMDSAPIVersion = "2018-02-01"
+const MSIEndpoint = "http://169.254.169.254/metadata/identity/oauth2/token"
 
 var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 
@@ -52,8 +59,32 @@ type UserOAuthTokenManager struct {
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
 func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthTokenManager {
 	return &UserOAuthTokenManager{
-		oauthClient: &http.Client{},
+		oauthClient: newAzcopyHTTPClient(),
 		credCache:   NewCredCache(userTokenCachePath),
+	}
+}
+
+func newAzcopyHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
+			Dial /*Context*/ : (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).Dial, /*Context*/
+			MaxIdleConns:           0, // No limit
+			MaxIdleConnsPerHost:    1000,
+			IdleConnTimeout:        180 * time.Second,
+			TLSHandshakeTimeout:    10 * time.Second,
+			ExpectContinueTimeout:  1 * time.Second,
+			DisableKeepAlives:      false,
+			DisableCompression:     false,
+			MaxResponseHeaderBytes: 0,
+			//ResponseHeaderTimeout:  time.Duration{},
+			//ExpectContinueTimeout:  time.Duration{},
+		},
 	}
 }
 
@@ -84,15 +115,39 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo() (*OAuthTokenInfo, error) {
 	return tokenInfo, nil
 }
 
-// LoginWithDefaultADEndpoint interactively logins in with specified tenantID, persist indicates whether to
-// cache the token on local disk.
-func (uotm *UserOAuthTokenManager) LoginWithDefaultADEndpoint(tenantID string, persist bool) (*OAuthTokenInfo, error) {
-	return uotm.LoginWithADEndpoint(tenantID, DefaultActiveDirectoryEndpoint, persist)
+// MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
+func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityID string, persist bool) (*OAuthTokenInfo, error) {
+	oAuthTokenInfo := &OAuthTokenInfo{
+		Identity:   true,
+		IdentityID: identityID,
+	}
+	token, err := oAuthTokenInfo.GetNewTokenFromMSI(ctx)
+	if err != nil {
+		return nil, err
+	}
+	oAuthTokenInfo.Token = *token
+
+	if persist {
+		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %v", err)
+		}
+	}
+
+	return oAuthTokenInfo, nil
 }
 
-// LoginWithADEndpoint interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
+// UserLogin interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
 // cache the token on local disk.
-func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
+	// Use default tenant ID and active directory endpoint, if nothing specified.
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+	if activeDirectoryEndpoint == "" {
+		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
+	}
+
 	// Init OAuth config
 	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
 	if err != nil {
@@ -114,7 +169,7 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 	fmt.Println(*deviceCode.Message)
 
 	// Wait here until the user is authenticated
-	// TODO: check if this can complete
+	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, due to error: %v",
@@ -128,7 +183,6 @@ func (uotm *UserOAuthTokenManager) LoginWithADEndpoint(tenantID, activeDirectory
 	}
 
 	if persist {
-		// TODO: consider to retry the save token process for multi-instance case.
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
 			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %v", err)
@@ -205,6 +259,8 @@ func (uotm *UserOAuthTokenManager) HasCachedToken() (bool, error) {
 func (uotm *UserOAuthTokenManager) RemoveCachedToken() error {
 	return uotm.credCache.RemoveCachedToken()
 }
+
+//====================================================================================
 
 // EnvVarOAuthTokenInfo passes oauth token info into AzCopy through environment variable.
 // Note: this is only used for testing, and not encouraged to be used in production environments.
@@ -284,11 +340,119 @@ type OAuthTokenInfo struct {
 	adal.Token
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
+	Identity                bool   `json:"_identity"`
+	IdentityID              string `json:"_identity_id"`
+}
+
+// Refresh gets new token with token info.
+func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error) {
+	if credInfo.Identity {
+		return credInfo.GetNewTokenFromMSI(ctx)
+	}
+
+	return credInfo.RefreshTokenWithUserCredential(ctx)
+}
+
+var msiTokenHTTPClient = newAzcopyHTTPClient()
+
+// GetNewTokenFromMSI get token from Azure Instance Metadata Service identity endpoint.
+// For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
+func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
+	// Prepare request to get token from Azure Instance Metadata Service identity endpoint.
+	req, err := http.NewRequest("GET", MSIEndpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request, %v", err)
+	}
+	params := req.URL.Query()
+	params.Set("resource", Resource)
+	params.Set("api-version", IMDSAPIVersion)
+	if credInfo.IdentityID != "" {
+		params.Set("client_id", credInfo.IdentityID)
+	}
+	req.URL.RawQuery = params.Encode()
+	req.Header.Set("Metadata", "true")
+	// Set context.
+	req.WithContext(ctx)
+
+	// Send request
+	resp, err := msiTokenHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { // resp and Body should not be nil
+		io.Copy(ioutil.Discard, resp.Body)
+		resp.Body.Close()
+	}()
+
+	// Check if the status code indicates success
+	// The request returns 200 currently, add 201 and 202 as well for possible extension.
+	if !isSuccessStatusCode(resp, http.StatusOK, http.StatusCreated, http.StatusAccepted) {
+		return nil, fmt.Errorf("failed to get token from msi, status code: %v", resp.StatusCode)
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &adal.Token{}
+	if len(b) > 0 {
+		b = removeBOM(b)
+		if err := json.Unmarshal(b, result); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal response body, %v", err)
+		}
+	} else {
+		return nil, errors.New("failed to get token from msi")
+	}
+
+	return result, nil
+}
+
+func isSuccessStatusCode(resp *http.Response, successStatusCodes ...int) bool {
+	if resp == nil {
+		return false
+	}
+	for _, i := range successStatusCodes {
+		if i == resp.StatusCode {
+			return true
+		}
+	}
+	return false
+}
+
+// RefreshTokenWithUserCredential get new token with user credential through refresh.
+func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
+	oauthConfig, err := adal.NewOAuthConfig(credInfo.ActiveDirectoryEndpoint, credInfo.Tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromManualToken(
+		*oauthConfig,
+		ApplicationID,
+		Resource,
+		credInfo.Token)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := spt.RefreshWithContext(ctx); err != nil {
+		return nil, err
+	}
+
+	newToken := spt.Token()
+	return &newToken, nil
+}
+
+// removes any BOM from the byte slice
+func removeBOM(b []byte) []byte {
+	// UTF8
+	return bytes.TrimPrefix(b, []byte("\xef\xbb\xbf"))
 }
 
 // IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
 func (credInfo OAuthTokenInfo) IsEmpty() bool {
-	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() {
+	if credInfo.Tenant == "" && credInfo.ActiveDirectoryEndpoint == "" && credInfo.Token.IsZero() && !credInfo.Identity {
 		return true
 	}
 

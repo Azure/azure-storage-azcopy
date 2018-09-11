@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -35,10 +37,17 @@ func init() {
 		Use:        "login",
 		Aliases:    []string{"login"},
 		SuggestFor: []string{"lgin"},
-		Short:      "login(lgin) launch oauth device login for current user.",
-		Long: `login(lgin) launch oauth device login for current user. The most common cases are:
-  - launch oauth device login for current user.
-  - launch oauth device login for current user, with specified tenant id.`,
+		Short:      "login(lgin) launch oauth MSI login or device login for current user.",
+		Long:       `login(lgin) launch oauth MSI login or device login for current user.`,
+		Example: `Login with specified tenant ID:
+- azcopy login --tenant-id "[TenantID]"
+
+Login with default tenant ID (microsoft.com):
+- azcopy login
+
+Login with managed identity (MSI):
+- azcopy login --identity
+`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
 		},
@@ -55,24 +64,57 @@ func init() {
 
 	rootCmd.AddCommand(lgCmd)
 
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth device interactive login")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "tenant id to use for OAuth device interactive login")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "Azure active directory endpoint to use for OAuth user interactive login")
+	// Use identity which aligns to Azure powershell and CLI.
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "use virtual machine's identity, formerly known as managed service identity (MSI)")
+	// Temporarily use u which aligns to Azure CLI.
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityID, "u", "", "managed service identity ID")
+
+	// hide flags
+	// temporaily hide aad-endpoint and support Production environment only.
+	lgCmd.PersistentFlags().MarkHidden("aad-endpoint")
+	lgCmd.PersistentFlags().MarkHidden("u")
 }
 
 type loginCmdArgs struct {
 	// OAuth login arguments
 	tenantID    string
 	aadEndpoint string
+
+	identity   bool   // Whether to use MSI.
+	identityID string // VM's user assigned identity, client or object ids of the service identity.
+}
+
+func (lca loginCmdArgs) validate() error {
+	// Only support one kind of oauth login at same time.
+	if lca.identity && lca.tenantID != "" {
+		return errors.New("tenant ID cannot be used with identity")
+	}
+
+	if !lca.identity && lca.identityID != "" {
+		return errors.New("u is only valid when using identity")
+	}
+
+	return nil
 }
 
 func (lca loginCmdArgs) process() error {
+	// Validate login parameters.
+	if err := lca.validate(); err != nil {
+		return err
+	}
+
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled succesfully.
-	if _, err := uotm.LoginWithADEndpoint(lca.tenantID, lca.aadEndpoint, true); err != nil {
-		return fmt.Errorf(
-			"login failed with tenantID '%s', using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
-			lca.tenantID,
-			err.Error())
+	if lca.identity {
+		if _, err := uotm.MSILogin(context.TODO(), lca.identityID, true); err != nil {
+			return err
+		}
+	} else {
+		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
+			return err
+		}
 	}
 
 	return nil
