@@ -21,24 +21,24 @@
 package ste
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
-	"unsafe"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"time"
 )
 
 type blockBlobUpload struct {
 	jptm        IJobPartTransferMgr
-	srcMmf      *common.MMF
+	srcFile     *os.File
+	leadingBytes []byte    // for Mime type recognition
 	source      string
 	destination string
 	blobURL     azblob.BlobURL
@@ -46,6 +46,7 @@ type blockBlobUpload struct {
 	blockIds    []string
 }
 
+/*
 type pageBlobUpload struct {
 	jptm        IJobPartTransferMgr
 	srcMmf      *common.MMF
@@ -53,7 +54,7 @@ type pageBlobUpload struct {
 	destination string
 	blobUrl     azblob.BlobURL
 	pacer       *pacer
-}
+}*/
 
 func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
@@ -105,8 +106,9 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		return
 	}
 
-	defer srcFile.Close()
+	// TODO: the MMF impl did this here: uncomment as appropriate: defer srcFile.Close()
 
+	/*
 	// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
 	srcMmf := &common.MMF{}
 	if blobSize > 0 {
@@ -119,8 +121,12 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			return
 		}
 	}
+	*/
+
 
 	if EndsWith(info.Source, ".vhd") && (blobSize%azblob.PageBlobPageBytes == 0) {
+		panic("Disabled in this test")
+		/*
 		// step 3.b: If the Source is vhd file and its size is multiple of 512,
 		// then upload the blob as a pageBlob.
 		pageBlobUrl := blobUrl.ToPageBlobURL()
@@ -198,12 +204,14 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			}
 			// schedule the chunk job/msg
 			jptm.ScheduleChunks(pbu.pageBlobUploadFunc(startIndex, adjustedPageSize))
-		}
+		}*/
 	} else if blobSize == 0 || blobSize <= chunkSize {
-		// step 3.b: if blob size is smaller than chunk size and it is not a vhd file
+		panic("disabled in this test")
+		/*
+	    // step 3.b: if blob size is smaller than chunk size and it is not a vhd file
 		// we should do a put blob instead of chunk up the file
 		PutBlobUploadFunc(jptm, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
-		return
+		return */
 	} else {
 		// step 3.c: If the source is not a vhd and size is greater than chunk Size,
 		// then uploading the source as block Blob.
@@ -225,7 +233,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
-			srcMmf.Unmap()
+			//TODO was: srcMmf.Unmap()
+			srcFile.Close()
 			return
 		}
 		// creating a slice to contain the blockIds
@@ -236,14 +245,23 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// Each chunk uses these details which uploading the block.
 		bbu := &blockBlobUpload{
 			jptm:        jptm,
-			srcMmf:      srcMmf,
+			// TODO was: srcMmf:      srcMmf,
+			srcFile:     srcFile,
 			source:      info.Source,
 			destination: info.Destination,
 			blobURL:     blobUrl,
 			pacer:       pacer,
 			blockIds:    blockIds}
 
-		// go through the file and schedule chunk messages to upload each chunk
+		prefetchedByteCounter := jptm.GetPrefetchedByteCounter()
+		const prefetchByteLimit = 2 * 1024 * 1024 * 1024  // todo: make this parameterizable, and check reasonableness of this default value
+
+		// Go through the file and schedule chunk messages to upload each chunk
+		// As we do this, we force preload of each chunk to memory, and we wait (block)
+		// here if the amount of preloaded data gets excessive. That's OK to do,
+		// because if we already have that much data preloaded (and scheduled for sending in
+		// chunks) then we don't need to schedule any more chunks right now, so the blocking
+		// is harmless (and a good thing, to avoid excessive RAM usage)
 		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
 			adjustedChunkSize := chunkSize
 
@@ -252,10 +270,36 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				adjustedChunkSize = blobSize - startIndex
 			}
 
+			// block if we already have too much prefetch data in in RAM
+			for prefetchedByteCounter.Read() > prefetchByteLimit {
+				time.Sleep(time.Second/2)
+			}
+
+			// make reader for this chunk
+			chunkReader, err := common.NewSimpleFileChunkReader(bbu.srcFile, startIndex, adjustedChunkSize, prefetchedByteCounter)
+			if err != nil {
+				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
+				return         // TODO: is this needed after jptm.Panic?
+			}
+
+			if startIndex == 0 {
+				// grab the leading bytes, for later MIME type recognition (else we would have to re-read the start of the file later)
+				const mimeRecgonitionLen = 512
+				bbu.leadingBytes = make([]byte, mimeRecgonitionLen)
+				_, err := chunkReader.Read(bbu.leadingBytes)
+				if err != nil {
+					jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
+					return         // TODO: is this needed after jptm.Panic?
+				}
+				// MUST re-wind, so that the bytes we read will get transferred too!
+				chunkReader.Seek(0, io.SeekStart)
+			}
+
 			// schedule the chunk job/msg
-			jptm.ScheduleChunks(bbu.blockBlobUploadFunc(blockIdCount, startIndex, adjustedChunkSize))
+			jptm.ScheduleChunks(bbu.blockBlobUploadFunc(blockIdCount, chunkReader))
 
 			blockIdCount += 1
+
 		}
 		// sanity check to verify the number of chunks scheduled
 		if blockIdCount != int32(numChunks) {
@@ -264,8 +308,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 }
 
-// This method blockBlobUploadFunc uploads the block of src data from given startIndex till the given chunkSize.
-func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
+// This method blockBlobUploadFunc uploads the block of src data
+func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, chunkReader common.FileChunkReader) chunkFunc {
 	return func(workerId int) {
 
 		// TODO: added the two operations for debugging purpose. remove later
@@ -294,7 +338,8 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
 		transferDone := func() {
 			bbu.jptm.Log(pipeline.LogInfo, "Transfer done")
-			bbu.srcMmf.Unmap()
+			bbu.srcFile.Close()
+			//TODO was: bbu.srcMmf.Unmap()
 			// Get the Status of the transfer
 			// If the transfer status value < 0, then transfer failed with some failure
 			// there is a possibility that some uncommitted blocks will be there
@@ -332,7 +377,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 		// step 3: perform put block
 		blockBlobUrl := bbu.blobURL.ToBlockBlobURL()
-		body := newRequestBodyPacer(bytes.NewReader(bbu.srcMmf.Slice()[startIndex:startIndex+adjustedChunkSize]), bbu.pacer, bbu.srcMmf)
+		body := newLiteRequestBodyPacer(chunkReader, bbu.pacer)
 		_, err := blockBlobUrl.StageBlock(bbu.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{})
 		if err != nil {
 			// check if the transfer was cancelled while Stage Block was in process.
@@ -376,7 +421,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 			// fetching the blob http headers with content-type, content-encoding attributes
 			// fetching the metadata passed with the JobPartOrder
-			blobHttpHeader, metaData := bbu.jptm.BlobDstData(bbu.srcMmf)
+			blobHttpHeader, metaData := bbu.jptm.BlobDstData(bbu.leadingBytes)
 
 			// commit the blocks.
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
@@ -409,6 +454,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 	}
 }
 
+/*
 func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUrl azblob.BlockBlobURL, pacer *pacer) {
 
 	// TODO: added the two operations for debugging purpose. remove later
@@ -601,3 +647,4 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 		}
 	}
 }
+*/

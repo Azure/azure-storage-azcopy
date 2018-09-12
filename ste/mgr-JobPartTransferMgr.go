@@ -18,7 +18,7 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	BlobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
+	BlobDstData(leadingDataBytes []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
@@ -39,6 +39,7 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	GetPrefetchedByteCounter() *common.SharedCounter
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -182,8 +183,8 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
+func (jptm *jobPartTransferMgr) BlobDstData(leadingDataBytes []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(leadingDataBytes)
 }
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
@@ -245,6 +246,10 @@ func (jptm *jobPartTransferMgr) OccupyAConnection() {
 // TODO: added for debugging purpose. remove later
 func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
+}
+
+func (jptm *jobPartTransferMgr) GetPrefetchedByteCounter() *common.SharedCounter {
+	return jptm.jobPartMgr.GetPrefetchedByteCounter()
 }
 
 func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {

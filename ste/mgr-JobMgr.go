@@ -64,6 +64,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	// TODO: added for debugging purpose. remove later
+	GetPrefetchedByteCounter() *common.SharedCounter
 	ActiveConnections() int64
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
@@ -77,7 +78,8 @@ type IJobMgr interface {
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		logger: common.NewJobLogger(jobID, level, appLogger, logFileFolder) /*Other fields remain zero-value until this job is scheduled */}
+		logger: common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		prefetchedByteCounter: new(common.SharedCounter) /*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
 }
@@ -123,6 +125,7 @@ type jobMgr struct {
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
+	prefetchedByteCounter *common.SharedCounter
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -152,6 +155,10 @@ func (jm *jobMgr) OccupyAConnection() {
 // TODO: added for debugging purpose. remove later
 func (jm *jobMgr) ReleaseAConnection() {
 	atomic.AddInt64(&jm.atomicCurrentConcurrentConnections, -1)
+}
+
+func (jm *jobMgr) GetPrefetchedByteCounter() *common.SharedCounter {
+	return jm.prefetchedByteCounter
 }
 
 // returns the number of goroutines actively performing the transfer / executing the chunkFunc

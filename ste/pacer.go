@@ -114,6 +114,12 @@ type bodyPacer struct {
 	mmf  *common.MMF
 }
 
+type liteBodyPacer struct {
+	body io.Reader // Seeking is required to support retries
+	p    *pacer
+}
+
+
 // newRequestBodyPacer wraps a response body to the given pacer to control the upload speed and
 // records the bytes transferred.
 func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF) io.ReadSeeker {
@@ -121,6 +127,13 @@ func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF
 		panic("pr must not be nil")
 	}
 	return &bodyPacer{body: requestBody, p: p, mmf: srcMMF}
+}
+
+func newLiteRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
+	if p == nil {
+		panic("pr must not be nil")
+	}
+	return &liteBodyPacer{body: requestBody, p: p}
 }
 
 // newResponseBodyPacer wraps a response body to the given pacer to control the download speed and
@@ -152,6 +165,27 @@ func (rbp *bodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err
 // bytesOverTheWire supports Close but the underlying stream may not; if it does, Close will close it.
 func (rbp *bodyPacer) Close() error {
 	if c, ok := rbp.body.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
+
+
+func (lbp *liteBodyPacer) Read(p []byte) (int, error) {
+	n, err := lbp.body.Read(p)
+	atomic.AddInt64(&lbp.p.bytesTransferred, int64(n))
+	return n, err
+}
+
+// Seeking is required to support retries
+func (lbp *liteBodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
+	return lbp.body.(io.ReadSeeker).Seek(offset, whence)
+}
+
+// bytesOverTheWire supports Close but the underlying stream may not; if it does, Close will close it.
+func (lbp *liteBodyPacer) Close() error {
+	if c, ok := lbp.body.(io.Closer); ok {
 		return c.Close()
 	}
 	return nil

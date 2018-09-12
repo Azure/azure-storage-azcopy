@@ -37,6 +37,7 @@ type IJobPartMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	GetPrefetchedByteCounter() *common.SharedCounter
 	common.ILogger
 }
 
@@ -555,11 +556,11 @@ func (jpm *jobPartMgr) IsForceWriteTrue() bool {
 	return jpm.Plan().ForceWrite
 }
 
-func (jpm *jobPartMgr) blobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
+func (jpm *jobPartMgr) blobDstData(leadingDataBytes []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || leadingDataBytes == nil {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
-	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.blobMetadata
+	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(leadingDataBytes)}, jpm.blobMetadata
 }
 
 func (jpm *jobPartMgr) fileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
@@ -621,6 +622,11 @@ func (jpm *jobPartMgr) OccupyAConnection() {
 func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
 }
+
+func (jpm *jobPartMgr) GetPrefetchedByteCounter() *common.SharedCounter {
+	return jpm.jobMgr.GetPrefetchedByteCounter()
+}
+
 
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
