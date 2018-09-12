@@ -1,6 +1,8 @@
 package common
 
 import (
+	"bytes"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -64,4 +66,37 @@ func (parts FileURLPartsExtension) GetServiceURL() url.URL {
 	parts.ShareName = ""
 	parts.DirectoryOrFilePath = ""
 	return parts.URL()
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type HTTPResponseExtension struct {
+	*http.Response
+}
+
+// IsSuccessStatusCode checks if response's status code is contained in specified success status codes.
+func (r HTTPResponseExtension) IsSuccessStatusCode(successStatusCodes ...int) bool {
+	if r.Response == nil {
+		return false
+	}
+	for _, i := range successStatusCodes {
+		if i == r.StatusCode {
+			return true
+		}
+	}
+	return false
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type ByteSlice []byte
+type ByteSliceExtension struct {
+	ByteSlice
+}
+
+// RemoveBOM removes any BOM from the byte slice
+func (bs ByteSliceExtension) RemoveBOM() []byte {
+	if bs.ByteSlice == nil {
+		return nil
+	}
+	// UTF8
+	return bytes.TrimPrefix(bs.ByteSlice, []byte("\xef\xbb\xbf"))
 }

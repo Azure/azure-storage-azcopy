@@ -105,7 +105,7 @@ func (cookedArgs cookedMakeCmdArgs) process() (err error) {
 		glcm.Info("Make is using OAuth token for authentication.")
 
 		uotm := GetUserOAuthTokenManagerInstance()
-		if tokenInfo, err := uotm.GetTokenInfo(); err != nil {
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo

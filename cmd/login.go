@@ -36,9 +36,9 @@ func init() {
 	lgCmd := &cobra.Command{
 		Use:        "login",
 		Aliases:    []string{"login"},
-		SuggestFor: []string{"lgin"},
-		Short:      "login(lgin) launch oauth MSI login or device login for current user.",
-		Long:       `login(lgin) launch oauth MSI login or device login for current user.`,
+		SuggestFor: []string{"login"},
+		Short:      "login launch oauth MSI login or device login for current user.",
+		Long:       `login launch oauth MSI login or device login for current user.`,
 		Example: `Login with specified tenant ID:
 - azcopy login --tenant-id "[TenantID]"
 
@@ -111,10 +111,13 @@ func (lca loginCmdArgs) process() error {
 		if _, err := uotm.MSILogin(context.TODO(), lca.identityID, true); err != nil {
 			return err
 		}
+		// For MSI login, info success message to user.
+		glcm.Info("Login with identity succeeded.")
 	} else {
 		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
 			return err
 		}
+		// User login fulfilled in browser, and user knows if the login fulfilled successfully.
 	}
 
 	return nil

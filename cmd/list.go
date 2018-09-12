@@ -94,7 +94,7 @@ func HandleListContainerCommand(source string, outputFormat common.OutputFormat)
 		glcm.Info("List is using OAuth token for authentication.")
 
 		uotm := GetUserOAuthTokenManagerInstance()
-		if tokenInfo, err := uotm.GetTokenInfo(); err != nil {
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo

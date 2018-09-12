@@ -223,10 +223,11 @@ func (rca resumeCmdArgs) process() error {
 		glcm.Exit(getJobFromToResponse.ErrorMsg, common.EExitCode.Error())
 	}
 
+	ctx := context.TODO()
 	// Initialize credential info.
 	credentialInfo := common.CredentialInfo{}
 	// TODO: Replace context with root context
-	if credentialInfo.CredentialType, err = getCredentialType(context.TODO(), rawFromToInfo{
+	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         getJobFromToResponse.FromTo,
 		source:         getJobFromToResponse.Source,
 		destination:    getJobFromToResponse.Destination,
@@ -241,7 +242,7 @@ func (rca resumeCmdArgs) process() error {
 
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(); err != nil {
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			credentialInfo.OAuthTokenInfo = *tokenInfo

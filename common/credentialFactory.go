@@ -43,20 +43,28 @@ type CreateCredentialOptions struct {
 	CallerID string
 }
 
+// callerMessage formats caller message prefix.
+func (o CreateCredentialOptions) callerMessage() string {
+	return IffString(o.CallerID == "", o.CallerID, o.CallerID+" ")
+}
+
+// logInfo logs info, if LogInfo is specified in CreateCredentialOptions.
 func (o CreateCredentialOptions) logInfo(str string) {
 	if o.LogInfo != nil {
-		o.LogInfo(fmt.Sprintf("%s ", o.CallerID) + str) // In case of str contains formats.
+		o.LogInfo(o.callerMessage() + str)
 	}
 }
 
+// logError logs error, if LogError is specified in CreateCredentialOptions.
 func (o CreateCredentialOptions) logError(str string) {
 	if o.LogError != nil {
-		o.LogError(fmt.Sprintf("%s ", o.CallerID) + str) // In case of str contains formats.
+		o.LogError(o.callerMessage() + str)
 	}
 }
 
+// panicError uses built-in panic if no Panic is specified in CreateCredentialOptions.
 func (o CreateCredentialOptions) panicError(err error) {
-	newErr := fmt.Errorf("%s %v", o.CallerID, err)
+	newErr := fmt.Errorf("%s%v", o.callerMessage(), err)
 	if o.Panic == nil {
 		panic(newErr)
 	} else {
@@ -70,7 +78,7 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 
 	if credInfo.CredentialType == ECredentialType.OAuthToken() {
 		if credInfo.OAuthTokenInfo.IsEmpty() {
-			options.panicError(fmt.Errorf("invalid state, cannot get valid OAuth token information"))
+			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}
 
 		// Create TokenCredential with refresher.
@@ -111,7 +119,7 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 	switch credInfo.CredentialType {
 	case ECredentialType.OAuthToken():
 		if credInfo.OAuthTokenInfo.IsEmpty() {
-			options.panicError(fmt.Errorf("invalid state, cannot get valid OAuth token information"))
+			options.panicError(errors.New("invalid state, cannot get valid OAuth token information"))
 		}
 
 		// Create TokenCredential with refresher.
@@ -136,7 +144,7 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
 
-	panic("Work around the compiling, logic wouldn' reach here")
+	panic("work around the compiling, logic wouldn't reach here")
 }
 
 func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azbfs.TokenCredential, options CreateCredentialOptions) time.Duration {
@@ -145,6 +153,8 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 		options.logError(fmt.Sprintf("failed to refresh token, due to error: %v", err))
 	}
 	tokenCredential.SetToken(newToken.AccessToken)
+
+	options.logInfo(fmt.Sprintf("%v token refreshed", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
 	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - DefaultTokenExpiryWithinThreshold

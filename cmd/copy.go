@@ -449,7 +449,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		uotm := GetUserOAuthTokenManagerInstance()
 		// Get token from env var or cache.
-		if tokenInfo, err := uotm.GetTokenInfo(); err != nil {
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
 			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo

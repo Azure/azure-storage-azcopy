@@ -33,9 +33,9 @@ func init() {
 	logoutCmd := &cobra.Command{
 		Use:        "logout",
 		Aliases:    []string{"logout"},
-		SuggestFor: []string{"lgout"},
-		Short:      "logout(lgout) launch logout for current user.",
-		Long: `logout(lgout) launch logout for current user. The most common cases are:
+		SuggestFor: []string{"logout"},
+		Short:      "logout launch logout for current user.",
+		Long: `logout launch logout for current user. The most common cases are:
   - launch logout for current user, all cached token for current user will be deleted.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
@@ -62,6 +62,9 @@ func (lca logoutCmdArgs) process() error {
 	if err := uotm.RemoveCachedToken(); err != nil {
 		return fmt.Errorf("logout failed due to error: %v", err)
 	}
+
+	// For MSI login, info success message to user.
+	glcm.Info("Logout succeeded.")
 
 	return nil
 }

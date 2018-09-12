@@ -21,7 +21,6 @@
 package common
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -93,17 +92,17 @@ func newAzcopyHTTPClient() *http.Client {
 //    use token passed from environment variable.
 // 2. Otherwise, try to get token from cache.
 // This method either successfully return token, or return error.
-func (uotm *UserOAuthTokenManager) GetTokenInfo() (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	var tokenInfo *OAuthTokenInfo
 	var err error
-	if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+	if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(ctx); err == nil || !IsErrorEnvVarOAuthTokenInfoNotSet(err) {
 		// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
 		// Note: Whenever environment variable is set in the context, it will overwrite the cached token info.
 		if err != nil { // this is the case when env var exists while get token info failed
 			return nil, err
 		}
 	} else { // Scenario: session mode which get token from cache
-		if tokenInfo, err = uotm.GetCachedTokenInfo(); err != nil {
+		if tokenInfo, err = uotm.GetCachedTokenInfo(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -130,7 +129,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityID stri
 	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %v", err)
+			return nil, fmt.Errorf("Failed to login during persisting token to local, %v", err)
 		}
 	}
 
@@ -161,7 +160,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		ApplicationID,
 		Resource)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, due to error: %v",
+		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
@@ -172,7 +171,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, due to error: %v",
+		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
@@ -185,7 +184,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if persist {
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, due to error: %v", err)
+			return nil, fmt.Errorf("Failed to login during persisting token to local, %v", err)
 		}
 	}
 
@@ -196,10 +195,10 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 // If access token is expired, it will refresh the token.
 // If refresh token is expired, the method will fail and return failure reason.
 // Fresh token is persisted if acces token or refresh token is changed.
-func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
-		return nil, fmt.Errorf("No cached token found, due to error: %s", err)
+		return nil, fmt.Errorf("No cached token found, %v", err)
 	}
 	if !hasToken {
 		return nil, errors.New("No cached token found, please use login command first before getToken")
@@ -207,37 +206,18 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo() (*OAuthTokenInfo, error)
 
 	tokenInfo, err := uotm.credCache.LoadToken()
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed due to error: %v", err.Error())
+		return nil, fmt.Errorf("Get cached token failed, %v", err)
 	}
 
-	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Get cached token failed to ensure token fresh, %v", err)
 	}
-
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		ApplicationID,
-		Resource,
-		tokenInfo.Token)
-	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed due to error: %v", err.Error())
-	}
-
-	// Ensure at least 10 minutes fresh time.
-	spt.SetRefreshWithin(DefaultTokenExpiryWithinThreshold)
-	spt.SetAutoRefresh(true)
-	err = spt.EnsureFresh() // EnsureFresh only refresh token when access token's fresh duration is less than threshold set in RefreshWithin.
-	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed to ensure token fresh due to error: %v", err.Error())
-	}
-
-	freshToken := spt.Token()
 
 	// Update token cache, if token is updated.
 	if freshToken.AccessToken != tokenInfo.AccessToken || freshToken.RefreshToken != tokenInfo.RefreshToken {
 		tokenInfoToPersist := OAuthTokenInfo{
-			Token:                   freshToken,
+			Token:                   *freshToken,
 			Tenant:                  tokenInfo.Tenant,
 			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
 		}
@@ -289,7 +269,7 @@ func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
 }
 
 // GetTokenInfoFromEnvVar gets token info from environment variable.
-func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar() (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
 	rawToken := os.Getenv(EnvVarOAuthTokenInfo)
 	if rawToken == "" {
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
@@ -301,33 +281,16 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar() (*OAuthTokenInfo, er
 
 	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal token, %v", err)
+		return nil, fmt.Errorf("Get token from environment variable failed to unmarshal token, %v", err)
 	}
 
-	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
+	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, err
-	}
-
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		ApplicationID,
-		Resource,
-		tokenInfo.Token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get token from env var, %v", err)
-	}
-
-	// Ensure at least 10 minutes fresh time.
-	spt.SetRefreshWithin(DefaultTokenExpiryWithinThreshold)
-	spt.SetAutoRefresh(true)
-	err = spt.EnsureFresh() // EnsureFresh only refresh token when access token's fresh duration is less than threshold set in RefreshWithin.
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure token fresh during get token from env var, %v", err)
+		return nil, fmt.Errorf("Get token from environment variable failed to ensure token fresh, %v", err)
 	}
 
 	return &OAuthTokenInfo{
-		Token:                   spt.Token(),
+		Token:                   *freshToken,
 		Tenant:                  tokenInfo.Tenant,
 		ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
 	}, nil
@@ -386,7 +349,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 	// Check if the status code indicates success
 	// The request returns 200 currently, add 201 and 202 as well for possible extension.
-	if !isSuccessStatusCode(resp, http.StatusOK, http.StatusCreated, http.StatusAccepted) {
+	if !(HTTPResponseExtension{Response: resp}).IsSuccessStatusCode(http.StatusOK, http.StatusCreated, http.StatusAccepted) {
 		return nil, fmt.Errorf("failed to get token from msi, status code: %v", resp.StatusCode)
 	}
 
@@ -397,7 +360,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 
 	result := &adal.Token{}
 	if len(b) > 0 {
-		b = removeBOM(b)
+		b = ByteSliceExtension{ByteSlice: b}.RemoveBOM()
 		if err := json.Unmarshal(b, result); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal response body, %v", err)
 		}
@@ -406,18 +369,6 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	}
 
 	return result, nil
-}
-
-func isSuccessStatusCode(resp *http.Response, successStatusCodes ...int) bool {
-	if resp == nil {
-		return false
-	}
-	for _, i := range successStatusCodes {
-		if i == resp.StatusCode {
-			return true
-		}
-	}
-	return false
 }
 
 // RefreshTokenWithUserCredential get new token with user credential through refresh.
@@ -442,12 +393,6 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 
 	newToken := spt.Token()
 	return &newToken, nil
-}
-
-// removes any BOM from the byte slice
-func removeBOM(b []byte) []byte {
-	// UTF8
-	return bytes.TrimPrefix(b, []byte("\xef\xbb\xbf"))
 }
 
 // IsEmpty returns if current OAuthTokenInfo is empty and doesn't contain any useful info.
