@@ -16,12 +16,6 @@ def execute_interactively_copy_blob_oauth_session_scenario():
     #logout
     test_logout()
 
-def execute_interactively_copy_blob_oauth_login_percmd_scenario():
-    #execute copy commands
-    # download will test both upload/download scenarios
-    test_download_1kb_blob_oauth(True)
-    test_recursive_download_blob_oauth(True)
-
 def execute_interactively_copy_bfs_oauth_session_scenario():
     #login to get session
     test_login(util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
@@ -34,12 +28,6 @@ def execute_interactively_copy_bfs_oauth_session_scenario():
     test_blobfs_download_100_1Kb_file(True)
     #logout
     test_logout()
-
-def execute_interactively_copy_bfs_oauth_login_percmd_scenario():
-    #download will test both upload and download
-    test_blobfs_download_1Kb_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
-    test_blobfs_download_64MB_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
-    test_blobfs_download_100_1Kb_file(True, True, util.test_oauth_tenant_id, util.test_oauth_aad_endpoint)
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
@@ -162,9 +150,7 @@ def cleanup():
 def main():
     init()
     execute_interactively_copy_blob_oauth_session_scenario()
-    execute_interactively_copy_blob_oauth_login_percmd_scenario()
     execute_interactively_copy_bfs_oauth_session_scenario()
-    execute_interactively_copy_bfs_oauth_login_percmd_scenario()
     cleanup()
 
 

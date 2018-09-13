@@ -81,18 +81,9 @@ class Command(object):
 # processes oauth command according to swtiches
 def process_oauth_command(
     cmd,
-    fromTo="",
-    forceOAuthLogin=False,
-    tenantID="",
-    aadEndpoint=""):
+    fromTo=""):
     if fromTo!="":
         cmd.add_flags("fromTo", fromTo)
-    if forceOAuthLogin:
-        cmd.add_flags("oauth-user","true")
-    if tenantID!="":
-        cmd.add_flags("tenant-id", tenantID)
-    if aadEndpoint!="":
-        cmd.add_flags("aad-endpoint", aadEndpoint)
 
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container(container):

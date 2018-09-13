@@ -18,42 +18,35 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// Create Pipeline to Get the Blob Properties or List Blob Segment
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(),
-		azblob.PipelineOptions{
-			Telemetry: azblob.TelemetryOptions{Value: "azcopy-V2"},
-		},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay,
-		}, nil)
+	p, err := createBlobPipeline(ctx, e.CredentialInfo)
+	if err != nil {
+		return err
+	}
 
 	// attempt to parse the source url
-	sourceUrl, err := url.Parse(cca.source)
+	sourceURL, err := url.Parse(cca.source)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
 	// append the sas at the end of query params.
-	sourceUrl = util.appendQueryParamToUrl(sourceUrl, cca.sourceSAS)
+	sourceURL = util.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
 
 	// get the blob parts
-	blobUrlParts := azblob.NewBlobURLParts(*sourceUrl) // TODO: keep blobUrlPart temporarily, it should be removed and further refactored.
+	blobUrlParts := azblob.NewBlobURLParts(*sourceURL) // TODO: keep blobUrlPart temporarily, it should be removed and further refactored.
 	blobURLPartsExtension := blobURLPartsExtension{blobUrlParts}
 
 	// First Check if source blob exists
 	// This check is in place to avoid listing of the blobs and matching the given blob against it
 	// For example given source is https://<container>/a?<query-params> and there exists other blobs aa and aab
 	// Listing the blobs with prefix /a will list other blob as well
-	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
+	blobUrl := azblob.NewBlobURL(*sourceURL, p)
 	blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
 	// If the source blob exists, then queue transfer for deletion and return
 	// Example: https://<container>/<blob>?<query-params>
 	if err == nil {
 		e.addTransfer(common.CopyTransfer{
-			Source:     util.stripSASFromBlobUrl(*sourceUrl).String(),
+			Source:     util.stripSASFromBlobUrl(*sourceURL).String(),
 			SourceSize: blobProperties.ContentLength(),
 		}, cca)
 		// only one transfer for this Job, dispatch the JobPart
@@ -65,8 +58,8 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// save the container Url in order to list the blobs further
-	literalContainerUrl := util.getContainerUrl(blobUrlParts)
-	containerUrl := azblob.NewContainerURL(literalContainerUrl, p)
+	literalContainerURL := util.getContainerUrl(blobUrlParts)
+	containerURL := azblob.NewContainerURL(literalContainerURL, p)
 
 	// searchPrefix is the used in listing blob inside a container
 	// all the blob listed should have the searchPrefix as the prefix
@@ -85,7 +78,7 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// perform a list blob with search prefix
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
+		listBlob, err := containerURL.ListBlobsFlatSegment(ctx, marker,
 			azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
 		if err != nil {
 			return fmt.Errorf("cannot list blobs for download. Failed with error %s", err.Error())

@@ -24,24 +24,17 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
 	"errors"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
 )
-
-// make related pipeline params
-const makeMaxTries = 5
-const makeTryTimeout = time.Minute * 1
-const makeRetryDelay = time.Second * 1
-const makeMaxRetryDelay = time.Second * 3
 
 // holds raw input from user
 type rawMakeCmdArgs struct {
@@ -75,34 +68,59 @@ type cookedMakeCmdArgs struct {
 	quota            int32 // quota is in GB
 }
 
-// TODO update this function when OAuth is officially enabled
-func (cookedArgs cookedMakeCmdArgs) process() error {
+// getCredentialType gets the proper credential type for make command.
+func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialType common.CredentialType, err error) {
+	credentialType = common.ECredentialType.Unknown()
+
+	switch cma.resourceLocation {
+	case common.ELocation.BlobFS():
+		if credentialType, err = getBlobFSCredentialType(); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.ELocation.Blob():
+		// The resource URL cannot be public access URL, as it need delete permission.
+		credentialType, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
+		if err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.ELocation.File():
+		return common.ECredentialType.Anonymous(), nil
+	default:
+		credentialType = common.ECredentialType.Anonymous()
+		glcm.Info(fmt.Sprintf("Use anonymous credential by default for location '%v'", cma.resourceLocation))
+	}
+
+	return credentialType, nil
+}
+
+func (cookedArgs cookedMakeCmdArgs) process() (err error) {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
+	credentialInfo := common.CredentialInfo{}
+	if credentialInfo.CredentialType, err = cookedArgs.getCredentialType(ctx); err != nil {
+		return err
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("Make is using OAuth token for authentication.")
+
+		uotm := GetUserOAuthTokenManagerInstance()
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			credentialInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
 	switch cookedArgs.resourceLocation {
 	case common.ELocation.BlobFS():
-		// get the Account Name and Key variables from environment
-		name := os.Getenv("ACCOUNT_NAME")
-		key := os.Getenv("ACCOUNT_KEY")
-		if name == "" || key == "" {
-			return fmt.Errorf("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the file system")
-		}
-
-		// here we assume the resourceURL is a proper file system URL
-		fsURL := azbfs.NewFileSystemURL(cookedArgs.resourceURL, azbfs.NewPipeline(azbfs.NewSharedKeyCredential(name, key),
-			azbfs.PipelineOptions{
-				Retry: azbfs.RetryOptions{
-					Policy:        azbfs.RetryPolicyExponential,
-					MaxTries:      makeMaxTries,
-					TryTimeout:    makeTryTimeout,
-					RetryDelay:    makeRetryDelay,
-					MaxRetryDelay: makeMaxRetryDelay,
-				},
-				Telemetry: azbfs.TelemetryOptions{
-					Value: common.UserAgent,
-				},
-			}))
-
-		_, err := fsURL.Create(context.Background())
+		p, err := createBlobFSPipeline(ctx, credentialInfo)
 		if err != nil {
+			return err
+		}
+		// here we assume the resourceURL is a proper file system URL
+		fsURL := azbfs.NewFileSystemURL(cookedArgs.resourceURL, p)
+		if _, err = fsURL.Create(ctx); err != nil {
 			// print a nicer error message if file system already exists
 			if storageErr, ok := err.(azbfs.StorageError); ok {
 				if storageErr.ServiceCode() == azbfs.ServiceCodeFileSystemAlreadyExists {
@@ -116,23 +134,12 @@ func (cookedArgs cookedMakeCmdArgs) process() error {
 			return err
 		}
 	case common.ELocation.Blob():
-		containerURL := azblob.NewContainerURL(cookedArgs.resourceURL, azblob.NewPipeline(azblob.NewAnonymousCredential(),
-			azblob.PipelineOptions{
-				Retry: azblob.RetryOptions{
-					Policy:        azblob.RetryPolicyExponential,
-					MaxTries:      makeMaxTries,
-					TryTimeout:    makeTryTimeout,
-					RetryDelay:    makeRetryDelay,
-					MaxRetryDelay: makeMaxRetryDelay,
-				},
-				Telemetry: azblob.TelemetryOptions{
-					Value: common.UserAgent,
-				},
-			}))
-
-		_, err := containerURL.Create(context.Background(), nil, azblob.PublicAccessNone)
-
+		p, err := createBlobPipeline(ctx, credentialInfo)
 		if err != nil {
+			return err
+		}
+		containerURL := azblob.NewContainerURL(cookedArgs.resourceURL, p)
+		if _, err = containerURL.Create(ctx, nil, azblob.PublicAccessNone); err != nil {
 			// print a nicer error message if container already exists
 			if storageErr, ok := err.(azblob.StorageError); ok {
 				if storageErr.ServiceCode() == azblob.ServiceCodeContainerAlreadyExists {
@@ -146,23 +153,12 @@ func (cookedArgs cookedMakeCmdArgs) process() error {
 			return err
 		}
 	case common.ELocation.File():
-		shareURL := azfile.NewShareURL(cookedArgs.resourceURL, azfile.NewPipeline(azfile.NewAnonymousCredential(),
-			azfile.PipelineOptions{
-				Retry: azfile.RetryOptions{
-					Policy:        azfile.RetryPolicyExponential,
-					MaxTries:      makeMaxTries,
-					TryTimeout:    makeTryTimeout,
-					RetryDelay:    makeRetryDelay,
-					MaxRetryDelay: makeMaxRetryDelay,
-				},
-				Telemetry: azfile.TelemetryOptions{
-					Value: common.UserAgent,
-				},
-			}))
-
-		_, err := shareURL.Create(context.Background(), nil, cookedArgs.quota)
-
+		p, err := createFilePipeline(ctx, credentialInfo)
 		if err != nil {
+			return err
+		}
+		shareURL := azfile.NewShareURL(cookedArgs.resourceURL, p)
+		if _, err = shareURL.Create(ctx, nil, cookedArgs.quota); err != nil {
 			// print a nicer error message if share already exists
 			if storageErr, ok := err.(azfile.StorageError); ok {
 				if storageErr.ServiceCode() == azfile.ServiceCodeShareAlreadyExists {

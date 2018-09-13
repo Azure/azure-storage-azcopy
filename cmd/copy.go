@@ -88,10 +88,6 @@ type rawCopyCmdArgs struct {
 	acl                      string
 	logVerbosity             string
 	cancelFromStdin          bool
-	// oauth options
-	useInteractiveOAuthUserCredential bool
-	tenantID                          string
-	aadEndpoint                       string
 }
 
 // validates and transform raw input into cooked input
@@ -169,10 +165,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.acl = raw.acl
 	cooked.cancelFromStdin = raw.cancelFromStdin
 
-	// cook oauth parameters
-	cooked.useInteractiveOAuthUserCredential = raw.useInteractiveOAuthUserCredential
-	cooked.tenantID = raw.tenantID
-	cooked.aadEndpoint = raw.aadEndpoint
 	// generate a unique job ID
 	cooked.jobID = common.NewJobID()
 
@@ -260,10 +252,6 @@ type cookedCopyCmdArgs struct {
 	acl                      string
 	logVerbosity             common.LogLevel
 	cancelFromStdin          bool
-	// oauth options
-	useInteractiveOAuthUserCredential bool
-	tenantID                          string
-	aadEndpoint                       string
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -409,63 +397,6 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 	return err
 }
 
-// validateCredentialType validate if given credential type is supported with specific copy scenario
-func (cca cookedCopyCmdArgs) validateCredentialType(credentialType common.CredentialType) error {
-	// oAuthToken is only supported by Blob/BlobFS.
-	if credentialType == common.ECredentialType.OAuthToken() &&
-		!(cca.fromTo == common.EFromTo.LocalBlob() || cca.fromTo == common.EFromTo.BlobLocal() ||
-			cca.fromTo == common.EFromTo.LocalBlobFS() || cca.fromTo == common.EFromTo.BlobFSLocal()) {
-		return fmt.Errorf("OAuthToken is not supported for FromTo: %v", cca.fromTo)
-	}
-
-	return nil
-}
-
-// getCredentialType checks user provided commandline switches, and gets the proper credential type
-// for current copy command.
-func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
-	credentialType = common.ECredentialType.Unknown()
-
-	if cca.useInteractiveOAuthUserCredential { // User explicty specify to use interactive login per command-line
-		credentialType = common.ECredentialType.OAuthToken()
-	} else {
-		// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
-		// verify credential type with cached token info, src or dest blob resource URL.
-		switch cca.fromTo {
-		case common.EFromTo.BlobBlob():
-			// For blob to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
-			// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
-			fallthrough
-		case common.EFromTo.LocalBlob():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.destination, false)
-			if err != nil {
-				return common.ECredentialType.Unknown(), err
-			}
-		case common.EFromTo.BlobLocal():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.source, true)
-			if err != nil {
-				return common.ECredentialType.Unknown(), err
-			}
-		case common.EFromTo.LocalBlobFS():
-			fallthrough
-		case common.EFromTo.BlobFSLocal():
-			credentialType, err = getBlobFSCredentialType()
-			if err != nil {
-				return common.ECredentialType.Unknown(), err
-			}
-		default:
-			credentialType = common.ECredentialType.Anonymous()
-			//glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
-		}
-	}
-
-	if cca.validateCredentialType(credentialType) != err {
-		return common.ECredentialType.Unknown(), err
-	}
-
-	return credentialType, nil
-}
-
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
@@ -497,37 +428,32 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CredentialInfo: common.CredentialInfo{},
 	}
 
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// verifies credential type and initializes credential info.
-	jobPartOrder.CredentialInfo.CredentialType, err = cca.getCredentialType()
-	if err != nil {
+	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+		fromTo:         cca.fromTo,
+		source:         cca.source,
+		destination:    cca.destination,
+		sourceSAS:      cca.sourceSAS,
+		destinationSAS: cca.destinationSAS,
+	}); err != nil {
 		return err
 	}
-	//glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
+
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("Using OAuth token for authentication.")
 
-		var tokenInfo *common.OAuthTokenInfo
-		if cca.useInteractiveOAuthUserCredential { // Scenario-1: interactive login per copy command
-			tokenInfo, err = uotm.LoginWithADEndpoint(cca.tenantID, cca.aadEndpoint, false)
-			if err != nil {
-				return err
-			}
-		} else if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
-			// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
-			// Note: Scenario-Test has higher priority than scenario-2, so whenever environment variable is set in the context,
-			// it will overwrite the cached token info.
-			if err != nil { // this is the case when env var exists while get token info failed
-				return err
-			}
-		} else { // Scenario-2: session mode which get token from cache
-			tokenInfo, err = uotm.GetCachedTokenInfo()
-			if err != nil {
-				return err
-			}
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 		}
-		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
 	from := cca.fromTo.From()
@@ -906,11 +832,6 @@ Download an entire directory:
 		"to the standard input. This is mostly used when the application is spawned by another process.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	// oauth options
-	cpCmd.PersistentFlags().BoolVar(&raw.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
-	cpCmd.PersistentFlags().StringVar(&raw.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
-	cpCmd.PersistentFlags().StringVar(&raw.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
-
 	// hide flags not relevant to BFS
 	// TODO remove after preview release
 	cpCmd.PersistentFlags().MarkHidden("include")
@@ -930,9 +851,4 @@ Download an entire directory:
 	cpCmd.PersistentFlags().MarkHidden("fromTo")
 	cpCmd.PersistentFlags().MarkHidden("acl")
 	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
-
-	// hide oauth feature temporarily
-	cpCmd.PersistentFlags().MarkHidden("oauth-user")
-	cpCmd.PersistentFlags().MarkHidden("tenant-id")
-	cpCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }
