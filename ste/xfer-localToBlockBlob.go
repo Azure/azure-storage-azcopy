@@ -275,15 +275,19 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				time.Sleep(time.Second/2)
 			}
 
-			// make reader for this chunk
-			chunkReader, err := common.NewSimpleFileChunkReader(bbu.srcFile, startIndex, adjustedChunkSize, prefetchedByteCounter)
+			// make reader for this chunk, and prefetch its contents
+			chunkReader := common.NewSimpleFileChunkReader(bbu.srcFile, startIndex, adjustedChunkSize, prefetchedByteCounter)
+			err = chunkReader.Prefetch()
 			if err != nil {
 				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
 				return         // TODO: is this needed after jptm.Panic?
 			}
 
 			if startIndex == 0 {
-				// grab the leading bytes, for later MIME type recognition (else we would have to re-read the start of the file later)
+				// grab the leading bytes, for later MIME type recognition
+				// (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
+				// reads as much as possible)
+				// TODO: tidy/refactor this code?
 				const mimeRecgonitionLen = 512
 				bbu.leadingBytes = make([]byte, mimeRecgonitionLen)
 				_, err := chunkReader.Read(bbu.leadingBytes)

@@ -34,11 +34,13 @@ import (
 // Cannot be read by multiple threads (since Read/Seek are inherently stateful)
 type FileChunkReader interface{
 	io.ReadSeeker
+	io.Closer
+	Prefetch() error
 }
 
-// TODO: how does the file get closed?
-
 type simpleFileChunkReader struct {
+	// The file we read from
+	// How does the file get closed? Answer, currently its closed by the code that opened it, not by this struct
 	file *os.File
 
 	// start position in file
@@ -60,34 +62,39 @@ type simpleFileChunkReader struct {
 }
 
 // TODO: consider support for prefetching only part of chunk. For the cases where chunks are relatively large (e.g. 100 MB)
+// TODO: that might work by having it preftech the start, and then, when that part is being sent out to the network, use a
+// separate goroutine to read the next.  OR, we can just say, if you want to use 100 MB chunk sizes, use lots of RAM.
 
-func NewSimpleFileChunkReader(file *os.File, offset int64, length int64, prefetchedByteTracker *SharedCounter) (FileChunkReader, error) {
+func NewSimpleFileChunkReader(file *os.File, offset int64, length int64, prefetchedByteTracker *SharedCounter) FileChunkReader {
 	if length <= 0 {
-		return nil, errors.New("length must be greater than zero")
+		panic("length must be greater than zero")
 	}
 
-	chunkReader := &simpleFileChunkReader{
+	return &simpleFileChunkReader{
 		file:                  file,
 		offsetInFile:          offset,
 		length:                length,
 		prefetchedByteTracker: prefetchedByteTracker}
-
-	err := chunkReader.EnsurePrefetchCompleted()
-	if err != nil {
-		return nil, err
-	}
-	return chunkReader, nil
 }
 
-
-func (cr *simpleFileChunkReader) EnsurePrefetchCompleted() error {
+// Prefetch the data in this chunk
+func (cr *simpleFileChunkReader) Prefetch() error {
 	if cr.buffer != nil {
 		return nil    // already prefetched
 	}
 
 	cr.buffer = make([]byte, cr.length)
 
-	// read the data
+	// Read the data
+	// It's important to use ReadAt here, not Read, since ReadAt maps to POSIX's
+	// "pread", which is safe for use by multiple threads that _share the same file descriptor_.
+	// We need that safety because we are sharing the file descriptor between all
+	// FileChunkReader's that point to the same file, and while one is being read for
+	// the first time, others may be re-fetched by other goroutines
+	// (due to retry triggering a seek-to-start and re-read).
+	// For safety on pread on Linux see http://uw714doc.sco.com/en/man/html.2/pread.2.html or
+	// other references on the POSIX pread. For safety on Windows,
+	// see https://golang.org/src/internal/poll/fd_windows.go
 	bytesRead, err := cr.file.ReadAt(cr.buffer, cr.offsetInFile)
 	if err != nil {
 		return err
@@ -103,6 +110,7 @@ func (cr *simpleFileChunkReader) EnsurePrefetchCompleted() error {
 }
 
 // Seeks within this chunk
+// Seeking is used for retries, and also by some code to get length (by seeking to end)
 func (cr *simpleFileChunkReader) Seek(offset int64, whence int) (int64, error){
 
 	newPosition := cr.positionInChunk
@@ -138,7 +146,7 @@ func (cr *simpleFileChunkReader)  Read(p []byte) (n int, err error) {
 	// Always use the prefetch logic to read the data
 	// This is simpler to maintain than using a different code path for the (rare) cases
 	// where there has been no prefetch before this routine is called
-	err = cr.EnsurePrefetchCompleted()
+	err = cr.Prefetch()
 	if err != nil {
 		return 0, err
 	}
@@ -153,10 +161,22 @@ func (cr *simpleFileChunkReader)  Read(p []byte) (n int, err error) {
 		// free the buffer now, since we probably won't read it again
 		// (and on the relatively rare occasions when we do, we'll just take the hit
 		// of re-reading it from disk, and the added hit that that read will be non-sequential)
-		cr.buffer = nil
-		cr.prefetchedByteTracker.Add(-cr.length)
+		cr.discardBuffer()
 		return bytesCopied, io.EOF
 	}
 
 	return bytesCopied, nil
+}
+
+func (cr *simpleFileChunkReader) discardBuffer() {
+	if cr.buffer == nil {
+		return
+	}
+	cr.buffer = nil
+	cr.prefetchedByteTracker.Add(-cr.length)
+}
+
+func (cr *simpleFileChunkReader)Close() error {
+	cr.discardBuffer()
+	return nil
 }
