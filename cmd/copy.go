@@ -436,6 +436,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// verifies credential type and initializes credential info.
+	// Note: Currently, only one credential type is necessary for source and destination.
+	// For upload&download, only one side need credential.
+	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
 	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
 		source:         cca.source,
@@ -464,57 +467,56 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
-	// If the Credentials is of Anonymous Type i.e SAS, then we need to strip the SAS from the credentials
-	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
-		switch from {
-		case common.ELocation.Blob():
-			fromUrl, err := url.Parse(cca.source)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-			}
-			blobParts := azblob.NewBlobURLParts(*fromUrl)
-			cca.sourceSAS = blobParts.SAS.Encode()
-			jobPartOrder.SourceSAS = cca.sourceSAS
-			blobParts.SAS = azblob.SASQueryParameters{}
-			bUrl := blobParts.URL()
-			cca.source = bUrl.String()
-		case common.ELocation.File():
-			fromUrl, err := url.Parse(cca.source)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-			}
-			fileParts := azfile.NewFileURLParts(*fromUrl)
-			cca.sourceSAS = fileParts.SAS.Encode()
-			jobPartOrder.SourceSAS = cca.sourceSAS
-			fileParts.SAS = azfile.SASQueryParameters{}
-			fUrl := fileParts.URL()
-			cca.source = fUrl.String()
+	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
+	// Note: SAS could exists in source of S2S copy, although the credential type is OAuth for destination.
+	switch from {
+	case common.ELocation.Blob():
+		fromUrl, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
 		}
+		blobParts := azblob.NewBlobURLParts(*fromUrl)
+		cca.sourceSAS = blobParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		blobParts.SAS = azblob.SASQueryParameters{}
+		bUrl := blobParts.URL()
+		cca.source = bUrl.String()
+	case common.ELocation.File():
+		fromUrl, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+		}
+		fileParts := azfile.NewFileURLParts(*fromUrl)
+		cca.sourceSAS = fileParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		fileParts.SAS = azfile.SASQueryParameters{}
+		fUrl := fileParts.URL()
+		cca.source = fUrl.String()
+	}
 
-		switch to {
-		case common.ELocation.Blob():
-			toUrl, err := url.Parse(cca.destination)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
-			}
-			blobParts := azblob.NewBlobURLParts(*toUrl)
-			cca.destinationSAS = blobParts.SAS.Encode()
-			jobPartOrder.DestinationSAS = cca.destinationSAS
-			blobParts.SAS = azblob.SASQueryParameters{}
-			bUrl := blobParts.URL()
-			cca.destination = bUrl.String()
-		case common.ELocation.File():
-			toUrl, err := url.Parse(cca.destination)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
-			}
-			fileParts := azfile.NewFileURLParts(*toUrl)
-			cca.destinationSAS = fileParts.SAS.Encode()
-			jobPartOrder.DestinationSAS = cca.destinationSAS
-			fileParts.SAS = azfile.SASQueryParameters{}
-			fUrl := fileParts.URL()
-			cca.destination = fUrl.String()
+	switch to {
+	case common.ELocation.Blob():
+		toUrl, err := url.Parse(cca.destination)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
 		}
+		blobParts := azblob.NewBlobURLParts(*toUrl)
+		cca.destinationSAS = blobParts.SAS.Encode()
+		jobPartOrder.DestinationSAS = cca.destinationSAS
+		blobParts.SAS = azblob.SASQueryParameters{}
+		bUrl := blobParts.URL()
+		cca.destination = bUrl.String()
+	case common.ELocation.File():
+		toUrl, err := url.Parse(cca.destination)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+		}
+		fileParts := azfile.NewFileURLParts(*toUrl)
+		cca.destinationSAS = fileParts.SAS.Encode()
+		jobPartOrder.DestinationSAS = cca.destinationSAS
+		fileParts.SAS = azfile.SASQueryParameters{}
+		fUrl := fileParts.URL()
+		cca.destination = fUrl.String()
 	}
 
 	if from == common.ELocation.Local() {
