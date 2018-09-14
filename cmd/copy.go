@@ -834,17 +834,17 @@ Download files and directories using wildcards:
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
-		"Support use of *. More than one file are separated by ';'")
-	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
-	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS")
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include these files when copying. "+
+		"Support use of *. Files should be separated with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
+	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
 
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
+	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
@@ -854,7 +854,7 @@ Download files and directories using wildcards:
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
-	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
+	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
 	// not implemented
@@ -867,8 +867,8 @@ Download files and directories using wildcards:
 
 	// permanently hidden
 	cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("exclude")
 	cpCmd.PersistentFlags().MarkHidden("output")
 	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
+	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 }
