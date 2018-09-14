@@ -8,6 +8,7 @@ from test_blobfs_upload_sharedkey import *
 from test_blobfs_upload_oauth import *
 from test_blobfs_download_sharedkey import *
 from test_blobfs_download_oauth import *
+from test_blob_piping import *
 from test_service_to_service_copy import *
 import glob, os
 import configparser
@@ -161,7 +162,8 @@ def main():
     print("Smoke tests starting...")
     init()
 
-    test_class_to_run = [Block_Upload_User_Scenarios,
+    test_class_to_run = [BlobPipingTests,
+                         Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,
                          BlobFs_Upload_OAuth_User_Scenarios,

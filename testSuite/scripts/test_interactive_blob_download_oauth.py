@@ -32,8 +32,6 @@ def test_download_1kb_blob_oauth():
         print("test_1kb_file test failed")
         return
 
-    time.sleep(5)
-
     # downloading the uploaded file
     src = util.get_resource_from_oauth_container(filename)
     src_validate = util.get_resource_from_oauth_container_validate(filename)

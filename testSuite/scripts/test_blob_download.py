@@ -29,8 +29,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(resource_url).execute_azcopy_verify()
         self.assertTrue(result)
 
-        time.sleep(5)
-
         # downloading the uploaded file
         src = util.get_resource_sas(filename)
         dest = util.test_directory_path + "/test_1kb_blob_download.txt"
@@ -309,8 +307,6 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dest_validate = util.get_resource_from_oauth_container_validate(filename)
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).execute_azcopy_verify()
         self.assertTrue(result)
-
-        time.sleep(5)
 
         # downloading the uploaded file
         src = util.get_resource_from_oauth_container(filename)

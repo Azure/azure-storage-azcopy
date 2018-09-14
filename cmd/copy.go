@@ -161,9 +161,15 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.background = raw.background
-	cooked.output.Parse(raw.output)
 	cooked.acl = raw.acl
 	cooked.cancelFromStdin = raw.cancelFromStdin
+
+	// if redirection is triggered, avoid printing any output
+	if cooked.isRedirection() {
+		cooked.output = common.EOutputFormat.None()
+	} else {
+		cooked.output.Parse(raw.output)
+	}
 
 	// generate a unique job ID
 	cooked.jobID = common.NewJobID()
@@ -727,6 +733,9 @@ func isStdinPipeIn() (bool, error) {
 		return false, fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 	}
 
+	// if the stdin is a named pipe, then we assume there will be data on the stdin
+	// the reason for this assumption is that we do not know when will the data come in
+	// it could come in right away, or come in 10 minutes later
 	return info.Mode()&os.ModeNamedPipe != 0, nil
 }
 
@@ -741,25 +750,44 @@ func init() {
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
 		Short:      "Copies source data to a destination location",
 		Long: `
-Copies source data to a destination location. Please refer to the examples for more information.
+Copies source data to a destination location. The supported pairs are:
+  - local <-> Azure Blob
+  - local <-> Azure File
+  - local <-> ADLS Gen 2
+  - Azure Blob <-> Azure Blob
+  - Azure File -> Azure Blob
+
+Please refer to the examples for more information.
 `,
 		Example: `Upload a single file:
-  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
+  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Upload a single file through piping(block blob only):
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
 Upload an entire directory:
-  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Upload files using wildcards:
-  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]"
+Upload only files using wildcards:
+  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]"
 
-Upload files and/or directories using wildcards:
-  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+Upload files and directories using wildcards:
+  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
 Download a single file:
-  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/file]" "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "/path/to/file.txt"
+
+Download a single file through piping(blobs only):
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
 
 Download an entire directory:
-  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/dir]" "/path/to/file.txt" --recursive=true
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
+
+Download files using wildcards:
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
+
+Download files and directories using wildcards:
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
@@ -803,52 +831,44 @@ Download an entire directory:
 	}
 	rootCmd.AddCommand(cpCmd)
 
-	// define the flags relevant to the cp command
-	// Visible flags
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
-	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
-	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
-
-	// hidden filters
+	// filters change which files get transferred
+	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
+	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
-	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
+	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS")
 
-	// hidden options
-	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "Specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS")
-	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
-	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
+	// options change how the transfers are performed
+	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
+	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "specifies content type of the file. Implies no-guess-mime-type.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
+	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "this sets the content-type based on the extension of the file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
+	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	// hide flags not relevant to BFS
-	// TODO remove after preview release
+	// not implemented
+	cpCmd.PersistentFlags().MarkHidden("acl")
+
+	// hide oauth feature temporarily
+	cpCmd.PersistentFlags().MarkHidden("oauth-user")
+	cpCmd.PersistentFlags().MarkHidden("tenant-id")
+	cpCmd.PersistentFlags().MarkHidden("aad-endpoint")
+
+	// permanently hidden
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("exclude")
-	//cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
 	cpCmd.PersistentFlags().MarkHidden("output")
-
-	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
-	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")
-	cpCmd.PersistentFlags().MarkHidden("metadata")
-	cpCmd.PersistentFlags().MarkHidden("content-type")
-	cpCmd.PersistentFlags().MarkHidden("content-encoding")
-	cpCmd.PersistentFlags().MarkHidden("no-guess-mime-type")
-	cpCmd.PersistentFlags().MarkHidden("preserve-last-modified-time")
-	cpCmd.PersistentFlags().MarkHidden("background-op")
-	cpCmd.PersistentFlags().MarkHidden("fromTo")
-	cpCmd.PersistentFlags().MarkHidden("acl")
 	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
+	cpCmd.PersistentFlags().MarkHidden("background-op")
 }
