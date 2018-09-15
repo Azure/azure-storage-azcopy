@@ -317,5 +317,8 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed
 // TODO: I feel like this should take the status & we kill SetStatus
 func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
+	// In case of context leak in job part transfer manager.
+	jptm.Cancel()
+
 	return jptm.jobPartMgr.ReportTransferDone()
 }

@@ -88,10 +88,6 @@ type rawCopyCmdArgs struct {
 	acl                      string
 	logVerbosity             string
 	cancelFromStdin          bool
-	// oauth options
-	useInteractiveOAuthUserCredential bool
-	tenantID                          string
-	aadEndpoint                       string
 }
 
 // validates and transform raw input into cooked input
@@ -165,14 +161,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 	cooked.background = raw.background
-	cooked.output.Parse(raw.output)
 	cooked.acl = raw.acl
 	cooked.cancelFromStdin = raw.cancelFromStdin
 
-	// cook oauth parameters
-	cooked.useInteractiveOAuthUserCredential = raw.useInteractiveOAuthUserCredential
-	cooked.tenantID = raw.tenantID
-	cooked.aadEndpoint = raw.aadEndpoint
+	// if redirection is triggered, avoid printing any output
+	if cooked.isRedirection() {
+		cooked.output = common.EOutputFormat.None()
+	} else {
+		cooked.output.Parse(raw.output)
+	}
+
 	// generate a unique job ID
 	cooked.jobID = common.NewJobID()
 
@@ -260,10 +258,6 @@ type cookedCopyCmdArgs struct {
 	acl                      string
 	logVerbosity             common.LogLevel
 	cancelFromStdin          bool
-	// oauth options
-	useInteractiveOAuthUserCredential bool
-	tenantID                          string
-	aadEndpoint                       string
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -409,63 +403,6 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 	return err
 }
 
-// validateCredentialType validate if given credential type is supported with specific copy scenario
-func (cca cookedCopyCmdArgs) validateCredentialType(credentialType common.CredentialType) error {
-	// oAuthToken is only supported by Blob/BlobFS.
-	if credentialType == common.ECredentialType.OAuthToken() &&
-		!(cca.fromTo == common.EFromTo.LocalBlob() || cca.fromTo == common.EFromTo.BlobLocal() ||
-			cca.fromTo == common.EFromTo.LocalBlobFS() || cca.fromTo == common.EFromTo.BlobFSLocal()) {
-		return fmt.Errorf("OAuthToken is not supported for FromTo: %v", cca.fromTo)
-	}
-
-	return nil
-}
-
-// getCredentialType checks user provided commandline switches, and gets the proper credential type
-// for current copy command.
-func (cca cookedCopyCmdArgs) getCredentialType() (credentialType common.CredentialType, err error) {
-	credentialType = common.ECredentialType.Unknown()
-
-	if cca.useInteractiveOAuthUserCredential { // User explicty specify to use interactive login per command-line
-		credentialType = common.ECredentialType.OAuthToken()
-	} else {
-		// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
-		// verify credential type with cached token info, src or dest blob resource URL.
-		switch cca.fromTo {
-		case common.EFromTo.BlobBlob():
-			// For blob to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
-			// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
-			fallthrough
-		case common.EFromTo.LocalBlob():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.destination, false)
-			if err != nil {
-				return common.ECredentialType.Unknown(), err
-			}
-		case common.EFromTo.BlobLocal():
-			credentialType, err = getBlobCredentialType(context.Background(), cca.source, true)
-			if err != nil {
-				return common.ECredentialType.Unknown(), err
-			}
-		case common.EFromTo.LocalBlobFS():
-			fallthrough
-		case common.EFromTo.BlobFSLocal():
-			credentialType, err = getBlobFSCredentialType()
-			if err != nil {
-				return common.ECredentialType.Unknown(), err
-			}
-		default:
-			credentialType = common.ECredentialType.Anonymous()
-			//glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", cca.fromTo))
-		}
-	}
-
-	if cca.validateCredentialType(credentialType) != err {
-		return common.ECredentialType.Unknown(), err
-	}
-
-	return credentialType, nil
-}
-
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
@@ -497,37 +434,32 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		CredentialInfo: common.CredentialInfo{},
 	}
 
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// verifies credential type and initializes credential info.
-	jobPartOrder.CredentialInfo.CredentialType, err = cca.getCredentialType()
-	if err != nil {
+	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+		fromTo:         cca.fromTo,
+		source:         cca.source,
+		destination:    cca.destination,
+		sourceSAS:      cca.sourceSAS,
+		destinationSAS: cca.destinationSAS,
+	}); err != nil {
 		return err
 	}
-	//glcm.Info(fmt.Sprintf("Copy uses credential type %q.", jobPartOrder.CredentialInfo.CredentialType))
+
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
 	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		uotm := GetUserOAuthTokenManagerInstance()
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("Using OAuth token for authentication.")
 
-		var tokenInfo *common.OAuthTokenInfo
-		if cca.useInteractiveOAuthUserCredential { // Scenario-1: interactive login per copy command
-			tokenInfo, err = uotm.LoginWithADEndpoint(cca.tenantID, cca.aadEndpoint, false)
-			if err != nil {
-				return err
-			}
-		} else if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
-			// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
-			// Note: Scenario-Test has higher priority than scenario-2, so whenever environment variable is set in the context,
-			// it will overwrite the cached token info.
-			if err != nil { // this is the case when env var exists while get token info failed
-				return err
-			}
-		} else { // Scenario-2: session mode which get token from cache
-			tokenInfo, err = uotm.GetCachedTokenInfo()
-			if err != nil {
-				return err
-			}
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 		}
-		jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
 	}
 
 	from := cca.fromTo.From()
@@ -801,6 +733,9 @@ func isStdinPipeIn() (bool, error) {
 		return false, fmt.Errorf("fatal: failed to read from Stdin due to error: %s", err)
 	}
 
+	// if the stdin is a named pipe, then we assume there will be data on the stdin
+	// the reason for this assumption is that we do not know when will the data come in
+	// it could come in right away, or come in 10 minutes later
 	return info.Mode()&os.ModeNamedPipe != 0, nil
 }
 
@@ -813,28 +748,46 @@ func init() {
 		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
-		Short:      "Move data between two places",
+		Short:      "Copies source data to a destination location",
 		Long: `
-Copy(cp) moves data between two places. Local <=> Azure Data Lake Storage Gen2 are the only scenarios officially supported at the moment.
+Copies source data to a destination location. The supported pairs are:
+  - local <-> Azure Blob
+  - local <-> Azure File
+  - local <-> ADLS Gen 2
+  - Azure Blob <-> Azure Blob
+  - Azure File -> Azure Blob
+
 Please refer to the examples for more information.
 `,
 		Example: `Upload a single file:
-  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory/or/file]"
+  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Upload a single file through piping(block blob only):
+  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
 Upload an entire directory:
-  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Upload files using wildcards:
-  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]"
+Upload only files using wildcards:
+  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]"
 
-Upload files and/or directories using wildcards:
-  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/destination/directory]" --recursive=true
+Upload files and directories using wildcards:
+  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
 Download a single file:
-  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/file]" "/path/to/file.txt"
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "/path/to/file.txt"
+
+Download a single file through piping(blobs only):
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
 
 Download an entire directory:
-  - azcopy cp "https://[account].blob.core.windows.net/[existing-filesystem]/[path/to/source/dir]" "/path/to/file.txt" --recursive=true
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
+
+Download files using wildcards:
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
+
+Download files and directories using wildcards:
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
@@ -878,62 +831,44 @@ Download an entire directory:
 	}
 	rootCmd.AddCommand(cpCmd)
 
-	// define the flags relevant to the cp command
-	// Visible flags
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL")
-	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system")
-	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
+	// filters change which files get transferred
+	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
+	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include these files when copying. "+
+		"Support use of *. Files should be separated with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
+	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
 
-	// hidden filters
-	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
-		"Support use of *. More than one file are separated by ';'")
-	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
-	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "Filter: Include the snapshots. Only valid when the source is blobs.")
-
-	// hidden options
-	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier.")
-	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
-	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies content type of the file. Implies no-guess-mime-type.")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "Specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS")
-	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Upload to Azure Storage using this content encoding.")
-	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "This sets the content-type based on the extension of the file.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation")
+	// options change how the transfers are performed
+	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
+	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "specifies content type of the file. Implies no-guess-mime-type.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
+	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "this sets the content-type based on the extension of the file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
+	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	// oauth options
-	cpCmd.PersistentFlags().BoolVar(&raw.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
-	cpCmd.PersistentFlags().StringVar(&raw.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
-	cpCmd.PersistentFlags().StringVar(&raw.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
-
-	// hide flags not relevant to BFS
-	// TODO remove after preview release
-	cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("exclude")
-	//cpCmd.PersistentFlags().MarkHidden("follow-symlinks")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("output")
-
-	cpCmd.PersistentFlags().MarkHidden("block-blob-tier")
-	cpCmd.PersistentFlags().MarkHidden("page-blob-tier")
-	cpCmd.PersistentFlags().MarkHidden("metadata")
-	cpCmd.PersistentFlags().MarkHidden("content-type")
-	cpCmd.PersistentFlags().MarkHidden("content-encoding")
-	cpCmd.PersistentFlags().MarkHidden("no-guess-mime-type")
-	cpCmd.PersistentFlags().MarkHidden("preserve-last-modified-time")
-	cpCmd.PersistentFlags().MarkHidden("background-op")
-	cpCmd.PersistentFlags().MarkHidden("fromTo")
+	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
-	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
 
 	// hide oauth feature temporarily
 	cpCmd.PersistentFlags().MarkHidden("oauth-user")
 	cpCmd.PersistentFlags().MarkHidden("tenant-id")
 	cpCmd.PersistentFlags().MarkHidden("aad-endpoint")
+
+	// permanently hidden
+	cpCmd.PersistentFlags().MarkHidden("include")
+	cpCmd.PersistentFlags().MarkHidden("output")
+	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
+	cpCmd.PersistentFlags().MarkHidden("background-op")
+	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 }

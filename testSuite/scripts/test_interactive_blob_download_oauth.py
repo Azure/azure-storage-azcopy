@@ -5,10 +5,7 @@ import time
 import utility as util
 
 # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
-def test_download_1kb_blob_oauth(
-    forceOAuthLogin=False,
-    tenantID="",
-    aadEndpoint=""):
+def test_download_1kb_blob_oauth():
     # create file of size 1KB.
     filename = "test_1kb_blob_upload.txt"
     file_path = util.create_test_file(filename, 1024)
@@ -20,14 +17,8 @@ def test_download_1kb_blob_oauth(
         add_flags("log-level", "info").add_flags("recursive", "true")
     util.process_oauth_command(
         cmd,
-        "",
-        forceOAuthLogin,
-        tenantID,
-        aadEndpoint)
-    if forceOAuthLogin:
-        result = cmd.execute_azcopy_command_interactive()
-    else:
-        result = cmd.execute_azcopy_copy_command()
+        "")
+    result = cmd.execute_azcopy_copy_command()
     if not result:
         print("failed uploading 1KB file to the container")
         return
@@ -41,8 +32,6 @@ def test_download_1kb_blob_oauth(
         print("test_1kb_file test failed")
         return
 
-    time.sleep(5)
-
     # downloading the uploaded file
     src = util.get_resource_from_oauth_container(filename)
     src_validate = util.get_resource_from_oauth_container_validate(filename)
@@ -50,14 +39,8 @@ def test_download_1kb_blob_oauth(
     cmd = util.Command("copy").add_arguments(src).add_arguments(dest).add_flags("log-level", "info")
     util.process_oauth_command(
         cmd,
-        "",
-        forceOAuthLogin,
-        tenantID,
-        aadEndpoint)
-    if forceOAuthLogin:
-        result = cmd.execute_azcopy_command_interactive()
-    else:
-        result = cmd.execute_azcopy_copy_command()
+        "")
+    result = cmd.execute_azcopy_copy_command()
     if not result:
         print("test_download_1kb_blob test case failed")
         return
@@ -71,10 +54,7 @@ def test_download_1kb_blob_oauth(
     print("test_download_1kb_blob successfully passed")
 
 # test_recursive_download_blob downloads a directory recursively from container through azcopy
-def test_recursive_download_blob_oauth(
-    forceOAuthLogin=False,
-    tenantID="",
-    aadEndpoint=""):
+def test_recursive_download_blob_oauth():
     # create directory and 5 files of 1KB inside that directory.
     dir_name = "dir_" + str(10) + "_files"
     dir1_path = util.create_test_n_files(1024, 5, dir_name)
@@ -85,14 +65,8 @@ def test_recursive_download_blob_oauth(
         .add_flags("recursive", "true")
     util.process_oauth_command(
         cmd,
-        "",
-        forceOAuthLogin,
-        tenantID,
-        aadEndpoint)
-    if forceOAuthLogin:
-        result = cmd.execute_azcopy_command_interactive()
-    else:
-        result = cmd.execute_azcopy_copy_command()
+        "")
+    result = cmd.execute_azcopy_copy_command()
     if not result:
         print("error uploading recursive dir ", dir1_path)
         return
@@ -117,14 +91,8 @@ def test_recursive_download_blob_oauth(
         "log-level", "info").add_flags("recursive", "true")
     util.process_oauth_command(
         cmd,
-        "",
-        forceOAuthLogin,
-        tenantID,
-        aadEndpoint)
-    if forceOAuthLogin:
-        result = cmd.execute_azcopy_command_interactive()
-    else:
-        result = cmd.execute_azcopy_copy_command()
+        "")
+    result = cmd.execute_azcopy_copy_command()
     if not result:
         print("error download recursive dir ", dir1_path)
         return

@@ -24,11 +24,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"unsafe"
 
@@ -76,7 +74,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := fileURL.GetProperties(jptm.Context())
 		if err == nil {
 			// If the error is nil, then blob exists and it doesn't needs to be uploaded.
-			jptm.LogUploadError(info.Source, info.Destination, "Blob Already Exists ", 0)
+			jptm.LogUploadError(info.Source, info.Destination, "File already exists ", 0)
 			// Mark the transfer as failed with FileAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
 			jptm.ReportTransferDone()
@@ -100,13 +98,14 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		return
 	}
 
+	defer srcFile.Close()
+
 	var srcMmf *common.MMF
 	if srcFileInfo.Size() > 0 {
 		// file needs to be memory mapped only when the file size is greater than 0.
 		srcMmf, err = common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
 		if err != nil {
 			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
-			srcFile.Close()
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			return
@@ -128,10 +127,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		if info.SourceSize > 0 {
 			srcMmf.Unmap()
 		}
-		err = srcFile.Close()
-		if err != nil {
-			jptm.LogError(info.Source, "File Close Error ", err)
-		}
 		return
 	}
 
@@ -147,10 +142,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		if info.SourceSize > 0 {
 			srcMmf.Unmap()
 		}
-		err = srcFile.Close()
-		if err != nil {
-			jptm.LogError(info.Source, "File Close Error ", err)
-		}
 		return
 	}
 
@@ -159,10 +150,6 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		// mark the transfer as successful
 		jptm.SetStatus(common.ETransferStatus.Success())
 		jptm.ReportTransferDone()
-		err = srcFile.Close()
-		if err != nil {
-			jptm.LogError(info.Source, "File Close Error ", err)
-		}
 		return
 	}
 
@@ -282,46 +269,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 	}
 }
 
-// isUserEndpointStyle verfies if a given URL is pointing to Azure storage dev fabric's or emulator's resource.
-func isUserEndpointStyle(url url.URL) bool {
-	pathStylePorts := map[int16]struct{}{10000: struct{}{}, 10001: struct{}{}, 10002: struct{}{}, 10003: struct{}{}, 10004: struct{}{}, 10100: struct{}{}, 10101: struct{}{}, 10102: struct{}{}, 10103: struct{}{}, 10104: struct{}{}, 11000: struct{}{}, 11001: struct{}{}, 11002: struct{}{}, 11003: struct{}{}, 11004: struct{}{}, 11100: struct{}{}, 11101: struct{}{}, 11102: struct{}{}, 11103: struct{}{}, 11104: struct{}{}}
-
-	// Decides whether it's user endpoint style, and compose the new path.
-	if net.ParseIP(url.Host) != nil {
-		return true
-	}
-
-	if url.Port() != "" {
-		port, err := strconv.Atoi(url.Port())
-		if err != nil {
-			return false
-		}
-		if _, ok := pathStylePorts[int16(port)]; ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-// getServiceURL gets service URL from an Azure file resource URL.
-func getServiceURL(u url.URL, p pipeline.Pipeline) azfile.ServiceURL {
-	path := u.Path
-
-	if path != "" {
-		if path[0] == '/' {
-			path = path[1:]
-		}
-		if isUserEndpointStyle(u) {
-			panic(fmt.Errorf("doesn't support user endpoint style currently"))
-		} else {
-			u.Path = ""
-		}
-	}
-
-	return azfile.NewServiceURL(u, p)
-}
-
 // getParentDirectoryURL gets parent directory URL of an Azure FileURL.
 func getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
 	u := fileURL.URL()
@@ -355,22 +302,19 @@ func splitWithoutToken(str string, token rune) []string {
 // createParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
 func createParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
 	dirURL := getParentDirectoryURL(fileURL, p)
-
-	segments := splitWithoutToken(dirURL.URL().Path, '/')
-
-	if isUserEndpointStyle(dirURL.URL()) {
-		panic(fmt.Errorf("doesn't support user endpoint style currently"))
-	}
-
-	_, err := dirURL.GetProperties(ctx)
-	if err != nil {
+	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
+	// Check whether parent dir of the file exists.
+	if _, err := dirURL.GetProperties(ctx); err != nil {
 		if err.(azfile.StorageError) != nil && (err.(azfile.StorageError)).Response() != nil &&
 			(err.(azfile.StorageError).Response().StatusCode == http.StatusNotFound) { // At least need read and write permisson for destination
-			// fileParentDirURL doesn't exist, try to create the directories to the root.
-			serviceURL := getServiceURL(dirURL.URL(), p)
-			curDirURL := serviceURL.NewShareURL(segments[0]).NewRootDirectoryURL() // Share directory should already exist, otherwise invalid state
-			// try to create the directories
-			for i := 1; i < len(segments); i++ {
+			// File's parent directory doesn't exist, try to create the parent directories.
+			// Split directories as segments.
+			segments := splitWithoutToken(dirURLExtension.DirectoryOrFilePath, '/')
+
+			shareURL := azfile.NewShareURL(dirURLExtension.GetShareURL(), p)
+			curDirURL := shareURL.NewRootDirectoryURL() // Share directory should already exist, doesn't support creating share
+			// Try to create the directories
+			for i := 0; i < len(segments); i++ {
 				curDirURL = curDirURL.NewDirectoryURL(segments[i])
 				_, err := curDirURL.Create(ctx, azfile.Metadata{})
 				if verifiedErr := verifyAndHandleCreateErrors(err); verifiedErr != nil {

@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -158,27 +159,14 @@ Resume the existing job with the given job ID.`,
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.excludeTransfer, "exclude", "", "Filter: exclude these failed transfer(s) when resuming the job. "+
 		"Files should be separated by ';'.")
 	// oauth options
-	resumeCmd.PersistentFlags().BoolVar(&resumeCmdArgs.useInteractiveOAuthUserCredential, "oauth-user", false, "Use OAuth user credential and do interactive login.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.tenantID, "tenant-id", common.DefaultTenantID, "Tenant id to use for OAuth user interactive login.")
-	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.aadEndpoint, "aad-endpoint", common.DefaultActiveDirectoryEndpoint, "Azure active directory endpoint to use for OAuth user interactive login.")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.SourceSAS, "source-sas", "", "source sas of the source for given JobId")
 	resumeCmd.PersistentFlags().StringVar(&resumeCmdArgs.DestinationSAS, "destination-sas", "", "destination sas of the destination for given JobId")
-
-	// hide oauth feature temporarily
-	resumeCmd.PersistentFlags().MarkHidden("oauth-user")
-	resumeCmd.PersistentFlags().MarkHidden("tenant-id")
-	resumeCmd.PersistentFlags().MarkHidden("aad-endpoint")
 }
 
 type resumeCmdArgs struct {
 	jobID           string
 	includeTransfer string
 	excludeTransfer string
-
-	// oauth options
-	useInteractiveOAuthUserCredential bool
-	tenantID                          string
-	aadEndpoint                       string
 
 	SourceSAS      string
 	DestinationSAS string
@@ -226,46 +214,40 @@ func (rca resumeCmdArgs) process() error {
 		}
 	}
 
+	// Get fromTo info, so we can decide what's the proper credential type to use.
+	var getJobFromToResponse common.GetJobFromToResponse
+	Rpc(common.ERpcCmd.GetJobFromTo(),
+		&common.GetJobFromToRequest{JobID: jobID},
+		&getJobFromToResponse)
+	if getJobFromToResponse.ErrorMsg != "" {
+		glcm.Exit(getJobFromToResponse.ErrorMsg, common.EExitCode.Error())
+	}
+
+	ctx := context.TODO()
 	// Initialize credential info.
-	credentialInfo := common.CredentialInfo{
-		CredentialType: common.ECredentialType.Anonymous(),
-	}
-	// Check whether to use OAuthToken credential.
-	// Scenario-1: interactive login per copy command
-	// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
-	// Scenario-2: session mode which get token from cache
-	uotm := GetUserOAuthTokenManagerInstance()
-	hasCachedToken, err := uotm.HasCachedToken()
-	if rca.useInteractiveOAuthUserCredential || common.EnvVarOAuthTokenInfoExists() || hasCachedToken {
-		credentialInfo.CredentialType = common.ECredentialType.OAuthToken()
-		var oAuthTokenInfo *common.OAuthTokenInfo
-		// For Scenario-1, create token with interactive login if necessary.
-		if rca.useInteractiveOAuthUserCredential {
-			oAuthTokenInfo, err = uotm.LoginWithADEndpoint(rca.tenantID, rca.aadEndpoint, false)
-			if err != nil {
-				return fmt.Errorf(
-					"login failed with tenantID %q, using public Azure directory endpoint 'https://login.microsoftonline.com', due to error: %s",
-					rca.tenantID,
-					err.Error())
-			}
-		} else if oAuthTokenInfo, err = uotm.GetTokenInfoFromEnvVar(); err == nil || !common.IsErrorEnvVarOAuthTokenInfoNotSet(err) {
-			// Scenario-Test
-			glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo))
-			if err != nil { // this is the case when env var exists while get token info failed
-				return err
-			}
-		} else { // Scenario-2
-			oAuthTokenInfo, err = uotm.GetCachedTokenInfo()
-			if err != nil {
-				return err
-			}
+	credentialInfo := common.CredentialInfo{}
+	// TODO: Replace context with root context
+	if credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+		fromTo:         getJobFromToResponse.FromTo,
+		source:         getJobFromToResponse.Source,
+		destination:    getJobFromToResponse.Destination,
+		sourceSAS:      rca.SourceSAS,
+		destinationSAS: rca.DestinationSAS,
+	}); err != nil {
+		return err
+	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("Resume is using OAuth token for authentication.")
+
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
-		if oAuthTokenInfo == nil {
-			return errors.New("cannot get valid oauth token")
-		}
-		credentialInfo.OAuthTokenInfo = *oAuthTokenInfo
 	}
-	//glcm.Info(fmt.Sprintf("Resume uses credential type %q.\n", credentialInfo.CredentialType))
 
 	// Send resume job request.
 	var resumeJobResponse common.CancelPauseResumeResponse

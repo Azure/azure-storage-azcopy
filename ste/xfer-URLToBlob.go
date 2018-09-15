@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -207,7 +208,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			// there is a possibility that some uncommitted blocks will be there
 			// Delete the uncommitted blobs
 			if bbc.jptm.TransferStatus() <= 0 {
-				_, err := bbc.destBlobURL.ToBlockBlobURL().Delete(bbc.jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+				_, err := bbc.destBlobURL.ToBlockBlobURL().Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 					// Other errors report that uncommitted blocks are there

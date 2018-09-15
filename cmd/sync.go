@@ -364,8 +364,8 @@ func init() {
 	var syncCmd = &cobra.Command{
 		Use:     "sync",
 		Aliases: []string{"sc", "s"},
-		Short:   "sync replicates source to the destination location. Last modified time is used for comparison",
-		Long:    `sync replicates source to the destination location. Last modified time the used for comparison`,
+		Short:   "Replicates source to the destination location",
+		Long:    `Replicates source to the destination location. The last modified times are used for comparison.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))

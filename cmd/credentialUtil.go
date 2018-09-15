@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -35,7 +34,6 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 var once sync.Once
@@ -58,24 +56,20 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 }
 
 // ==============================================================================================
-// Credential type methods
+// Get credential type methods
 // ==============================================================================================
 
 // getBlobCredentialType is used to get Blob's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
-// 1. For source or dest url, if the url contains SAS, indicating using anonymous credential(SAS).
-// 2. If it's source blob url, and it's a public resource, indicating using anonymous credential(public resource).
+// 1. For source or dest url, if the url contains SAS or SAS is provided standalone, indicating using anonymous credential(SAS).
+// 2. If the blob URL can be public access resource, and validated as public resource, indicating using anonymous credential(public resource).
 // 3. If there is cached OAuth token, indicating using token credential.
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
 // The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
-func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource bool) (common.CredentialType, error) {
+func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
-	// TODO: Clean up user messages in errors.
-	// If error is due to a user error, make the error message user friendly.
-	// If error is due to a program bug, error should be logged in the general azcopy log (if the bug is not related to a job), or in the job-specific log if it is related to a job.
-	// and terminate the application.
 	if err != nil {
 		return common.ECredentialType.Unknown(), errors.New("provided blob resource string is not in URL format")
 	}
@@ -83,28 +77,14 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 	sas := azblob.NewBlobURLParts(*resourceURL).SAS
 
 	// If SAS existed, return anonymous credential type.
-	if isSASExisted := sas.Signature() != ""; isSASExisted {
+	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
 		return common.ECredentialType.Anonymous(), nil
 	}
 
-	// Following are the cases: Use oauth token, public source blob or default anonymous credential.
-	uotm := GetUserOAuthTokenManagerInstance()
-	hasCachedToken, err := uotm.HasCachedToken()
-	if err != nil {
-		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
-		glcm.Info(fmt.Sprintf("No cached token found, %v", err))
-	}
-
-	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
-	// the tokens.
-	hasEnvVarOAuthTokenInfo := common.EnvVarOAuthTokenInfoExists()
-	if hasEnvVarOAuthTokenInfo {
-		glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
-	}
-
-	if !hasCachedToken && !hasEnvVarOAuthTokenInfo { // no oauth token found, then directly return anonymous credential
+	// If SAS token doesn't exist, it could be using OAuth token or the resource is public.
+	if !oAuthTokenExists() { // no oauth token found, then directly return anonymous credential
 		return common.ECredentialType.Anonymous(), nil
-	} else if !isSource { // oauth token found, if it's destination, then it should not be public resource, return token credential
+	} else if !canBePublic { // oauth token found, if it can not be public resource, return token credential
 		return common.ECredentialType.OAuthToken(), nil
 	} else { // check if it's public resource, and return credential type correspondingly
 		// If has cached token, and no SAS token provided, it could be a public blob resource.
@@ -149,32 +129,99 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, isSource
 // 2. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 3. Otherwise use shared key.
 func getBlobFSCredentialType() (common.CredentialType, error) {
+	if oAuthTokenExists() {
+		return common.ECredentialType.OAuthToken(), nil
+	}
+
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
+		return common.ECredentialType.SharedKey(), nil
+	} else {
+		return common.ECredentialType.Unknown(), errors.New("OAuth token or shared key should be provided for Blob FS")
+	}
+}
+
+func oAuthTokenExists() (oauthTokenExists bool) {
 	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
 	// the tokens
 	if common.EnvVarOAuthTokenInfoExists() {
 		glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
-		return common.ECredentialType.OAuthToken(), nil
+		oauthTokenExists = true
 	}
 
 	uotm := GetUserOAuthTokenManagerInstance()
-	hasCachedToken, err := uotm.HasCachedToken()
-	if err != nil {
+	if hasCachedToken, err := uotm.HasCachedToken(); hasCachedToken {
+		oauthTokenExists = true
+	} else if err != nil {
 		// Log the error if fail to get cached token, as these are unhandled errors, and should not influence the logic flow.
-		glcm.Info(fmt.Sprintf("No cached token found, %v", err))
+		// Uncomment for debugging.
+		// glcm.Info(fmt.Sprintf("No cached token found, %v", err))
 	}
 
-	if hasCachedToken {
-		return common.ECredentialType.OAuthToken(), nil
-	} else {
-		return common.ECredentialType.SharedKey(), nil // For internal testing, SharedKey is not supported from commandline
+	return
+}
+
+// getAzureFileCredentialType is used to get Azure file's credential type
+func getAzureFileCredentialType() (common.CredentialType, error) {
+	// Azure file only support anonymous credential currently.
+	return common.ECredentialType.Anonymous(), nil
+}
+
+type rawFromToInfo struct {
+	fromTo                    common.FromTo
+	source, destination       string
+	sourceSAS, destinationSAS string // Standalone SAS which might be provided
+}
+
+// getCredentialType checks user provided info, and gets the proper credential type
+// for current command.
+func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType common.CredentialType, err error) {
+	// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
+	// verify credential type with cached token info, src or dest resource URL.
+	switch raw.fromTo {
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
+		// For blob/file to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
+		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
+		fallthrough
+	case common.EFromTo.LocalBlob(), common.EFromTo.PipeBlob():
+		if credentialType, err = getBlobCredentialType(ctx, raw.destination, false, raw.destinationSAS != ""); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.EFromTo.BlobTrash():
+		// For BlobTrash direction, use source as resource URL, and it should not be public access resource.
+		if credentialType, err = getBlobCredentialType(ctx, raw.source, false, raw.sourceSAS != ""); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.EFromTo.BlobLocal(), common.EFromTo.BlobPipe():
+		if credentialType, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.EFromTo.LocalBlobFS(), common.EFromTo.BlobFSLocal():
+		if credentialType, err = getBlobFSCredentialType(); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile():
+		if credentialType, err = getAzureFileCredentialType(); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	default:
+		credentialType = common.ECredentialType.Anonymous()
+		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
+		glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", raw.fromTo))
 	}
+
+	return credentialType, nil
 }
 
 // ==============================================================================================
 // pipeline factory methods
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	credential := createBlobCredential(ctx, credInfo)
+	credential := common.CreateBlobCredential(ctx, credInfo, common.CreateCredentialOptions{
+		//LogInfo:  glcm.Info, //Comment out for debugging
+		LogError: glcm.Info,
+	})
 
 	return ste.NewBlobPipeline(
 		credential,
@@ -193,63 +240,11 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 		nil), nil
 }
 
-func createBlobCredential(ctx context.Context, credInfo common.CredentialInfo) azblob.Credential {
-	credential := azblob.NewAnonymousCredential()
-
-	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
-		}
-
-		// Create TokenCredential with refresher.
-		return azblob.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azblob.TokenCredential) time.Duration {
-				return refreshBlobToken(ctx, credInfo.OAuthTokenInfo, credential)
-			})
-	}
-
-	return credential
-}
-
-func refreshBlobToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azblob.TokenCredential) time.Duration {
-	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		common.ApplicationID,
-		common.Resource,
-		tokenInfo.Token)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	err = spt.RefreshWithContext(ctx)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	newToken := spt.Token()
-	tokenCredential.SetToken(newToken.AccessToken)
-
-	// Calculate wait duration, and schedule next refresh.
-	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-	if waitDuration < time.Second {
-		waitDuration = time.Nanosecond
-	}
-
-	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
-		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
-	}
-
-	return waitDuration
-}
-
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	credential := createBlobFSCredential(ctx, credInfo)
+	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CreateCredentialOptions{
+		//LogInfo:  glcm.Info, //Comment out for debugging
+		LogError: glcm.Info,
+	})
 
 	return azbfs.NewPipeline(
 		credential,
@@ -267,36 +262,6 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (
 		}), nil
 }
 
-func createBlobFSCredential(ctx context.Context, credInfo common.CredentialInfo) azbfs.Credential {
-	switch credInfo.CredentialType {
-	case common.ECredentialType.OAuthToken():
-		if credInfo.OAuthTokenInfo.IsEmpty() {
-			panic(fmt.Errorf("invalid state, cannot get valid token info for OAuthToken credential"))
-		}
-
-		// Create TokenCredential with refresher.
-		return azbfs.NewTokenCredential(
-			credInfo.OAuthTokenInfo.AccessToken,
-			func(credential azbfs.TokenCredential) time.Duration {
-				return refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, credential)
-			})
-
-	case common.ECredentialType.SharedKey():
-		// Get the Account Name and Key variables from environment
-		name := os.Getenv("ACCOUNT_NAME")
-		key := os.Getenv("ACCOUNT_KEY")
-		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-		if name == "" || key == "" {
-			panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs SharedKey credential")
-		}
-		// create the shared key credentials
-		return azbfs.NewSharedKeyCredential(name, key)
-
-	default:
-		panic(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
-	}
-}
-
 func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
 	return azfile.NewPipeline(
 		azfile.NewAnonymousCredential(),
@@ -312,39 +277,4 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				Value: common.UserAgent,
 			},
 		}), nil
-}
-
-func refreshBlobFSToken(ctx context.Context, tokenInfo common.OAuthTokenInfo, tokenCredential azbfs.TokenCredential) time.Duration {
-	oauthConfig, err := adal.NewOAuthConfig(tokenInfo.ActiveDirectoryEndpoint, tokenInfo.Tenant)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	spt, err := adal.NewServicePrincipalTokenFromManualToken(
-		*oauthConfig,
-		common.ApplicationID,
-		common.Resource,
-		tokenInfo.Token)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	err = spt.RefreshWithContext(ctx)
-	if err != nil {
-		glcm.Info(fmt.Sprintf("failed to refresh token, due to error: %v", err))
-	}
-
-	newToken := spt.Token()
-	tokenCredential.SetToken(newToken.AccessToken)
-
-	// Calculate wait duration, and schedule next refresh.
-	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - common.DefaultTokenExpiryWithinThreshold
-	if waitDuration < time.Second {
-		waitDuration = time.Nanosecond
-	}
-	if common.GlobalTestOAuthInjection.DoTokenRefreshInjection {
-		waitDuration = common.GlobalTestOAuthInjection.TokenRefreshDuration
-	}
-
-	return waitDuration
 }
