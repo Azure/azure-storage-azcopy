@@ -29,6 +29,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/go-autorest/autorest/adal"
 )
 
 // ==============================================================================================
@@ -92,6 +93,23 @@ func CreateBlobCredential(ctx context.Context, credInfo CredentialInfo, options 
 	return credential
 }
 
+// refreshPolicyHalfOfExpiryWithin is used for calculating next refresh time,
+// it checkes how long it will be before the token get expired, and use half of the value as
+// duration to wait.
+func refreshPolicyHalfOfExpiryWithin(token *adal.Token) time.Duration {
+	waitDuration := token.Expires().Sub(time.Now().UTC()) / 2
+	// In case of refresh flooding
+	if waitDuration < time.Second {
+		waitDuration = time.Second
+	}
+
+	if GlobalTestOAuthInjection.DoTokenRefreshInjection {
+		waitDuration = GlobalTestOAuthInjection.TokenRefreshDuration
+	}
+
+	return waitDuration
+}
+
 func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCredential azblob.TokenCredential, options CreateCredentialOptions) time.Duration {
 	newToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
@@ -102,16 +120,7 @@ func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCreden
 	options.logInfo(fmt.Sprintf("%v token refreshed", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
-	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - DefaultTokenExpiryWithinThreshold
-	if waitDuration < time.Second {
-		waitDuration = time.Nanosecond
-	}
-
-	if GlobalTestOAuthInjection.DoTokenRefreshInjection {
-		waitDuration = GlobalTestOAuthInjection.TokenRefreshDuration
-	}
-
-	return waitDuration
+	return refreshPolicyHalfOfExpiryWithin(newToken)
 }
 
 // CreateBlobFSCredential creates BlobFS credential according to credential info.
@@ -157,13 +166,5 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 	options.logInfo(fmt.Sprintf("%v token refreshed", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
-	waitDuration := newToken.Expires().Sub(time.Now().UTC()) - DefaultTokenExpiryWithinThreshold
-	if waitDuration < time.Second {
-		waitDuration = time.Nanosecond
-	}
-	if GlobalTestOAuthInjection.DoTokenRefreshInjection {
-		waitDuration = GlobalTestOAuthInjection.TokenRefreshDuration
-	}
-
-	return waitDuration
+	return refreshPolicyHalfOfExpiryWithin(newToken)
 }
