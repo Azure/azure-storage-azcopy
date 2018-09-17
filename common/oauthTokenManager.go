@@ -115,10 +115,14 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 }
 
 // MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
-func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityID string, persist bool) (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo IdentityInfo, persist bool) (*OAuthTokenInfo, error) {
+	if err := identityInfo.Validate(); err != nil {
+		return nil, err
+	}
+
 	oAuthTokenInfo := &OAuthTokenInfo{
-		Identity:   true,
-		IdentityID: identityID,
+		Identity:     true,
+		IdentityInfo: identityInfo,
 	}
 	token, err := oAuthTokenInfo.GetNewTokenFromMSI(ctx)
 	if err != nil {
@@ -304,7 +308,32 @@ type OAuthTokenInfo struct {
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	Identity                bool   `json:"_identity"`
-	IdentityID              string `json:"_identity_id"`
+	IdentityInfo            IdentityInfo
+}
+
+// IdentityInfo contains info for MSI.
+type IdentityInfo struct {
+	ClientID string `json:"_identity_client_id"`
+	ObjectID string `json:"_identity_object_id"`
+	MSIResID string `json:"_identity_msi_res_id"`
+}
+
+// Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
+func (identityInfo *IdentityInfo) Validate() error {
+	v := make(map[string]bool, 3)
+	if identityInfo.ClientID != "" {
+		v[identityInfo.ClientID] = true
+	}
+	if identityInfo.ObjectID != "" {
+		v[identityInfo.ObjectID] = true
+	}
+	if identityInfo.MSIResID != "" {
+		v[identityInfo.MSIResID] = true
+	}
+	if len(v) > 1 {
+		return errors.New("client ID, object ID and MSI resource ID are mutually exclusive")
+	}
+	return nil
 }
 
 // Refresh gets new token with token info.
@@ -329,8 +358,14 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	params := req.URL.Query()
 	params.Set("resource", Resource)
 	params.Set("api-version", IMDSAPIVersion)
-	if credInfo.IdentityID != "" {
-		params.Set("client_id", credInfo.IdentityID)
+	if credInfo.IdentityInfo.ClientID != "" {
+		params.Set("client_id", credInfo.IdentityInfo.ClientID)
+	}
+	if credInfo.IdentityInfo.ObjectID != "" {
+		params.Set("object_id", credInfo.IdentityInfo.ObjectID)
+	}
+	if credInfo.IdentityInfo.MSIResID != "" {
+		params.Set("msi_res_id", credInfo.IdentityInfo.MSIResID)
 	}
 	req.URL.RawQuery = params.Encode()
 	req.Header.Set("Metadata", "true")
