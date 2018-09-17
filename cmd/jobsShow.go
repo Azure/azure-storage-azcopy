@@ -119,7 +119,8 @@ func PrintJobTransfers(outputForamt common.OutputFormat, listTransfersResponse c
 		if listTransfersResponse.ErrorMsg != "" {
 			exitCode = common.EExitCode.Error()
 		}
-		jsonOutput, err := json.MarshalIndent(listTransfersResponse, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(listTransfersResponse, "", "  ")
+		jsonOutput, err := json.Marshal(listTransfersResponse)
 		common.PanicIfErr(err)
 		glcm.Exit(string(jsonOutput), exitCode)
 		return
@@ -150,7 +151,8 @@ func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.Li
 		if summary.ErrorMsg != "" {
 			exitCode = common.EExitCode.Error()
 		}
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 		glcm.Exit(string(jsonOutput), exitCode)
 		return
