@@ -345,6 +345,7 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 				// Transfer Status needs to reset.
 				if jppt.TransferStatus() <= common.ETransferStatus.Failed() {
 					jppt.SetTransferStatus(common.ETransferStatus.Started(), true)
+					jppt.SetErrorCode(0, true)
 				}
 			}
 		})
@@ -420,7 +421,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 					common.TransferDetail{
 						Src:            src,
 						Dst:            dst,
-						TransferStatus: common.ETransferStatus.Failed()}) // TODO: Optimize
+						TransferStatus: common.ETransferStatus.Failed(),
+						ErrorCode:      jppt.ErrorCode()}) // TODO: Optimize
 			case common.ETransferStatus.BlobAlreadyExistsFailure(),
 				common.ETransferStatus.FileAlreadyExistsFailure():
 				js.TransfersSkipped++
@@ -518,7 +520,7 @@ func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersR
 			// getting source and destination of a transfer at index index for given jobId and part number.
 			src, dst := jpp.TransferSrcDstStrings(t)
 			ljt.Details = append(ljt.Details,
-				common.TransferDetail{Src: src, Dst: dst, TransferStatus: transferEntry.TransferStatus()})
+				common.TransferDetail{Src: src, Dst: dst, TransferStatus: transferEntry.TransferStatus(), ErrorCode: transferEntry.ErrorCode()})
 		}
 	}
 	return ljt

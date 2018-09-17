@@ -142,6 +142,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.LogUploadError(info.Source, info.Destination, "File Create Error "+msg, status)
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		// Unmap only if the source size > 0
 		if info.SourceSize > 0 {
@@ -270,6 +271,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 					// cancelling the transfer
 					jptm.Cancel()
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				rangeDone()
 				return

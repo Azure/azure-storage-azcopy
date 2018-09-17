@@ -88,6 +88,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
 		jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
 		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
 		return
 	}
@@ -108,6 +109,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
 			if !jptm.WasCanceled() {
 				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.SetErrorCode(int32(status))
 			}
 		} else {
 			// if the create blob is a success, updating the transfer status to success
@@ -250,6 +252,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				bbc.jptm.LogS2SCopyError(bbc.srcURL.String(), bbc.destBlobURL.String(), msg, status)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
+				bbc.jptm.SetErrorCode(int32(status))
 			}
 
 			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
@@ -279,6 +282,8 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				bbc.jptm.LogS2SCopyError(bbc.srcURL.String(), bbc.destBlobURL.String(), "Commit block list"+msg, status)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
+				bbc.jptm.SetErrorCode(int32(status))
+				bbc.jptm.SetErrorCode(int32(status))
 				transferDone()
 				return
 			}
