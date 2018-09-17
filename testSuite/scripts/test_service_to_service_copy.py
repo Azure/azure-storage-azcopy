@@ -80,6 +80,13 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url, 
             "Blob")
 
+    # Test oauth support for service to service copy, where source is authenticated with SAS
+    # and destination is authenticated with OAuth token.
+    def test_copy_single_17mb_file_from_blob_to_blob_oauth(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_without_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 17 * 1024 * 1024, True)
+
     # common testing utils for service to service copy.
     def util_are_dir_trees_equal(self, dir1, dir2):
         dirs_cmp = filecmp.dircmp(dir1, dir2)
@@ -103,7 +110,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         srcType,
         dstBucketURL,
         dstType,
-        sizeInKB=1):
+        sizeInKB=1,
+        oAuth=False):
         # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
@@ -113,7 +121,11 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         filename = "test_" + str(sizeInKB) + "kb_copy.txt"
         file_path = util.create_test_file(filename, sizeInKB)
         srcFileURL = util.get_object_sas(srcBucketURL, filename)
-        dstFileURL = util.get_object_sas(dstBucketURL, filename)
+        if oAuth:
+            dstFileURL = util.get_object_without_sas(dstBucketURL, filename)
+        else:
+            dstFileURL = util.get_object_sas(dstBucketURL, filename)
+        
 
         # Upload file using azcopy.
         # TODO: Note for S3/Google need special logic
