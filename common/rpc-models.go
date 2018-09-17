@@ -165,6 +165,7 @@ type TransferDetail struct {
 	Src            string
 	Dst            string
 	TransferStatus TransferStatus
+	ErrorCode      int32
 }
 
 type CancelPauseResumeResponse struct {

@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"unsafe"
 
+	"sync/atomic"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
@@ -246,9 +248,14 @@ type JobPartPlanTransfer struct {
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
 
-	// transferStatus_doNotUse represents the status of current transfer (TransferInProgress, TransferFailed or TransfersCompleted)
-	// transferStatus_doNotUse should not be directly accessed anywhere except by transferStatus and setTransferStatus
+	// atomicTransferStatus represents the status of current transfer (TransferInProgress, TransferFailed or TransfersCompleted)
+	// atomicTransferStatus should not be directly accessed anywhere except by transferStatus and setTransferStatus
 	atomicTransferStatus common.TransferStatus
+
+	// atomicErrorCode represents the storageError error code of the error with which the transfer got failed.
+	// atomicErrorCode has a default value (0) which means either there was no error or transfer failed because some non storageError.
+	// atomicErrorCode should not be directly accessed anywhere except by transferStatus and setTransferStatus
+	atomicErrorCode int32
 }
 
 // TransferStatus returns the transfer's status
@@ -259,8 +266,7 @@ func (jppt *JobPartPlanTransfer) TransferStatus() common.TransferStatus {
 // SetTransferStatus sets the transfer's status
 // overWrite flags if set to true overWrites the failed status.
 // If overWrite flag is set to false, then status of transfer is set to failed won't be overWritten.
-// overWrite flag is used while resuming the failed transfers where the status of failed transfers are
-// marked to InProgress from failed.
+// overWrite flag is used while resuming the failed transfers where the errorCode are set to default i.e 0
 func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus, overWrite bool) {
 	if !overWrite {
 		common.AtomicMorphInt32((*int32)(&jppt.atomicTransferStatus),
@@ -271,5 +277,26 @@ func (jppt *JobPartPlanTransfer) SetTransferStatus(status common.TransferStatus,
 			})
 	} else {
 		(&jppt.atomicTransferStatus).AtomicStore(status)
+	}
+}
+
+// ErrorCode returns the transfer's errorCode.
+func (jppt *JobPartPlanTransfer) ErrorCode() int32 {
+	return atomic.LoadInt32(&jppt.atomicErrorCode)
+}
+
+// SetErrorCode sets the error code of the error if transfer failed.
+// overWrite flags if set to true overWrites the atomicErrorCode.
+// If overWrite flag is set to false, then errorCode won't be overwritten.
+func (jppt *JobPartPlanTransfer) SetErrorCode(errorCode int32, overwrite bool) {
+	if !overwrite {
+		common.AtomicMorphInt32(&jppt.atomicErrorCode,
+			func(startErrorCode int32) (val int32, morphResult interface{}) {
+				// startErrorCode != 0 means that error code is already set.
+				// If current error code is already set to some error code, then it will not be changed.
+				return common.Iffint32(startErrorCode != 0, startErrorCode, errorCode), nil
+			})
+	} else {
+		atomic.StoreInt32(&jppt.atomicErrorCode, errorCode)
 	}
 }

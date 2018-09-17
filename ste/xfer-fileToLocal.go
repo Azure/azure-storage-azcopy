@@ -190,6 +190,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return
@@ -207,6 +208,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return

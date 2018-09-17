@@ -41,12 +41,12 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize    uint32
-	logVerbosity string
-	include      string
-	exclude      string
+	blockSize      uint32
+	logVerbosity   string
+	include        string
+	exclude        string
 	followSymlinks bool
-	output       string
+	output         string
 }
 
 // validates and transform raw input into cooked input
@@ -199,7 +199,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 
 		if jobDone {
