@@ -27,6 +27,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -137,7 +138,10 @@ func (c *CredCache) removeCachedTokenInternal() error {
 	}
 	key, err := keyring.Search(c.cachedTokenKey)
 	if err != nil {
-		return fmt.Errorf("failed to find cached token during removing cached token, %v", err)
+		if strings.Contains(err.Error(), "required key not available") {
+			return fmt.Errorf("no cached token found for current user")
+		}
+		return fmt.Errorf("no cached token found for current user, %v", err)
 	}
 	err = key.Unlink()
 	if err != nil {

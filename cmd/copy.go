@@ -753,43 +753,61 @@ func init() {
 		Short:      "Copies source data to a destination location",
 		Long: `
 Copies source data to a destination location. The supported pairs are:
-  - local <-> Azure Blob
-  - local <-> Azure File
-  - local <-> ADLS Gen 2
-  - Azure Blob <-> Azure Blob
-  - Azure File -> Azure Blob
+  - local <-> Azure Blob (SAS or OAuth authentication)
+  - local <-> Azure File (SAS authentication)
+  - local <-> ADLS Gen 2 (OAuth or SharedKey authentication)
+  - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
 `,
-		Example: `Upload a single file:
+		Example: `Upload a single file with SAS:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Upload a single file through piping(block blob only):
+Upload a single file with OAuth token, please use login command first if not yet logged in:
+  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
+
+Upload a single file through piping(block blob only) with SAS:
   - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Upload an entire directory:
+Upload an entire directory with SAS:
   - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Upload only files using wildcards:
+Upload only files using wildcards with SAS:
   - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]"
 
-Upload files and directories using wildcards:
+Upload files and directories using wildcards with SAS:
   - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Download a single file:
+Download a single file with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "/path/to/file.txt"
 
-Download a single file through piping(blobs only):
+Download a single file with OAuth token, please use login command first if not yet logged in:
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
+
+Download a single file through piping(blobs only) with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
 
-Download an entire directory:
+Download an entire directory with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
 
-Download files using wildcards:
+Download files using wildcards with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
 
-Download files and directories using wildcards:
+Download files and directories using wildcards with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
+
+Copy a single file with SAS:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Copy a single file with OAuth token, please use login command first if not yet logged in and note that OAuth token is used by destination:
+- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
+
+Copy an entire directory with SAS:
+- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Copy an entire account with SAS:
+- azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection

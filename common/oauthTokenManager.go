@@ -202,10 +202,10 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
-		return nil, fmt.Errorf("No cached token found, %v", err)
+		return nil, fmt.Errorf("No cached token found, please log in with azcopy's login command, %v", err)
 	}
 	if !hasToken {
-		return nil, errors.New("No cached token found, please use login command first before getToken")
+		return nil, errors.New("No cached token found, please log in with azcopy's login command")
 	}
 
 	tokenInfo, err := uotm.credCache.LoadToken()
@@ -215,7 +215,7 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAu
 
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed to ensure token fresh, %v", err)
+		return nil, fmt.Errorf("Get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
 	}
 
 	// Update token cache, if token is updated.

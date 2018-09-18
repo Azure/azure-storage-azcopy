@@ -34,7 +34,8 @@ func init() {
 		Use:        "logout",
 		SuggestFor: []string{"logout"},
 		Short:      "Log out to remove access to Azure storage resources.",
-		Long:       `Log out to remove access to Azure storage resources.`,
+		Long: `Log out to remove access to Azure storage resources.
+This command will remove all the cached login info for current user.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
 		},
