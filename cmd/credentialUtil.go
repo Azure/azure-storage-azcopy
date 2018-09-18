@@ -218,7 +218,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 // pipeline factory methods
 // ==============================================================================================
 func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	credential := common.CreateBlobCredential(ctx, credInfo, common.CreateCredentialOptions{
+	credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 		//LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
@@ -241,7 +241,7 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 }
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
-	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CreateCredentialOptions{
+	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
 		//LogInfo:  glcm.Info, //Comment out for debugging
 		LogError: glcm.Info,
 	})
