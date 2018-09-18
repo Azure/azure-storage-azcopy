@@ -445,19 +445,13 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 
 // this function accepts the list of files/directories to transfer and processes them
 func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// Create the new azblob pipeline
-	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	},
-		ste.XferRetryOptions{
-			Policy:        0,
-			MaxTries:      ste.UploadMaxTries,
-			TryTimeout:    ste.UploadTryTimeout,
-			RetryDelay:    ste.UploadRetryDelay,
-			MaxRetryDelay: ste.UploadMaxRetryDelay},
-		nil)
+	p, err := createBlobPipeline(ctx, e.CredentialInfo)
+	if err != nil {
+		return err
+	}
 
 	// Copying the JobId of sync job to individual copyJobRequest
 	e.CopyJobRequest.JobID = e.JobID
@@ -492,6 +486,10 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	// Copy the sync Command String to the CopyJobPartRequest and DeleteJobRequest
 	e.CopyJobRequest.CommandString = e.CommandString
 	e.DeleteJobRequest.CommandString = e.CommandString
+
+	// Set credential info properly
+	e.CopyJobRequest.CredentialInfo = e.CredentialInfo
+	e.DeleteJobRequest.CredentialInfo = e.CredentialInfo
 
 	err, isSourceAFile := e.compareLocalAgainstRemote(cca, p)
 	if err != nil {
