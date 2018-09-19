@@ -37,7 +37,7 @@ import (
 // credential factories
 // ==============================================================================================
 
-// CredentialOpOptions contains optional params for credential operations.
+// CredentialOpOptions contains credential operations' parameters.
 type CredentialOpOptions struct {
 	LogInfo  func(string)
 	LogError func(string)

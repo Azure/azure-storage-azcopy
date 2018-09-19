@@ -27,8 +27,8 @@ import (
 	"os"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
+	"syscall"
 )
 
 // CredCache manages credential caches.
@@ -138,7 +138,7 @@ func (c *CredCache) removeCachedTokenInternal() error {
 	}
 	key, err := keyring.Search(c.cachedTokenKey)
 	if err != nil {
-		if strings.Contains(err.Error(), "required key not available") {
+		if err == syscall.ENOKEY {
 			return fmt.Errorf("no cached token found for current user")
 		}
 		return fmt.Errorf("no cached token found for current user, %v", err)

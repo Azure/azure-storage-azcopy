@@ -23,7 +23,6 @@ package common
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/jiacfan/keychain" // forked and customized from github.com/keybase/go-keychain, todo: make a release to ensure stability
@@ -134,7 +133,7 @@ func (c *CredCache) removeCachedTokenInternal() error {
 	if err != nil {
 		err = handleGenericKeyChainSecError(err)
 
-		if strings.Contains(err.Error(), "The specified item could not be found in the keychain") {
+		if err == keychain.ErrorItemNotFound {
 			return fmt.Errorf("no cached token found for current user")
 		}
 
