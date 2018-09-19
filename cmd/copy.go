@@ -880,11 +880,6 @@ Copy an entire account with SAS:
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
 
-	// hide oauth feature temporarily
-	cpCmd.PersistentFlags().MarkHidden("oauth-user")
-	cpCmd.PersistentFlags().MarkHidden("tenant-id")
-	cpCmd.PersistentFlags().MarkHidden("aad-endpoint")
-
 	// permanently hidden
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("output")

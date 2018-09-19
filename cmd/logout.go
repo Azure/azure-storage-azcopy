@@ -46,8 +46,6 @@ This command will remove all the cached login info for current user.`,
 			}
 			return nil
 		},
-		// hide oauth feature temporarily
-		Hidden: true,
 	}
 
 	rootCmd.AddCommand(logoutCmd)

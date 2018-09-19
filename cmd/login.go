@@ -69,8 +69,6 @@ Log in using a VM's user-assigned identity with Resource ID of the service ident
 			}
 			return nil
 		},
-		// hide oauth feature temporarily
-		Hidden: true,
 	}
 
 	rootCmd.AddCommand(lgCmd)
