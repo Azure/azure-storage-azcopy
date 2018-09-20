@@ -65,7 +65,7 @@ Log in using a VM's user-assigned identity with Resource ID of the service ident
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := loginCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform login command, due to error: %v", err)
+				return fmt.Errorf("failed to perform login command, %v", err)
 			}
 			return nil
 		},

@@ -133,7 +133,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, %v", err)
+			return nil, err
 		}
 	}
 
@@ -164,7 +164,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		ApplicationID,
 		Resource)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, %v",
+		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
@@ -175,7 +175,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, %v",
+		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
@@ -188,7 +188,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if persist {
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, %v", err)
+			return nil, err
 		}
 	}
 
@@ -202,20 +202,20 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
-		return nil, fmt.Errorf("No cached token found, please log in with azcopy's login command, %v", err)
+		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
 	}
 	if !hasToken {
-		return nil, errors.New("No cached token found, please log in with azcopy's login command")
+		return nil, errors.New("no cached token found, please log in with azcopy's login command")
 	}
 
 	tokenInfo, err := uotm.credCache.LoadToken()
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed, %v", err)
+		return nil, fmt.Errorf("get cached token failed, %v", err)
 	}
 
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
+		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
 	}
 
 	// Update token cache, if token is updated.
@@ -285,12 +285,12 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (
 
 	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))
 	if err != nil {
-		return nil, fmt.Errorf("Get token from environment variable failed to unmarshal token, %v", err)
+		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %v", err)
 	}
 
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Get token from environment variable failed to ensure token fresh, %v", err)
+		return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
 	}
 
 	return &OAuthTokenInfo{
@@ -375,7 +375,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	// Send request
 	resp, err := msiTokenHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
 	}
 	defer func() { // resp and Body should not be nil
 		io.Copy(ioutil.Discard, resp.Body)

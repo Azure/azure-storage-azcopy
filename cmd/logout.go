@@ -42,7 +42,7 @@ This command will remove all the cached login info for current user.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := logoutCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform logout command, due to error: %v", err)
+				return fmt.Errorf("failed to perform logout command, %v", err)
 			}
 			return nil
 		},
