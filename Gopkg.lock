@@ -65,20 +65,20 @@
   version = "v1.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:ed3694e74931ec334bc8872504ae5ca53d52d2f0e38f6356dbb7ccc9805328a9"
+  digest = "1:ea6f6666dafd73ffad2f95feb9bca34ab09bc6942e2766a30dd603ebdde2ad70"
   name = "github.com/jiacfan/keychain"
   packages = ["."]
   pruneopts = "UT"
-  revision = "55285221316b0547171a4258015906e3a4da4721"
+  revision = "f2c902a3d80764f24a0bbde0e590a37d35fa1735"
+  version = "0.2.0"
 
 [[projects]]
-  branch = "master"
   digest = "1:6e3c5c3cae1a71d36ca570b29af02acdf6e0507a37bd91caf2146b6dc9463ce7"
   name = "github.com/jiacfan/keyctl"
   packages = ["."]
   pruneopts = "UT"
   revision = "988d05162bc59cf7789c35af405be8f1599a87a3"
+  version = "0.1.0"
 
 [[projects]]
   digest = "1:ca955a9cd5b50b0f43d2cc3aeb35c951473eeca41b34eb67507f1dbcc0542394"

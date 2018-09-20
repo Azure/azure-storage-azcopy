@@ -19,12 +19,12 @@
   name = "github.com/JeffreyRichter/enum"
 
 [[constraint]]
-  branch = "master"
   name = "github.com/jiacfan/keychain"
+  version = "0.2.0"
 
 [[constraint]]
-  branch = "master"
   name = "github.com/jiacfan/keyctl"
+  version = "0.1.0"
 
 [[constraint]]
   name = "github.com/spf13/cobra"
