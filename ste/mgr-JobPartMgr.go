@@ -343,11 +343,12 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 		// Create pipeline for Azure Blob.
 		case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
 			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
-			credential := common.CreateBlobCredential(ctx, credInfo, common.CreateCredentialOptions{
+			credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
 				Panic:    jpm.Panic,
 				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+				Cancel:   jpm.jobMgr.Cancel,
 			})
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
@@ -368,11 +369,12 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 				jpm.pacer)
 		// Create pipeline for Azure BlobFS.
 		case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
-			credential := common.CreateBlobFSCredential(ctx, credInfo, common.CreateCredentialOptions{
+			credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
 				Panic:    jpm.Panic,
 				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+				Cancel:   jpm.jobMgr.Cancel,
 			})
 			jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 

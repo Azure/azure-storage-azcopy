@@ -32,27 +32,23 @@ func init() {
 	// logoutCmd represents the logout command
 	logoutCmd := &cobra.Command{
 		Use:        "logout",
-		Aliases:    []string{"logout"},
 		SuggestFor: []string{"logout"},
-		Short:      "logout launch logout for current user.",
-		Long: `logout launch logout for current user. The most common cases are:
-  - launch logout for current user, all cached token for current user will be deleted.`,
+		Short:      "Log out to remove access to Azure storage resources.",
+		Long: `Log out to remove access to Azure storage resources.
+This command will remove all the cached login info for current user.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := logoutCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform logout command due to error %s", err.Error())
+				return fmt.Errorf("failed to perform logout command, %v", err)
 			}
 			return nil
 		},
-		// hide oauth feature temporarily
-		Hidden: true,
 	}
 
 	rootCmd.AddCommand(logoutCmd)
-	// TODO: p2 functions, add tenant and cloud name, i.e. support soverign clouds
 }
 
 type logoutCmdArgs struct{}
@@ -60,7 +56,7 @@ type logoutCmdArgs struct{}
 func (lca logoutCmdArgs) process() error {
 	uotm := GetUserOAuthTokenManagerInstance()
 	if err := uotm.RemoveCachedToken(); err != nil {
-		return fmt.Errorf("logout failed due to error: %v", err)
+		return err
 	}
 
 	// For MSI login, info success message to user.

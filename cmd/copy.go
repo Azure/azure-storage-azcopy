@@ -436,6 +436,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 	// verifies credential type and initializes credential info.
+	// Note: Currently, only one credential type is necessary for source and destination.
+	// For upload&download, only one side need credential.
+	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
 	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
 		source:         cca.source,
@@ -464,57 +467,56 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
-	// If the Credentials is of Anonymous Type i.e SAS, then we need to strip the SAS from the credentials
-	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.Anonymous() {
-		switch from {
-		case common.ELocation.Blob():
-			fromUrl, err := url.Parse(cca.source)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-			}
-			blobParts := azblob.NewBlobURLParts(*fromUrl)
-			cca.sourceSAS = blobParts.SAS.Encode()
-			jobPartOrder.SourceSAS = cca.sourceSAS
-			blobParts.SAS = azblob.SASQueryParameters{}
-			bUrl := blobParts.URL()
-			cca.source = bUrl.String()
-		case common.ELocation.File():
-			fromUrl, err := url.Parse(cca.source)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-			}
-			fileParts := azfile.NewFileURLParts(*fromUrl)
-			cca.sourceSAS = fileParts.SAS.Encode()
-			jobPartOrder.SourceSAS = cca.sourceSAS
-			fileParts.SAS = azfile.SASQueryParameters{}
-			fUrl := fileParts.URL()
-			cca.source = fUrl.String()
+	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
+	// Note: SAS could exists in source of S2S copy, although the credential type is OAuth for destination.
+	switch from {
+	case common.ELocation.Blob():
+		fromUrl, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
 		}
+		blobParts := azblob.NewBlobURLParts(*fromUrl)
+		cca.sourceSAS = blobParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		blobParts.SAS = azblob.SASQueryParameters{}
+		bUrl := blobParts.URL()
+		cca.source = bUrl.String()
+	case common.ELocation.File():
+		fromUrl, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+		}
+		fileParts := azfile.NewFileURLParts(*fromUrl)
+		cca.sourceSAS = fileParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		fileParts.SAS = azfile.SASQueryParameters{}
+		fUrl := fileParts.URL()
+		cca.source = fUrl.String()
+	}
 
-		switch to {
-		case common.ELocation.Blob():
-			toUrl, err := url.Parse(cca.destination)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
-			}
-			blobParts := azblob.NewBlobURLParts(*toUrl)
-			cca.destinationSAS = blobParts.SAS.Encode()
-			jobPartOrder.DestinationSAS = cca.destinationSAS
-			blobParts.SAS = azblob.SASQueryParameters{}
-			bUrl := blobParts.URL()
-			cca.destination = bUrl.String()
-		case common.ELocation.File():
-			toUrl, err := url.Parse(cca.destination)
-			if err != nil {
-				return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
-			}
-			fileParts := azfile.NewFileURLParts(*toUrl)
-			cca.destinationSAS = fileParts.SAS.Encode()
-			jobPartOrder.DestinationSAS = cca.destinationSAS
-			fileParts.SAS = azfile.SASQueryParameters{}
-			fUrl := fileParts.URL()
-			cca.destination = fUrl.String()
+	switch to {
+	case common.ELocation.Blob():
+		toUrl, err := url.Parse(cca.destination)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
 		}
+		blobParts := azblob.NewBlobURLParts(*toUrl)
+		cca.destinationSAS = blobParts.SAS.Encode()
+		jobPartOrder.DestinationSAS = cca.destinationSAS
+		blobParts.SAS = azblob.SASQueryParameters{}
+		bUrl := blobParts.URL()
+		cca.destination = bUrl.String()
+	case common.ELocation.File():
+		toUrl, err := url.Parse(cca.destination)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+		}
+		fileParts := azfile.NewFileURLParts(*toUrl)
+		cca.destinationSAS = fileParts.SAS.Encode()
+		jobPartOrder.DestinationSAS = cca.destinationSAS
+		fileParts.SAS = azfile.SASQueryParameters{}
+		fUrl := fileParts.URL()
+		cca.destination = fUrl.String()
 	}
 
 	if from == common.ELocation.Local() {
@@ -751,43 +753,61 @@ func init() {
 		Short:      "Copies source data to a destination location",
 		Long: `
 Copies source data to a destination location. The supported pairs are:
-  - local <-> Azure Blob
-  - local <-> Azure File
-  - local <-> ADLS Gen 2
-  - Azure Blob <-> Azure Blob
-  - Azure File -> Azure Blob
+  - local <-> Azure Blob (SAS or OAuth authentication)
+  - local <-> Azure File (SAS authentication)
+  - local <-> ADLS Gen 2 (OAuth or SharedKey authentication)
+  - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
 `,
-		Example: `Upload a single file:
+		Example: `Upload a single file with SAS:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Upload a single file through piping(block blob only):
+Upload a single file with OAuth token, please use login command first if not yet logged in:
+  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
+
+Upload a single file through piping(block blob only) with SAS:
   - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Upload an entire directory:
+Upload an entire directory with SAS:
   - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Upload only files using wildcards:
+Upload only files using wildcards with SAS:
   - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]"
 
-Upload files and directories using wildcards:
+Upload files and directories using wildcards with SAS:
   - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Download a single file:
+Download a single file with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "/path/to/file.txt"
 
-Download a single file through piping(blobs only):
+Download a single file with OAuth token, please use login command first if not yet logged in:
+  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
+
+Download a single file through piping(blobs only) with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
 
-Download an entire directory:
+Download an entire directory with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
 
-Download files using wildcards:
+Download files using wildcards with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
 
-Download files and directories using wildcards:
+Download files and directories using wildcards with SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
+
+Copy a single file with SAS:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Copy a single file with OAuth token, please use login command first if not yet logged in and note that OAuth token is used by destination:
+- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
+
+Copy an entire directory with SAS:
+- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Copy an entire account with SAS:
+- azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
@@ -859,11 +879,6 @@ Download files and directories using wildcards:
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
-
-	// hide oauth feature temporarily
-	cpCmd.PersistentFlags().MarkHidden("oauth-user")
-	cpCmd.PersistentFlags().MarkHidden("tenant-id")
-	cpCmd.PersistentFlags().MarkHidden("aad-endpoint")
 
 	// permanently hidden
 	cpCmd.PersistentFlags().MarkHidden("include")

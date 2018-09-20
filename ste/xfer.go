@@ -30,16 +30,15 @@ import (
 
 // upload related
 const UploadMaxTries = 20
-const UploadTryTimeout = time.Minute * 10
+const UploadTryTimeout = time.Minute * 15
 const UploadRetryDelay = time.Second * 1
-const UploadMaxRetryDelay = time.Second * 3
+const UploadMaxRetryDelay = time.Second * 60
 
 // download related
-const DownloadMaxTries = 5
 const MaxRetryPerDownloadBody = 5
-const DownloadTryTimeout = time.Minute * 10
+const DownloadTryTimeout = time.Minute * 15
 const DownloadRetryDelay = time.Second * 1
-const DownloadMaxRetryDelay = time.Second * 3
+const DownloadMaxRetryDelay = time.Second * 60
 
 // pacer related
 const PacerTimeToWaitInMs = 50
