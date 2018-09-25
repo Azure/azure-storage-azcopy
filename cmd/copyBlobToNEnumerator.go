@@ -171,7 +171,6 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 		if !gCopyUtil.matchBlobNameAgainstPattern(blobNamePattern, blobItem.Name, cca.recursive) {
 			return false
 		}
-
 		includeExcludeMatchPath := common.IffString(includExcludeContainer,
 			azblob.NewBlobURLParts(srcContainerURL.URL()).ContainerName+"/"+blobItem.Name,
 			blobItem.Name)
@@ -184,7 +183,12 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 		if gCopyUtil.resourceShouldBeExcluded(parentSourcePath, e.Exclude, includeExcludeMatchPath) {
 			return false
 		}
-
+		// check if blobType of the current blob is present in the list of blob type to exclude.
+		for _, blobType := range e.ExcludeBlobType {
+			if blobItem.Properties.BlobType == blobType {
+				return false
+			}
+		}
 		return true
 	}
 

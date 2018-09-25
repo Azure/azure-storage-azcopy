@@ -88,6 +88,8 @@ type rawCopyCmdArgs struct {
 	acl                      string
 	logVerbosity             string
 	cancelFromStdin          bool
+	// list of blobTypes to exclude while enumerating the transfer
+	excludeBlobType string
 }
 
 // validates and transform raw input into cooked input
@@ -230,6 +232,21 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from sevice to service")
 		}
 	}
+
+	// If the user has provided some input with excludeBlobType flag, parse the input.
+	if len(raw.excludeBlobType) > 0 {
+		// Split the string using delimeter ';' and parse the individual blobType
+		blobTypes := strings.Split(raw.excludeBlobType, ";")
+		for _, blobType := range blobTypes {
+			var eBlobType common.BlobType
+			err := eBlobType.Parse(blobType)
+			if err != nil {
+				return cooked, fmt.Errorf("error parsing the excludeBlobType %s provided with excludeBlobTypeFlag ", blobType)
+			}
+			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
+		}
+	}
+
 	return cooked, nil
 }
 
@@ -251,7 +268,9 @@ type cookedCopyCmdArgs struct {
 	forceWrite     bool
 
 	// options from flags
-	blockSize                uint32
+	blockSize uint32
+	// list of blobTypes to exclude while enumerating the transfer
+	excludeBlobType          []azblob.BlobType
 	blockBlobTier            common.BlockBlobTier
 	pageBlobTier             common.PageBlobTier
 	metadata                 string
@@ -414,13 +433,14 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// initialize the fields that are constant across all job part orders
 	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:      cca.jobID,
-		FromTo:     cca.fromTo,
-		ForceWrite: cca.forceWrite,
-		Priority:   common.EJobPriority.Normal(),
-		LogLevel:   cca.logVerbosity,
-		Include:    cca.include,
-		Exclude:    cca.exclude,
+		JobID:           cca.jobID,
+		FromTo:          cca.fromTo,
+		ForceWrite:      cca.forceWrite,
+		Priority:        common.EJobPriority.Normal(),
+		LogLevel:        cca.logVerbosity,
+		Include:         cca.include,
+		Exclude:         cca.exclude,
+		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
@@ -867,7 +887,7 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
-
+	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "excludeBlobType", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
