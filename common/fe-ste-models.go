@@ -302,6 +302,47 @@ func (ft *FromTo) From() Location {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Enumerates the values for blob type.
+type BlobType uint8
+
+var EBlobType = BlobType(0)
+
+func (BlobType) None() BlobType { return BlobType(0) }
+
+func (BlobType) BlockBlob() BlobType { return BlobType(1) }
+
+func (BlobType) PageBlob() BlobType { return BlobType(2) }
+
+func (BlobType) AppendBlob() BlobType { return BlobType(3) }
+
+func (bt BlobType) String() string {
+	return enum.StringInt(bt, reflect.TypeOf(bt))
+}
+
+func (bt *BlobType) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(bt), s, true, true)
+	if err == nil {
+		*bt = val.(BlobType)
+	}
+	return err
+}
+
+// ToAzBlobType returns the equivalent azblob.BlobType for given string.
+func (bt *BlobType) ToAzBlobType() azblob.BlobType {
+	blobType := bt.String()
+	switch blobType {
+	case string(azblob.BlobBlockBlob):
+		return azblob.BlobBlockBlob
+	case string(azblob.BlobPageBlob):
+		return azblob.BlobPageBlob
+	case string(azblob.BlobAppendBlob):
+		return azblob.BlobAppendBlob
+	default:
+		return azblob.BlobNone
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var ETransferStatus = TransferStatus(0)
 
