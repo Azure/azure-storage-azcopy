@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -133,7 +134,11 @@ func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCreden
 	newToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
 		// Fail to get new token.
-		options.logError(fmt.Sprintf("failed to refresh token, please check if refresh token has expired and run 'azcopy login' again. (Error details: %v)", err))
+		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
+			options.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
+		} else {
+			options.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))
+		}
 		// Try to refresh again according to original token's info.
 		return refreshPolicyHalfOfExpiryWithin(&(tokenInfo.Token), options)
 	}
@@ -183,7 +188,11 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 	newToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
 		// Fail to get new token.
-		options.logError(fmt.Sprintf("failed to refresh token, please check if refresh token has expired and run 'azcopy login' again. (Error details: %v)", err))
+		if _, ok := err.(adal.TokenRefreshError); ok && strings.Contains(err.Error(), "refresh token has expired") {
+			options.logError(fmt.Sprintf("failed to refresh token, OAuth refresh token has expired, please log in with azcopy login command again. (Error details: %v)", err))
+		} else {
+			options.logError(fmt.Sprintf("failed to refresh token, please check error details and try to log in with azcopy login command again. (Error details: %v)", err))
+		}
 		// Try to refresh again according to existing token's info.
 		return refreshPolicyHalfOfExpiryWithin(&(tokenInfo.Token), options)
 	}
