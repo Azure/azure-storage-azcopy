@@ -82,7 +82,8 @@ type SyncJobPartOrderRequest struct {
 	// the count of the local files deletion is tracked using it.
 	FilesDeletedLocally int
 	// commandString hold the user given command which is logged to the Job log file
-	CommandString string
+	CommandString  string
+	CredentialInfo CredentialInfo
 }
 
 type CopyJobPartOrderResponse struct {

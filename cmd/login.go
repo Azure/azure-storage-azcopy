@@ -35,18 +35,29 @@ func init() {
 	// lgCmd represents the login command
 	lgCmd := &cobra.Command{
 		Use:        "login",
-		Aliases:    []string{"login"},
 		SuggestFor: []string{"login"},
-		Short:      "login launch oauth MSI login or device login for current user.",
-		Long:       `login launch oauth MSI login or device login for current user.`,
-		Example: `Login with specified tenant ID:
-- azcopy login --tenant-id "[TenantID]"
-
-Login with default tenant ID (microsoft.com):
+		Short:      "Log in to use OAuth token to access Azure storage resources.",
+		Long: `Log in to use OAuth token to access Azure storage resources. 
+This command will cache encrypted login info for current user with OS built-in mechanisms.
+Please refer to the examples for more information.`,
+		Example: `Log in interactively with default AAD tenant ID (microsoft.com):
 - azcopy login
 
-Login with managed identity (MSI):
+Log in interactively with specified tenant ID:
+- azcopy login --tenant-id "[TenantID]"
+
+Log in using a VM's system-assigned identity:
 - azcopy login --identity
+
+Log in using a VM's user-assigned identity with Client ID of the service identity:
+- azcopy login --identity --identity-client-id "[ServiceIdentityClientID]"
+
+Log in using a VM's user-assigned identity with Object ID of the service identity:
+- azcopy login --identity --identity-object-id "[ServiceIdentityObjectID]"
+
+Log in using a VM's user-assigned identity with Resource ID of the service identity:
+- azcopy login --identity --identity-resource-id "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
+
 `,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
@@ -54,27 +65,28 @@ Login with managed identity (MSI):
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := loginCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform login command due to error %s", err.Error())
+				return fmt.Errorf("failed to perform login command, %v", err)
 			}
 			return nil
 		},
-		// hide oauth feature temporarily
-		Hidden: true,
 	}
 
 	rootCmd.AddCommand(lgCmd)
 
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "tenant id to use for OAuth device interactive login")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "Azure active directory endpoint to use for OAuth user interactive login")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.tenantID, "tenant-id", "", "the Azure active directory tenant id to use for OAuth device interactive login")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "the Azure active directory endpoint to use for OAuth user interactive login")
 	// Use identity which aligns to Azure powershell and CLI.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "use virtual machine's identity, formerly known as managed service identity (MSI)")
-	// Temporarily use u which aligns to Azure CLI.
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityID, "u", "", "managed service identity ID")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "log in using virtual machine's identity, also known as managed service identity (MSI)")
+	// Client ID of user-assigned identity.
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "client ID of user-assigned identity")
+	// Object ID of user-assigned identity.
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityObjectID, "identity-object-id", "", "object ID of user-assigned identity")
+	// Resource ID of user-assigned identity.
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityResourceID, "identity-resource-id", "", "resource ID of user-assigned identity")
 
 	// hide flags
 	// temporaily hide aad-endpoint and support Production environment only.
 	lgCmd.PersistentFlags().MarkHidden("aad-endpoint")
-	lgCmd.PersistentFlags().MarkHidden("u")
 }
 
 type loginCmdArgs struct {
@@ -82,8 +94,14 @@ type loginCmdArgs struct {
 	tenantID    string
 	aadEndpoint string
 
-	identity   bool   // Whether to use MSI.
-	identityID string // VM's user assigned identity, client or object ids of the service identity.
+	identity bool // Whether to use MSI.
+
+	// Info of VM's user assigned identity, client or object ids of the service identity are required if
+	// your VM has multiple user-assigned managed identities.
+	// https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/how-to-use-vm-token#get-a-token-using-go
+	identityClientID   string
+	identityObjectID   string
+	identityResourceID string
 }
 
 func (lca loginCmdArgs) validate() error {
@@ -92,8 +110,8 @@ func (lca loginCmdArgs) validate() error {
 		return errors.New("tenant ID cannot be used with identity")
 	}
 
-	if !lca.identity && lca.identityID != "" {
-		return errors.New("u is only valid when using identity")
+	if !lca.identity && (lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "") {
+		return errors.New("identity client/object/resource ID is only valid when using identity")
 	}
 
 	return nil
@@ -108,7 +126,11 @@ func (lca loginCmdArgs) process() error {
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled succesfully.
 	if lca.identity {
-		if _, err := uotm.MSILogin(context.TODO(), lca.identityID, true); err != nil {
+		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
+			ClientID: lca.identityClientID,
+			ObjectID: lca.identityObjectID,
+			MSIResID: lca.identityResourceID,
+		}, true); err != nil {
 			return err
 		}
 		// For MSI login, info success message to user.
@@ -117,7 +139,8 @@ func (lca loginCmdArgs) process() error {
 		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
 			return err
 		}
-		// User login fulfilled in browser, and user knows if the login fulfilled successfully.
+		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
+		glcm.Info("Login succeeded.")
 	}
 
 	return nil

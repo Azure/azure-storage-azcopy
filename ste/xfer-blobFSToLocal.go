@@ -214,7 +214,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 			}
 
 			// step 2: write the body into the memory mapped file directly
-			resp := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
+			resp := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body := newResponseBodyPacer(resp, bffd.pacer, bffd.destMMF)
 			_, err = io.ReadFull(body, bffd.destMMF.Slice()[startIndex:startIndex+adjustedRangeSize])
 			// reading the response and closing the resp body
