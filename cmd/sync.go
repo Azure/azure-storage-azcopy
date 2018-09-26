@@ -42,11 +42,12 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize    uint32
-	logVerbosity string
-	include      string
-	exclude      string
-	output       string
+	blockSize      uint32
+	logVerbosity   string
+	include        string
+	exclude        string
+	followSymlinks bool
+	output         string
 }
 
 // validates and transform raw input into cooked input
@@ -67,6 +68,8 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	cooked.blockSize = raw.blockSize
+
+	cooked.followSymlinks = raw.followSymlinks
 
 	err := cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
@@ -118,7 +121,7 @@ type cookedSyncCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 	recursive      bool
-
+	followSymlinks bool
 	// options from flags
 	include      map[string]int
 	exclude      map[string]int
@@ -197,7 +200,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 
 		if jobDone {
@@ -426,6 +430,7 @@ func init() {
 	// hidden filters
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")
+	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when performing sync from local file system.")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
