@@ -206,6 +206,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				// cancel the transfer
 				fru.jptm.Cancel()
 				fru.jptm.SetStatus(common.ETransferStatus.Failed())
+				fru.jptm.SetErrorCode(int32(status))
 			}
 			// report the number of range done
 			lastRangeDone, _ := fru.jptm.ReportChunkDone()
@@ -243,6 +244,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 					fru.jptm.LogUploadError(info.Source, info.Destination, msg, status)
 					fru.jptm.Cancel()
 					fru.jptm.SetStatus(common.ETransferStatus.Failed())
+					fru.jptm.SetErrorCode(int32(status))
 				}
 				transferDone()
 				return

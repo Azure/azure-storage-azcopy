@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -39,20 +40,22 @@ func (c *RpcCmd) Parse(s string) error {
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
-	Version        Version     // version of the azcopy
-	JobID          JobID       // Guid - job identifier
-	PartNum        PartNumber  // part number of the job
-	IsFinalPart    bool        // to determine the final part for a specific job
-	ForceWrite     bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
-	Priority       JobPriority // priority of the task
-	FromTo         FromTo
-	Include        map[string]int
-	Exclude        map[string]int
-	Transfers      []CopyTransfer
-	LogLevel       LogLevel
-	BlobAttributes BlobTransferAttributes
-	SourceSAS      string
-	DestinationSAS string
+	Version     Version     // version of the azcopy
+	JobID       JobID       // Guid - job identifier
+	PartNum     PartNumber  // part number of the job
+	IsFinalPart bool        // to determine the final part for a specific job
+	ForceWrite  bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
+	Priority    JobPriority // priority of the task
+	FromTo      FromTo
+	Include     map[string]int
+	Exclude     map[string]int
+	// list of blobTypes to exclude.
+	ExcludeBlobType []azblob.BlobType
+	Transfers       []CopyTransfer
+	LogLevel        LogLevel
+	BlobAttributes  BlobTransferAttributes
+	SourceSAS       string
+	DestinationSAS  string
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
@@ -144,6 +147,7 @@ type ListJobSummaryResponse struct {
 	BytesOverWire         uint64
 	TotalBytesTransferred uint64
 	FailedTransfers       []TransferDetail
+	SkippedTransfers      []TransferDetail
 }
 
 type ListJobTransfersRequest struct {
@@ -165,6 +169,7 @@ type TransferDetail struct {
 	Src            string
 	Dst            string
 	TransferStatus TransferStatus
+	ErrorCode      int32
 }
 
 type CancelPauseResumeResponse struct {

@@ -157,25 +157,20 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						if !cca.followSymlinks {
 							return nil
 						}
-						evaluatedSymlinkPath, err := filepath.EvalSymlinks(pathToFile)
+						// evaluate the symlinkPath.
+						evaluatedSymlinkPath, err := util.evaluateSymlinkPath(pathToFile)
 						if err != nil {
 							glcm.Info(fmt.Sprintf("error evaluating the symlink path %s", evaluatedSymlinkPath))
 							return nil
 						}
 						// If the path is a windows file system path, replace '\\' with '/'
 						// to maintain the consistency with other system paths.
-						if common.AZCOPY_PATH_SEPARATOR_CHAR == '\\' {
-							evaluatedSymlinkPath = strings.Replace(evaluatedSymlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if common.OS_PATH_SEPARATOR == "\\" {
+							pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 						}
-						tList, errorList := util.getSymlinkTransferList(evaluatedSymlinkPath, fileOrDirectoryPath, parentSourcePath, cleanContainerPath, destinationURL, e.Include, e.Exclude)
-						// Iterate though the list of all transfers and add it to the CopyJobPartOrder Request
-						for _, tl := range tList {
-							e.addTransfer(tl, cca)
-						}
-						// Iterate through all the errors occurred while traversing the symlinks and
-						// put them into the lifecycle manager
-						for _, err := range errorList {
-							glcm.Info(err.Error())
+						err = e.getSymlinkTransferList(evaluatedSymlinkPath, pathToFile, parentSourcePath, cleanContainerPath, destinationURL, cca)
+						if err != nil {
+							glcm.Info(fmt.Sprintf("error %s evaluating the symlinkPath %s", err.Error(), evaluatedSymlinkPath))
 						}
 					}
 					return nil
@@ -204,6 +199,8 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					return err
 				}
 			}
+		}else{
+			glcm.Info(fmt.Sprintf("error %s accessing the filepath %s", err.Error(), fileOrDirectoryPath))
 		}
 	}
 
@@ -211,6 +208,155 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return errors.New("nothing can be uploaded, please use --recursive to upload directories")
 	}
 	return e.dispatchFinalPart(cca)
+}
+
+// getSymlinkTransferList api scans all the elements inside the symlinkPath and enumerates the transfers.
+// If there exists a symlink in the given symlinkPath, it recursively scans it and enumerate the transfer.
+// The path of the files in the symlinkPath will be relative to the original path.
+// Example 1: C:\MountedD is a symlink to D: and D: contains file1, file2.
+// The destination for file1, file2 remotely will be MountedD/file1, MountedD/file2.
+// Example 2. If there exists a symlink inside the D: "D:\MountecF" pointing to F: and there exists
+// ffile1, ffile2, then destination for ffile1, ffile2 remotely will be MountedD/MountedF/ffile1 and
+// MountedD/MountedF/ffile2
+func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, parentSource, cleanContainerPath string,
+	destinationUrl *url.URL, cca *cookedCopyCmdArgs) error{
+
+	util := copyHandlerUtil{}
+	// replace the "\\" path separator with "/" separator
+	symlinkPath = strings.Replace(symlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+	// Glob the evaluated symlinkPath and iterate through each files and sub-directories.
+	listOfFilesDirs, err := filepath.Glob(symlinkPath)
+	if err != nil {
+		return fmt.Errorf(fmt.Sprintf("found cycle in symlink path %s", symlinkPath))
+	}
+	for _, files := range listOfFilesDirs {
+		// replace the windows path separator in the path with "/" path separator
+		files = strings.Replace(files, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		fInfo, err := os.Stat(files)
+		if err != nil {
+			glcm.Info(fmt.Sprintf("error %s fetching the fileInfo for filePath %s", err.Error(), files))
+		} else if fInfo.IsDir() {
+			filepath.Walk(files, func(path string, fileInfo os.FileInfo, err error) error {
+				if err != nil {
+					glcm.Info(err.Error())
+					return nil
+				} else if fileInfo.IsDir() {
+					return nil
+				} else if fileInfo.Mode().IsRegular() { // If the file is a regular file i.e not a directory and symlink.
+					// replace the windows path separator in the path with "/" path separator
+					path = strings.Replace(path, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+					// strip the original symlink path from the filePath
+					// For Example: C:\MountedD points to D:\ and path is D:\file1
+					// relativePath = file1
+					relativePath := strings.Replace(path, symlinkPath, "", 1)
+					// If there exists a path separator at the start of the relative path, then remove the path separator
+					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						relativePath = relativePath[1:]
+					}
+					var sourcePath = ""
+					// concatenate the relative symlink path to the original source path
+					// For Example: C:\MountedD points to D:\ and path is D:\file1
+					// sourcePath = c:\MounteD\file1
+					if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						sourcePath = fmt.Sprintf("%s%s", source, relativePath)
+					} else {
+						sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, relativePath)
+					}
+
+					// check if the sourcePath needs to be include or not
+					if !util.resourceShouldBeIncluded(parentSource, e.Include, sourcePath) {
+						return nil
+					}
+					// check if the source has to be excluded or not
+					if util.resourceShouldBeExcluded(parentSource, e.Exclude, sourcePath) {
+						return nil
+					}
+					// create the transfer and add to the list
+					destinationUrl.Path = util.generateObjectPath(cleanContainerPath,
+						util.getRelativePath(parentSource, sourcePath))
+					transfer := common.CopyTransfer{
+						Source:           path,
+						Destination:      destinationUrl.String(),
+						LastModifiedTime: fileInfo.ModTime(),
+						SourceSize:       fileInfo.Size(),
+					}
+					err = e.addTransfer(transfer, cca)
+					if err != nil {
+						glcm.Info(fmt.Sprintf("error %s adding the transfer source %s and destination %s", err.Error(), path, destinationUrl.String()))
+					}
+					return nil
+				} else if fileInfo.Mode()&os.ModeSymlink != 0 { // If the file is a symlink
+					// replace the windows path separator in the path with "/" path separator
+					path = strings.Replace(path, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+					// Evaulate the symlink path
+					sLinkPath, err := util.evaluateSymlinkPath(path)
+					if err != nil {
+						glcm.Info(fmt.Sprintf("error %s evaluating the symlink path %s ", err.Error(), path))
+						return nil
+					}
+					// strip the original symlink path and concatenate the relativePath to the original sourcePath
+					// for Example: source = C:\MountedD sLinkPath = D:\MountedE
+					// relativePath = MountedE , sourcePath = C;\MountedD\MountedE
+					relativePath := strings.Replace(path, symlinkPath, "", 1)
+					// If char of relative Path is the path separator, strip the path separator
+					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						relativePath = relativePath[1:]
+					}
+					var sourcePath = ""
+					// concatenate the relative symlink path to the original source
+					if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						sourcePath = fmt.Sprintf("%s%s", source, relativePath)
+					} else {
+						sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, relativePath)
+					}
+					err = e.getSymlinkTransferList(sLinkPath, sourcePath,
+						parentSource, cleanContainerPath, destinationUrl, cca)
+					if err != nil {
+						glcm.Info(fmt.Sprintf("error %s iterating through the symlink %s", err.Error(), sLinkPath))
+					}
+				}
+				return nil
+			})
+		} else if fInfo.Mode().IsRegular() {
+			// strip the original symlink path
+			relativePath := strings.Replace(files, symlinkPath, "", 1)
+
+			// concatenate the path to the parent source
+			var sourcePath = ""
+			if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				sourcePath = fmt.Sprintf("%s%s", source, relativePath)
+			} else {
+				sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, relativePath)
+			}
+
+			// check if the sourcePath needs to be include or not
+			if !util.resourceShouldBeIncluded(parentSource, e.Include, sourcePath) {
+				continue
+			}
+			// check if the source has to be excluded or not
+			if util.resourceShouldBeExcluded(parentSource, e.Exclude, sourcePath) {
+				continue
+			}
+
+			// create the transfer and add to the list
+			destinationUrl.Path = util.generateObjectPath(cleanContainerPath,
+				util.getRelativePath(source, sourcePath))
+			transfer := common.CopyTransfer{
+				Source:           files,
+				Destination:      destinationUrl.String(),
+				LastModifiedTime: fInfo.ModTime(),
+				SourceSize:       fInfo.Size(),
+			}
+			err = e.addTransfer(transfer, cca)
+			if err != nil {
+				glcm.Info(fmt.Sprintf("error %s adding the transfer source %s and destination %s", err.Error(), files, destinationUrl.String()))
+			}
+		} else {
+			continue
+		}
+	}
+	return nil
 }
 
 func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {

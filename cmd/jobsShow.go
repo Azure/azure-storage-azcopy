@@ -119,7 +119,8 @@ func PrintJobTransfers(outputForamt common.OutputFormat, listTransfersResponse c
 		if listTransfersResponse.ErrorMsg != "" {
 			exitCode = common.EExitCode.Error()
 		}
-		jsonOutput, err := json.MarshalIndent(listTransfersResponse, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(listTransfersResponse, "", "  ")
+		jsonOutput, err := json.Marshal(listTransfersResponse)
 		common.PanicIfErr(err)
 		glcm.Exit(string(jsonOutput), exitCode)
 		return
@@ -150,7 +151,8 @@ func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.Li
 		if summary.ErrorMsg != "" {
 			exitCode = common.EExitCode.Error()
 		}
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 		glcm.Exit(string(jsonOutput), exitCode)
 		return
@@ -160,11 +162,12 @@ func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.Li
 		glcm.Exit("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
 	}
 	glcm.Info(fmt.Sprintf(
-		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nFinal Job Status: %v\n",
+		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\n",
 		summary.JobID.String(),
 		summary.TotalTransfers,
 		summary.TransfersCompleted,
 		summary.TransfersFailed,
+		summary.TransfersSkipped,
 		summary.JobStatus,
 	))
 }
