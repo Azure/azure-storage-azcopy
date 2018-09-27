@@ -96,9 +96,17 @@ func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	err = syscall.Fallocate(int(f.Fd()), 0, 0, fileSize)
 	if err != nil {
-		return nil, err
+		// To solve the case that Fallocate cannot work well with cifs/smb3.
+		if err == syscall.ENOTSUP {
+			if truncateError := f.Truncate(fileSize); truncateError != nil {
+				return nil, truncateError
+			}
+		} else {
+			return nil, err
+		}
 	}
 	//if truncateError := f.Truncate(fileSize); truncateError != nil {
 	//	return nil, truncateError
