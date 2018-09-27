@@ -224,6 +224,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					jptm.LogDownloadError(source, destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return
@@ -239,6 +240,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					jptm.LogDownloadError(source, destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return

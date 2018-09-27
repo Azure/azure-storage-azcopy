@@ -197,7 +197,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 
 		if jobDone {

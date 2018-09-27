@@ -143,6 +143,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-"+msg, status)
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			srcMmf.Unmap()
 			return
@@ -160,6 +161,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				jptm.LogUploadError(info.Source, info.Destination, "PageBlob SetTier-"+msg, status)
 				jptm.Cancel()
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				jptm.SetErrorCode(int32(status))
 				// Since transfer failed while setting the page blob tier
 				// Deleting the created page blob
 				_, err := pageBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
@@ -349,6 +351,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				bbu.jptm.LogUploadError(bbu.source, bbu.destination, "Chunk Upload Failed "+msg, status)
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
+				bbu.jptm.SetErrorCode(int32(status))
 			}
 
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
@@ -384,6 +387,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				bbu.jptm.LogUploadError(bbu.source, bbu.destination, "Commit block list failed "+msg, status)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
+				bbu.jptm.SetErrorCode(int32(status))
 				transferDone()
 				return
 			}
@@ -401,6 +405,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					bbu.jptm.LogUploadError(bbu.source, bbu.destination, "BlockBlob SetTier "+msg, status)
 					bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+					bbu.jptm.SetErrorCode(int32(status))
 				}
 			}
 			bbu.jptm.SetStatus(common.ETransferStatus.Success())
@@ -457,6 +462,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 		jptm.LogUploadError(tInfo.Source, tInfo.Destination, "PutBlob Failed "+msg, status)
 		if !jptm.WasCanceled() {
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetErrorCode(int32(status))
 		}
 	} else {
 		// if the put blob is a success, updating the transfer status to success
@@ -473,6 +479,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcMmf *common.MMF, blockBlobUr
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				jptm.LogUploadError(tInfo.Source, tInfo.Destination, "BlockBlob SetTier "+msg, status)
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+				jptm.SetErrorCode(int32(status))
 				// since blob tier failed, the transfer failed
 				// the blob created should be deleted
 				_, err := blockBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
@@ -589,6 +596,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 					// cancelling the transfer
 					pbu.jptm.Cancel()
 					pbu.jptm.SetStatus(common.ETransferStatus.Failed())
+					pbu.jptm.SetErrorCode(int32(status))
 				}
 				pageDone()
 				return

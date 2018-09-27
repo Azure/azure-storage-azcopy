@@ -144,6 +144,7 @@ type ListJobSummaryResponse struct {
 	BytesOverWire         uint64
 	TotalBytesTransferred uint64
 	FailedTransfers       []TransferDetail
+	SkippedTransfers      []TransferDetail
 }
 
 type ListJobTransfersRequest struct {
@@ -165,6 +166,7 @@ type TransferDetail struct {
 	Src            string
 	Dst            string
 	TransferStatus TransferStatus
+	ErrorCode      int32
 }
 
 type CancelPauseResumeResponse struct {

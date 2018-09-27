@@ -29,6 +29,7 @@ type IJobPartTransferMgr interface {
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
 	TransferStatus() common.TransferStatus
 	SetStatus(status common.TransferStatus)
+	SetErrorCode(errorCode int32)
 	SetNumberOfChunks(numChunks uint32)
 	ReportTransferDone() uint32
 	RescheduleTransfer()
@@ -222,6 +223,21 @@ func (jptm *jobPartTransferMgr) TransferStatus() common.TransferStatus {
 // TransferStatus updates the status of given transfer for given jobId and partNumber
 func (jptm *jobPartTransferMgr) SetStatus(status common.TransferStatus) {
 	jptm.jobPartPlanTransfer.SetTransferStatus(status, false)
+}
+
+// SetErrorCode updates the errorcode of transfer for given jobId and partNumber.
+func (jptm *jobPartTransferMgr) ErrorCode() int32 {
+	return jptm.jobPartPlanTransfer.ErrorCode()
+}
+
+// SetErrorCode updates the errorcode of transfer for given jobId and partNumber.
+func (jptm *jobPartTransferMgr) SetErrorCode(errorCode int32) {
+	// If the given errorCode is 0, then errorCode doesn't needs to be updated since default value
+	// of errorCode is 0.
+	if errorCode == 0 {
+		return
+	}
+	jptm.jobPartPlanTransfer.SetErrorCode(errorCode, false)
 }
 
 // TODO: Can we kill this method?

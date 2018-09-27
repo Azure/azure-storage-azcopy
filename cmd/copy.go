@@ -135,7 +135,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			if len(files[index]) == 0 {
 				continue
 			}
-			cooked.include[files[index]] = index
+			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
+			// this replacement is done to handle the windows file paths where path separator "\\"
+			includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			cooked.include[includePath] = index
 		}
 	}
 
@@ -151,7 +154,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			if len(files[index]) == 0 {
 				continue
 			}
-			cooked.exclude[files[index]] = index
+			// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
+			// this replacement is done to handle the windows file paths where path separator "\\"
+			excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			cooked.exclude[excludePath] = index
 		}
 	}
 
@@ -660,7 +666,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 
 		if jobDone {
