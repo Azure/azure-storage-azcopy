@@ -82,7 +82,8 @@ type SyncJobPartOrderRequest struct {
 	// the count of the local files deletion is tracked using it.
 	FilesDeletedLocally int
 	// commandString hold the user given command which is logged to the Job log file
-	CommandString string
+	CommandString  string
+	CredentialInfo CredentialInfo
 }
 
 type CopyJobPartOrderResponse struct {
@@ -143,6 +144,7 @@ type ListJobSummaryResponse struct {
 	BytesOverWire         uint64
 	TotalBytesTransferred uint64
 	FailedTransfers       []TransferDetail
+	SkippedTransfers      []TransferDetail
 }
 
 type ListJobTransfersRequest struct {
@@ -164,6 +166,7 @@ type TransferDetail struct {
 	Src            string
 	Dst            string
 	TransferStatus TransferStatus
+	ErrorCode      int32
 }
 
 type CancelPauseResumeResponse struct {

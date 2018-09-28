@@ -550,6 +550,16 @@ def get_object_sas(url_with_sas, object_name):
         resource_sas = url_parts[0] + "/" + object_name + '?' + url_parts[1]
     return resource_sas
 
+def get_object_without_sas(url, object_name):
+    # Splitting the container URL to add the uploaded blob name to the SAS
+    url_parts = url.split("?")
+    # adding the blob name after the container name
+    if url_parts[0].endswith("/"):
+        resource_sas = url_parts[0] + object_name
+    else:
+        resource_sas = url_parts[0] + "/" + object_name
+    return resource_sas
+
 # get_resource_sas return the shared access signature for the given resource
 # using the container url.
 def get_resource_sas(resource_name):

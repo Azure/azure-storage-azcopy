@@ -132,6 +132,11 @@ func (c *CredCache) removeCachedTokenInternal() error {
 	err := keychain.DeleteGenericPasswordItem(serviceName, cachedTokenKey)
 	if err != nil {
 		err = handleGenericKeyChainSecError(err)
+
+		if err == keychain.ErrorItemNotFound {
+			return fmt.Errorf("no cached token found for current user")
+		}
+
 		return fmt.Errorf("failed to remove cached token, %v", err)
 	}
 	return nil
@@ -203,8 +208,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 func handleGenericKeyChainSecError(err error) error {
 	if err == keychain.ErrorInteractionNotAllowed {
 		return fmt.Errorf(
-			"%v (Please check if default(login) keychain is locked, to use AzCopy from SSH in Mac OS, please unlock default(login) keychain from SSH first)",
-			err)
+			"if you are using SSH, please run 'security unlock-keychain' to unlock default(login) keychain from SSH first, and then re-run your azcopy command. (Error details: %v)", err)
 	}
 
 	return err

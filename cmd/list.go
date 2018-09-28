@@ -163,7 +163,8 @@ func printListContainerResponse(lsResponse *common.ListContainerResponse, output
 		return
 	}
 	if outputFormat == common.EOutputFormat.Json() {
-		marshaledData, err := json.MarshalIndent(lsResponse, "", " ")
+		//marshaledData, err := json.MarshalIndent(lsResponse, "", " ")
+		marshaledData, err := json.Marshal(lsResponse)
 		if err != nil {
 			panic(fmt.Errorf("error listing the source. Failed with error %s", err))
 		}

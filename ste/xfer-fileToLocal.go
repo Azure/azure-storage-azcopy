@@ -190,13 +190,14 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return
 			}
 
 			// step 2: write the body into the memory mapped file directly
-			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
+			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			_, err = io.ReadFull(retryReader, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
 			io.Copy(ioutil.Discard, retryReader)
 			retryReader.Close()
@@ -207,6 +208,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
 					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return

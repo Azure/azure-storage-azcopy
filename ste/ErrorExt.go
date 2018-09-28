@@ -11,7 +11,7 @@ type ErrorEx struct {
 }
 
 func (errex ErrorEx) ErrorCodeAndString() (int, string) {
-	switch e := interface{}(errex).(type) {
+	switch e := interface{}(errex.error).(type) {
 	case azblob.StorageError:
 		return e.Response().StatusCode, e.Response().Status
 	case azfile.StorageError:

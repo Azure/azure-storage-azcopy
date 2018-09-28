@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -196,7 +197,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
-		jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
+		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
 
 		if jobDone {
@@ -266,6 +268,36 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		CommandString:    cca.commandString,
 		SourceSAS:        cca.sourceSAS,
 		DestinationSAS:   cca.destinationSAS,
+		CredentialInfo:   common.CredentialInfo{},
+	}
+
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	// verifies credential type and initializes credential info.
+	// For sync, only one side need credential.
+	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+		fromTo:         cca.fromTo,
+		source:         cca.source,
+		destination:    cca.destination,
+		sourceSAS:      cca.sourceSAS,
+		destinationSAS: cca.destinationSAS,
+	}); err != nil {
+		return err
+	}
+
+	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
+	// the info will be transferred to STE.
+	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// Message user that they are using Oauth token for authentication,
+		// in case of silently using cached token without consciousness。
+		glcm.Info("Using OAuth token for authentication.")
+
+		uotm := GetUserOAuthTokenManagerInstance()
+		// Get token from env var or cache.
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return err
+		} else {
+			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+		}
 	}
 
 	from := cca.fromTo.From()

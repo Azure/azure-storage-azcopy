@@ -64,6 +64,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+msg, status)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		}
@@ -74,6 +75,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				jptm.LogDownloadError(info.Source, info.Destination, "Preserve Modified Time Error "+msg, status)
 				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.SetErrorCode(int32(status))
 				// Since the transfer failed, the file created above should be deleted
 				err = deleteFile(info.Destination)
 				if err != nil {
@@ -95,6 +97,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+msg, status)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetErrorCode(int32(status))
 			jptm.ReportTransferDone()
 			return
 		}
@@ -106,6 +109,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogDownloadError(info.Source, info.Destination, "Memory Map Error "+msg, status)
 			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.SetErrorCode(int32(status))
 			// Since the transfer failed, the file created above should be deleted
 			err = deleteFile(info.Destination)
 			if err != nil {
@@ -203,13 +207,14 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					bffd.jptm.LogDownloadError(bffd.source, bffd.destination, msg, status)
 					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
+					bffd.jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return
 			}
 
 			// step 2: write the body into the memory mapped file directly
-			resp := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: DownloadMaxTries})
+			resp := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body := newResponseBodyPacer(resp, bffd.pacer, bffd.destMMF)
 			_, err = io.ReadFull(body, bffd.destMMF.Slice()[startIndex:startIndex+adjustedRangeSize])
 			// reading the response and closing the resp body
@@ -224,6 +229,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					bffd.jptm.LogDownloadError(bffd.source, bffd.destination, msg, status)
 					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
+					bffd.jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return

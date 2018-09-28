@@ -115,10 +115,14 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 }
 
 // MSILogin tries to get token from MSI, persist indicates whether to cache the token on local disk.
-func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityID string, persist bool) (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo IdentityInfo, persist bool) (*OAuthTokenInfo, error) {
+	if err := identityInfo.Validate(); err != nil {
+		return nil, err
+	}
+
 	oAuthTokenInfo := &OAuthTokenInfo{
-		Identity:   true,
-		IdentityID: identityID,
+		Identity:     true,
+		IdentityInfo: identityInfo,
 	}
 	token, err := oAuthTokenInfo.GetNewTokenFromMSI(ctx)
 	if err != nil {
@@ -129,7 +133,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityID stri
 	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, %v", err)
+			return nil, err
 		}
 	}
 
@@ -160,7 +164,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 		ApplicationID,
 		Resource)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, %v",
+		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
@@ -171,7 +175,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
 	token, err := adal.WaitForUserCompletion(uotm.oauthClient, deviceCode)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to login with tenantID %q, Azure directory endpoint %q, %v",
+		return nil, fmt.Errorf("failed to login with tenantID %q, Azure directory endpoint %q, %v",
 			tenantID, activeDirectoryEndpoint, err)
 	}
 
@@ -184,7 +188,7 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	if persist {
 		err = uotm.credCache.SaveToken(oAuthTokenInfo)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to login during persisting token to local, %v", err)
+			return nil, err
 		}
 	}
 
@@ -198,20 +202,20 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
-		return nil, fmt.Errorf("No cached token found, %v", err)
+		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
 	}
 	if !hasToken {
-		return nil, errors.New("No cached token found, please use login command first before getToken")
+		return nil, errors.New("no cached token found, please log in with azcopy's login command")
 	}
 
 	tokenInfo, err := uotm.credCache.LoadToken()
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed, %v", err)
+		return nil, fmt.Errorf("get cached token failed, %v", err)
 	}
 
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Get cached token failed to ensure token fresh, %v", err)
+		return nil, fmt.Errorf("get cached token failed to ensure token fresh, please log in with azcopy's login command again, %v", err)
 	}
 
 	// Update token cache, if token is updated.
@@ -281,12 +285,12 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (
 
 	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))
 	if err != nil {
-		return nil, fmt.Errorf("Get token from environment variable failed to unmarshal token, %v", err)
+		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %v", err)
 	}
 
 	freshToken, err := tokenInfo.Refresh(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Get token from environment variable failed to ensure token fresh, %v", err)
+		return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
 	}
 
 	return &OAuthTokenInfo{
@@ -304,7 +308,32 @@ type OAuthTokenInfo struct {
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	Identity                bool   `json:"_identity"`
-	IdentityID              string `json:"_identity_id"`
+	IdentityInfo            IdentityInfo
+}
+
+// IdentityInfo contains info for MSI.
+type IdentityInfo struct {
+	ClientID string `json:"_identity_client_id"`
+	ObjectID string `json:"_identity_object_id"`
+	MSIResID string `json:"_identity_msi_res_id"`
+}
+
+// Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
+func (identityInfo *IdentityInfo) Validate() error {
+	v := make(map[string]bool, 3)
+	if identityInfo.ClientID != "" {
+		v[identityInfo.ClientID] = true
+	}
+	if identityInfo.ObjectID != "" {
+		v[identityInfo.ObjectID] = true
+	}
+	if identityInfo.MSIResID != "" {
+		v[identityInfo.MSIResID] = true
+	}
+	if len(v) > 1 {
+		return errors.New("client ID, object ID and MSI resource ID are mutually exclusive")
+	}
+	return nil
 }
 
 // Refresh gets new token with token info.
@@ -329,8 +358,14 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	params := req.URL.Query()
 	params.Set("resource", Resource)
 	params.Set("api-version", IMDSAPIVersion)
-	if credInfo.IdentityID != "" {
-		params.Set("client_id", credInfo.IdentityID)
+	if credInfo.IdentityInfo.ClientID != "" {
+		params.Set("client_id", credInfo.IdentityInfo.ClientID)
+	}
+	if credInfo.IdentityInfo.ObjectID != "" {
+		params.Set("object_id", credInfo.IdentityInfo.ObjectID)
+	}
+	if credInfo.IdentityInfo.MSIResID != "" {
+		params.Set("msi_res_id", credInfo.IdentityInfo.MSIResID)
 	}
 	req.URL.RawQuery = params.Encode()
 	req.Header.Set("Metadata", "true")
@@ -340,7 +375,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	// Send request
 	resp, err := msiTokenHTTPClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("please check whether MSI is enabled on this PC, to enable MSI please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/qs-configure-portal-windows-vm#enable-system-assigned-identity-on-an-existing-vm. (Error details: %v)", err)
 	}
 	defer func() { // resp and Body should not be nil
 		io.Copy(ioutil.Discard, resp.Body)
