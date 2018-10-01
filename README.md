@@ -8,7 +8,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 
 * Copy data from Azure Blob containers/File shares to File system, and vice versa
 * Copy block blobs between two Azure Storage accounts
-* Sync a directory in local file system to Azure Blob and File shares, or vice versa
+* Sync a directory in local file system to Azure Blob, or vice versa
 * List/Remove files and blobs in a given path
 * Supports glob patterns in path, --include and --exclude flags
 * Resillient: retries automatically after a failure, and supports resuming after a failed job
