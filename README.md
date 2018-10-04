@@ -30,7 +30,9 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 
 ### Authenticating with Azure Storage
 
-AzCopy requires the use of SAS tokens when copying data into/out of Azure Storage. Simply generate a SAS token/URI from the Azure Portal, Storage Explorer, or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path).
+AzCopy supports two types of authentication:
+* Pre-signed URLs (URLs with Shared Access Signature aka. SAS tokens): Simply generate a SAS token from the Azure Portal, Storage Explorer, or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path).
+* Azure Active Directory Authentication : Add your user to the 'Blob Data Contributor' role in the Azure Portal, and log on to AzCopy using `azcopy login`. You can then simply use AzCopy commands without any SAS token appended to the path. e.g. `azcopy cp https://myaccount.blob.core.windows.net/container/data /mydata --recursive`
 
 ### Getting started
 
