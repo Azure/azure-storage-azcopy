@@ -13,6 +13,16 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 * Supports glob patterns in path, --include and --exclude flags
 * Resillient: retries automatically after a failure, and supports resuming after a failed job
 
+## What's new in v10 ? 
+
+* Synchronize a file system up to Azure Blob or vice versa. Use `azcopy sync <source> <destination>`
+* Supports Azure Data Lake Storage Gen2. Use `myaccount.dfs.core.windows.net` for the URI to use ADLS Gen2 APIs.
+* Supports copying an entire account (Blob service only) to another account. Use `azcopy cp https://myaccount.blob.core.windows.net https://myotheraccount.blob.core.windows.net` which will enumerate all Blob containers and copy to the destination account
+* Account to account copy is now using the new Put from URL APIs that will copy the data directly from one storage account to another. No data transfer is needed down to the client where AzCopy runs. Therefore it is significantly faster!
+* List/Remove files and blobs in a given path
+* Supports glob patterns in path, --include and --exclude flags
+* Every AzCopy run will create a job order, and a related log file. You can view and restart previous jobs using `azcopy jobs` command.
+
 ## Installation
 
 1. Download the AzCopy executable using one of the following links:
