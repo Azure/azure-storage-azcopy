@@ -22,6 +22,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 * List/Remove files and blobs in a given path
 * Supports glob patterns in path, --include and --exclude flags
 * Every AzCopy run will create a job order, and a related log file. You can view and restart previous jobs using `azcopy jobs` command.
+* Improved performance all around!
 
 ## Installation
 
