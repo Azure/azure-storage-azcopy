@@ -216,7 +216,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 			// step 2: write the body into the memory mapped file directly
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body = newResponseBodyPacer(body, p, dstMMF)
-			_, err = io.ReadFull(body, dstMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(body, dstMMF.Slice())
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
