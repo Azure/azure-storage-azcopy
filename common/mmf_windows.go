@@ -52,18 +52,13 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	if writable {
 		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
 	}
-	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, uint32(int64(length)>>32), uint32(int64(length)&0xffffffff), nil)
+	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, 0, 0, nil)
 	if hMMF == 0 {
 		return nil, os.NewSyscallError("CreateFileMapping", errno)
 	}
 	defer syscall.CloseHandle(hMMF)
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 
-	// pre-fetch the memory mapped file so that performance is better when it is read
-	err := prefetchVirtualMemory(&memoryRangeEntry{VirtualAddress: addr, NumberOfBytes: int(length)})
-	if err != nil {
-		panic(err)
-	}
 	m := []byte{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr
