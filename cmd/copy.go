@@ -887,7 +887,8 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "excludeBlobType", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. More than one blob should be separated by ';' ")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "excludeBlobType", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
+		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
