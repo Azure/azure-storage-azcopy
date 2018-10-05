@@ -98,22 +98,12 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		return
 	}
 
-	defer srcFile.Close()
-
-	var srcMmf *common.MMF
-	if srcFileInfo.Size() > 0 {
-		// file needs to be memory mapped only when the file size is greater than 0.
-		srcMmf, err = common.NewMMF(srcFile, false, 0, srcFileInfo.Size())
-		if err != nil {
-			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
-		}
-	}
+	byteLength := common.Iffint64(srcFileInfo.Size() > 512, 512, srcFileInfo.Size())
+	byteBuffer := make([]byte, byteLength)
+	_, err = srcFile.Read(byteBuffer)
 
 	// Get http headers and meta data of file.
-	fileHTTPHeaders, metaData := jptm.FileDstData(srcMmf)
+	fileHTTPHeaders, metaData := jptm.FileDstData(byteBuffer)
 
 	// step 3: Create parent directories and file.
 	// 3a: Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
@@ -123,10 +113,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
-		// Unmap only if the source size is > 0
-		if info.SourceSize > 0 {
-			srcMmf.Unmap()
-		}
+		srcFile.Close()
 		return
 	}
 
@@ -139,10 +126,7 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
-		// Unmap only if the source size > 0
-		if info.SourceSize > 0 {
-			srcMmf.Unmap()
-		}
+		srcFile.Close()
 		return
 	}
 
@@ -172,11 +156,11 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		}
 
 		// schedule the chunk job/msg
-		jptm.ScheduleChunks(fileUploadFunc(jptm, srcFile, srcMmf, fileURL, pacer, startIndex, adjustedChunkSize))
+		jptm.ScheduleChunks(fileUploadFunc(jptm, srcFile, fileURL, pacer, startIndex, adjustedChunkSize))
 	}
 }
 
-func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.MMF, fileURL azfile.FileURL, pacer *pacer, startRange int64, pageSize int64) chunkFunc {
+func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.FileURL, pacer *pacer, startRange int64, pageSize int64) chunkFunc {
 	info := jptm.Info()
 	return func(workerId int) {
 		// rangeDone is the function called after success / failure of each range.
@@ -188,7 +172,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 					jptm.Log(pipeline.LogDebug, "Finalizing transfer")
 				}
 				jptm.SetStatus(common.ETransferStatus.Success())
-				srcMmf.Unmap()
 				err := srcFile.Close()
 				if err != nil {
 					jptm.LogError(info.Source, "File Close Error ", err)
@@ -208,6 +191,27 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 			}
 		}
 
+		srcMMF := &common.MMF{}
+		srcMMF, err := common.NewMMF(srcFile, false, startRange, pageSize)
+		if err != nil {
+			if err != nil {
+				if jptm.WasCanceled() {
+					if jptm.ShouldLog(pipeline.LogDebug) {
+						jptm.Log(pipeline.LogDebug,
+							fmt.Sprintf("Failed to UploadRange from %d to %d, transfer was cancelled", startRange, startRange+pageSize))
+					}
+				} else {
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogUploadError(info.Source, info.Destination, "Upload Range Error "+msg, status)
+					// cancelling the transfer
+					jptm.Cancel()
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
+				}
+				rangeDone()
+				return
+			}
+		}
 		if jptm.WasCanceled() {
 			if jptm.ShouldLog(pipeline.LogDebug) {
 				jptm.Log(pipeline.LogDebug,
@@ -216,7 +220,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 			rangeDone()
 		} else {
 			// rangeBytes is the byte slice of Page for the given range range
-			rangeBytes := srcMmf.Slice()[startRange : startRange+pageSize]
+			rangeBytes := srcMMF.Slice()
 			// converted the bytes slice to int64 array.
 			// converting each of 8 bytes of byteSlice to an integer.
 			int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]
@@ -244,7 +248,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, srcMmf *common.M
 				return
 			}
 
-			body := newRequestBodyPacer(bytes.NewReader(rangeBytes), pacer, srcMmf)
+			body := newRequestBodyPacer(bytes.NewReader(rangeBytes), pacer, srcMMF)
 			_, err := fileURL.UploadRange(jptm.Context(), startRange, body)
 			if err != nil {
 				if jptm.WasCanceled() {

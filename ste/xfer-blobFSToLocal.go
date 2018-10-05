@@ -17,7 +17,7 @@ type BlobFSFileDownload struct {
 	srcFileURL  azbfs.FileURL
 	source      string
 	destination string
-	destMMF     *common.MMF
+	destFile    *os.File
 	pacer       *pacer
 }
 
@@ -102,24 +102,6 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			return
 		}
 
-		defer dstFile.Close()
-
-		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
-		if err != nil {
-			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogDownloadError(info.Source, info.Destination, "Memory Map Error "+msg, status)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.SetErrorCode(int32(status))
-			// Since the transfer failed, the file created above should be deleted
-			err = deleteFile(info.Destination)
-			if err != nil {
-				// If there was an error deleting the file, log the error
-				// If there was an error deleting the file, log the error
-				jptm.LogError(info.Destination, "Delete File Error ", err)
-			}
-			jptm.ReportTransferDone()
-			return
-		}
 		if rem := sourceSize % downloadChunkSize; rem == 0 {
 			numChunks = uint32(sourceSize / downloadChunkSize)
 		} else {
@@ -131,7 +113,7 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			srcFileURL:  srcBlobURL.NewFileUrl(),
 			source:      info.Source,
 			destination: info.Destination,
-			destMMF:     dstMMF,
+			destFile:    dstFile,
 			pacer:       pacer}
 		// step 4: go through the blob range and schedule download chunk jobs
 		for startIndex := int64(0); startIndex < sourceSize; startIndex += downloadChunkSize {
@@ -151,23 +133,6 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, startIndex int64, adjustedRangeSize int64) chunkFunc {
 	return func(workerId int) {
 
-		// This function allows routine to manage behavior of unexpected panics.
-		// The panic error along with transfer details are logged.
-		// The transfer is marked as failed and is reported as done.
-		//defer func(jptm IJobPartTransferMgr) {
-		//	r := recover()
-		//	if r != nil {
-		//		// Get the transfer Info and log the details
-		//		info := jptm.Info()
-		//		if jptm.ShouldLog(pipeline.LogError) {
-		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v adjustedRangeSize %v destinationMMF size %v",
-		//				r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedRangeSize, len(bffd.destMMF.Slice())))
-		//		}
-		//		jptm.SetStatus(common.ETransferStatus.Failed())
-		//		jptm.ReportTransferDone()
-		//	}
-		//}(bffd.jptm)
-
 		info := bffd.jptm.Info()
 		// chunkDone is an internal function which marks a chunkDone
 		// Check if the current chunk is the last Chunk
@@ -181,7 +146,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				if bffd.jptm.ShouldLog(pipeline.LogInfo) {
 					bffd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" has worker %d which is finalizing cancellation of the Transfer", workerId))
 				}
-				bffd.destMMF.Unmap()
+				bffd.destFile.Close()
 				bffd.jptm.ReportTransferDone()
 				// If the status of transfer is less than or equal to 0
 				// then transfer failed or cancelled
@@ -199,6 +164,22 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 		if bffd.jptm.WasCanceled() {
 			chunkDone()
 		} else {
+			destMMF := &common.MMF{}
+			destMMF, err := common.NewMMF(bffd.destFile, true, startIndex, adjustedRangeSize)
+			if err != nil {
+				// cancel entire transfer because this chunk has failed
+				if !bffd.jptm.WasCanceled() {
+					bffd.jptm.Cancel()
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					bffd.jptm.LogDownloadError(bffd.source, bffd.destination, msg, status)
+					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
+					bffd.jptm.SetErrorCode(int32(status))
+				}
+				chunkDone()
+				return
+			}
+			defer destMMF.Unmap()
+
 			// step 1: Downloading the file from range startIndex till (startIndex + adjustedRangeSize)
 			get, err := bffd.srcFileURL.Download(bffd.jptm.Context(), startIndex, adjustedRangeSize)
 			if err != nil {
@@ -215,8 +196,8 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 
 			// step 2: write the body into the memory mapped file directly
 			resp := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-			body := newResponseBodyPacer(resp, bffd.pacer, bffd.destMMF)
-			_, err = io.ReadFull(body, bffd.destMMF.Slice()[startIndex:startIndex+adjustedRangeSize])
+			body := newResponseBodyPacer(resp, bffd.pacer, destMMF)
+			_, err = io.ReadFull(body, destMMF.Slice()[startIndex:startIndex+adjustedRangeSize])
 			// reading the response and closing the resp body
 			if resp != nil {
 				io.Copy(ioutil.Discard, resp)
@@ -248,7 +229,7 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 				}
 				bffd.jptm.ReportTransferDone()
 
-				bffd.destMMF.Unmap()
+				bffd.destFile.Close()
 
 				lastModifiedTime, preserveLastModifiedTime := bffd.jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {

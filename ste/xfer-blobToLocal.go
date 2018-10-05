@@ -131,21 +131,6 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			return
 		}
 
-		defer dstFile.Close()
-
-		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
-		if err != nil {
-			jptm.LogDownloadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			// Since the transfer failed, the file created above should be deleted
-			err = deleteFile(info.Destination)
-			if err != nil {
-				// If there was an error deleting the file, log the error
-				jptm.LogError(info.Destination, "Delete File Error ", err)
-			}
-			jptm.ReportTransferDone()
-			return
-		}
 		if rem := blobSize % downloadChunkSize; rem == 0 {
 			numChunks = uint32(blobSize / downloadChunkSize)
 		} else {
@@ -163,13 +148,13 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, info.Source, info.Destination, srcBlobURL, blockIdCount, dstMMF, startIndex, adjustedChunkSize, pacer))
+			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, info.Source, info.Destination, srcBlobURL, blockIdCount, dstFile, startIndex, adjustedChunkSize, pacer))
 			blockIdCount++
 		}
 	}
 }
 
-func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination string, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF *common.MMF, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
+func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination string, transferBlobURL azblob.BlobURL, chunkId int32, dstFile *os.File, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
 	return func(workerId int) {
 		// TODO: added the two operations for debugging purpose. remove later
 		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
@@ -177,29 +162,13 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer jptm.ReleaseAConnection()
 
-		// This function allows routine to manage behavior of unexpected panics.
-		// The panic error along with transfer details are logged.
-		// The transfer is marked as failed and is reported as done.
-		//defer func (jptm IJobPartTransferMgr) {
-		//	r := recover()
-		//	if r != nil {
-		//		info := jptm.Info()
-		//		if jptm.ShouldLog(pipeline.LogError) {
-		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
-		//					r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF.Slice())))
-		//		}
-		//		jptm.SetStatus(common.ETransferStatus.Failed())
-		//		jptm.ReportTransferDone()
-		//	}
-		//}(jptm)
-
 		chunkDone := func() {
 			lastChunk, _ := jptm.ReportChunkDone()
 			if lastChunk {
 				if jptm.ShouldLog(pipeline.LogDebug) {
 					jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
 				}
-				destinationMMF.Unmap()
+				dstFile.Close()
 				// If the current transfer status value is less than or equal to 0
 				// then transfer either failed or was cancelled
 				// the file created locally should be deleted
@@ -229,10 +198,25 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 				chunkDone()
 				return
 			}
+			dstMMF := &common.MMF{}
+			dstMMF, err = common.NewMMF(dstFile, true, startIndex, adjustedChunkSize)
+			if err != nil {
+				if !jptm.WasCanceled() {
+					jptm.Cancel()
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogDownloadError(source, destination, msg, status)
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
+				}
+				chunkDone()
+				return
+			}
+			defer dstMMF.Unmap()
+
 			// step 2: write the body into the memory mapped file directly
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-			body = newResponseBodyPacer(body, p, destinationMMF)
-			_, err = io.ReadFull(body, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
+			body = newResponseBodyPacer(body, p, dstMMF)
+			_, err = io.ReadFull(body, dstMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !jptm.WasCanceled() {
@@ -259,7 +243,7 @@ func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination stri
 				}
 				jptm.ReportTransferDone()
 
-				destinationMMF.Unmap()
+				dstFile.Close()
 
 				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {

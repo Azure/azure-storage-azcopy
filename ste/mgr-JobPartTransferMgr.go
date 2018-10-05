@@ -18,8 +18,8 @@ import (
 type IJobPartTransferMgr interface {
 	FromTo() common.FromTo
 	Info() TransferInfo
-	BlobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
-	FileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
+	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
+	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
@@ -183,11 +183,11 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 	jptm.jobPartMgr.ScheduleChunks(chunkFunc)
 }
 
-func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
 }
 
-func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(dataFileToXfer)
 }
 
