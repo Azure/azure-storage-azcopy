@@ -429,6 +429,8 @@ func (jpm *jobPartMgr) blobDstData(dataFileToXfer []byte) (headers azblob.BlobHT
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
+	//TODO: detect the content type using file extension first (mime package)
+	// TODO: mime.TypeByExtension() might return "" if it is not able to guess the mime type
 	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
 }
 
