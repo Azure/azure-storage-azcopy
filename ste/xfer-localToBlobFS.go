@@ -194,7 +194,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		}
 		defer srcMMF.Unmap()
 
-		body := newRequestBodyPacer(bytes.NewReader(srcMMF.Slice()[startRange:startRange+calculatedRangeInterval]), fru.pacer, srcMMF)
+		body := newRequestBodyPacer(bytes.NewReader(srcMMF.Slice()), fru.pacer, srcMMF)
 		_, err = fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled
