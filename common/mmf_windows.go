@@ -32,6 +32,8 @@ import (
 type MMF struct {
 	// slice represents the actual memory mapped buffer
 	slice []byte
+
+	length int64
 	// defines whether source has been mapped or not
 	isMapped bool
 	// This lock exists to fix a bug in Go's Http Client. Because the http
@@ -65,7 +67,7 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	h.Data = addr
 	h.Len = int(length)
 	h.Cap = h.Len
-	return &MMF{slice: m, isMapped: true, lock: sync.RWMutex{}}, nil
+	return &MMF{slice: m, length: length, isMapped: true, lock: sync.RWMutex{}}, nil
 }
 
 // To unmap, we need exclusive (write) access to the MMF and
@@ -75,6 +77,13 @@ func (m *MMF) Unmap() {
 	m.lock.Lock()
 	addr := uintptr(unsafe.Pointer(&(([]byte)(m.slice)[0])))
 	m.slice = []byte{}
+	// Modified pages in the unmapped view are not written to disk until their share count
+	// reaches zero, or in other words, until they are unmapped or trimmed from the working
+	// sets of all processes that share the pages. Even then, the modified pages are written
+	// "lazily" to disk; that is, modifications may be cached in memory and written to disk
+	// at a later time. To avoid modifications to be cached in memory,explicitly flushing
+	// modified pages using the FlushViewOfFile function.
+	syscall.FlushViewOfFile(addr, uintptr(m.length))
 	err := syscall.UnmapViewOfFile(addr)
 	PanicIfErr(err)
 	m.isMapped = false
