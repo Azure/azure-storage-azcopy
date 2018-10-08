@@ -44,7 +44,7 @@ func init() {
 		Aliases: []string{"ls"},
 		Short:   "List the entities in a given resource",
 		Long:    `List the entities in a given resource. Only Blob containers are supported at the moment.`,
-		Example: "azcopy container list [containerURL]",
+		Example: "azcopy list [containerURL]",
 		Args: func(cmd *cobra.Command, args []string) error {
 			// the listContainer command requires necessarily to have an argument
 

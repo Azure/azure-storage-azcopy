@@ -21,12 +21,12 @@
   revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
 
 [[projects]]
-  digest = "1:08032073e38c5051f85fab2184b4c41a818a6777c7b77b2db5dc10abd37eb5c1"
+  branch = "dev"
+  digest = "1:0149c65f0b7dec63213cfc2928bb7a5ceee77159c72b25d99d83da85f2b01184"
   name = "github.com/Azure/azure-storage-file-go"
   packages = ["2017-07-29/azfile"]
   pruneopts = "UT"
-  revision = "9227fd295d972e4395fd601e6f48cee2f5cda02b"
-  version = "0.2.0"
+  revision = "d6c64f9676be0f471cbc80c63322f280ac2950c9"
 
 [[projects]]
   digest = "1:63338b441142be9b2af072dfb8bda052f5f888ec2178bbf6e06f52e59006a916"

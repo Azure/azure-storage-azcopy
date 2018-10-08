@@ -37,6 +37,7 @@ type LifecycleMgr interface {
 	Info(string)                                    // simple print, allowed to float up
 	Prompt(string) string                           // ask the user a question(after erasing the progress), then return the response
 	Exit(string, ExitCode)                          // exit after printing
+	Error(string)                                   // print to stderr
 	SurrenderControl()                              // give up control, this should never return
 	InitiateProgressReporting(WorkController, bool) // start writing progress with another routine
 }
@@ -54,6 +55,7 @@ func (outputMessageType) Progress() outputMessageType { return outputMessageType
 func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
 func (outputMessageType) Exit() outputMessageType     { return outputMessageType(2) } // exit after printing
 func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(3) } // ask the user a question after erasing the progress
+func (outputMessageType) Error() outputMessageType    { return outputMessageType(4) } // print to stderr
 
 // defines the output and how it should be handled
 type outputMessage struct {
@@ -127,6 +129,13 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
 		msgType:    eMessageType.Info(),
+	}
+}
+
+func (lcm *lifecycleMgr) Error(msg string) {
+	lcm.msgQueue <- outputMessage{
+		msgContent: msg,
+		msgType:    eMessageType.Error(),
 	}
 }
 
@@ -212,6 +221,25 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 				fmt.Print(lcm.progressCache)
 			} else {
 				fmt.Println(msgToPrint.msgContent)
+			}
+
+		case eMessageType.Error():
+			// we need to print to stderr but it's mostly likely that both stdout and stderr are directed to the terminal
+			// in case we are already printing progress to stdout, we need to make sure that the content from
+			// stderr gets displayed properly on its own line
+			if lcm.progressCache != "" { // a progress status is already on the last line
+				// erase the progress status
+				fmt.Print("\r")
+				matchLengthWithSpaces(len(lcm.progressCache), 0)
+				fmt.Print("\r")
+
+				os.Stderr.WriteString(msgToPrint.msgContent)
+
+				// print the previous progress status again, so that it's on the last line
+				fmt.Print("\n")
+				fmt.Print(lcm.progressCache)
+			} else {
+				os.Stderr.WriteString(msgToPrint.msgContent)
 			}
 
 		case eMessageType.Prompt():
