@@ -236,6 +236,8 @@ func (bbd *blobDownload) generateDownloadBlobFunc(chunkId int32, startIndex int6
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 			body = newResponseBodyPacer(body, bbd.pacer, dstMMF)
 			_, err = io.ReadFull(body, dstMMF.Slice())
+			// Close the underlying stream.
+			body.Close()
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
 				if !bbd.jptm.WasCanceled() {
