@@ -303,7 +303,6 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// step 2: save the block ID into the list of block IDs
 		(bbu.blockIds)[chunkId] = encodedBlockId
 
-		srcMMF := &common.MMF{}
 		srcMMF, err := common.NewMMF(bbu.srcFile, false, startIndex, adjustedChunkSize)
 		if err != nil {
 			if bbu.jptm.WasCanceled() {
@@ -523,7 +522,6 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 			}
 		}
 
-		srcMMF := &common.MMF{}
 		srcMMF, err := common.NewMMF(pbu.srcFile, false, startPage, calculatedPageSize)
 		if err != nil {
 			if pbu.jptm.WasCanceled() {

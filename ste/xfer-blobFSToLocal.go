@@ -164,7 +164,6 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 		if bffd.jptm.WasCanceled() {
 			chunkDone()
 		} else {
-			destMMF := &common.MMF{}
 			destMMF, err := common.NewMMF(bffd.destFile, true, startIndex, adjustedRangeSize)
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
