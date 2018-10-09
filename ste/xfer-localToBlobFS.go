@@ -165,7 +165,6 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			return
 		}
 
-		srcMMF := &common.MMF{}
 		srcMMF, err := common.NewMMF(fru.srcFile, false, startRange, calculatedRangeInterval)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled

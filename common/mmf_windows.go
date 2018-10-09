@@ -62,6 +62,14 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	defer syscall.CloseHandle(hMMF)
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 
+	if writable {
+		// pre-fetch the memory mapped file so that performance is better when it is read
+		err := prefetchVirtualMemory(&memoryRangeEntry{VirtualAddress: addr, NumberOfBytes: int(length)})
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	m := []byte{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr

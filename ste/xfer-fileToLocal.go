@@ -168,7 +168,6 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 		if jptm.WasCanceled() {
 			chunkDone()
 		} else {
-			dstMMF := &common.MMF{}
 			dstMMF, err := common.NewMMF(dstFile, true, startIndex, adjustedChunkSize)
 			if err != nil {
 				if !jptm.WasCanceled() {

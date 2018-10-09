@@ -217,8 +217,7 @@ func (bbd *blobDownload) generateDownloadBlobFunc(chunkId int32, startIndex int6
 				chunkDone()
 				return
 			}
-			dstMMF := &common.MMF{}
-			dstMMF, err = common.NewMMF(bbd.destFile, true, startIndex, adjustedChunkSize)
+			dstMMF, err := common.NewMMF(bbd.destFile, true, startIndex, adjustedChunkSize)
 			if err != nil {
 				if !bbd.jptm.WasCanceled() {
 					bbd.jptm.Cancel()

@@ -191,7 +191,6 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.F
 			}
 		}
 
-		srcMMF := &common.MMF{}
 		srcMMF, err := common.NewMMF(srcFile, false, startRange, pageSize)
 		if err != nil {
 			if err != nil {
