@@ -32,6 +32,8 @@ import (
 type MMF struct {
 	// slice represents the actual memory mapped buffer
 	slice []byte
+
+	length int64
 	// defines whether source has been mapped or not
 	isMapped bool
 	// This lock exists to fix a bug in Go's Http Client. Because the http
@@ -52,24 +54,28 @@ func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, err
 	if writable {
 		prot, access = uint32(syscall.PAGE_READWRITE), uint32(syscall.FILE_MAP_WRITE)
 	}
-	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, uint32(int64(length)>>32), uint32(int64(length)&0xffffffff), nil)
+	var fileSize = offset + length
+	hMMF, errno := syscall.CreateFileMapping(syscall.Handle(file.Fd()), nil, prot, uint32(fileSize>>32), uint32(fileSize&0xffffffff), nil)
 	if hMMF == 0 {
 		return nil, os.NewSyscallError("CreateFileMapping", errno)
 	}
 	defer syscall.CloseHandle(hMMF)
 	addr, errno := syscall.MapViewOfFile(hMMF, access, uint32(offset>>32), uint32(offset&0xffffffff), uintptr(length))
 
-	// pre-fetch the memory mapped file so that performance is better when it is read
-	err := prefetchVirtualMemory(&memoryRangeEntry{VirtualAddress: addr, NumberOfBytes: int(length)})
-	if err != nil {
-		panic(err)
+	if writable {
+		// pre-fetch the memory mapped file so that performance is better when it is read
+		err := prefetchVirtualMemory(&memoryRangeEntry{VirtualAddress: addr, NumberOfBytes: int(length)})
+		if err != nil {
+			panic(err)
+		}
 	}
+
 	m := []byte{}
 	h := (*reflect.SliceHeader)(unsafe.Pointer(&m))
 	h.Data = addr
 	h.Len = int(length)
 	h.Cap = h.Len
-	return &MMF{slice: m, isMapped: true, lock: sync.RWMutex{}}, nil
+	return &MMF{slice: m, length: length, isMapped: true, lock: sync.RWMutex{}}, nil
 }
 
 // To unmap, we need exclusive (write) access to the MMF and
@@ -79,6 +85,13 @@ func (m *MMF) Unmap() {
 	m.lock.Lock()
 	addr := uintptr(unsafe.Pointer(&(([]byte)(m.slice)[0])))
 	m.slice = []byte{}
+	// Modified pages in the unmapped view are not written to disk until their share count
+	// reaches zero, or in other words, until they are unmapped or trimmed from the working
+	// sets of all processes that share the pages. Even then, the modified pages are written
+	// "lazily" to disk; that is, modifications may be cached in memory and written to disk
+	// at a later time. To avoid modifications to be cached in memory,explicitly flushing
+	// modified pages using the FlushViewOfFile function.
+	syscall.FlushViewOfFile(addr, uintptr(m.length))
 	err := syscall.UnmapViewOfFile(addr)
 	PanicIfErr(err)
 	m.isMapped = false

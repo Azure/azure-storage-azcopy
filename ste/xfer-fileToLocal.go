@@ -118,21 +118,7 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			jptm.ReportTransferDone()
 			return
 		}
-		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
-		if err != nil {
-			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
-			jptm.LogDownloadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
-			dstFile.Close()
 
-			//delete the file if transfer failed
-			err := os.Remove(info.Destination)
-			if err != nil {
-				jptm.LogError(info.Destination, "Delete File Error ", err)
-			}
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
-		}
 		if rem := fileSize % downloadChunkSize; rem == 0 {
 			numChunks = uint32(fileSize / downloadChunkSize)
 		} else {
@@ -150,13 +136,13 @@ func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, dstMMF, startIndex, adjustedChunkSize))
+			jptm.ScheduleChunks(generateDownloadFileFunc(jptm, srcFileURL, dstFile, startIndex, adjustedChunkSize))
 			chunkIDCount++
 		}
 	}
 }
 
-func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, destinationMMF *common.MMF, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.FileURL, dstFile *os.File, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		info := jptm.Info()
 		chunkDone := func() {
@@ -166,7 +152,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				if jptm.ShouldLog(pipeline.LogDebug) {
 					jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
-				destinationMMF.Unmap()
+				dstFile.Close()
 				// If the status of transfer is less than or equal to 0
 				// then transfer failed or cancelled
 				// the downloaded file needs to be deleted
@@ -182,6 +168,20 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 		if jptm.WasCanceled() {
 			chunkDone()
 		} else {
+			dstMMF, err := common.NewMMF(dstFile, true, startIndex, adjustedChunkSize)
+			if err != nil {
+				if !jptm.WasCanceled() {
+					jptm.Cancel()
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogDownloadError(info.Source, info.Destination, msg, status)
+					jptm.SetStatus(common.ETransferStatus.Failed())
+					jptm.SetErrorCode(int32(status))
+				}
+				chunkDone()
+				return
+			}
+			defer dstMMF.Unmap()
+
 			// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 			get, err := transferFileURL.Download(jptm.Context(), startIndex, adjustedChunkSize, false)
 			if err != nil {
@@ -198,7 +198,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 
 			// step 2: write the body into the memory mapped file directly
 			retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-			_, err = io.ReadFull(retryReader, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
+			_, err = io.ReadFull(retryReader, dstMMF.Slice())
 			io.Copy(ioutil.Discard, retryReader)
 			retryReader.Close()
 			if err != nil {
@@ -227,7 +227,7 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 				}
 				jptm.ReportTransferDone()
 
-				destinationMMF.Unmap()
+				dstFile.Close()
 
 				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {

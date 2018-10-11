@@ -425,18 +425,20 @@ func (jpm *jobPartMgr) IsForceWriteTrue() bool {
 	return jpm.Plan().ForceWrite
 }
 
-func (jpm *jobPartMgr) blobDstData(dataFileToXfer *common.MMF) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+func (jpm *jobPartMgr) blobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
-	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.blobMetadata
+	//TODO: detect the content type using file extension first (mime package)
+	// TODO: mime.TypeByExtension() might return "" if it is not able to guess the mime type
+	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) fileDstData(dataFileToXfer *common.MMF) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+func (jpm *jobPartMgr) fileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.fileHTTPHeaders, jpm.fileMetadata
 	}
-	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer.Slice())}, jpm.fileMetadata
+	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.fileMetadata
 }
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
