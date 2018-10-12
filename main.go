@@ -21,7 +21,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 	"strconv"
 
@@ -44,7 +44,7 @@ func main() {
 	// Perform os specific initialization
 	_, err := ProcessOSSpecificInitialization()
 	if err != nil {
-		panic(err)
+		log.Fatalf("initialization failed: %v",err)
 	}
 
 	// Get the value of environment variable AZCOPY_CONCURRENCY_VALUE
@@ -56,8 +56,8 @@ func main() {
 	if concurrencyValue != "" {
 		val, err := strconv.ParseInt(concurrencyValue, 10, 64)
 		if err != nil {
-			panic(fmt.Sprintf("error parsing the env azcopy_concurency_value %v. "+
-				"Failed with error %s", concurrencyValue, err.Error()))
+			log.Fatalf("error parsing the env azcopy_concurency_value %q failed with error %v", 
+				   concurrencyValue, err)
 		}
 		defaultConcurrentConnections = int(val)
 	}

@@ -88,6 +88,8 @@ func init() {
 			if err != nil {
 				glcm.Exit("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
 			}
+
+			glcm.Exit("", common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release.

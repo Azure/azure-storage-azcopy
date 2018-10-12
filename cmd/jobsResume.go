@@ -150,6 +150,7 @@ Resume the existing job with the given job ID.`,
 			if err != nil {
 				glcm.Exit(fmt.Sprintf("failed to perform resume command due to error: %s", err.Error()), common.EExitCode.Error())
 			}
+			glcm.Exit("", common.EExitCode.Success())
 		},
 	}
 

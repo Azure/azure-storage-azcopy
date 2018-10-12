@@ -31,6 +31,15 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
+type blobDownload struct {
+	jptm        IJobPartTransferMgr
+	destFile    *os.File
+	source      string
+	destination string
+	blobURL     azblob.BlobURL
+	pacer       *pacer
+}
+
 func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// step 1: get the source, destination info for the transfer.
@@ -131,27 +140,22 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			return
 		}
 
-		defer dstFile.Close()
-
-		dstMMF, err := common.NewMMF(dstFile, true, 0, info.SourceSize)
-		if err != nil {
-			jptm.LogDownloadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			// Since the transfer failed, the file created above should be deleted
-			err = deleteFile(info.Destination)
-			if err != nil {
-				// If there was an error deleting the file, log the error
-				jptm.LogError(info.Destination, "Delete File Error ", err)
-			}
-			jptm.ReportTransferDone()
-			return
-		}
 		if rem := blobSize % downloadChunkSize; rem == 0 {
 			numChunks = uint32(blobSize / downloadChunkSize)
 		} else {
 			numChunks = uint32(blobSize/downloadChunkSize + 1)
 		}
 		jptm.SetNumberOfChunks(numChunks)
+		// creating block Blob struct which holds the srcFile, srcMmf memory map byte slice, pacer instance and blockId list.
+		// Each chunk uses these details which uploading the block.
+		bbd := &blobDownload{
+			jptm:        jptm,
+			destFile:    dstFile,
+			source:      info.Source,
+			destination: info.Destination,
+			blobURL:     srcBlobURL,
+			pacer:       pacer}
+
 		blockIdCount := int32(0)
 		// step 4: go through the blob range and schedule download chunk jobs
 		for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
@@ -163,113 +167,113 @@ func BlobToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			}
 
 			// schedule the download chunk job
-			jptm.ScheduleChunks(generateDownloadBlobFunc(jptm, info.Source, info.Destination, srcBlobURL, blockIdCount, dstMMF, startIndex, adjustedChunkSize, pacer))
+			jptm.ScheduleChunks(bbd.generateDownloadBlobFunc(blockIdCount, startIndex, adjustedChunkSize))
 			blockIdCount++
 		}
 	}
 }
 
-func generateDownloadBlobFunc(jptm IJobPartTransferMgr, source, destination string, transferBlobURL azblob.BlobURL, chunkId int32, destinationMMF *common.MMF, startIndex int64, adjustedChunkSize int64, p *pacer) chunkFunc {
+func (bbd *blobDownload) generateDownloadBlobFunc(chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 		// TODO: added the two operations for debugging purpose. remove later
 		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
-		jptm.OccupyAConnection()
+		bbd.jptm.OccupyAConnection()
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
-		defer jptm.ReleaseAConnection()
-
-		// This function allows routine to manage behavior of unexpected panics.
-		// The panic error along with transfer details are logged.
-		// The transfer is marked as failed and is reported as done.
-		//defer func (jptm IJobPartTransferMgr) {
-		//	r := recover()
-		//	if r != nil {
-		//		info := jptm.Info()
-		//		if jptm.ShouldLog(pipeline.LogError) {
-		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v sourceMMF size %v",
-		//					r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize, len(destinationMMF.Slice())))
-		//		}
-		//		jptm.SetStatus(common.ETransferStatus.Failed())
-		//		jptm.ReportTransferDone()
-		//	}
-		//}(jptm)
+		defer bbd.jptm.ReleaseAConnection()
 
 		chunkDone := func() {
-			lastChunk, _ := jptm.ReportChunkDone()
+			lastChunk, _ := bbd.jptm.ReportChunkDone()
 			if lastChunk {
-				if jptm.ShouldLog(pipeline.LogDebug) {
-					jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
+				if bbd.jptm.ShouldLog(pipeline.LogDebug) {
+					bbd.jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
 				}
-				destinationMMF.Unmap()
+				bbd.destFile.Close()
 				// If the current transfer status value is less than or equal to 0
 				// then transfer either failed or was cancelled
 				// the file created locally should be deleted
-				if jptm.TransferStatus() <= 0 {
-					err := deleteFile(destination)
+				if bbd.jptm.TransferStatus() <= 0 {
+					err := deleteFile(bbd.destination)
 					if err != nil {
 						// If there was an error deleting the file, log the error
-						jptm.LogError(destination, "Delete File Error ", err)
+						bbd.jptm.LogError(bbd.destination, "Delete File Error ", err)
 					}
 				}
-				jptm.ReportTransferDone()
+				bbd.jptm.ReportTransferDone()
 			}
 		}
-		if jptm.WasCanceled() {
+		if bbd.jptm.WasCanceled() {
 			chunkDone()
 		} else {
 			// Step 1: Download blob from start Index till startIndex + adjustedChunkSize
-			get, err := transferBlobURL.Download(jptm.Context(), startIndex, adjustedChunkSize, azblob.BlobAccessConditions{}, false)
+			get, err := bbd.blobURL.Download(bbd.jptm.Context(), startIndex, adjustedChunkSize, azblob.BlobAccessConditions{}, false)
 			if err != nil {
-				if !jptm.WasCanceled() {
-					jptm.Cancel()
+				if !bbd.jptm.WasCanceled() {
+					bbd.jptm.Cancel()
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
-					jptm.LogDownloadError(source, destination, msg, status)
-					jptm.SetStatus(common.ETransferStatus.Failed())
-					jptm.SetErrorCode(int32(status))
+					bbd.jptm.LogDownloadError(bbd.source, bbd.destination, msg, status)
+					bbd.jptm.SetStatus(common.ETransferStatus.Failed())
+					bbd.jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return
 			}
+			dstMMF, err := common.NewMMF(bbd.destFile, true, startIndex, adjustedChunkSize)
+			if err != nil {
+				if !bbd.jptm.WasCanceled() {
+					bbd.jptm.Cancel()
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					bbd.jptm.LogDownloadError(bbd.source, bbd.destination, msg, status)
+					bbd.jptm.SetStatus(common.ETransferStatus.Failed())
+					bbd.jptm.SetErrorCode(int32(status))
+				}
+				chunkDone()
+				return
+			}
+			defer dstMMF.Unmap()
+
 			// step 2: write the body into the memory mapped file directly
 			body := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-			body = newResponseBodyPacer(body, p, destinationMMF)
-			_, err = io.ReadFull(body, destinationMMF.Slice()[startIndex:startIndex+adjustedChunkSize])
+			body = newResponseBodyPacer(body, bbd.pacer, dstMMF)
+			_, err = io.ReadFull(body, dstMMF.Slice())
+			// Close the underlying stream.
+			body.Close()
 			if err != nil {
 				// cancel entire transfer because this chunk has failed
-				if !jptm.WasCanceled() {
-					jptm.Cancel()
+				if !bbd.jptm.WasCanceled() {
+					bbd.jptm.Cancel()
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
-					jptm.LogDownloadError(source, destination, msg, status)
-					jptm.SetStatus(common.ETransferStatus.Failed())
-					jptm.SetErrorCode(int32(status))
+					bbd.jptm.LogDownloadError(bbd.source, bbd.destination, msg, status)
+					bbd.jptm.SetStatus(common.ETransferStatus.Failed())
+					bbd.jptm.SetErrorCode(int32(status))
 				}
 				chunkDone()
 				return
 			}
 
-			lastChunk, _ := jptm.ReportChunkDone()
+			lastChunk, _ := bbd.jptm.ReportChunkDone()
 			// step 3: check if this is the last chunk
 			if lastChunk {
 				// step 4: this is the last block, perform EPILOGUE
-				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
+				if bbd.jptm.ShouldLog(pipeline.LogInfo) {
+					bbd.jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
 				}
-				jptm.SetStatus(common.ETransferStatus.Success())
-				if jptm.ShouldLog(pipeline.LogDebug) {
-					jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
+				bbd.jptm.SetStatus(common.ETransferStatus.Success())
+				if bbd.jptm.ShouldLog(pipeline.LogDebug) {
+					bbd.jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
 				}
-				jptm.ReportTransferDone()
+				bbd.jptm.ReportTransferDone()
 
-				destinationMMF.Unmap()
+				bbd.destFile.Close()
 
-				lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
+				lastModifiedTime, preserveLastModifiedTime := bbd.jptm.PreserveLastModifiedTime()
 				if preserveLastModifiedTime {
-					err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
+					err := os.Chtimes(bbd.jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 					if err != nil {
-						jptm.LogError(destination, "Changing Modified Time ", err)
+						bbd.jptm.LogError(bbd.destination, "Changing Modified Time ", err)
 						return
 					}
-					if jptm.ShouldLog(pipeline.LogInfo) {
-						jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Preserved Modified Time for %s", destination))
+					if bbd.jptm.ShouldLog(pipeline.LogInfo) {
+						bbd.jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Preserved Modified Time for %s", bbd.destination))
 					}
 				}
 			}

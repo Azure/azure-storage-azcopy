@@ -8,7 +8,7 @@
 
 [[constraint]]
   name = "github.com/Azure/azure-storage-file-go"
-  version = "0.2.0"
+  branch = "dev"
 
 [[constraint]]
   name = "github.com/Azure/go-autorest"

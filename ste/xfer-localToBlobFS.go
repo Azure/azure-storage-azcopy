@@ -14,7 +14,7 @@ import (
 
 type fileRangeAppend struct {
 	jptm    IJobPartTransferMgr
-	srcMmf  *common.MMF
+	srcFile *os.File
 	fileUrl azbfs.FileURL
 	pacer   *pacer
 }
@@ -92,15 +92,6 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		transferDone(common.ETransferStatus.Failed())
 		return
 	}
-	defer srcfile.Close()
-
-	// memory map the source file
-	srcMmf, err := common.NewMMF(srcfile, false, 0, sourceSize)
-	if err != nil {
-		jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error "+err.Error(), 0)
-		transferDone(common.ETransferStatus.Failed())
-		return
-	}
 
 	// Since the source is a file, it can be uploaded by appending the ranges to file concurrently
 	// before the ranges are appended, file has to be created first and the ranges are scheduled to append
@@ -123,7 +114,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 
 	fru := &fileRangeAppend{
 		jptm:    jptm,
-		srcMmf:  srcMmf,
+		srcFile: srcfile,
 		fileUrl: fileUrl,
 		pacer:   pacer}
 
@@ -143,28 +134,12 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInterval int64) chunkFunc {
 	return func(workerId int) {
 		info := fru.jptm.Info()
-		// This function allows routine to manage behavior of unexpected panics.
-		// The panic error along with transfer details are logged.
-		// The transfer is marked as failed and is reported as done.
-		//defer func(jptm IJobPartTransferMgr) {
-		//	r := recover()
-		//	if r != nil {
-		//		// Get the transfer Info and log the details
-		//		info := jptm.Info()
-		//		if jptm.ShouldLog(pipeline.LogError) {
-		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startRange %v calculatedRangeInterval %v sourceMMF size %v",
-		//				r, info.Source, info.Destination, info.SourceSize, startRange, calculatedRangeInterval, len(fru.srcMmf.Slice())))
-		//		}
-		//		jptm.SetStatus(common.ETransferStatus.Failed())
-		//		jptm.ReportTransferDone()
-		//	}
-		//}(fru.jptm)
 
 		// transferDone is the internal function which called by the last range append
 		// it unmaps the source file and delete the file in case transfer failed
 		transferDone := func() {
-			// unmap the source file
-			fru.srcMmf.Unmap()
+
+			fru.srcFile.Close()
 			// if the transfer status is less than or equal to 0, it means that transfer was cancelled or failed
 			// in this case, we need to delete the file which was created before any range was appended
 			if fru.jptm.TransferStatus() <= 0 {
@@ -190,8 +165,36 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			return
 		}
 
-		body := newRequestBodyPacer(bytes.NewReader(fru.srcMmf.Slice()[startRange:startRange+calculatedRangeInterval]), fru.pacer, fru.srcMmf)
-		_, err := fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
+		srcMMF, err := common.NewMMF(fru.srcFile, false, startRange, calculatedRangeInterval)
+		if err != nil {
+			// If the file append range failed, it could be that transfer was cancelled
+			// status of transfer does not change when it is cancelled
+			if fru.jptm.WasCanceled() {
+				if fru.jptm.ShouldLog(pipeline.LogDebug) {
+					fru.jptm.Log(pipeline.LogDebug, "Append Range of cancelled transfer not processed")
+				}
+			} else {
+				status, msg := ErrorEx{err}.ErrorCodeAndString()
+				// If the transfer was not cancelled, then append range failed due to some other reason
+				fru.jptm.LogUploadError(info.Source, info.Destination, msg, status)
+				// cancel the transfer
+				fru.jptm.Cancel()
+				fru.jptm.SetStatus(common.ETransferStatus.Failed())
+				fru.jptm.SetErrorCode(int32(status))
+			}
+			// report the number of range done
+			lastRangeDone, _ := fru.jptm.ReportChunkDone()
+			// if the current range is the last range to be appended for the transfer
+			// report transfer done
+			if lastRangeDone {
+				transferDone()
+			}
+			return
+		}
+		defer srcMMF.Unmap()
+
+		body := newRequestBodyPacer(bytes.NewReader(srcMMF.Slice()), fru.pacer, srcMMF)
+		_, err = fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled
 			// status of transfer does not change when it is cancelled

@@ -49,6 +49,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			HandlePauseCommand(commandLineInput)
+			glcm.Exit("", common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release
