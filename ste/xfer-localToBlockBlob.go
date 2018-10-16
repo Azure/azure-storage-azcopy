@@ -27,8 +27,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
+	"syscall"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -97,14 +97,17 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 
 	// step 2a: Open the Source File.
-	srcFile, err := os.Open(info.Source)
+	pathp, err := syscall.UTF16PtrFromString(info.Source)
+	var sa *syscall.SecurityAttributes
+	var FILE_FLAG_SEQUENTIAL_SCAN = uint32(0x08000000)
+	fileHandle, err := syscall.CreateFile(pathp, syscall.GENERIC_READ, 0, sa, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN, 0)
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	defer srcFile.Close()
+	defer syscall.CloseHandle(fileHandle)
 
 	// TODO: the MMF impl did this here: uncomment as appropriate: defer srcFile.Close()
 
@@ -233,7 +236,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			//TODO was: srcMmf.Unmap()
-			srcFile.Close()
+			//srcFile.Close()
 			return
 		}
 		// creating a slice to contain the blockIds
@@ -261,7 +264,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// because if we already have that much data preloaded (and scheduled for sending in
 		// chunks) then we don't need to schedule any more chunks right now, so the blocking
 		// is harmless (and a good thing, to avoid excessive RAM usage)
-		sequentialFileReader := common.NewFileHandleWrapper(srcFile)
+		sequentialFileReader := common.NewFileHandleWrapper(fileHandle)
 		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
 			adjustedChunkSize := chunkSize
 

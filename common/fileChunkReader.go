@@ -82,26 +82,32 @@ func (cr *simpleFileChunkReader) Prefetch(fileReader io.Reader) error {
 
 	cr.buffer = make([]byte, cr.length)
 
-	// TODO: does reading in pieces help at all?
-	totalBytesRead := 0
+	/*
+		// TODO: does reading in pieces help at all?
+		totalBytesRead := 0
 
-	const readSize = 1024 * 1024 // TODO: parameterize? (and then alter last comment abome, re specfic reference to Storage Spaces and 1 MB)
+		const readSize = 1024 * 1024 // TODO: parameterize? (and then alter last comment abome, re specfic reference to Storage Spaces and 1 MB)
 
-	// TODO: *** can we us a Reader to do this for us? ***
-	for subOffset := int64(0); subOffset < cr.length; {
-		var endOfSliceToLoad = subOffset + readSize
-		var sliceToLoad []byte
-		if endOfSliceToLoad > cr.length {
-			sliceToLoad = cr.buffer[subOffset:]
-		} else {
-			sliceToLoad = cr.buffer[subOffset:endOfSliceToLoad]
+		// TODO: *** can we us a Reader to do this for us? ***
+		for subOffset := int64(0); subOffset < cr.length; {
+			var endOfSliceToLoad = subOffset + readSize
+			var sliceToLoad []byte
+			if endOfSliceToLoad > cr.length {
+				sliceToLoad = cr.buffer[subOffset:]
+			} else {
+				sliceToLoad = cr.buffer[subOffset:endOfSliceToLoad]
+			}
+			iterationBytesRead, err := fileReader.Read(sliceToLoad)
+			if err != nil {
+				return err
+			}
+			totalBytesRead += iterationBytesRead
+			subOffset += int64(iterationBytesRead)
 		}
-		iterationBytesRead, err := fileReader.Read(sliceToLoad)
-		if err != nil {
-			return err
-		}
-		totalBytesRead += iterationBytesRead
-		subOffset += int64(iterationBytesRead)
+	*/
+	totalBytesRead, err := fileReader.Read(cr.buffer)
+	if err != nil {
+		return err
 	}
 
 	if int64(totalBytesRead) != cr.length {

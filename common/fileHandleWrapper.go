@@ -22,18 +22,18 @@ package common
 
 import (
 	"io"
-	"os"
+	"syscall"
 )
 
 type fileHandleWrapper struct {
-	file *os.File
+	fileHandle syscall.Handle
 }
 
-func NewFileHandleWrapper(file *os.File) io.Reader {
+func NewFileHandleWrapper(fileHandle syscall.Handle) io.Reader {
 	return &fileHandleWrapper{
-		file: file}
+		fileHandle: fileHandle}
 }
 
 func (w *fileHandleWrapper) Read(b []byte) (int, error) {
-	return w.file.Read(b)
+	return syscall.Read(w.fileHandle, b)
 }
