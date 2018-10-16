@@ -23,7 +23,6 @@ package common
 import (
 	"errors"
 	"io"
-	"os"
 )
 
 // Reader of ONE chunk of a file. Maybe be used to re-read multiple times (e.g. if
@@ -35,7 +34,7 @@ import (
 type FileChunkReader interface {
 	io.ReadSeeker
 	io.Closer
-	Prefetch(file *os.File) error
+	Prefetch(fileReader io.Reader) error
 }
 
 type simpleFileChunkReader struct {
@@ -76,7 +75,7 @@ func NewSimpleFileChunkReader(filePath string, offset int64, length int64, prefe
 }
 
 // Prefetch the data in this chunk, using a file object that is provided to us (providing it to us supports sequential read, in the non-retry scenario)
-func (cr *simpleFileChunkReader) Prefetch(file *os.File) error {
+func (cr *simpleFileChunkReader) Prefetch(fileReader io.Reader) error {
 	if cr.buffer != nil {
 		return nil // already prefetched
 	}
@@ -97,7 +96,7 @@ func (cr *simpleFileChunkReader) Prefetch(file *os.File) error {
 		} else {
 			sliceToLoad = cr.buffer[subOffset:endOfSliceToLoad]
 		}
-		iterationBytesRead, err := file.Read(sliceToLoad)
+		iterationBytesRead, err := fileReader.Read(sliceToLoad)
 		if err != nil {
 			return err
 		}

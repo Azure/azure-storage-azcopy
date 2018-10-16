@@ -261,6 +261,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// because if we already have that much data preloaded (and scheduled for sending in
 		// chunks) then we don't need to schedule any more chunks right now, so the blocking
 		// is harmless (and a good thing, to avoid excessive RAM usage)
+		sequentialFileReader := common.NewFileHandleWrapper(srcFile)
 		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
 			adjustedChunkSize := chunkSize
 
@@ -278,7 +279,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			// file handle (srcFile). Each chunk reader also gets the full file path, so if it needs to repeat the file read
 			// later (when doing a retry), it can do so.
 			chunkReader := common.NewSimpleFileChunkReader(bbu.source, startIndex, adjustedChunkSize, prefetchedByteCounter)
-			err = chunkReader.Prefetch(srcFile)
+			err = chunkReader.Prefetch(sequentialFileReader)
 			if err != nil {
 				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
 				return          // TODO: is this needed after jptm.Panic?
