@@ -20,17 +20,41 @@
 
 package common
 
-import "sync/atomic"
+import (
+	"sync"
+)
 
 type SharedCounter struct {
 	value int64
+	cond *sync.Cond  // TODO: replace with something cancllelabe, by context
+}
+
+func NewSharedCount () *SharedCounter {
+	return &SharedCounter{
+		value: 0,
+		cond: sync.NewCond(&sync.Mutex{})}
 }
 
 func (c *SharedCounter) Add(increment int64) {
-	atomic.AddInt64(&c.value, increment)
+	c.cond.L.Lock()
+	defer c.cond.L.Unlock()
+
+	c.value += increment
+	c.cond.Broadcast()  // let all waiting goroutines know that the value has changed
 }
 
-func (c *SharedCounter) Read() int64 {
-	return atomic.LoadInt64(&c.value)
+
+func (c *SharedCounter) WaitUntilLessThan(threshold int64) {
+	c.cond.L.Lock()
+	defer c.cond.L.Unlock()
+
+	for {
+		ok := c.value < threshold
+		if ok {
+			return
+		}
+		c.cond.Wait()   // serves as a "hole" in the lock. Blocks until Broadcast is called
+	}
 }
+
 

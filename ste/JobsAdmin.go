@@ -24,14 +24,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
-
-	"path"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -116,7 +114,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	partsCh := make(chan IJobPartMgr, PartsChannelSize)
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
+	//lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 
 	// Create suicide channel which is used to scale back on the number of workers
 	suicideCh := make(chan SuicideJob, concurrentConnections)
@@ -136,15 +134,15 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
-			lowTransferCh:    lowTransferCh,
+			//lowTransferCh:    lowTransferCh,
 		},
 		xferChannels: XferChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
-			lowTransferCh:    lowTransferCh,
-			normalChunckCh:   normalChunkCh,
-			lowChunkCh:       lowChunkCh,
-			suicideCh:        suicideCh,
+			//lowTransferCh:    lowTransferCh,
+			normalChunckCh: normalChunkCh,
+			//lowChunkCh:       lowChunkCh,
+			suicideCh: suicideCh,
 		},
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
@@ -162,7 +160,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway. Maybe test and make sure whether it really is worth protecting against this
-	for cc := 0; cc < 16; cc++ {  // TODO: parameterize this count? But its only about initiation of transfers, so it might not matter much what the value is
+	for cc := 0; cc < 16; cc++ { // TODO: parameterize this count? But its only about initiation of transfers, so it might not matter much what the value is
 		go ja.transferProcessor(cc)
 	}
 }
@@ -200,18 +198,8 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 		select {
 		case <-ja.xferChannels.suicideCh:
 			return
-		default:
-			select {
-			case chunkFunc := <-ja.xferChannels.normalChunckCh:
-				chunkFunc(workerID)
-			default:
-				select {
-				case chunkFunc := <-ja.xferChannels.lowChunkCh:
-					chunkFunc(workerID)
-				default:
-					time.Sleep(1 * time.Millisecond) // Sleep before looping around
-				}
-			}
+		case chunkFunc := <-ja.xferChannels.normalChunckCh:
+			chunkFunc(workerID)
 		}
 	}
 }
@@ -238,23 +226,16 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 		// No suicide check here, because this routine runs only in a small number of goroutines, so no need to kill them off
 		// TODO: review the above??? Maybe do need to kill them at end of job
 		// TODO: is the suicide channel mechnanism still used?  I can't find the usage - JR
-//		select {
-//		case <-ja.xferChannels.suicideCh:
-//			return
-//		default:
+		//		select {
+		//		case <-ja.xferChannels.suicideCh:
+		//			return
+		//		default:
 
 		select {
 		case jptm := <-ja.xferChannels.normalTransferCh:
 			startTransfer(jptm)
-		default:
-			select {
-			case jptm := <-ja.xferChannels.lowTransferCh:
-				startTransfer(jptm)
-			default:
-				time.Sleep(1 * time.Millisecond) // Sleep before looping around
-			}
 		}
-//		}
+		//		}
 	}
 }
 
@@ -283,10 +264,10 @@ type CoordinatorChannels struct {
 type XferChannels struct {
 	partsChannel     <-chan IJobPartMgr         // Read only
 	normalTransferCh <-chan IJobPartTransferMgr // Read-only
-	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
-	normalChunckCh   chan chunkFunc             // Read-write
-	lowChunkCh       chan chunkFunc             // Read-write
-	suicideCh        <-chan SuicideJob          // Read-only
+	//lowTransferCh    <-chan IJobPartTransferMgr // Read-only
+	normalChunckCh chan chunkFunc // Read-write
+	//lowChunkCh       chan chunkFunc             // Read-write
+	suicideCh <-chan SuicideJob // Read-only
 }
 
 type SuicideJob struct{}
@@ -351,7 +332,8 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 	case common.EJobPriority.Normal():
 		ja.xferChannels.normalChunckCh <- chunkFunc
 	case common.EJobPriority.Low():
-		ja.xferChannels.lowChunkCh <- chunkFunc
+		panic("low priority temporarily unsupported")
+		//ja.xferChannels.lowChunkCh <- chunkFunc
 	default:
 		ja.Panic(fmt.Errorf("invalid priority: %q", priority))
 	}

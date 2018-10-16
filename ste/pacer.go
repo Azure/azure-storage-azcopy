@@ -24,7 +24,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +46,7 @@ func newPacer(bytesPerSecond int64) (p *pacer) {
 		availableBytesPerPeriod: bytesPerSecond * int64(PacerTimeToWaitInMs) / 1000,
 		lastUpdatedTimestamp:    time.Now().UnixNano()}
 
+	/* JMR REMOVED, in attempt to reduce gosched overhead. And we're not using pacing anyway.
 	// the pace runs in a separate goroutine for as long as the transfer engine is running
 	go func() {
 		for {
@@ -62,6 +62,7 @@ func newPacer(bytesPerSecond int64) (p *pacer) {
 			//}
 		}
 	}()
+	*/
 
 	return
 }
