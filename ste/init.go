@@ -409,6 +409,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 		for t := uint32(0); t < jpp.NumTransfers; t++ {
 			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
 			jppt := jpp.Transfer(t)
+			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():

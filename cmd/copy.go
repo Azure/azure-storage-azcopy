@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
+	"io/ioutil"
 )
 
 // upload related
@@ -134,16 +135,30 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// If the user provided the list of files explicitly to be copied, then parse the argument
 	if len(raw.listOfFiles) > 0 {
-		files := strings.Split(raw.listOfFiles, ";")
-		for index := range files {
+		//files := strings.Split(raw.listOfFiles, ";")
+		jsonFile, err := os.Open(raw.listOfFiles)
+		if err != nil {
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFiles)
+		}
+		// read our opened xmlFile as a byte array.
+		jsonBytes, err := ioutil.ReadAll(jsonFile)
+		if err != nil {
+			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFiles)
+		}
+		var files common.ListOfFiles
+		err = json.Unmarshal(jsonBytes, &files)
+		if err != nil {
+			return cooked, fmt.Errorf("error %s unmarshalling the contents of %s file passed with the list-of-file flag", err.Error(), raw.listOfFiles)
+		}
+		for _, file := range files.Files {
 			// If split of the include string leads to an empty string
 			// not include that string
-			if len(files[index]) == 0 {
+			if len(file) == 0 {
 				continue
 			}
 			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
 			// this replacement is done to handle the windows file paths where path separator "\\"
-			filePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			filePath := strings.Replace(file, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 			cooked.listOfFiles = append(cooked.listOfFiles, filePath)
 		}
 	}
