@@ -88,7 +88,7 @@ func (e *removeBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If the blob represents a folder as per the conditions mentioned in the
 			// api doesBlobRepresentAFolder, then skip the blob.
-			if util.doesBlobRepresentAFolder(blobInfo) {
+			if util.doesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
 			}
 			// If the blobName doesn't matches the blob name pattern, then blob is not included

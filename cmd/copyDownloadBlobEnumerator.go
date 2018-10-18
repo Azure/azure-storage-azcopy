@@ -112,6 +112,103 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 	}
 
+	// If the user has provided us with a list of files to be copied explicitly
+	// then there is no need list using the source and then perform pattern matching.
+	if len(cca.listOfFiles) > 0 {
+		for _, blob := range cca.listOfFiles {
+			// copy the blobParts in the temporary blobPart since for each blob mentioned in the listOfFiles flag
+			// blobParts will be modified.
+			tempBlobUrlParts := blobUrlParts
+			if len(parentSourcePath) > 0 && parentSourcePath[len(parentSourcePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				parentSourcePath = parentSourcePath[0 : len(parentSourcePath)-1]
+			}
+			// Create the blobPath using the given source and blobs mentioned with listOfFile flag.
+			// For Example:
+			// 1. source = "https://sdksampleperftest.blob.core.windows.net/bigdata" blob = "file1.txt" blobPath= "file1.txt"
+			// 2. source = "https://sdksampleperftest.blob.core.windows.net/bigdata/dir-1" blob = "file1.txt" blobPath= "dir-1/file1.txt"
+			blobPath := fmt.Sprintf("%s%s%s", parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING, blob)
+			if len(blobPath) > 0 && blobPath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				blobPath = blobPath[1:]
+			}
+			tempBlobUrlParts.BlobName = blobPath
+			blobURL := azblob.NewBlobURL(tempBlobUrlParts.URL(), p)
+			blobProperties, err := blobURL.GetProperties(ctx, azblob.BlobAccessConditions{})
+			if err == nil {
+				// If the blob represents a folder as per the conditions mentioned in the
+				// api doesBlobRepresentAFolder, then skip the blob.
+				if util.doesBlobRepresentAFolder(blobProperties.NewMetadata()) {
+					continue
+				}
+				blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
+				e.addTransfer(common.CopyTransfer{
+					Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobPath)).String(),
+					Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
+					LastModifiedTime: blobProperties.LastModified(),
+					SourceSize:       blobProperties.ContentLength()}, cca)
+				continue
+			}
+			if !cca.recursive {
+				glcm.Info(fmt.Sprintf("error fetching properties of %s. Either it is a directory or getting the blob properties failed. For virtual directories try using the recursive flag", blobPath))
+				continue
+			}
+			// Since the given blob in the listOFFiles flag is not a blob, it can be a virtual directory
+			// If the virtual directory doesn't have a path separator at the end of it, then we should append it.
+			// This is done to avoid listing blobs which shares the common prefix i.e the virtual directory name.
+			// For Example:
+			// 1. source = "https://sdksampleperftest.blob.core.windows.net/bigdata" blob="100k". In this case, it is
+			// a possibility that we have blobs https://sdksampleperftest.blob.core.windows.net/bigdata/100K and
+			// https://sdksampleperftest.blob.core.windows.net/bigdata/100K/f1.txt. So we need to list the blob
+			// https://sdksampleperftest.blob.core.windows.net/bigdata/100K/f1.txt
+			searchPrefix := tempBlobUrlParts.BlobName
+			if len(searchPrefix) > 0 && searchPrefix[len(searchPrefix)-1] != common.AZCOPY_PATH_SEPARATOR_CHAR {
+				searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
+			}
+			for marker := (azblob.Marker{}); marker.NotDone(); {
+				// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
+				listBlob, err := containerUrl.ListBlobsFlatSegment(ctx, marker,
+					azblob.ListBlobsSegmentOptions{Details: azblob.BlobListingDetails{Metadata: true}, Prefix: searchPrefix})
+				if err != nil {
+					glcm.Info(fmt.Sprintf("cannot list blobs inside directory %s mentioned.", searchPrefix))
+					continue
+				}
+				// If there was no blob listed inside the directory mentioned in the listOfFiles flag,
+				// report to the user and continue to the next blob mentioned.
+				if !listBlob.NextMarker.NotDone() && len(listBlob.Segment.BlobItems) == 0 {
+					glcm.Info(fmt.Sprintf("cannot list blobs inside directory %s mentioned.", searchPrefix))
+					break
+				}
+				for _, blobInfo := range listBlob.Segment.BlobItems {
+					// If the blob represents a folder as per the conditions mentioned in the
+					// api doesBlobRepresentAFolder, then skip the blob.
+					if util.doesBlobRepresentAFolder(blobInfo.Metadata) {
+						continue
+					}
+					blobRelativePath := util.getRelativePath(parentSourcePath, blobInfo.Name)
+
+					// check for the special character in blob relative path and get path without special character.
+					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
+					e.addTransfer(common.CopyTransfer{
+						Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
+						Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
+						LastModifiedTime: blobInfo.Properties.LastModified,
+						SourceSize:       *blobInfo.Properties.ContentLength}, cca)
+				}
+				marker = listBlob.NextMarker
+			}
+		}
+		// If there are no transfer to queue up, exit with message
+		if len(e.Transfers) == 0 {
+			glcm.Exit(fmt.Sprintf("no transfer queued for copying data from %s to %s", cca.source, cca.destination), 1)
+			return nil
+		}
+		// dispatch the JobPart as Final Part of the Job
+		err = e.dispatchFinalPart(cca)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
 	// searchPrefix is the used in listing blob inside a container
 	// all the blob listed should have the searchPrefix as the prefix
 	// blobNamePattern represents the regular expression which the blobName should Match
@@ -142,7 +239,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		for _, blobInfo := range listBlob.Segment.BlobItems {
 			// If the blob represents a folder as per the conditions mentioned in the
 			// api doesBlobRepresentAFolder, then skip the blob.
-			if util.doesBlobRepresentAFolder(blobInfo) {
+			if util.doesBlobRepresentAFolder(blobInfo.Metadata) {
 				continue
 			}
 			// If the blobName doesn't matches the blob name pattern, then blob is not included
