@@ -139,7 +139,15 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if util.doesBlobRepresentAFolder(blobProperties.NewMetadata()) {
 					continue
 				}
-				blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
+				//blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
+				//blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
+				blobRelativePath := strings.Replace(blobPath, parentSourcePath, "", 1)
+				if len(blobRelativePath) > 0 && blobRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+					blobRelativePath = blobRelativePath[1:]
+				}
+				// check for the special character in blob relative path and get path without special character.
+				blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
+
 				e.addTransfer(common.CopyTransfer{
 					Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobPath)).String(),
 					Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
@@ -183,7 +191,11 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					if util.doesBlobRepresentAFolder(blobInfo.Metadata) {
 						continue
 					}
-					blobRelativePath := util.getRelativePath(parentSourcePath, blobInfo.Name)
+					blobRelativePath := strings.Replace(blobInfo.Name, parentSourcePath, "", 1)
+					if len(blobRelativePath) > 0 && blobRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						blobRelativePath = blobRelativePath[1:]
+					}
+					//blobRelativePath := util.getRelativePath(parentSourcePath, blobInfo.Name)
 
 					// check for the special character in blob relative path and get path without special character.
 					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
