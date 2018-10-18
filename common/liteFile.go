@@ -25,15 +25,32 @@ import (
 	"syscall"
 )
 
-type fileHandleWrapper struct {
+// Light-weight file access, with syscalls direct to file handles
+// In testing, this used less CPU that io.File. TBC - why was that?
+// TODO: do we need or want this on on-Windows platforms?
+type liteFile struct {
 	fileHandle syscall.Handle
 }
 
-func NewFileHandleWrapper(fileHandle syscall.Handle) io.Reader {
-	return &fileHandleWrapper{
-		fileHandle: fileHandle}
+func NewLiteFileForReading(fullPath string) (io.ReadCloser, error) {
+	// TODO: this is Windows-specific. See TODO above deciding whether we want/need this on Linux
+
+	pathp, err := syscall.UTF16PtrFromString(fullPath)
+	var sa *syscall.SecurityAttributes
+	var FILE_FLAG_SEQUENTIAL_SCAN = uint32(0x08000000)
+	fileHandle, err := syscall.CreateFile(pathp, syscall.GENERIC_READ, 0, sa, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	return &liteFile{
+		fileHandle: fileHandle}, nil
 }
 
-func (w *fileHandleWrapper) Read(b []byte) (int, error) {
-	return syscall.Read(w.fileHandle, b)
+func (f *liteFile) Read(b []byte) (int, error) {
+	return syscall.Read(f.fileHandle, b)
+}
+
+func (f *liteFile) Close() error {
+	return syscall.Close(f.fileHandle)
 }

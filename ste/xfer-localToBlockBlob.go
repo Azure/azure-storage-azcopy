@@ -28,7 +28,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"syscall"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -97,17 +96,14 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 
 	// step 2a: Open the Source File.
-	pathp, err := syscall.UTF16PtrFromString(info.Source)
-	var sa *syscall.SecurityAttributes
-	var FILE_FLAG_SEQUENTIAL_SCAN = uint32(0x08000000)
-	fileHandle, err := syscall.CreateFile(pathp, syscall.GENERIC_READ, 0, sa, syscall.OPEN_EXISTING, syscall.FILE_ATTRIBUTE_NORMAL|FILE_FLAG_SEQUENTIAL_SCAN, 0)
+	sourceFile, err := common.NewLiteFileForReading(info.Source)
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	defer syscall.CloseHandle(fileHandle)
+	defer sourceFile.Close() // we read all the chunks in this routine, so can close a the end
 
 	// TODO: the MMF impl did this here: uncomment as appropriate: defer srcFile.Close()
 
@@ -264,7 +260,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// because if we already have that much data preloaded (and scheduled for sending in
 		// chunks) then we don't need to schedule any more chunks right now, so the blocking
 		// is harmless (and a good thing, to avoid excessive RAM usage)
-		sequentialFileReader := common.NewFileHandleWrapper(fileHandle)
 		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
 			adjustedChunkSize := chunkSize
 
@@ -282,7 +277,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			// file handle (srcFile). Each chunk reader also gets the full file path, so if it needs to repeat the file read
 			// later (when doing a retry), it can do so.
 			chunkReader := common.NewSimpleFileChunkReader(bbu.source, startIndex, adjustedChunkSize, prefetchedByteCounter)
-			err = chunkReader.Prefetch(sequentialFileReader)
+			err = chunkReader.Prefetch(sourceFile)
 			if err != nil {
 				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
 				return          // TODO: is this needed after jptm.Panic?
