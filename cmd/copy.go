@@ -65,6 +65,7 @@ type rawCopyCmdArgs struct {
 	//blobUrlForRedirection string
 
 	// filters from flags
+	listOfFiles    string
 	include        string
 	exclude        string
 	recursive      bool
@@ -123,6 +124,28 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
+	}
+	// User can provide either listOfFiles or include since listOFFiles mentions
+	// file names to include explicitly and include file may mention at pattern.
+	// This could conflict enumerating the files to queue up for transfer.
+	if len(raw.listOfFiles) > 0 && len(raw.include) > 0 {
+		return cooked, fmt.Errorf("user provided argument with both listOfFiles and include flag. Only one should be provided")
+	}
+
+	// If the user provided the list of files explicitly to be copied, then parse the argument
+	if len(raw.listOfFiles) > 0 {
+		files := strings.Split(raw.listOfFiles, ";")
+		for index := range files {
+			// If split of the include string leads to an empty string
+			// not include that string
+			if len(files[index]) == 0 {
+				continue
+			}
+			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
+			// this replacement is done to handle the windows file paths where path separator "\\"
+			filePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			cooked.listOfFiles = append(cooked.listOfFiles, filePath)
+		}
 	}
 
 	// initialize the include map which contains the list of files to be included
@@ -260,6 +283,7 @@ type cookedCopyCmdArgs struct {
 	fromTo         common.FromTo
 
 	// filters from flags
+	listOfFiles    []string
 	include        map[string]int
 	exclude        map[string]int
 	recursive      bool
@@ -883,6 +907,8 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.listOfFiles, "list-of-files", "", "copy these files only."+
+		"Does not support use of *. Files should be separated with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
