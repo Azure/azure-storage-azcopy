@@ -37,6 +37,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
+	"io/ioutil"
 )
 
 // upload related
@@ -65,11 +66,12 @@ type rawCopyCmdArgs struct {
 	//blobUrlForRedirection string
 
 	// filters from flags
-	include        string
-	exclude        string
-	recursive      bool
-	followSymlinks bool
-	withSnapshots  bool
+	listOfFilesToCopy string
+	include           string
+	exclude           string
+	recursive         bool
+	followSymlinks    bool
+	withSnapshots     bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
 	forceWrite bool
@@ -123,6 +125,46 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
+	}
+	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
+	// file names to include explicitly and include file may mention at pattern.
+	// This could conflict enumerating the files to queue up for transfer.
+	if len(raw.listOfFilesToCopy) > 0 && len(raw.include) > 0 {
+		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
+	}
+
+	// If the user provided the list of files explicitly to be copied, then parse the argument
+	// The user passes the location of json file which will have the list of files to be copied.
+	// The "json file" is chosen as input because there is limit on the number of characters that
+	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
+	// any limit on the number of files that can be copied.
+	if len(raw.listOfFilesToCopy) > 0 {
+		//files := strings.Split(raw.listOfFilesToCopy, ";")
+		jsonFile, err := os.Open(raw.listOfFilesToCopy)
+		if err != nil {
+			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
+		}
+		// read our opened xmlFile as a byte array.
+		jsonBytes, err := ioutil.ReadAll(jsonFile)
+		if err != nil {
+			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
+		}
+		var files common.ListOfFiles
+		err = json.Unmarshal(jsonBytes, &files)
+		if err != nil {
+			return cooked, fmt.Errorf("error %s unmarshalling the contents of %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
+		}
+		for _, file := range files.Files {
+			// If split of the include string leads to an empty string
+			// not include that string
+			if len(file) == 0 {
+				continue
+			}
+			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
+			// this replacement is done to handle the windows file paths where path separator "\\"
+			filePath := strings.Replace(file, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			cooked.listOfFilesToCopy = append(cooked.listOfFilesToCopy, filePath)
+		}
 	}
 
 	// initialize the include map which contains the list of files to be included
@@ -260,12 +302,13 @@ type cookedCopyCmdArgs struct {
 	fromTo         common.FromTo
 
 	// filters from flags
-	include        map[string]int
-	exclude        map[string]int
-	recursive      bool
-	followSymlinks bool
-	withSnapshots  bool
-	forceWrite     bool
+	listOfFilesToCopy []string
+	include           map[string]int
+	exclude           map[string]int
+	recursive         bool
+	followSymlinks    bool
+	withSnapshots     bool
+	forceWrite        bool
 
 	// options from flags
 	blockSize uint32
@@ -883,6 +926,8 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
+	// This flag is implemented only for Storage Explorer.
+	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
@@ -909,6 +954,8 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().MarkHidden("acl")
 
 	// permanently hidden
+	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
+	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("output")
 	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")

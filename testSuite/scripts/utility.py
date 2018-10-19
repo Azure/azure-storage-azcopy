@@ -6,6 +6,7 @@ import subprocess
 import shlex
 import uuid
 import random
+import json
 from pathlib import Path
 
 
@@ -343,6 +344,17 @@ def create_test_file(filename, size):
         num_chars = size
         f.write('0' * num_chars)
     f.close()
+    return file_path
+
+def create_json_file(filename, jsonData):
+    # creating the file path
+    file_path = os.path.join(test_directory_path, filename + ".json")
+    # if file already exists, then removing the file.
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+    with open(file_path, 'w') as outfile:
+        json.dump(jsonData, outfile)
+    outfile.close()
     return file_path
 
 

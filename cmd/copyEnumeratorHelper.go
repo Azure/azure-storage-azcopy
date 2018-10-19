@@ -84,7 +84,7 @@ func enumerateBlobsInContainer(ctx context.Context, containerURL azblob.Containe
 		for _, blobItem := range listContainerResp.Segment.BlobItems {
 			// If the blob represents a folder as per the conditions mentioned in the
 			// api doesBlobRepresentAFolder, then skip the blob.
-			if gCopyUtil.doesBlobRepresentAFolder(blobItem) {
+			if gCopyUtil.doesBlobRepresentAFolder(blobItem.Metadata) {
 				continue
 			}
 

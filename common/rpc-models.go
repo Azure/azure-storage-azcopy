@@ -138,16 +138,19 @@ type ListJobSummaryResponse struct {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
-	CompleteJobOrdered    bool
-	JobStatus             JobStatus
-	TotalTransfers        uint32
-	TransfersCompleted    uint32
-	TransfersFailed       uint32
-	TransfersSkipped      uint32
-	BytesOverWire         uint64
+	CompleteJobOrdered bool
+	JobStatus          JobStatus
+	TotalTransfers     uint32
+	TransfersCompleted uint32
+	TransfersFailed    uint32
+	TransfersSkipped   uint32
+	BytesOverWire      uint64
+	// sum of the size of transfer completed successfully so far.
 	TotalBytesTransferred uint64
-	FailedTransfers       []TransferDetail
-	SkippedTransfers      []TransferDetail
+	// sum of the total transfer enumerated so far.
+	TotalBytesEnumerated uint64
+	FailedTransfers      []TransferDetail
+	SkippedTransfers     []TransferDetail
 }
 
 type ListJobTransfersRequest struct {

@@ -499,3 +499,69 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # Number of Expected Transfer should be 20
         self.assertEquals(x.TransfersCompleted, 20)
         self.assertEquals(x.TransfersFailed, 0)
+
+        # This test validates the functionality if list-of-files flag.
+    def test_blob_download_list_of_files_flag(self):
+        #This test verifies the azcopy behavior blobs are downloaded using
+        # list-of-files flag
+        dir_name = "dir_download_list_of_files_flag"
+        dir_path = util.create_test_n_files(1024, 10, dir_name)
+
+        #create sub-directory inside directory
+        sub_dir_name_1 = os.path.join(dir_name, "logs")
+        sub_dir_path_1 = util.create_test_n_files(1024, 10, sub_dir_name_1)
+
+        #create sub-directory inside sub-directory
+        sub_dir_name_2 = os.path.join(sub_dir_name_1, "abc")
+        sub_dir_path_2 = util.create_test_n_files(1024, 10, sub_dir_name_2)
+
+        #upload the directory with 30 files
+        # upload the directory
+        # execute azcopy command
+        result = util.Command("copy").add_arguments(dir_path).add_arguments(util.test_container_url). \
+            add_flags("recursive", "true").add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # execute the validator.
+        dir_sas = util.get_resource_sas(dir_name)
+        result = util.Command("testBlob").add_arguments(dir_path).add_arguments(dir_sas). \
+            add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
+
+        #download the entire directory with list-of-files-flag
+        dict = {}
+        dict["Files"] = [dir_name]
+        filePath = util.create_json_file("testfile", dict)
+        result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true") \
+            .add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
+        # parse the result to get the last job progress summary
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        # since entire directory is downloaded
+        self.assertEquals(x.TransfersCompleted, 30)
+        self.assertEquals(x.TransfersFailed, 0)
+
+        # create the resource sas
+        dir_sas = util.get_resource_sas(dir_name)
+        #download the logs directory inside the dir
+        dict = {}
+        dict["Files"] = ["logs"]
+        filePath = util.create_json_file("testfile", dict)
+        result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
+            add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true"). \
+            add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
+        # parse the result to get the last job progress summary
+        result = util.parseAzcopyOutput(result)
+        try:
+            # parse the Json Output
+            x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+        except:
+            self.fail('error parsing the output in Json Format')
+        #since only logs sub-directory is downloaded, transfers will be 20
+        self.assertEquals(x.TransfersCompleted, 20)
+        self.assertEquals(x.TransfersFailed, 0)
