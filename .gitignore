@@ -325,3 +325,6 @@ testSuite/venv1/*
 testSuite/scripts/__pycache__/utility.cpython-36.pyc
 testSuite/scripts/__pycache__/utility.cpython-36.pyc
 venv*
+
+#json create files
+*.json

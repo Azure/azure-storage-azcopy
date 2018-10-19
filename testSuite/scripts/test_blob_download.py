@@ -500,7 +500,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertEquals(x.TransfersCompleted, 20)
         self.assertEquals(x.TransfersFailed, 0)
 
-    # This test validates the functionality if list-of-files flag.
+        # This test validates the functionality if list-of-files flag.
     def test_blob_download_list_of_files_flag(self):
         #This test verifies the azcopy behavior blobs are downloaded using
         # list-of-files flag
@@ -529,9 +529,12 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         #download the entire directory with list-of-files-flag
+        dict = {}
+        dict["Files"] = [dir_name]
+        filePath = util.create_json_file("testfile", dict)
         result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(dir_path). \
             add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true") \
-            .add_flags("list-of-files", dir_name).execute_azcopy_copy_command_get_output()
+            .add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -546,9 +549,12 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name)
         #download the logs directory inside the dir
+        dict = {}
+        dict["Files"] = ["logs"]
+        filePath = util.create_json_file("testfile", dict)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
             add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true"). \
-            add_flags("list-of-files", "logs").execute_azcopy_copy_command_get_output()
+            add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
