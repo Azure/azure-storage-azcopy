@@ -114,9 +114,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// If the user has provided us with a list of files to be copied explicitly
 	// then there is no need list using the source and then perform pattern matching.
-	if len(cca.listOfFiles) > 0 {
-		for _, blob := range cca.listOfFiles {
-			// copy the blobParts in the temporary blobPart since for each blob mentioned in the listOfFiles flag
+	if len(cca.listOfFilesToCopy) > 0 {
+		for _, blob := range cca.listOfFilesToCopy {
+			// copy the blobParts in the temporary blobPart since for each blob mentioned in the listOfFilesToCopy flag
 			// blobParts will be modified.
 			tempBlobUrlParts := blobUrlParts
 			if len(parentSourcePath) > 0 && parentSourcePath[len(parentSourcePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
@@ -179,7 +179,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					glcm.Info(fmt.Sprintf("cannot list blobs inside directory %s mentioned.", searchPrefix))
 					continue
 				}
-				// If there was no blob listed inside the directory mentioned in the listOfFiles flag,
+				// If there was no blob listed inside the directory mentioned in the listOfFilesToCopy flag,
 				// report to the user and continue to the next blob mentioned.
 				if !listBlob.NextMarker.NotDone() && len(listBlob.Segment.BlobItems) == 0 {
 					glcm.Info(fmt.Sprintf("cannot list blobs inside directory %s mentioned.", searchPrefix))

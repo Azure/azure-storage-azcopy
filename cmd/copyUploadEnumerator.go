@@ -82,8 +82,9 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// If the user has provided the listofFiles explicitly to copy, there is no
 	// need to glob the source and match the patterns.
-	if len(cca.listOfFiles) > 0 {
-		for _, file := range cca.listOfFiles {
+	// This feature is supported only for Storage Explorer and doesn't follow the symlinks.
+	if len(cca.listOfFilesToCopy) > 0 {
+		for _, file := range cca.listOfFilesToCopy {
 			tempDestinationURl := *destinationURL
 			parentSourcePath, _ := util.sourceRootPathWithoutWildCards(cca.source)
 			if len(parentSourcePath) > 0 && parentSourcePath[len(parentSourcePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
@@ -96,6 +97,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				continue
 			}
 			if f.Mode().IsRegular() {
+				// If the file is a regular file, calculate the destination path and queue for transfer.
 				tempDestinationURl.Path = util.generateObjectPath(tempDestinationURl.Path, f.Name())
 				err = e.addTransfer(common.CopyTransfer{
 					Source:           filePath,
@@ -109,10 +111,12 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				}
 				continue
 			}
+			// If the last character of the filePath is a path separator, strip the path separator.
 			if len(filePath) > 0 && filePath[len(filePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 				filePath = filePath[:len(filePath)-1]
 			}
 			if f.IsDir() && cca.recursive {
+				// If the file is a directory, walk through all the elements inside the directory and queue the elements for transfer.
 				filepath.Walk(filePath, func(pathToFile string, info os.FileInfo, err error) error {
 					if err != nil {
 						glcm.Info(fmt.Sprintf("Accessing %s failed with error %s", pathToFile, err.Error()))
