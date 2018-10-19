@@ -37,9 +37,13 @@ type FileChunkReader interface {
 	Prefetch(fileReader io.Reader) error
 }
 
+
+type ChunkReaderSourceFactory func()(io.ReadSeeker, error)
+
+
 type simpleFileChunkReader struct {
-	// The file we read from
-	fileFullName string
+	// A factory to get hold of the file, in case we need to re-read any of it
+	sourceFactory ChunkReaderSourceFactory
 
 	// start position in file
 	offsetInFile int64
@@ -63,12 +67,12 @@ type simpleFileChunkReader struct {
 // TODO: that might work by having it preftech the start, and then, when that part is being sent out to the network, use a
 // separate goroutine to read the next.  OR, we can just say, if you want to use 100 MB chunk sizes, use lots of RAM.
 
-func NewSimpleFileChunkReader(filePath string, offset int64, length int64, prefetchedByteTracker *SharedCounter) FileChunkReader {
+func NewSimpleFileChunkReader(sourceFactory ChunkReaderSourceFactory, offset int64, length int64, prefetchedByteTracker *SharedCounter) FileChunkReader {
 	if length <= 0 {
 		panic("length must be greater than zero")
 	}
 	return &simpleFileChunkReader{
-		fileFullName:          filePath,
+		sourceFactory:         sourceFactory,
 		offsetInFile:          offset,
 		length:                length,
 		prefetchedByteTracker: prefetchedByteTracker}
@@ -82,31 +86,8 @@ func (cr *simpleFileChunkReader) Prefetch(fileReader io.Reader) error {
 
 	cr.buffer = make([]byte, cr.length)
 
-	/*
-		// TODO: does reading in pieces help at all?
-		totalBytesRead := 0
-
-		const readSize = 1024 * 1024 // TODO: parameterize? (and then alter last comment abome, re specfic reference to Storage Spaces and 1 MB)
-
-		// TODO: *** can we us a Reader to do this for us? ***
-		for subOffset := int64(0); subOffset < cr.length; {
-			var endOfSliceToLoad = subOffset + readSize
-			var sliceToLoad []byte
-			if endOfSliceToLoad > cr.length {
-				sliceToLoad = cr.buffer[subOffset:]
-			} else {
-				sliceToLoad = cr.buffer[subOffset:endOfSliceToLoad]
-			}
-			iterationBytesRead, err := fileReader.Read(sliceToLoad)
-			if err != nil {
-				return err
-			}
-			totalBytesRead += iterationBytesRead
-			subOffset += int64(iterationBytesRead)
-		}
-	*/
 	totalBytesRead, err := fileReader.Read(cr.buffer)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		return err
 	}
 
@@ -124,14 +105,19 @@ func (cr *simpleFileChunkReader) RedoPrefetchIfNecessary() error {
 	if cr.buffer != nil {
 		return nil // nothing to do
 	}
-	panic("Not working")
-	/*
-		file, err := os.Open(cr.fileFullName) // re-open the file
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		return cr.Prefetch(file)*/
+
+	// create a new reader for the file (since anything that was passed to our Prefetch routine before is, deliberately, not kept)
+	sourceFile, err := cr.sourceFactory()
+	if err != nil {
+		return err
+	}
+	defer TryClose(sourceFile)
+
+	_, err = sourceFile.Seek(cr.offsetInFile, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	return cr.Prefetch(sourceFile)
 }
 
 // Seeks within this chunk

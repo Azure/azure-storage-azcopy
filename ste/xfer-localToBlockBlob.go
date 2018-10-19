@@ -96,14 +96,18 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 
 	// step 2a: Open the Source File.
-	sourceFile, err := common.NewLiteFileForReading(info.Source)
+	// declare factory func, because we need it later too
+	sourceFileFactory := func()(io.ReadSeeker, error) {
+		return common.NewLiteFileForReading(info.Source)
+	}
+	sourceFile, err := sourceFileFactory()
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
-	defer sourceFile.Close() // we read all the chunks in this routine, so can close a the end
+	defer common.TryClose(sourceFile) // we read all the chunks in this routine, so can close a the end
 
 	// TODO: the MMF impl did this here: uncomment as appropriate: defer srcFile.Close()
 
@@ -273,10 +277,10 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 			// Make reader for this chunk, and prefetch its contents
 			// To take advantage of the good sequential read performance provided by many file systems,
-			// we work sequentially through the file here, prefecting in sequential order from the same
-			// file handle (srcFile). Each chunk reader also gets the full file path, so if it needs to repeat the file read
-			// later (when doing a retry), it can do so.
-			chunkReader := common.NewSimpleFileChunkReader(bbu.source, startIndex, adjustedChunkSize, prefetchedByteCounter)
+			// we work sequentially through the file here. 
+			// Each chunk reader also gets a factory to make a ReadSeeker, in case it needs to repeat the file read
+			// later (when doing a retry)
+			chunkReader := common.NewSimpleFileChunkReader(sourceFileFactory, startIndex, adjustedChunkSize, prefetchedByteCounter)
 			err = chunkReader.Prefetch(sourceFile)
 			if err != nil {
 				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?

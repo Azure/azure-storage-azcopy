@@ -32,7 +32,7 @@ type liteFile struct {
 	fileHandle syscall.Handle
 }
 
-func NewLiteFileForReading(fullPath string) (io.ReadCloser, error) {
+func NewLiteFileForReading(fullPath string) (io.ReadSeeker, error) {
 	// TODO: this is Windows-specific. See TODO above deciding whether we want/need this on Linux
 
 	pathp, err := syscall.UTF16PtrFromString(fullPath)
@@ -51,6 +51,18 @@ func (f *liteFile) Read(b []byte) (int, error) {
 	return syscall.Read(f.fileHandle, b)
 }
 
+func (f *liteFile) Seek(offset int64, whence int) (int64, error){
+	return syscall.Seek(f.fileHandle, offset, whence)
+}
+
 func (f *liteFile) Close() error {
 	return syscall.Close(f.fileHandle)
+}
+
+// implemented because constructor for LiteFile returns it as a ReaderSeeker, and there is no ReaderSeekerCloser
+func TryClose(rs io.ReadSeeker) error {
+	if c, ok := rs.(io.Closer); ok {
+		c.Close()
+	}
+	return nil
 }
