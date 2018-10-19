@@ -7,3 +7,4 @@
 
 # remove logs and memory mapped plan files
 rm -rf ~/.azcopy/*
+rm ./azcopy*

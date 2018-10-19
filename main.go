@@ -21,13 +21,12 @@
 package main
 
 import (
-	"log"
-	"os"
-	"strconv"
-
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
+	"log"
+	"os"
+	"runtime"
 )
 
 // get the lifecycle manager to print messages
@@ -44,25 +43,10 @@ func main() {
 	// Perform os specific initialization
 	_, err := ProcessOSSpecificInitialization()
 	if err != nil {
-		log.Fatalf("initialization failed: %v",err)
+		log.Fatalf("initialization failed: %v", err)
 	}
 
-	// Get the value of environment variable AZCOPY_CONCURRENCY_VALUE
-	// If the environment variable is set, it defines the number of concurrent connections
-	// transfer engine will spawn. If not set, transfer engine will spawn the default number
-	// of concurrent connections
-	defaultConcurrentConnections := 300
-	concurrencyValue := os.Getenv("AZCOPY_CONCURRENCY_VALUE")
-	if concurrencyValue != "" {
-		val, err := strconv.ParseInt(concurrencyValue, 10, 64)
-		if err != nil {
-			log.Fatalf("error parsing the env azcopy_concurency_value %q failed with error %v", 
-				   concurrencyValue, err)
-		}
-		defaultConcurrentConnections = int(val)
-	}
-	ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
-
+	ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder)
 	cmd.Execute(azcopyAppPathFolder)
 	glcm.Exit("", common.EExitCode.Success())
 }

@@ -73,6 +73,7 @@ func Execute(azsAppPathFolder string) {
 		// only help commands reach this point
 		// execute synchronously before exiting
 		detectNewVersion()
+		glcm.Exit("", common.EExitCode.Success())
 	}
 }
 
