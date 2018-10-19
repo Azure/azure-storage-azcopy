@@ -134,6 +134,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// If the user provided the list of files explicitly to be copied, then parse the argument
+	// The user passes the location of json file which will have the list of files to be copied.
+	// The "json file" is chosen as input because there is limit on the number of characters that
+	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
+	// any limit on the number of files that can be copied.
 	if len(raw.listOfFilesToCopy) > 0 {
 		//files := strings.Split(raw.listOfFilesToCopy, ";")
 		jsonFile, err := os.Open(raw.listOfFilesToCopy)
