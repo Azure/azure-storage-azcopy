@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
 	"path/filepath"
-
 	"strings"
-
-	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type copyUploadEnumerator common.CopyJobPartOrderRequest
@@ -81,6 +79,80 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// then we should extra_path as a prefix while uploading
 	// temporarily save the path of the container
 	cleanContainerPath := destinationURL.Path
+
+	// If the user has provided the listofFiles explicitly to copy, there is no
+	// need to glob the source and match the patterns.
+	if len(cca.listOfFiles) > 0 {
+		for _, file := range cca.listOfFiles {
+			tempDestinationURl := *destinationURL
+			parentSourcePath, _ := util.sourceRootPathWithoutWildCards(cca.source)
+			if len(parentSourcePath) > 0 && parentSourcePath[len(parentSourcePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				parentSourcePath = parentSourcePath[:len(parentSourcePath)-1]
+			}
+			filePath := fmt.Sprintf("%s%s%s", parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING, file)
+			f, err := os.Stat(filePath)
+			if err != nil {
+				glcm.Info(fmt.Sprintf("Error getting the fileInfo for file %s. failed with error %s", filePath, err.Error()))
+				continue
+			}
+			if f.Mode().IsRegular() {
+				tempDestinationURl.Path = util.generateObjectPath(tempDestinationURl.Path, f.Name())
+				err = e.addTransfer(common.CopyTransfer{
+					Source:           filePath,
+					Destination:      tempDestinationURl.String(),
+					LastModifiedTime: f.ModTime(),
+					SourceSize:       f.Size(),
+				}, cca)
+
+				if err != nil {
+					glcm.Info(fmt.Sprintf("error %s adding source %s and destination %s as a transfer", err.Error(), filePath, destinationURL))
+				}
+				continue
+			}
+			if len(filePath) > 0 && filePath[len(filePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				filePath = filePath[:len(filePath)-1]
+			}
+			if f.IsDir() && cca.recursive {
+				filepath.Walk(filePath, func(pathToFile string, info os.FileInfo, err error) error {
+					if err != nil {
+						glcm.Info(fmt.Sprintf("Accessing %s failed with error %s", pathToFile, err.Error()))
+						return nil
+					}
+					if info.IsDir() {
+						return nil
+					} else if info.Mode().IsRegular() { // If the resource is file
+						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
+						// this replacement is done to handle the windows file paths where path separator "\\"
+						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+						// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
+						// this replacement is done to handle the windows file paths where path separator "\\"
+						filePath = strings.Replace(filePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+						// upload the files
+						// the path in the blob name started at the given fileOrDirectoryPath
+						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
+						tempDestinationURl.Path = util.generateObjectPath(cleanContainerPath,
+							util.getRelativePath(filePath, pathToFile))
+						err = e.addTransfer(common.CopyTransfer{
+							Source:           pathToFile,
+							Destination:      tempDestinationURl.String(),
+							LastModifiedTime: info.ModTime(),
+							SourceSize:       info.Size(),
+						}, cca)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+			}
+		}
+		if e.PartNum == 0 && len(e.Transfers) == 0 {
+			return errors.New("nothing can be uploaded, please use --recursive to upload directories")
+		}
+		return e.dispatchFinalPart(cca)
+	}
 
 	// Get the source path without the wildcards
 	// This is defined since the files mentioned with exclude flag
