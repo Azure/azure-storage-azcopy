@@ -1,0 +1,27 @@
+AzCopy 10.0.3-Preview
+Project URL: github.com/Azure/azure-storage-azcopy
+
+AzCopy is a command line tool that moves data into/out of Azure Storage.
+To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy
+
+The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
+
+Usage:
+  azcopy [command]
+
+Available Commands:
+  copy        Copies source data to a destination location
+  help        Help about any command
+  jobs        Sub-commands related to managing jobs
+  list        List the entities in a given resource
+  login       Log in to use OAuth token to access Azure storage resources.
+  logout      Log out to remove access to Azure storage resources.
+  make        Create a container/share/filesystem
+  remove      Deletes blobs or files in Azure Storage
+  sync        Replicates source to the destination location
+
+Flags:
+  -h, --help      help for azcopy
+      --version   version for azcopy
+
+Use "azcopy [command] --help" for more information about a command.
