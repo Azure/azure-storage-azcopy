@@ -9,11 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"sync/atomic"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
-	"sync/atomic"
 )
 
 type syncUploadEnumerator common.SyncJobPartOrderRequest
@@ -22,22 +23,23 @@ type syncUploadEnumerator common.SyncJobPartOrderRequest
 func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer, cca *cookedSyncCmdArgs) error {
 	// If the existing transfers in DeleteJobRequest is equal to NumOfFilesPerDispatchJobPart,
 	// then send the JobPartOrder to transfer engine.
-	if len(e.DeleteJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
-		resp := common.CopyJobPartOrderResponse{}
-		e.DeleteJobRequest.PartNum = e.PartNumber
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
-
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
-		}
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
-		if e.PartNumber == 0 {
-			//cca.waitUntilJobCompletion(false)
-			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
-		}
-		e.DeleteJobRequest.Transfers = []common.CopyTransfer{}
-		e.PartNumber++
-	}
+	// TODO: Delete the commented code once the testing is complete.
+	//if len(e.DeleteJobRequest.Transfers) == NumOfFilesPerDispatchJobPart {
+	//	resp := common.CopyJobPartOrderResponse{}
+	//	e.DeleteJobRequest.PartNum = e.PartNumber
+	//	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
+	//
+	//	if !resp.JobStarted {
+	//		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
+	//	}
+	//	// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+	//	if e.PartNumber == 0 {
+	//		//cca.waitUntilJobCompletion(false)
+	//		atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+	//	}
+	//	e.DeleteJobRequest.Transfers = []common.CopyTransfer{}
+	//	e.PartNumber++
+	//}
 	e.DeleteJobRequest.Transfers = append(e.DeleteJobRequest.Transfers, transfer)
 	return nil
 }
@@ -71,25 +73,74 @@ func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer,
 
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
-	numberOfCopyTransfers := len(e.CopyJobRequest.Transfers)
-	numberOfDeleteTransfers := len(e.DeleteJobRequest.Transfers)
+	numberOfCopyTransfers := uint64(len(e.CopyJobRequest.Transfers))
+	numberOfDeleteTransfers := uint64(len(e.DeleteJobRequest.Transfers))
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
 		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
 			"The source and destination are in sync")
-	} else if numberOfCopyTransfers > 0 && numberOfDeleteTransfers > 0 {
+	}
+	// sendDeleteTransfers is an internal function which creates JobPartRequest for all the delete transfers enumerated.
+	// It creates requests for group of 10000 transfers.
+	sendDeleteTransfers := func() error {
+		currentCount := uint64(0)
+		// If the user agrees to delete the transfers, then break the entire deleteJobRequest into parts of 10000 size and send them
+		for numberOfDeleteTransfers > 0 {
+			// number of transfers in the current request can be either 10,000 or less than that.
+			numberOfTransfers := common.Iffuint64(numberOfDeleteTransfers > NumOfFilesPerDispatchJobPart, NumOfFilesPerDispatchJobPart, numberOfDeleteTransfers)
+			// create a copy of DeleteJobRequest
+			deleteJobRequest := e.DeleteJobRequest
+			// Reset the transfer list in the copy of DeleteJobRequest
+			deleteJobRequest.Transfers = []common.CopyTransfer{}
+			// Copy the transfers from currentCount till number of transfer calculated for current iteration
+			deleteJobRequest.Transfers = e.DeleteJobRequest.Transfers[currentCount : currentCount+numberOfTransfers]
+			// Set the part number
+			deleteJobRequest.PartNum = e.PartNumber
+			// Increment the part number
+			e.PartNumber++
+			// Increment the current count
+			currentCount += numberOfTransfers
+			// Decrease the numberOfDeleteTransfer by the number Of transfers calculated for the current iteration
+			numberOfDeleteTransfers -= numberOfTransfers
+			// If the number of delete transfer is 0, it means it is the last part that needs to be sent.
+			// Set the IsFinalPart for the current request to true
+			if numberOfDeleteTransfers == 0 {
+				deleteJobRequest.IsFinalPart = true
+			}
+			var resp common.CopyJobPartOrderResponse
+			Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&deleteJobRequest), &resp)
+			if !resp.JobStarted {
+				return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
+			}
+			// If the part sent above was the first, then set atomicFirstPartOrdered to 1, so that progress can be fetched.
+			if deleteJobRequest.PartNum == 0 {
+				atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+			}
+		}
+		return nil
+	}
+	if numberOfCopyTransfers > 0 && numberOfDeleteTransfers > 0 {
 		var resp common.CopyJobPartOrderResponse
 		e.CopyJobRequest.PartNum = e.PartNumber
+		answer := glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+		// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
+		if !strings.EqualFold(answer, "y") {
+			e.CopyJobRequest.IsFinalPart = true
+			Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.CopyJobRequest), &resp)
+			if !resp.JobStarted {
+				return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
+			}
+			return nil
+		}
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.CopyJobRequest), &resp)
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-		e.PartNumber++
-		e.DeleteJobRequest.IsFinalPart = true
-		e.DeleteJobRequest.PartNum = e.PartNumber
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
-		if !resp.JobStarted {
-			return fmt.Errorf("delete job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
+		// If the part sent above was the first, then set atomicFirstPartOrdered to 1, so that progress can be fetched.
+		if e.PartNumber == 0 {
+			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 		}
+		e.PartNumber++
+		return sendDeleteTransfers()
 	} else if numberOfCopyTransfers > 0 {
 		e.CopyJobRequest.IsFinalPart = true
 		e.CopyJobRequest.PartNum = e.PartNumber
@@ -98,17 +149,17 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-	} else {
-		e.DeleteJobRequest.IsFinalPart = true
-		e.DeleteJobRequest.PartNum = e.PartNumber
-		var resp common.CopyJobPartOrderResponse
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
-		if !resp.JobStarted {
-			return fmt.Errorf("delete job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
-		}
+		return nil
 	}
+	answer := glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+	// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
+	if !strings.EqualFold(answer, "y") {
+		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
+			"The source and destination are in sync")
+	}
+	error := sendDeleteTransfers()
 	cca.isEnumerationComplete = true
-	return nil
+	return error
 }
 
 // compareRemoteAgainstLocal api compares the blob at given destination Url and
@@ -190,7 +241,6 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, blobInfo.Name) {
 				continue
 			}
-			e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
@@ -201,6 +251,9 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			if !util.blobNameMatchesThePattern(sourcePattern, realtivePathofBlobLocally) {
 				continue
 			}
+			// Increment the number of files scanned at the destination.
+			e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+
 			blobLocalPath := util.generateLocalPath(rootPath, realtivePathofBlobLocally)
 			// Check if the blob exists locally or not
 			_, err := os.Stat(blobLocalPath)
@@ -208,7 +261,9 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 				continue
 			}
 			// if the blob doesn't exits locally, then we need to delete blob.
-			if err != nil && os.IsNotExist(err) {
+			// If the error was path error, then blob name exists doesn't comply with current os path
+			_, isPathError := err.(*os.PathError)
+			if err != nil && (os.IsNotExist(err) || isPathError) {
 				// delete the blob.
 				e.addTransferToDelete(common.CopyTransfer{
 					Source:      util.stripSASFromBlobUrl(util.generateBlobUrl(containerUrl, blobInfo.Name)).String(),

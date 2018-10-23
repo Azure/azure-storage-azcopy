@@ -43,8 +43,8 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	_, err := srcBlobURL.Delete(jptm.Context(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 	if err != nil {
 		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
-		if err.(azblob.StorageError) != nil {
-			if err.(azblob.StorageError).Response().StatusCode == http.StatusNotFound {
+		if strErr, ok := err.(azblob.StorageError); ok {
+			if strErr.Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
 			}
 		} else {

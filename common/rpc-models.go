@@ -83,7 +83,7 @@ type SyncJobPartOrderRequest struct {
 	// FilesDeletedLocally is used to keep track of the file that are deleted locally
 	// Since local files to delete are not sent as transfer to STE
 	// the count of the local files deletion is tracked using it.
-	FilesDeletedLocally int
+	FilesToDeleteLocally []string
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
