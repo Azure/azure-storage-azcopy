@@ -49,6 +49,10 @@ type rawSyncCmdArgs struct {
 	include      string
 	exclude      string
 	output       string
+	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
+	// which doesn't exists at source. With this flag turned, on user will not be asked for permission before
+	// deleting the flag.
+	force bool
 }
 
 // validates and transform raw input into cooked input
@@ -110,6 +114,7 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.recursive = raw.recursive
 	cooked.output.Parse(raw.output)
 	cooked.jobID = common.NewJobID()
+	cooked.force = raw.force
 	return cooked, nil
 }
 
@@ -153,6 +158,10 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesScanned uint64
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
+	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
+	// which doesn't exists at source. With this flag turned, on user will not be asked for permission before
+	// deleting the flag.
+	force bool
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -444,4 +453,6 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
+	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete file in difference in source and destination. "+
+		"If false, user will again be prompted with a question while queuing transfers for deletion")
 }

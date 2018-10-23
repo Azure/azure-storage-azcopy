@@ -121,7 +121,12 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 	if numberOfCopyTransfers > 0 && numberOfDeleteTransfers > 0 {
 		var resp common.CopyJobPartOrderResponse
 		e.CopyJobRequest.PartNum = e.PartNumber
-		answer := glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+		answer := ""
+		if cca.force {
+			answer = "y"
+		} else {
+			answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+		}
 		// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
 		if !strings.EqualFold(answer, "y") {
 			e.CopyJobRequest.IsFinalPart = true
@@ -151,7 +156,13 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 		}
 		return nil
 	}
-	answer := glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+	answer := ""
+	// If the user set the force flag to true, then prompt is not required and file will be deleted.
+	if cca.force {
+		answer = "y"
+	} else {
+		answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+	}
 	// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
 	if !strings.EqualFold(answer, "y") {
 		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +

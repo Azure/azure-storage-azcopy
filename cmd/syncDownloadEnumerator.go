@@ -72,9 +72,18 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 		}
 	}
 	if numberOfDeleteTransfers > 0 {
-		answer := glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete locally. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+		answer := ""
+		if cca.force {
+			answer = "y"
+		} else {
+			answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete locally. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+		}
 		// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
 		if !strings.EqualFold(answer, "y") {
+			if numberOfCopyTransfers == 0 {
+				return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
+					"The source and destination are in sync")
+			}
 			cca.isEnumerationComplete = true
 			return nil
 		}
@@ -83,6 +92,9 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 			if err != nil {
 				glcm.Info(fmt.Sprintf("error %s deleting the file %s", err.Error(), file))
 			}
+		}
+		if numberOfCopyTransfers == 0 {
+			glcm.Exit(fmt.Sprintf("sync completed. Deleted %v files locally ", len(e.FilesToDeleteLocally)), 0)
 		}
 	}
 	cca.isEnumerationComplete = true
