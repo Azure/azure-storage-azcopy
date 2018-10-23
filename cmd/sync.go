@@ -35,6 +35,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
+	"sync/atomic"
 )
 
 type rawSyncCmdArgs struct {
@@ -144,6 +145,13 @@ type cookedSyncCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// defines whether first part has been ordered or not.
+	atomicFirstPartOrdered uint32
+	// defines the number of files listed at the source and compared.
+	atomicSourceFilesScanned uint64
+	// defines the number of files listed at the destination and compared.
+	atomicDestinationFilesScanned uint64
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -189,6 +197,11 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+	lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
+		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+	if atomic.LoadUint32(&cca.atomicFirstPartOrdered) == 0 {
+		return
+	}
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)

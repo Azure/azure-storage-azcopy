@@ -13,6 +13,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"sync/atomic"
 )
 
 type syncUploadEnumerator common.SyncJobPartOrderRequest
@@ -31,7 +32,8 @@ func (e *syncUploadEnumerator) addTransferToDelete(transfer common.CopyTransfer,
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			cca.waitUntilJobCompletion(false)
+			//cca.waitUntilJobCompletion(false)
+			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 		}
 		e.DeleteJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -53,7 +55,12 @@ func (e *syncUploadEnumerator) addTransferToUpload(transfer common.CopyTransfer,
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			cca.waitUntilJobCompletion(false)
+			//cca.waitUntilJobCompletion(false)
+			/*
+					update this atomic counter which is monitored by another go routine
+				 	reporting numbers to the user
+			*/
+			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -183,7 +190,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 			if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, blobInfo.Name) {
 				continue
 			}
-
+			e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
@@ -213,6 +220,10 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 		marker = listBlob.NextMarker
 	}
 	return nil
+}
+
+func (e *syncUploadEnumerator) updateSyncCounter(atomicCounter *uint64) {
+	atomic.AddUint64(atomicCounter, 1)
 }
 
 func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs, p pipeline.Pipeline) (error, bool) {
@@ -266,6 +277,9 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// If the source is a file and destination is a blob
 	// For Example: "cca.source = C:\User\user-1\a.txt" && "cca.destination = https://<container-name>/vd-1/a.txt"
 	if berr == nil && isSourceASingleFile != nil {
+		// Increment the sync counter.
+		e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
 		// Example1: "cca.destination = https://<container-name>/blob1?<sig>  blobName = blob1"
@@ -294,6 +308,9 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// then compare the file against the possible blob. If file doesn't exists as a blob upload it
 	// it it exists then compare it.
 	if isSourceASingleFile != nil && berr != nil {
+		// Increment the sync counter.
+		e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, isSourceASingleFile.Name())
 		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
 		bProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
@@ -421,6 +438,8 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 						if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, pathToFile) {
 							return nil
 						}
+						// Increment the sync counter.
+						e.updateSyncCounter(&cca.atomicSourceFilesScanned)
 						return checkAndQueue(rootPath, pathToFile, f)
 					}
 				})
@@ -435,7 +454,8 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 				if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, fileOrDir) {
 					continue
 				}
-
+				// Increment the sync counter.
+				e.updateSyncCounter(&cca.atomicSourceFilesScanned)
 				err = checkAndQueue(rootPath, fileOrDir, f)
 			}
 		}
@@ -491,6 +511,8 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	e.CopyJobRequest.CredentialInfo = e.CredentialInfo
 	e.DeleteJobRequest.CredentialInfo = e.CredentialInfo
 
+	cca.waitUntilJobCompletion(false)
+
 	err, isSourceAFile := e.compareLocalAgainstRemote(cca, p)
 	if err != nil {
 		return err
@@ -511,7 +533,8 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 		if err != nil {
 			return err
 		}
-		cca.waitUntilJobCompletion(true)
+		//cca.waitUntilJobCompletion(true)
+		atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 	}
 	return nil
 }

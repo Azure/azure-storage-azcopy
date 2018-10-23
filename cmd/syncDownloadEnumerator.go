@@ -13,6 +13,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"sync/atomic"
 )
 
 type syncDownloadEnumerator common.SyncJobPartOrderRequest
@@ -30,7 +31,8 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 		}
 		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
 		if e.PartNumber == 0 {
-			cca.waitUntilJobCompletion(false)
+			//cca.waitUntilJobCompletion(false)
+			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -178,6 +180,8 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 			if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, blobInfo.Name) {
 				continue
 			}
+			// Increment the sync counter.
+			e.updateSyncCounter(&cca.atomicSourceFilesScanned)
 			// relativePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// relativePathofBlobLocally = virtual-dir/a.txt
@@ -210,6 +214,10 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 		marker = listBlob.NextMarker
 	}
 	return nil
+}
+
+func (e *syncDownloadEnumerator) updateSyncCounter(atomicCounter *uint64) {
+	atomic.AddUint64(atomicCounter, 1)
 }
 
 // compareLocalAgainstRemote iterates through each files/dir inside the source and compares
@@ -250,6 +258,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// If the source is an existing blob and the destination is a directory
 	// need to check if the blob exists in the destination or not
 	if berr == nil && f.IsDir() {
+		// Increment the sync counter.
+		e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+
 		// Get the blob name without the any virtual directory as path in the blobName
 		// for example: cca.source = https://<container-name>/a1/a2/f1.txt blobName = f1.txt
 		bName := blobUrlParts.BlobName
@@ -286,6 +297,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// If the source is a file and destination is a blob
 	// For Example: "cca.dstString = C:\User\user-1\a.txt" && "cca.source = https://<container-name>/vd-1/a.txt"
 	if berr == nil && !f.IsDir() {
+		// Increment the sync counter.
+		e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
 		// Example1: "cca.source = https://<container-name>/blob1?<sig>  blobName = blob1"
@@ -423,6 +437,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 						if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, pathToFile) {
 							return nil
 						}
+						// Increment the sync counter.
+						e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
 						return checkAndQueue(cca.destination, pathToFile, f)
 					}
 				})
@@ -437,6 +453,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 				if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, fileOrDir) {
 					continue
 				}
+				// Increment the sync counter.
+				e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
 				err = checkAndQueue(cca.destination, fileOrDir, f)
 			}
 		}
@@ -496,6 +514,8 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	e.CopyJobRequest.CredentialInfo = e.CredentialInfo
 	e.DeleteJobRequest.CredentialInfo = e.CredentialInfo
 
+	cca.waitUntilJobCompletion(false)
+
 	err, isSourceABlob := e.compareLocalAgainstRemote(cca, p)
 	if err != nil {
 		return err
@@ -516,7 +536,8 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 		if err != nil {
 			return err
 		}
-		cca.waitUntilJobCompletion(true)
+		//cca.waitUntilJobCompletion(true)
+		atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 	}
 	return nil
 }
