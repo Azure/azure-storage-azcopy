@@ -265,7 +265,7 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 				continue
 			}
 			// Increment the number of files scanned at the destination.
-			e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+			atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 
 			blobLocalPath := util.generateLocalPath(rootPath, realtivePathofBlobLocally)
 			// Check if the blob exists locally or not
@@ -288,10 +288,6 @@ func (e *syncUploadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArgs,
 		marker = listBlob.NextMarker
 	}
 	return nil
-}
-
-func (e *syncUploadEnumerator) updateSyncCounter(atomicCounter *uint64) {
-	atomic.AddUint64(atomicCounter, 1)
 }
 
 func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs, p pipeline.Pipeline) (error, bool) {
@@ -346,7 +342,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// For Example: "cca.source = C:\User\user-1\a.txt" && "cca.destination = https://<container-name>/vd-1/a.txt"
 	if berr == nil && isSourceASingleFile != nil {
 		// Increment the sync counter.
-		e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+		atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
@@ -377,7 +373,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	// it it exists then compare it.
 	if isSourceASingleFile != nil && berr != nil {
 		// Increment the sync counter.
-		e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+		atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 
 		filedestinationUrl, _ := util.appendBlobNameToUrl(blobUrlParts, isSourceASingleFile.Name())
 		blobUrl := azblob.NewBlobURL(filedestinationUrl, p)
@@ -507,7 +503,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 							return nil
 						}
 						// Increment the sync counter.
-						e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+						atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 						return checkAndQueue(rootPath, pathToFile, f)
 					}
 				})
@@ -523,7 +519,7 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 					continue
 				}
 				// Increment the sync counter.
-				e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+				atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 				err = checkAndQueue(rootPath, fileOrDir, f)
 			}
 		}
