@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"sync/atomic"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -28,9 +30,11 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+		// if the current part order sent to engine is 0, then set atomicFirstPartOrdered
+		// variable to 1
 		if e.PartNumber == 0 {
-			cca.waitUntilJobCompletion(false)
+			//cca.waitUntilJobCompletion(false)
+			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -39,40 +43,23 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 	return nil
 }
 
+// addTransferToDelete adds the filePath to the list of files to delete locally.
+func (e *syncDownloadEnumerator) addTransferToDelete(filePath string) {
+	e.FilesToDeleteLocally = append(e.FilesToDeleteLocally, filePath)
+}
+
 // we need to send a last part with isFinalPart set to true, along with whatever transfers that still haven't been sent
 func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 	numberOfCopyTransfers := len(e.CopyJobRequest.Transfers)
-	numberOfDeleteTransfers := len(e.DeleteJobRequest.Transfers)
+	numberOfDeleteTransfers := len(e.FilesToDeleteLocally)
 	// If the numberoftransfer to copy / delete both are 0
 	// means no transfer has been to queue to send to STE
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
-		// If there are some files that were deleted locally
-		// display the files
-		if e.FilesDeletedLocally > 0 {
-			return fmt.Errorf("%d files deleted locally. No transfer to upload or download ", e.FilesDeletedLocally)
-		} else {
-			return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
-				"The source and destination are in sync")
-		}
-	} else if numberOfCopyTransfers > 0 && numberOfDeleteTransfers > 0 {
-		//If there are transfer to upload and download both
-		// Send the CopyJob Part Order first
-		// Increment the Part Number
-		// Send the DeleteJob Part are the final Part
-		var resp common.CopyJobPartOrderResponse
-		e.CopyJobRequest.PartNum = e.PartNumber
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.CopyJobRequest), &resp)
-		if !resp.JobStarted {
-			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
-		}
-		e.PartNumber++
-		e.DeleteJobRequest.IsFinalPart = true
-		e.DeleteJobRequest.PartNum = e.PartNumber
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
-		if !resp.JobStarted {
-			return fmt.Errorf("delete job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
-		}
-	} else if numberOfCopyTransfers > 0 {
+		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
+			"The source and destination are in sync")
+
+	}
+	if numberOfCopyTransfers > 0 {
 		// Only CopyJobPart Order needs to be sent
 		e.CopyJobRequest.IsFinalPart = true
 		e.CopyJobRequest.PartNum = e.PartNumber
@@ -81,14 +68,35 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-	} else {
-		// Only DeleteJob Part Order needs to be sent
-		e.DeleteJobRequest.IsFinalPart = true
-		e.DeleteJobRequest.PartNum = e.PartNumber
-		var resp common.CopyJobPartOrderResponse
-		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(&e.DeleteJobRequest), &resp)
-		if !resp.JobStarted {
-			return fmt.Errorf("delete job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
+		// If the JobPart sent was the first part, then set atomicFirstPartOrdered to 1, so that progress reporting can start.
+		if e.PartNumber == 0 {
+			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+		}
+	}
+	if numberOfDeleteTransfers > 0 {
+		answer := ""
+		if cca.force {
+			answer = "y"
+		} else {
+			answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete locally. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
+		}
+		// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
+		if !strings.EqualFold(answer, "y") {
+			if numberOfCopyTransfers == 0 {
+				return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
+					"The source and destination are in sync")
+			}
+			cca.isEnumerationComplete = true
+			return nil
+		}
+		for _, file := range e.FilesToDeleteLocally {
+			err := os.Remove(file)
+			if err != nil {
+				glcm.Info(fmt.Sprintf("error %s deleting the file %s", err.Error(), file))
+			}
+		}
+		if numberOfCopyTransfers == 0 {
+			glcm.Exit(fmt.Sprintf("sync completed. Deleted %v files locally ", len(e.FilesToDeleteLocally)), 0)
 		}
 	}
 	cca.isEnumerationComplete = true
@@ -178,6 +186,8 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 			if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, blobInfo.Name) {
 				continue
 			}
+			// Increment the sync counter.
+			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			// relativePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// relativePathofBlobLocally = virtual-dir/a.txt
@@ -250,6 +260,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// If the source is an existing blob and the destination is a directory
 	// need to check if the blob exists in the destination or not
 	if berr == nil && f.IsDir() {
+		// Increment the sync counter.
+		atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+
 		// Get the blob name without the any virtual directory as path in the blobName
 		// for example: cca.source = https://<container-name>/a1/a2/f1.txt blobName = f1.txt
 		bName := blobUrlParts.BlobName
@@ -286,6 +299,9 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// If the source is a file and destination is a blob
 	// For Example: "cca.dstString = C:\User\user-1\a.txt" && "cca.source = https://<container-name>/vd-1/a.txt"
 	if berr == nil && !f.IsDir() {
+		// Increment the sync counter.
+		atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
+
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
 		// Example1: "cca.source = https://<container-name>/blob1?<sig>  blobName = blob1"
@@ -346,11 +362,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 			// If the blobUrl.GetProperties failed with StatusNotFound, it means blob doesn't exists
 			// delete the blob locally
 			if stError, ok := err.(azblob.StorageError); !ok || (ok && stError.Response().StatusCode == http.StatusNotFound) {
-				err := os.Remove(pathToFile)
-				if err != nil {
-					return fmt.Errorf("error deleting the file %s. Failed with error %s", pathToFile, err.Error())
-				}
-				e.FilesDeletedLocally++
+				e.addTransferToDelete(pathToFile)
 				return nil
 			}
 			return err
@@ -423,6 +435,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 						if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, pathToFile) {
 							return nil
 						}
+						// Increment the sync counter.
+						atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 						return checkAndQueue(cca.destination, pathToFile, f)
 					}
 				})
@@ -437,6 +451,8 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 				if util.resourceShouldBeExcluded(parentDestinationPath, e.Exclude, fileOrDir) {
 					continue
 				}
+				// Increment the sync counter.
+				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 				err = checkAndQueue(cca.destination, fileOrDir, f)
 			}
 		}
@@ -481,9 +497,6 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	// set force wriet flag to true
 	e.CopyJobRequest.ForceWrite = true
 
-	//Initialize the number of transfer deleted locally to Zero
-	e.FilesDeletedLocally = 0
-
 	//Set the log level
 	e.CopyJobRequest.LogLevel = e.LogLevel
 	e.DeleteJobRequest.LogLevel = e.LogLevel
@@ -495,6 +508,8 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	// Set credential info properly
 	e.CopyJobRequest.CredentialInfo = e.CredentialInfo
 	e.DeleteJobRequest.CredentialInfo = e.CredentialInfo
+
+	cca.waitUntilJobCompletion(false)
 
 	err, isSourceABlob := e.compareLocalAgainstRemote(cca, p)
 	if err != nil {
@@ -516,7 +531,8 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 		if err != nil {
 			return err
 		}
-		cca.waitUntilJobCompletion(true)
+		//cca.waitUntilJobCompletion(true)
+		atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 	}
 	return nil
 }

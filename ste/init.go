@@ -474,6 +474,125 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	return js
 }
 
+// GetSyncJobSummary api returns the job progress summary of an active syncjob
+/*
+* Return following Properties in Job Progress Summary
+* CompleteJobOrdered - determines whether final part of job has been ordered or not
+* CopyTotalTransfers - total number of copy transfers available for the given job
+* CopyTransfersCompleted - total number of copy transfers in the job completed
+* CopyTransfersCompleted - number of copy transfers failed in the job.
+* DeleteTotalTransfers - total number of delete transfers available for the given job
+* DeleteTransfersCompleted - total number of delete transfers in the job completed
+* DeleteTransfersCompleted - number of delete transfers failed in the job.
+* FailedTransfers - list of transfer that failed.
+ */
+func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
+	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
+	jm, found := JobsAdmin.JobMgr(jobID)
+	if !found {
+		// Job with JobId does not exists
+		// Search the plan files in Azcopy folder
+		// and resurrect the Job
+		if !JobsAdmin.ResurrectJob(jobID, EMPTY_SAS_STRING, EMPTY_SAS_STRING) {
+			return common.ListSyncJobSummaryResponse{
+				ErrorMsg: fmt.Sprintf("no job with JobId %v exists", jobID),
+			}
+		}
+		// If the job manager was not found, then Job was resurrected
+		// Get the Job manager again for given JobId
+		jm, _ = JobsAdmin.JobMgr(jobID)
+	}
+
+	js := common.ListSyncJobSummaryResponse{
+		Timestamp:          time.Now().UTC(),
+		JobID:              jobID,
+		ErrorMsg:           "",
+		JobStatus:          common.EJobStatus.InProgress(), // Default
+		CompleteJobOrdered: false,                          // default to false; returns true if ALL job parts have been ordered
+		FailedTransfers:    []common.TransferDetail{},
+	}
+
+	jm.(*jobMgr).jobPartMgrs.Iterate(true, func(partNum common.PartNumber, jpm IJobPartMgr) {
+		jpp := jpm.Plan()
+		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
+		fromTo := jpp.FromTo
+		if fromTo == common.EFromTo.LocalBlob() ||
+			fromTo == common.EFromTo.BlobLocal() {
+			js.CopyTotalTransfers += jpp.NumTransfers
+		}
+		if fromTo == common.EFromTo.BlobTrash() {
+			js.DeleteTotalTransfers += jpp.NumTransfers
+		}
+
+		// Iterate through this job part's transfers
+		for t := uint32(0); t < jpp.NumTransfers; t++ {
+			// transferHeader represents the memory map transfer header of transfer at index position for given job and part number
+			jppt := jpp.Transfer(t)
+			// check for all completed transfer to calculate the progress percentage at the end
+			switch jppt.TransferStatus() {
+			case common.ETransferStatus.Success():
+				if fromTo == common.EFromTo.LocalBlob() ||
+					fromTo == common.EFromTo.BlobLocal() {
+					js.CopyTransfersCompleted++
+				}
+				if fromTo == common.EFromTo.BlobTrash() {
+					js.DeleteTransfersCompleted++
+				}
+
+			case common.ETransferStatus.Failed(),
+				common.ETransferStatus.BlobTierFailure():
+				if fromTo == common.EFromTo.LocalBlob() ||
+					fromTo == common.EFromTo.BlobLocal() {
+					js.CopyTransfersFailed++
+				}
+				if fromTo == common.EFromTo.BlobTrash() {
+					js.DeleteTransfersFailed++
+				}
+				// getting the source and destination for failed transfer at position - index
+				src, dst := jpp.TransferSrcDstStrings(t)
+				// appending to list of failed transfer
+				js.FailedTransfers = append(js.FailedTransfers,
+					common.TransferDetail{
+						Src:            src,
+						Dst:            dst,
+						TransferStatus: common.ETransferStatus.Failed(),
+						ErrorCode:      jppt.ErrorCode()}) // TODO: Optimize
+			}
+		}
+	})
+	// This is added to let FE to continue fetching the Job Progress Summary
+	// in case of resume. In case of resume, the Job is already completely
+	// ordered so the progress summary should be fetched until all job parts
+	// are iterated and have been scheduled
+	js.CompleteJobOrdered = js.CompleteJobOrdered || jm.AllTransfersScheduled()
+
+	// get zero'th part of the job part plan.
+	jp0, ok := jm.JobPartMgr(0)
+	if !ok {
+		panic(fmt.Errorf("error getting the 0th part of Job %s", jobID))
+	}
+
+	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+	// Get the number of active go routines performing the transfer or executing the chunk Func
+	// TODO: added for debugging purpose. remove later
+	js.ActiveConnections = jm.ActiveConnections()
+
+	// If the status is cancelled, then no need to check for completerJobOrdered
+	// since user must have provided the consent to cancel an incompleteJob if that
+	// is the case.
+	part0PlanStatus := jp0.Plan().JobStatus()
+	if part0PlanStatus == common.EJobStatus.Cancelled() {
+		js.JobStatus = part0PlanStatus
+		return js
+	}
+	// Job is completed if Job order is complete AND ALL transfers are completed/failed
+	// FIX: active or inactive state, then job order is said to be completed if final part of job has been ordered.
+	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
+		js.JobStatus = part0PlanStatus
+	}
+	return js
+}
+
 // ListJobTransfers api returns the list of transfer with specific status for given jobId in http response
 func ListJobTransfers(r common.ListJobTransfersRequest) common.ListJobTransfersResponse {
 	// getJobPartInfoReferenceFromMap gives the JobPartPlanInfo Pointer for given JobId and partNumber

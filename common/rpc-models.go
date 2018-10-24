@@ -13,15 +13,16 @@ var ERpcCmd = RpcCmd("")
 // JobStatus indicates the status of a Job; the default is InProgress.
 type RpcCmd string
 
-func (RpcCmd) None() RpcCmd             { return RpcCmd("--none--") }
-func (RpcCmd) CopyJobPartOrder() RpcCmd { return RpcCmd("CopyJobPartOrder") }
-func (RpcCmd) ListJobs() RpcCmd         { return RpcCmd("ListJobs") }
-func (RpcCmd) ListJobSummary() RpcCmd   { return RpcCmd("ListJobSummary") }
-func (RpcCmd) ListJobTransfers() RpcCmd { return RpcCmd("ListJobTransfers") }
-func (RpcCmd) CancelJob() RpcCmd        { return RpcCmd("Cancel") }
-func (RpcCmd) PauseJob() RpcCmd         { return RpcCmd("PauseJob") }
-func (RpcCmd) ResumeJob() RpcCmd        { return RpcCmd("ResumeJob") }
-func (RpcCmd) GetJobFromTo() RpcCmd     { return RpcCmd("GetJobFromTo") }
+func (RpcCmd) None() RpcCmd               { return RpcCmd("--none--") }
+func (RpcCmd) CopyJobPartOrder() RpcCmd   { return RpcCmd("CopyJobPartOrder") }
+func (RpcCmd) ListJobs() RpcCmd           { return RpcCmd("ListJobs") }
+func (RpcCmd) ListJobSummary() RpcCmd     { return RpcCmd("ListJobSummary") }
+func (RpcCmd) ListSyncJobSummary() RpcCmd { return RpcCmd("ListSyncJobSummary") }
+func (RpcCmd) ListJobTransfers() RpcCmd   { return RpcCmd("ListJobTransfers") }
+func (RpcCmd) CancelJob() RpcCmd          { return RpcCmd("Cancel") }
+func (RpcCmd) PauseJob() RpcCmd           { return RpcCmd("PauseJob") }
+func (RpcCmd) ResumeJob() RpcCmd          { return RpcCmd("ResumeJob") }
+func (RpcCmd) GetJobFromTo() RpcCmd       { return RpcCmd("GetJobFromTo") }
 
 func (c RpcCmd) String() string {
 	return enum.String(c, reflect.TypeOf(c))
@@ -83,7 +84,7 @@ type SyncJobPartOrderRequest struct {
 	// FilesDeletedLocally is used to keep track of the file that are deleted locally
 	// Since local files to delete are not sent as transfer to STE
 	// the count of the local files deletion is tracked using it.
-	FilesDeletedLocally int
+	FilesToDeleteLocally []string
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
@@ -151,6 +152,26 @@ type ListJobSummaryResponse struct {
 	TotalBytesEnumerated uint64
 	FailedTransfers      []TransferDetail
 	SkippedTransfers     []TransferDetail
+}
+
+// represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
+type ListSyncJobSummaryResponse struct {
+	ErrorMsg  string
+	Timestamp time.Time
+	JobID     JobID
+	// TODO: added for debugging purpose. remove later
+	ActiveConnections int64
+	// CompleteJobOrdered determines whether the Job has been completely ordered or not
+	CompleteJobOrdered       bool
+	JobStatus                JobStatus
+	CopyTotalTransfers       uint32
+	CopyTransfersCompleted   uint32
+	CopyTransfersFailed      uint32
+	BytesOverWire            uint64
+	DeleteTotalTransfers     uint32
+	DeleteTransfersCompleted uint32
+	DeleteTransfersFailed    uint32
+	FailedTransfers          []TransferDetail
 }
 
 type ListJobTransfersRequest struct {

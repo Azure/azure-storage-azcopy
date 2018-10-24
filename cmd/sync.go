@@ -30,6 +30,8 @@ import (
 	"os"
 	"strings"
 
+	"sync/atomic"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -47,6 +49,10 @@ type rawSyncCmdArgs struct {
 	include      string
 	exclude      string
 	output       string
+	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
+	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
+	// deleting the flag.
+	force bool
 }
 
 // validates and transform raw input into cooked input
@@ -108,6 +114,7 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.recursive = raw.recursive
 	cooked.output.Parse(raw.output)
 	cooked.jobID = common.NewJobID()
+	cooked.force = raw.force
 	return cooked, nil
 }
 
@@ -144,6 +151,17 @@ type cookedSyncCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// defines whether first part has been ordered or not.
+	atomicFirstPartOrdered uint32
+	// defines the number of files listed at the source and compared.
+	atomicSourceFilesScanned uint64
+	// defines the number of files listed at the destination and compared.
+	atomicDestinationFilesScanned uint64
+	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
+	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
+	// deleting the flag.
+	force bool
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -189,9 +207,16 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+	// Report the number of files scanned at source and destination to the user.
+	lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
+		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+	// If the first part isn't ordered yet, no need to fetch the progress summary.
+	if atomic.LoadUint32(&cca.atomicFirstPartOrdered) == 0 {
+		return
+	}
 	// fetch a job status
-	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	var summary common.ListSyncJobSummaryResponse
+	Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
 	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
 
 	// if json output is desired, simply marshal and return
@@ -203,7 +228,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 		if jobDone {
 			exitCode := common.EExitCode.Success()
-			if summary.TransfersFailed > 0 {
+			if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 				exitCode = common.EExitCode.Error()
 			}
 			lcm.Exit(string(jsonOutput), exitCode)
@@ -217,18 +242,19 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 {
+		if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
 		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Copy Transfers: %v\nTotal Number Of Delete Transfers: %v\nNumber of Copy Transfers Completed: %v\nNumber of Copy Transfers Failed: %v\nNumber of Delete Transfers Completed: %v\nNumber of Delete Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
-			summary.TotalTransfers,
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TransfersSkipped,
-			summary.TotalBytesTransferred,
+			summary.CopyTotalTransfers,
+			summary.DeleteTotalTransfers,
+			summary.CopyTransfersCompleted,
+			summary.CopyTransfersFailed,
+			summary.DeleteTransfersCompleted,
+			summary.DeleteTransfersFailed,
 			summary.JobStatus), exitCode)
 	}
 
@@ -248,12 +274,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, 2-sec Throughput (Mb/s): %v",
-		summary.TransfersCompleted,
-		summary.TransfersFailed,
-		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-		summary.TransfersSkipped,
-		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v",
+		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
+		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
@@ -430,4 +455,6 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
+	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete file in difference in source and destination. "+
+		"If false, user will again be prompted with a question while queuing transfers for deletion")
 }

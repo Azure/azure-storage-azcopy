@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type copyUploadEnumerator common.CopyJobPartOrderRequest
@@ -97,8 +98,15 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				continue
 			}
 			if f.Mode().IsRegular() {
+				// replace the parent source path in the filePath to to ensure the correct path mentioned in the list of flags.
+				// For Example: Source = /home/user/dir list-of-files = dir2/1.txt;dir2/2.txt dst = https://container/dir2/1.txt
+				// and https://container/dir2/2.txt
+				relativePath := strings.Replace(filePath, parentSourcePath, "", 1)
+				if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+					relativePath = relativePath[1:]
+				}
 				// If the file is a regular file, calculate the destination path and queue for transfer.
-				tempDestinationURl.Path = util.generateObjectPath(tempDestinationURl.Path, f.Name())
+				tempDestinationURl.Path = util.generateObjectPath(tempDestinationURl.Path, relativePath)
 				err = e.addTransfer(common.CopyTransfer{
 					Source:           filePath,
 					Destination:      tempDestinationURl.String(),

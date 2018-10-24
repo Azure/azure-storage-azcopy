@@ -182,7 +182,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # sync the source and destination
         result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         self.assertFalse(result)
 
 
@@ -219,7 +219,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas = util.append_text_path_resource_sas(dir_sas, "*")
         # sync the source and destination
         result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         self.assertFalse(result)
 
         subdir1 = os.path.join(dir_name, "subdir1")
@@ -250,7 +250,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # since source and destination both are in sync, it will fail
         dir_sas = util.append_text_path_resource_sas(dir_sas, "*/*.txt")
         result = util.Command("sync").add_arguments(dir_sas).add_arguments(dir_n_files_path). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         self.assertFalse(result)
 
         # delete 5 files inside each sub-directories locally
@@ -280,8 +280,8 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
         # Number of Expected Transfer should be 10 since 10 files were deleted
-        self.assertEquals(x.TransfersCompleted, 10)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.CopyTransfersCompleted, 10)
+        self.assertEquals(x.CopyTransfersFailed, 0)
 
     # test_download_1kb_blob verifies the download of 1Kb blob using azcopy.
     def test_download_1kb_blob_with_oauth(self):
