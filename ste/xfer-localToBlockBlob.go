@@ -24,26 +24,26 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 )
 
 type blockBlobUpload struct {
-	jptm        IJobPartTransferMgr
-	srcFile     *os.File
-	leadingBytes []byte    // for Mime type recognition
-	source      string
-	destination string
-	blobURL     azblob.BlobURL
-	pacer       *pacer
-	blockIds    []string
+	jptm         IJobPartTransferMgr
+	leadingBytes []byte // for Mime type recognition
+	source       string
+	destination  string
+	blobURL      azblob.BlobURL
+	pacer        *pacer
+	blockIds     []string
 }
 
 /*
@@ -98,120 +98,123 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 
 	// step 2a: Open the Source File.
-	srcFile, err := os.Open(info.Source)
+	// declare factory func, because we need it later too
+	sourceFileFactory := func()(common.CloseableReaderAt, error) {
+		return os.Open(info.Source)
+	}
+	sourceFile, err := sourceFileFactory()
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
 	}
+	defer sourceFile.Close() // we read all the chunks in this routine, so can close a the end
 
-	// TODO: the MMF impl did this here: uncomment as appropriate: defer srcFile.Close()
 
 	/*
-	// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
-	srcMmf := &common.MMF{}
-	if blobSize > 0 {
-		// file needs to be memory mapped only when the file size is greater than 0.
-		srcMmf, err = common.NewMMF(srcFile, false, 0, blobSize)
-		if err != nil {
-			jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error-"+err.Error(), 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			return
+		// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
+		srcMmf := &common.MMF{}
+		if blobSize > 0 {
+			// file needs to be memory mapped only when the file size is greater than 0.
+			srcMmf, err = common.NewMMF(srcFile, false, 0, blobSize)
+			if err != nil {
+				jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error-"+err.Error(), 0)
+				jptm.SetStatus(common.ETransferStatus.Failed())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
-	}
 	*/
-
 
 	if EndsWith(info.Source, ".vhd") && (blobSize%azblob.PageBlobPageBytes == 0) {
 		panic("Disabled in this test")
 		/*
-		// step 3.b: If the Source is vhd file and its size is multiple of 512,
-		// then upload the blob as a pageBlob.
-		pageBlobUrl := blobUrl.ToPageBlobURL()
+			// step 3.b: If the Source is vhd file and its size is multiple of 512,
+			// then upload the blob as a pageBlob.
+			pageBlobUrl := blobUrl.ToPageBlobURL()
 
-		// If the given chunk Size for the Job is greater than maximum page size i.e 4 MB
-		// then set maximum pageSize will be 4 MB.
-		chunkSize = common.Iffint64(
-			chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
-			common.DefaultPageBlobChunkSize,
-			chunkSize)
+			// If the given chunk Size for the Job is greater than maximum page size i.e 4 MB
+			// then set maximum pageSize will be 4 MB.
+			chunkSize = common.Iffint64(
+				chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
+				common.DefaultPageBlobChunkSize,
+				chunkSize)
 
-		// Get http headers and meta data of page.
-		blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
+			// Get http headers and meta data of page.
+			blobHttpHeaders, metaData := jptm.BlobDstData(srcMmf)
 
-		// Create Page Blob of the source size
-		_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
-			0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
-		if err != nil {
-			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-"+msg, status)
-			jptm.Cancel()
-			jptm.SetStatus(common.ETransferStatus.Failed())
-			jptm.ReportTransferDone()
-			srcMmf.Unmap()
-			return
-		}
-
-		//set tier on pageBlob.
-		//If set tier fails, then cancelling the job.
-		_, pageBlobTier := jptm.BlobTiers()
-		if pageBlobTier != common.EPageBlobTier.None() {
-			// for blob tier, set the latest service version from sdk as service version in the context.
-			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			_, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType())
+			// Create Page Blob of the source size
+			_, err := pageBlobUrl.Create(jptm.Context(), blobSize,
+				0, blobHttpHeaders, metaData, azblob.BlobAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				jptm.LogUploadError(info.Source, info.Destination, "PageBlob SetTier-"+msg, status)
+				jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-"+msg, status)
 				jptm.Cancel()
-				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
-				// Since transfer failed while setting the page blob tier
-				// Deleting the created page blob
-				_, err := pageBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-				if err != nil {
-					// Log the error if deleting the page blob failed.
-					jptm.LogError(pageBlobUrl.String(), "Deleting page blob", err)
-
-				}
+				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.ReportTransferDone()
 				srcMmf.Unmap()
 				return
 			}
-		}
 
-		// Calculate the number of Page Ranges for the given PageSize.
-		numPages := common.Iffuint32(blobSize%chunkSize == 0,
-			uint32(blobSize/chunkSize),
-			uint32(blobSize/chunkSize)+1)
+			//set tier on pageBlob.
+			//If set tier fails, then cancelling the job.
+			_, pageBlobTier := jptm.BlobTiers()
+			if pageBlobTier != common.EPageBlobTier.None() {
+				// for blob tier, set the latest service version from sdk as service version in the context.
+				ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+				_, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType())
+				if err != nil {
+					status, msg := ErrorEx{err}.ErrorCodeAndString()
+					jptm.LogUploadError(info.Source, info.Destination, "PageBlob SetTier-"+msg, status)
+					jptm.Cancel()
+					jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
+					// Since transfer failed while setting the page blob tier
+					// Deleting the created page blob
+					_, err := pageBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+					if err != nil {
+						// Log the error if deleting the page blob failed.
+						jptm.LogError(pageBlobUrl.String(), "Deleting page blob", err)
 
-		jptm.SetNumberOfChunks(numPages)
-
-		pbu := &pageBlobUpload{
-			jptm:        jptm,
-			srcMmf:      srcMmf,
-			source:      info.Source,
-			destination: info.Destination,
-			blobUrl:     blobUrl,
-			pacer:       pacer}
-
-		// Scheduling page range update to the Page Blob created above.
-		for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
-			adjustedPageSize := chunkSize
-			// compute actual size of the chunk
-			if startIndex+chunkSize > blobSize {
-				adjustedPageSize = blobSize - startIndex
+					}
+					jptm.ReportTransferDone()
+					srcMmf.Unmap()
+					return
+				}
 			}
-			// schedule the chunk job/msg
-			jptm.ScheduleChunks(pbu.pageBlobUploadFunc(startIndex, adjustedPageSize))
-		}*/
+
+			// Calculate the number of Page Ranges for the given PageSize.
+			numPages := common.Iffuint32(blobSize%chunkSize == 0,
+				uint32(blobSize/chunkSize),
+				uint32(blobSize/chunkSize)+1)
+
+			jptm.SetNumberOfChunks(numPages)
+
+			pbu := &pageBlobUpload{
+				jptm:        jptm,
+				srcMmf:      srcMmf,
+				source:      info.Source,
+				destination: info.Destination,
+				blobUrl:     blobUrl,
+				pacer:       pacer}
+
+			// Scheduling page range update to the Page Blob created above.
+			for startIndex := int64(0); startIndex < blobSize; startIndex += chunkSize {
+				adjustedPageSize := chunkSize
+				// compute actual size of the chunk
+				if startIndex+chunkSize > blobSize {
+					adjustedPageSize = blobSize - startIndex
+				}
+				// schedule the chunk job/msg
+				jptm.ScheduleChunks(pbu.pageBlobUploadFunc(startIndex, adjustedPageSize))
+			}*/
 	} else if blobSize == 0 || blobSize <= chunkSize {
 		panic("disabled in this test")
 		/*
-	    // step 3.b: if blob size is smaller than chunk size and it is not a vhd file
-		// we should do a put blob instead of chunk up the file
-		PutBlobUploadFunc(jptm, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
-		return */
+			    // step 3.b: if blob size is smaller than chunk size and it is not a vhd file
+				// we should do a put blob instead of chunk up the file
+				PutBlobUploadFunc(jptm, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
+				return */
 	} else {
 		// step 3.c: If the source is not a vhd and size is greater than chunk Size,
 		// then uploading the source as block Blob.
@@ -234,7 +237,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
 			//TODO was: srcMmf.Unmap()
-			srcFile.Close()
+			//srcFile.Close()
 			return
 		}
 		// creating a slice to contain the blockIds
@@ -244,9 +247,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		// creating block Blob struct which holds the srcFile, srcMmf memory map byte slice, pacer instance and blockId list.
 		// Each chunk uses these details which uploading the block.
 		bbu := &blockBlobUpload{
-			jptm:        jptm,
-			// TODO was: srcMmf:      srcMmf,
-			srcFile:     srcFile,
+			jptm: jptm,
 			source:      info.Source,
 			destination: info.Destination,
 			blobURL:     blobUrl,
@@ -254,7 +255,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			blockIds:    blockIds}
 
 		prefetchedByteCounter := jptm.GetPrefetchedByteCounter()
-		const prefetchByteLimit = 2 * 1024 * 1024 * 1024  // todo: make this parameterizable, and check reasonableness of this default value
+		const prefetchByteLimit = 512 * 1024 * 1024 // todo: make this parameterizable, and check reasonableness of this default value
 
 		// Go through the file and schedule chunk messages to upload each chunk
 		// As we do this, we force preload of each chunk to memory, and we wait (block)
@@ -272,15 +273,20 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 			// block if we already have too much prefetch data in in RAM
 			for prefetchedByteCounter.Read() > prefetchByteLimit {
+				// TODO: check context here, for cancellation?
 				time.Sleep(time.Second/2)
 			}
 
-			// make reader for this chunk, and prefetch its contents
-			chunkReader := common.NewSimpleFileChunkReader(bbu.srcFile, startIndex, adjustedChunkSize, prefetchedByteCounter)
-			err = chunkReader.Prefetch()
+			// Make reader for this chunk, and prefetch its contents right now.
+			// To take advantage of the good sequential read performance provided by many file systems,
+			// we work sequentially through the file here. 
+			// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat it's part
+			// of the file read later (when doing a retry)
+			chunkReader := common.NewSimpleFileChunkReader(sourceFileFactory, startIndex, adjustedChunkSize, prefetchedByteCounter)
+			err = chunkReader.Prefetch(sourceFile)  // use the file handle we have already opened, instead of getting each chunk reader to open its own here
 			if err != nil {
 				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
-				return         // TODO: is this needed after jptm.Panic?
+				return          // TODO: is this needed after jptm.Panic?
 			}
 
 			if startIndex == 0 {
@@ -293,7 +299,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				_, err := chunkReader.Read(bbu.leadingBytes)
 				if err != nil {
 					jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
-					return         // TODO: is this needed after jptm.Panic?
+					return          // TODO: is this needed after jptm.Panic?
 				}
 				// MUST re-wind, so that the bytes we read will get transferred too!
 				chunkReader.Seek(0, io.SeekStart)
@@ -342,8 +348,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, chunkReader commo
 		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
 		transferDone := func() {
 			bbu.jptm.Log(pipeline.LogInfo, "Transfer done")
-			bbu.srcFile.Close()
-			//TODO was: bbu.srcMmf.Unmap()
+			chunkReader.Close()
 			// Get the Status of the transfer
 			// If the transfer status value < 0, then transfer failed with some failure
 			// there is a possibility that some uncommitted blocks will be there
