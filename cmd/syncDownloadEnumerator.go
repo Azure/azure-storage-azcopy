@@ -30,7 +30,8 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-		// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+		// if the current part order sent to engine is 0, then set atomicFirstPartOrdered
+		// variable to 1
 		if e.PartNumber == 0 {
 			//cca.waitUntilJobCompletion(false)
 			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
@@ -42,6 +43,7 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 	return nil
 }
 
+// addTransferToDelete adds the filePath to the list of files to delete locally.
 func (e *syncDownloadEnumerator) addTransferToDelete(filePath string) {
 	e.FilesToDeleteLocally = append(e.FilesToDeleteLocally, filePath)
 }
@@ -185,7 +187,7 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 				continue
 			}
 			// Increment the sync counter.
-			e.updateSyncCounter(&cca.atomicSourceFilesScanned)
+			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
 			// relativePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// relativePathofBlobLocally = virtual-dir/a.txt
@@ -218,10 +220,6 @@ func (e *syncDownloadEnumerator) compareRemoteAgainstLocal(cca *cookedSyncCmdArg
 		marker = listBlob.NextMarker
 	}
 	return nil
-}
-
-func (e *syncDownloadEnumerator) updateSyncCounter(atomicCounter *uint64) {
-	atomic.AddUint64(atomicCounter, 1)
 }
 
 // compareLocalAgainstRemote iterates through each files/dir inside the source and compares
@@ -263,7 +261,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// need to check if the blob exists in the destination or not
 	if berr == nil && f.IsDir() {
 		// Increment the sync counter.
-		e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+		atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 
 		// Get the blob name without the any virtual directory as path in the blobName
 		// for example: cca.source = https://<container-name>/a1/a2/f1.txt blobName = f1.txt
@@ -302,7 +300,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 	// For Example: "cca.dstString = C:\User\user-1\a.txt" && "cca.source = https://<container-name>/vd-1/a.txt"
 	if berr == nil && !f.IsDir() {
 		// Increment the sync counter.
-		e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+		atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 
 		// Get the blob name from the destination url
 		// blobName refers to the last name of the blob with which it is stored as file locally
@@ -438,7 +436,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 							return nil
 						}
 						// Increment the sync counter.
-						e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+						atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 						return checkAndQueue(cca.destination, pathToFile, f)
 					}
 				})
@@ -454,7 +452,7 @@ func (e *syncDownloadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArg
 					continue
 				}
 				// Increment the sync counter.
-				e.updateSyncCounter(&cca.atomicDestinationFilesScanned)
+				atomic.AddUint64(&cca.atomicDestinationFilesScanned, 1)
 				err = checkAndQueue(cca.destination, fileOrDir, f)
 			}
 		}

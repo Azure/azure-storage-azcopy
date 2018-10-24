@@ -50,7 +50,7 @@ type rawSyncCmdArgs struct {
 	exclude      string
 	output       string
 	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
-	// which doesn't exists at source. With this flag turned, on user will not be asked for permission before
+	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
 }
@@ -159,7 +159,7 @@ type cookedSyncCmdArgs struct {
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
 	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
-	// which doesn't exists at source. With this flag turned, on user will not be asked for permission before
+	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
 }
@@ -207,8 +207,10 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+	// Report the number of files scanned at source and destination to the user.
 	lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
 		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+	// If the first part isn't ordered yet, no need to fetch the progress summary.
 	if atomic.LoadUint32(&cca.atomicFirstPartOrdered) == 0 {
 		return
 	}

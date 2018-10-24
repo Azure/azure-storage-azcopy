@@ -474,16 +474,17 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	return js
 }
 
-// GetJobSummary api returns the job progress summary of an active job
+// GetSyncJobSummary api returns the job progress summary of an active syncjob
 /*
 * Return following Properties in Job Progress Summary
 * CompleteJobOrdered - determines whether final part of job has been ordered or not
-* TotalTransfers - total number of transfers available for the given job
-* TotalNumberOfTransfersCompleted - total number of transfers in the job completed
-* NumberOfTransfersCompletedAfterCheckpoint - number of transfers completed after the last checkpoint
-* NumberOfTransferFailedAfterCheckpoint - number of transfers failed after last checkpoint timestamp
-* PercentageProgress - job progress reported in terms of percentage
-* FailedTransfers - list of transfer after last checkpoint timestamp that failed.
+* CopyTotalTransfers - total number of copy transfers available for the given job
+* CopyTransfersCompleted - total number of copy transfers in the job completed
+* CopyTransfersCompleted - number of copy transfers failed in the job.
+* DeleteTotalTransfers - total number of delete transfers available for the given job
+* DeleteTransfersCompleted - total number of delete transfers in the job completed
+* DeleteTransfersCompleted - number of delete transfers failed in the job.
+* FailedTransfers - list of transfer that failed.
  */
 func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
