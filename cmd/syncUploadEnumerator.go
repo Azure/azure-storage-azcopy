@@ -145,7 +145,9 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
 		}
 		e.PartNumber++
-		return sendDeleteTransfers()
+		err := sendDeleteTransfers()
+		cca.isEnumerationComplete = true
+		return err
 	} else if numberOfCopyTransfers > 0 {
 		e.CopyJobRequest.IsFinalPart = true
 		e.CopyJobRequest.PartNum = e.PartNumber
