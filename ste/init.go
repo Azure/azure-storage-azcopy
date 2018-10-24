@@ -515,7 +515,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 		jpp := jpm.Plan()
 		js.CompleteJobOrdered = js.CompleteJobOrdered || jpp.IsFinalPart
 		fromTo := jpp.FromTo
-		if fromTo == common.EFromTo.LocalBlob() {
+		if fromTo == common.EFromTo.LocalBlob() ||
+			fromTo == common.EFromTo.BlobLocal() {
 			js.CopyTotalTransfers += jpp.NumTransfers
 		}
 		if fromTo == common.EFromTo.BlobTrash() {
@@ -529,7 +530,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
 			case common.ETransferStatus.Success():
-				if fromTo == common.EFromTo.LocalBlob() {
+				if fromTo == common.EFromTo.LocalBlob() ||
+					fromTo == common.EFromTo.BlobLocal() {
 					js.CopyTransfersCompleted++
 				}
 				if fromTo == common.EFromTo.BlobTrash() {
@@ -538,7 +540,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.BlobTierFailure():
-				if fromTo == common.EFromTo.BlobTrash() {
+				if fromTo == common.EFromTo.LocalBlob() ||
+					fromTo == common.EFromTo.BlobLocal() {
 					js.CopyTransfersFailed++
 				}
 				if fromTo == common.EFromTo.BlobTrash() {
