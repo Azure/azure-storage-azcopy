@@ -254,6 +254,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			pacer:       pacer,
 			blockIds:    blockIds}
 
+		context := jptm.Context()
+		sendLimiter := jptm.GetSendLimiter()
 		prefetchedByteCounter := jptm.GetPrefetchedByteCounter()
 		const prefetchByteLimit = 512 * 1024 * 1024 // todo: make this parameterizable, and check reasonableness of this default value
 
@@ -279,10 +281,10 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 
 			// Make reader for this chunk, and prefetch its contents right now.
 			// To take advantage of the good sequential read performance provided by many file systems,
-			// we work sequentially through the file here. 
+			// we work sequentially through the file here.
 			// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat it's part
 			// of the file read later (when doing a retry)
-			chunkReader := common.NewSimpleFileChunkReader(sourceFileFactory, startIndex, adjustedChunkSize, prefetchedByteCounter)
+			chunkReader := common.NewSimpleFileChunkReader(context, sendLimiter, sourceFileFactory, startIndex, adjustedChunkSize, prefetchedByteCounter)
 			err = chunkReader.Prefetch(sourceFile)  // use the file handle we have already opened, instead of getting each chunk reader to open its own here
 			if err != nil {
 				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
@@ -321,6 +323,8 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 // This method blockBlobUploadFunc uploads the block of src data
 func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, chunkReader common.FileChunkReader) chunkFunc {
 	return func(workerId int) {
+
+		defer chunkReader.Close() // just make doubly sure that, no matter what, this reader gets closed
 
 		// TODO: added the two operations for debugging purpose. remove later
 		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1

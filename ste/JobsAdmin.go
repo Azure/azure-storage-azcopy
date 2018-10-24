@@ -162,7 +162,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway. Maybe test and make sure whether it really is worth protecting against this
-	for cc := 0; cc < 16; cc++ {  // TODO: parameterize this count? But its only about initiation of transfers, so it might not matter much what the value is
+	for cc := 0; cc < 16; cc++ {  // TODO: parameterize this count? But (except for small files, where a higher value will usualyl be needed) its only about initiation of transfers, so it might not matter much what the value is
 		go ja.transferProcessor(cc)
 	}
 }

@@ -50,7 +50,11 @@ func main() {
 	// If the environment variable is set, it defines the number of concurrent connections
 	// transfer engine will spawn. If not set, transfer engine will spawn the default number
 	// of concurrent connections
-	defaultConcurrentConnections := 300
+	defaultConcurrentConnections := 500  // increased from 300, with the addition of sendRateLimiter
+	                                     // The difference between this number and sendRateLimiter's cap
+	                                     // equals the number of connections that can be awaiting
+	                                     // a reply from the server. (sendRateLimiter caps the number
+	                                     // that can actively be sending).
 	concurrencyValue := os.Getenv("AZCOPY_CONCURRENCY_VALUE")
 	if concurrencyValue != "" {
 		val, err := strconv.ParseInt(concurrencyValue, 10, 64)

@@ -21,6 +21,7 @@
 package common
 
 import (
+	"context"
 	"errors"
 	"io"
 )
@@ -48,6 +49,12 @@ type ChunkReaderSourceFactory func()(CloseableReaderAt, error)
 
 
 type simpleFileChunkReader struct {
+	// context used when waiting for permission to supply data
+	ctx context.Context
+
+	// Limits the number of concurrent active sends
+	sendLimiter SendLimiter
+
 	// A factory to get hold of the file, in case we need to re-read any of it
 	sourceFactory ChunkReaderSourceFactory
 
@@ -67,17 +74,22 @@ type simpleFileChunkReader struct {
 	// used to track how many unread bytes we have prefetched, so that
 	// callers can prevent excessive prefetching (to control RAM usage)
 	prefetchedByteTracker *SharedCounter
+
+	// do we currently own/hold one of the active "slots" for sending
+	sendSlotHeld bool
 }
 
 // TODO: consider support for prefetching only part of chunk. For the cases where chunks are relatively large (e.g. 100 MB)
 // TODO: that might work by having it preftech the start, and then, when that part is being sent out to the network, use a
 // separate goroutine to read the next.  OR, we can just say, if you want to use 100 MB chunk sizes, use lots of RAM.
 
-func NewSimpleFileChunkReader(sourceFactory ChunkReaderSourceFactory, offset int64, length int64, prefetchedByteTracker *SharedCounter) FileChunkReader {
+func NewSimpleFileChunkReader(ctx context.Context, sendLimiter SendLimiter, sourceFactory ChunkReaderSourceFactory, offset int64, length int64, prefetchedByteTracker *SharedCounter) FileChunkReader {
 	if length <= 0 {
 		panic("length must be greater than zero")
 	}
 	return &simpleFileChunkReader{
+		ctx:				   ctx,
+		sendLimiter:           sendLimiter,
 		sourceFactory:         sourceFactory,
 		offsetInFile:          offset,
 		length:                length,
@@ -167,24 +179,48 @@ func (cr *simpleFileChunkReader) Read(p []byte) (n int, err error) {
 		return 0, err
 	}
 
-	// copy bytes across
+	if cr.positionInChunk == 0 && !cr.sendSlotHeld {
+		// (Must check slotHeld in the if above, in case first part of file is probed for mime-type, in which case the
+		// early bytes may be read TWICE)
+		//
+		// Wait until we are allowed to be one of the actively-sending goroutines
+		// (The total count of active senders is limited to provide better network performance,
+		// on a per-CPU-usage basis. Without this, CPU usage in the OS's network stack is much higher
+		// in some tests.)
+		// It would have been nice to do this restriction not here in the Read method but more in the structure
+		// of the code, by explicitly separating HTTP "write body" from "read response" (and only applying this limit
+		// to the former).  However, that's difficult/impossible in the architecture of net/http. So instead we apply
+		// the restriction here, in code that is called at the time of STARTING to write the body
+		err = cr.sendLimiter.AcquireSendSlot(cr.ctx)
+		if err != nil {
+			return 0, err
+		}
+		cr.sendSlotHeld = true
+	}
+
+	// Copy the data across
 	bytesCopied := copy(p, cr.buffer[cr.positionInChunk:])
 	cr.positionInChunk += int64(bytesCopied)
 
 	// check for EOF
 	isEof := cr.positionInChunk >= cr.length
 	if isEof {
-		// free the buffer now, since we probably won't read it again
-		// (and on the relatively rare occasions when we do, we'll just take the hit
-		// of re-reading it from disk, and the added hit that that read will be non-sequential)
-		cr.discardBuffer()
+		cr.deactivate()
 		return bytesCopied, io.EOF
 	}
 
 	return bytesCopied, nil
 }
 
-func (cr *simpleFileChunkReader) discardBuffer() {
+func (cr *simpleFileChunkReader) deactivate() {
+	if cr.sendSlotHeld {
+		cr.sendLimiter.ReleaseSendSlot() // important, otherwise other instances of this struct may be blocked from sending
+		cr.sendSlotHeld = false
+	}
+
+	// free the buffer now, since we probably won't read it again
+	// (and on the relatively rare occasions when we do (for retry/resend cases), we'll just take the hit
+	// of re-reading it from disk, and the added hit that that read will be non-sequential)
 	if cr.buffer == nil {
 		return
 	}
@@ -196,6 +232,6 @@ func (cr *simpleFileChunkReader) discardBuffer() {
 // because we close at the completion of a successful read of the whole prefetch buffer.
 // We still want this though, to handle cases where for some reason the transfer stops before all the buffer has been read.)
 func (cr *simpleFileChunkReader) Close() error {
-	cr.discardBuffer()
+	cr.deactivate()
 	return nil
 }

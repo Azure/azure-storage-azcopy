@@ -40,6 +40,7 @@ type IJobPartTransferMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	GetPrefetchedByteCounter() *common.SharedCounter
+	GetSendLimiter() common.SendLimiter
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -250,6 +251,10 @@ func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 
 func (jptm *jobPartTransferMgr) GetPrefetchedByteCounter() *common.SharedCounter {
 	return jptm.jobPartMgr.GetPrefetchedByteCounter()
+}
+
+func (jptm *jobPartTransferMgr) GetSendLimiter() common.SendLimiter {
+	return jptm.jobPartMgr.GetSendLimiter()
 }
 
 func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {

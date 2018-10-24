@@ -38,6 +38,7 @@ type IJobPartMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	GetPrefetchedByteCounter() *common.SharedCounter
+	GetSendLimiter() common.SendLimiter
 	common.ILogger
 }
 
@@ -627,6 +628,9 @@ func (jpm *jobPartMgr) GetPrefetchedByteCounter() *common.SharedCounter {
 	return jpm.jobMgr.GetPrefetchedByteCounter()
 }
 
+func (jpm *jobPartMgr) GetSendLimiter() common.SendLimiter {
+	return jpm.jobMgr.GetSendLimiter()
+}
 
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }

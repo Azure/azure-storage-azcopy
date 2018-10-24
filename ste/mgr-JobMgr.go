@@ -65,6 +65,7 @@ type IJobMgr interface {
 	ReleaseAConnection()
 	// TODO: added for debugging purpose. remove later
 	GetPrefetchedByteCounter() *common.SharedCounter
+	GetSendLimiter() common.SendLimiter
 	ActiveConnections() int64
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
@@ -79,7 +80,9 @@ func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Cont
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		logger: common.NewJobLogger(jobID, level, appLogger, logFileFolder),
-		prefetchedByteCounter: new(common.SharedCounter) /*Other fields remain zero-value until this job is scheduled */}
+		prefetchedByteCounter: new(common.SharedCounter) ,
+		sendLimiter: common.NewSendLimiter(48), // TODO: parameterize
+	   /*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
 }
@@ -126,6 +129,7 @@ type jobMgr struct {
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
 	prefetchedByteCounter *common.SharedCounter
+	sendLimiter common.SendLimiter
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -159,6 +163,10 @@ func (jm *jobMgr) ReleaseAConnection() {
 
 func (jm *jobMgr) GetPrefetchedByteCounter() *common.SharedCounter {
 	return jm.prefetchedByteCounter
+}
+
+func (jm *jobMgr) GetSendLimiter() common.SendLimiter {
+	return jm.sendLimiter
 }
 
 // returns the number of goroutines actively performing the transfer / executing the chunkFunc
