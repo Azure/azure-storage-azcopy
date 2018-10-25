@@ -139,6 +139,26 @@ Copying data between two Azure Storage accounts make use of the PutBlockFromURL 
 
 Set the environment variable `AZCOPY_CONCURRENCY_VALUE` to configure the number of concurrent requests. This is set to 300 by default. Note that this does not equal to 300 parallel connections. Reducing this will limit the bandwidth, and CPU used by AzCopy.
 
+#### Configure proxy settings
+To configure the proxy settings for AzCopy v10, set the environment variable https_proxy using the following command:
+
+```
+# For Windows:
+set https_proxy=<proxy IP>:<proxy port>
+# For Linux:
+export https_proxy=<proxy IP>:<proxy port>
+# For MacOS
+export https_proxy=<proxy IP>:<proxy port>
+```
+
+For proxy authentication, use the following format:
+
+```
+export https_proxy=<user>:<pass>@<proxy IP>:<proxy port>
+# or with a domain:
+export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
+```
+
 ## Troubleshooting and Reporting Issues
 
 ### Check Logs for errors
