@@ -31,9 +31,9 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
     * [Linux x64](https://aka.ms/downloadazcopy-v10-linux)
     * [MacOS x64](https://aka.ms/downloadazcopy-v10-mac)
 
-2. Unzip and get started
+2. Unzip (Windows/MacOS) or untar (Linux):
     
-    * unzip azcopy_linux_amd64_10.0.0.zip
+    * tar -xf azcopy_linux_amd64_10.0.0.tar
     * cd azcopy_linux_amd64_10.0.0
     * ./azcopy
 
