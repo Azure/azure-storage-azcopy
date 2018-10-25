@@ -527,6 +527,151 @@ func (e *syncUploadEnumerator) compareLocalAgainstRemote(cca *cookedSyncCmdArgs,
 	return nil, false
 }
 
+func (e *syncUploadEnumerator) listTheSourceIfRequired(cca *cookedSyncCmdArgs, p pipeline.Pipeline) (bool, error) {
+	ctx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	util := copyHandlerUtil{}
+
+	// attempt to parse the destination url
+	destinationUrl, err := url.Parse(cca.destination)
+	// the destination should have already been validated, it would be surprising if it cannot be parsed at this point
+	common.PanicIfErr(err)
+
+	// since destination is a remote url, it will have sas parameter
+	// since sas parameter will be stripped from the destination url
+	// while cooking the raw command arguments
+	// destination sas is added to url for listing the blobs.
+	destinationUrl = util.appendQueryParamToUrl(destinationUrl, cca.destinationSAS)
+
+	blobUrl := azblob.NewBlobURL(*destinationUrl, p)
+
+	// Get the files and directories for the given source pattern
+	listOfFilesAndDir, lofaderr := filepath.Glob(cca.source)
+	if lofaderr != nil {
+		return false, fmt.Errorf("error getting the files and directories for source pattern %s", cca.source)
+	}
+
+	// Get the blob Properties
+	bProperties, bPropertiesError := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
+
+	// isSourceASingleFile is used to determine whether given source pattern represents single file or not
+	// If the source is a single file, this pointer will not be nil
+	// if it is nil, it means the source is a directory or list of file
+	var isSourceASingleFile os.FileInfo = nil
+
+	if len(listOfFilesAndDir) == 0 {
+		fInfo, fError := os.Stat(listOfFilesAndDir[0])
+		if fError != nil {
+			return false, fmt.Errorf("cannot get the information of the %s. Failed with error %s", listOfFilesAndDir[0], fError)
+		}
+		if fInfo.Mode().IsRegular() {
+			isSourceASingleFile = fInfo
+		}
+	}
+
+	// sync only happens between the source and destination of same type i.e between blob and blob or between Directory and Virtual Folder / Container
+	// If the source is a file and destination is not a blob, sync fails.
+	if isSourceASingleFile != nil && bPropertiesError != nil {
+		glcm.Exit(fmt.Sprintf("Cannot perform sync between file %s and non blob destination %s. sync only happens between source and destination of same type", cca.source, cca.destination), 1)
+	}
+	// If the source is a directory and destination is a blob
+	if isSourceASingleFile == nil && bPropertiesError == nil {
+		glcm.Exit(fmt.Sprintf("Cannot perform sync between directory %s and blob destination %s. sync only happens between source and destination of same type", cca.source, cca.destination), 1)
+	}
+
+	// If both source is a file and destination is a blob, then we need to do the comparison and queue the transfer if required.
+	if isSourceASingleFile != nil && bPropertiesError == nil {
+		blobName := destinationUrl.Path[strings.LastIndex(destinationUrl.Path, "/")+1:]
+		// Compare the blob name and file name
+		// blobName and filename should be same for sync to happen
+		if strings.Compare(blobName, isSourceASingleFile.Name()) != 0 {
+			glcm.Exit(fmt.Sprintf("sync cannot be done since blob %s and filename %s doesn't match", blobName, isSourceASingleFile.Name()), 1)
+		}
+
+		// If the modified time of file local is not later than that of blob
+		// sync does not needs to happen.
+		if !isSourceASingleFile.ModTime().After(bProperties.LastModified()) {
+			glcm.Exit(fmt.Sprintf("blob %s and file %s already in sync", blobName, isSourceASingleFile.Name()), 1)
+		}
+
+		e.addTransferToUpload(common.CopyTransfer{
+			Source:           cca.source,
+			Destination:      util.stripSASFromBlobUrl(*destinationUrl).String(),
+			SourceSize:       isSourceASingleFile.Size(),
+			LastModifiedTime: isSourceASingleFile.ModTime(),
+		}, cca)
+	}
+
+	// Get the source path without the wildcards
+	// This is defined since the files mentioned with exclude flag
+	// & include flag are relative to the Source
+	// If the source has wildcards, then files are relative to the
+	// parent source path which is the path of last directory in the source
+	// without wildcards
+	// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+	// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
+	// For Example: src = "/home/*" parentSourcePath = "/home"
+	parentSourcePath := cca.source
+	wcIndex := util.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		parentSourcePath = parentSourcePath[:pathSepIndex]
+	}
+
+	// Iterate through each file / dir inside the source
+	// and then checkAndQueue
+	for _, fileOrDir := range listOfFilesAndDir {
+		f, err := os.Stat(fileOrDir)
+		if err != nil {
+			glcm.Info(fmt.Sprintf("cannot get the file Info for %s. failed with error %s", fileOrDir, err.Error()))
+		}
+		// directories are uploaded only if recursive is on
+		if f.IsDir() && cca.recursive {
+			// walk goes through the entire directory tree
+			err = filepath.Walk(fileOrDir, func(pathToFile string, fileInfo os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if fileInfo.IsDir() {
+					return nil
+				} else {
+					// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
+					// this replacement is done to handle the windows file paths where path separator "\\"
+					pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+					if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, pathToFile) {
+						cca.sourceFilesToExclude[fileOrDir] = f.ModTime()
+						return nil
+					}
+					if len(cca.sourceFiles) > 100000 {
+						glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
+					}
+					cca.sourceFiles[pathToFile] = fileInfo.ModTime()
+					// Increment the sync counter.
+					atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+				}
+				return nil
+			})
+		} else if !f.IsDir() {
+			// replace the OS path separator in fileOrDir string with AZCOPY_PATH_SEPARATOR
+			// this replacement is done to handle the windows file paths where path separator "\\"
+			fileOrDir = strings.Replace(fileOrDir, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+			if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, fileOrDir) {
+				cca.sourceFilesToExclude[fileOrDir] = f.ModTime()
+				continue
+			}
+			if len(cca.sourceFiles) > 100000 {
+				glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
+			}
+			cca.sourceFiles[fileOrDir] = f.ModTime()
+			// Increment the sync counter.
+			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
+		}
+	}
+	return true, nil
+}
+
 // this function accepts the list of files/directories to transfer and processes them
 func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
