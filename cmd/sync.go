@@ -162,6 +162,10 @@ type cookedSyncCmdArgs struct {
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
+
+	sourceFiles map[string]time.Time
+
+	sourceFilesToExclude map[string]time.Time
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
