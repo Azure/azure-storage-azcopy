@@ -152,7 +152,11 @@ type cookedSyncCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
 
+	// defines the scanning status of the sync operation.
+	// 0 means scanning is in progress and 1 means scanning is complete.
+	atomicScanningStatus uint32
 	// defines whether first part has been ordered or not.
+	// 0 means first part is not ordered and 1 means first part is ordered.
 	atomicFirstPartOrdered uint32
 	// defines the number of files listed at the source and compared.
 	atomicSourceFilesScanned uint64
@@ -162,10 +166,26 @@ type cookedSyncCmdArgs struct {
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
+}
 
-	sourceFiles map[string]time.Time
+// setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
+func (cca *cookedSyncCmdArgs) setFirstPartOrdered() {
+	atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+}
 
-	sourceFilesToExclude map[string]time.Time
+// firstPartOrdered returns the value of atomicFirstPartOrdered.
+func (cca *cookedSyncCmdArgs) firstPartOrdered() uint32 {
+	return atomic.LoadUint32(&cca.atomicFirstPartOrdered)
+}
+
+// setScanningComplete sets the value of atomicScanningStatus to 1.
+func (cca *cookedSyncCmdArgs) setScanningComplete() {
+	atomic.StoreUint32(&cca.atomicScanningStatus, 1)
+}
+
+// scanningComplete returns the value of atomicScanningStatus.
+func (cca *cookedSyncCmdArgs) scanningComplete() uint32 {
+	return atomic.LoadUint32(&cca.atomicScanningStatus)
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -211,11 +231,14 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
-	// Report the number of files scanned at source and destination to the user.
-	lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
-		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+
+	if cca.scanningComplete() == 0 {
+		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
+			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+		return
+	}
 	// If the first part isn't ordered yet, no need to fetch the progress summary.
-	if atomic.LoadUint32(&cca.atomicFirstPartOrdered) == 0 {
+	if cca.firstPartOrdered() == 0 {
 		return
 	}
 	// fetch a job status

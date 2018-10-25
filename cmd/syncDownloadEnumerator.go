@@ -30,11 +30,11 @@ func (e *syncDownloadEnumerator) addTransferToUpload(transfer common.CopyTransfe
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-		// if the current part order sent to engine is 0, then set atomicFirstPartOrdered
+		// if the current part order sent to engine is 0, then set atomicSyncStatus
 		// variable to 1
 		if e.PartNumber == 0 {
 			//cca.waitUntilJobCompletion(false)
-			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+			cca.setFirstPartOrdered()
 		}
 		e.CopyJobRequest.Transfers = []common.CopyTransfer{}
 		e.PartNumber++
@@ -68,9 +68,9 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-		// If the JobPart sent was the first part, then set atomicFirstPartOrdered to 1, so that progress reporting can start.
+		// If the JobPart sent was the first part, then set atomicSyncStatus to 1, so that progress reporting can start.
 		if e.PartNumber == 0 {
-			atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+			cca.setFirstPartOrdered()
 		}
 	}
 	if numberOfDeleteTransfers > 0 {
@@ -532,7 +532,7 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 			return err
 		}
 		//cca.waitUntilJobCompletion(true)
-		atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+		cca.setFirstPartOrdered()
 	}
 	return nil
 }
