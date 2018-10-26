@@ -56,9 +56,9 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 	// If the numberoftransfer to copy / delete both are 0
 	// means no transfer has been to queue to send to STE
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
-		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
-			"The source and destination are in sync")
-
+		glcm.Exit("cannot start job because there are no transfer to upload or delete. "+
+			"The source and destination are in sync", 1)
+		return nil
 	}
 	if numberOfCopyTransfers > 0 {
 		// Only CopyJobPart Order needs to be sent
@@ -337,7 +337,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 						localfileRelativePath = localfileRelativePath[1:]
 					}
 					// if the localfileRelativePath does not match the source pattern, then it is not compared
-					if !util.blobNameMatchesThePattern(sourcePattern, localfileRelativePath) {
+					if !util.matchBlobNameAgainstPattern(sourcePattern, localfileRelativePath, cca.recursive) {
 						return nil
 					}
 
@@ -345,7 +345,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 						e.SourceFilesToExclude[pathToFile] = fileInfo.ModTime()
 						return nil
 					}
-					if len(e.SourceFiles) > 100000 {
+					if len(e.SourceFiles) > MaxNumberOfFilesAllowedInSync {
 						glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
 					}
 					e.SourceFiles[pathToFile] = fileInfo.ModTime()
@@ -368,7 +368,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 				localfileRelativePath = localfileRelativePath[1:]
 			}
 			// if the localfileRelativePath does not match the source pattern, then it is not compared
-			if !util.blobNameMatchesThePattern(sourcePattern, localfileRelativePath) {
+			if !util.matchBlobNameAgainstPattern(sourcePattern, localfileRelativePath, cca.recursive) {
 				continue
 			}
 
@@ -377,7 +377,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 				continue
 			}
 
-			if len(e.SourceFiles) > 100000 {
+			if len(e.SourceFiles) > MaxNumberOfFilesAllowedInSync {
 				glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
 			}
 			e.SourceFiles[fileOrDir] = f.ModTime()

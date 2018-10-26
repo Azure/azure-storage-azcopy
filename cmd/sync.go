@@ -39,6 +39,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const MaxNumberOfFilesAllowedInSync = 10000000
+
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string

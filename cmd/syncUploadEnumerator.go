@@ -53,8 +53,9 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 	numberOfCopyTransfers := uint64(len(e.CopyJobRequest.Transfers))
 	numberOfDeleteTransfers := uint64(len(e.DeleteJobRequest.Transfers))
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
-		return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
-			"The source and destination are in sync")
+		glcm.Exit("cannot start job because there are no transfers to upload or delete. "+
+			"The source and destination are in sync", 0)
+		return nil
 	}
 	// sendDeleteTransfers is an internal function which creates JobPartRequest for all the delete transfers enumerated.
 	// It creates requests for group of 10000 transfers.
@@ -273,7 +274,7 @@ func (e *syncUploadEnumerator) listTheSourceIfRequired(cca *cookedSyncCmdArgs, p
 						e.SourceFilesToExclude[pathToFile] = f.ModTime()
 						return nil
 					}
-					if len(e.SourceFiles) > 100000 {
+					if len(e.SourceFiles) > MaxNumberOfFilesAllowedInSync {
 						glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
 					}
 					e.SourceFiles[pathToFile] = fileInfo.ModTime()
@@ -291,7 +292,7 @@ func (e *syncUploadEnumerator) listTheSourceIfRequired(cca *cookedSyncCmdArgs, p
 				e.SourceFilesToExclude[fileOrDir] = f.ModTime()
 				continue
 			}
-			if len(e.SourceFiles) > 100000 {
+			if len(e.SourceFiles) > MaxNumberOfFilesAllowedInSync {
 				glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
 			}
 			e.SourceFiles[fileOrDir] = f.ModTime()
