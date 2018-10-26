@@ -225,8 +225,12 @@ func (e *syncUploadEnumerator) listTheSourceIfRequired(cca *cookedSyncCmdArgs, p
 			SourceSize:       isSourceASingleFile.Size(),
 			LastModifiedTime: isSourceASingleFile.ModTime(),
 		}, cca)
+		return true, nil
 	}
 
+	if len(listOfFilesAndDir) == 1 && !cca.recursive {
+		glcm.Exit(fmt.Sprintf("error performing between source %s and destination %s is a directory. recursive flag is turned off.", cca.source, cca.destination), 1)
+	}
 	// Get the source path without the wildcards
 	// This is defined since the files mentioned with exclude flag
 	// & include flag are relative to the Source
@@ -368,7 +372,7 @@ func (e *syncUploadEnumerator) listDestinationAndCompare(cca *cookedSyncCmdArgs,
 
 			// check if the listed blob segment matches the sourcePath pattern
 			// if it does not comparison is not required
-			if !util.blobNameMatchesThePattern(sourcePattern, realtivePathofBlobLocally) {
+			if !util.matchBlobNameAgainstPattern(sourcePattern, realtivePathofBlobLocally, cca.recursive) {
 				continue
 			}
 
