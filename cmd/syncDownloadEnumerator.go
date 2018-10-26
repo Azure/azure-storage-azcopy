@@ -346,7 +346,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 						return nil
 					}
 					if len(e.SourceFiles) > MaxNumberOfFilesAllowedInSync {
-						glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
+						glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, MaxNumberOfFilesAllowedInSync), 1)
 					}
 					e.SourceFiles[pathToFile] = fileInfo.ModTime()
 					// Increment the sync counter.
@@ -378,7 +378,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 			}
 
 			if len(e.SourceFiles) > MaxNumberOfFilesAllowedInSync {
-				glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, 10000), 1)
+				glcm.Exit(fmt.Sprintf("cannot sync the source %s with more than %v number of files", cca.source, MaxNumberOfFilesAllowedInSync), 1)
 			}
 			e.SourceFiles[fileOrDir] = f.ModTime()
 			// Increment the sync counter.
