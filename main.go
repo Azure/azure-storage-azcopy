@@ -46,6 +46,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	/*  AZCOPY_CONCURRENCY_VALUE, and replaced with three separate params
 	// Get the value of environment variable AZCOPY_CONCURRENCY_VALUE
 	// If the environment variable is set, it defines the number of concurrent connections
 	// transfer engine will spawn. If not set, transfer engine will spawn the default number
@@ -54,18 +56,39 @@ func main() {
 	                                     // The difference between this number and sendRateLimiter's cap
 	                                     // equals the number of connections that can be awaiting
 	                                     // a reply from the server. (sendRateLimiter caps the number
-	                                     // that can actively be sending).
+	                                     // that can actively be sending).*/
 	concurrencyValue := os.Getenv("AZCOPY_CONCURRENCY_VALUE")
 	if concurrencyValue != "" {
-		val, err := strconv.ParseInt(concurrencyValue, 10, 64)
-		if err != nil {
-			panic(fmt.Sprintf("error parsing the env azcopy_concurency_value %v. "+
-				"Failed with error %s", concurrencyValue, err.Error()))
-		}
-		defaultConcurrentConnections = int(val)
+		fmt.Printf("\n")
+		fmt.Printf("**** Warning AZCOPY_CONCURRENCY_VALUE is replaced by %s, %s and %s ***\n",
+			ste.AZCOPY_CONCURRENT_SEND_COUNT_NAME,
+			ste.AZCOPY_CONCURRENT_WAIT_COUNT_NAME,
+			ste.AZCOPY_CONCURRENT_FILE_READ_COUNT_NAME)
+ 		fmt.Printf("\n")
 	}
-	ste.MainSTE(defaultConcurrentConnections, 2400, azcopyAppPathFolder)
+
+	concurrencyParams := ste.ConcurrencyParams{}
+	initConcurrencyValue(&concurrencyParams.ConcurrentSendCount, ste.AZCOPY_CONCURRENT_SEND_COUNT_NAME, ste.DefaultConcurrentSendCount)
+	initConcurrencyValue(&concurrencyParams.ConcurrentWaitCount, ste.AZCOPY_CONCURRENT_WAIT_COUNT_NAME, ste.DefaultConcurrentWaitCount)
+	initConcurrencyValue(&concurrencyParams.ConcurrentFileReadCount,       ste.AZCOPY_CONCURRENT_FILE_READ_COUNT_NAME,       ste.DefaultFileReadCount)
+	concurrencyParams.Dump()
+
+	ste.MainSTE(concurrencyParams, 2400, azcopyAppPathFolder)
 
 	cmd.Execute(azcopyAppPathFolder)
 	glcm.Exit("", common.EExitCode.Success())
+}
+
+func initConcurrencyValue(value *int, name string, defaultValue int) {
+	stringValue := os.Getenv(name)
+	if stringValue == "" {
+		*value = defaultValue
+	} else {
+		val, err := strconv.ParseInt(stringValue, 10, 32)
+		if err != nil {
+			panic(fmt.Sprintf("error parsing the env variable named %s with value %v. " +
+				  "Failed with error %s", name, stringValue, err.Error()))
+		}
+		*value = int(val)
+	}
 }

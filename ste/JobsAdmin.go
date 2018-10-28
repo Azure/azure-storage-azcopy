@@ -95,10 +95,13 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrencyParams ConcurrencyParams, targetRateInMBps int64, azcopyAppPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
+
+	// total connections is the number we allow to be sending PLUS the number we allow to waiting for replies
+	concurrentConnections := concurrencyParams.ConcurrentSendCount + concurrencyParams.ConcurrentWaitCount
 
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
@@ -146,6 +149,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 			lowChunkCh:       lowChunkCh,
 			suicideCh:        suicideCh,
 		},
+		maxConcurrentSends: concurrencyParams.ConcurrentSendCount,
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
@@ -161,8 +165,9 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	}
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
-	// anyway. Maybe test and make sure whether it really is worth protecting against this
-	for cc := 0; cc < 16; cc++ {  // TODO: parameterize this count? But (except for small files, where a higher value will usualyl be needed) its only about initiation of transfers, so it might not matter much what the value is
+	// anyway.)
+	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
+	for cc := 0; cc < concurrencyParams.ConcurrentFileReadCount; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }
@@ -209,7 +214,12 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 				case chunkFunc := <-ja.xferChannels.lowChunkCh:
 					chunkFunc(workerID)
 				default:
-					time.Sleep(1 * time.Millisecond) // Sleep before looping around
+					time.Sleep(100 * time.Millisecond) // Sleep before looping around
+					                                   // TODO: In order to safely support high goroutine counts,
+					                                   // review sleep duration, or find an approach that does not require waking every x milliseconds
+					                                   // For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
+					                                   // the wake-ups. Also, if we continue using sendLimiter then, depending on how much buffered data
+					                                   // has been read from disk, most go-routines may wait on the sendLimiter instead of waiting here
 				}
 			}
 		}
@@ -251,7 +261,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 			case jptm := <-ja.xferChannels.lowTransferCh:
 				startTransfer(jptm)
 			default:
-				time.Sleep(1 * time.Millisecond) // Sleep before looping around
+				time.Sleep(10 * time.Millisecond) // Sleep before looping around
 			}
 		}
 //		}
@@ -272,6 +282,7 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
+	maxConcurrentSends  int
 }
 
 type CoordinatorChannels struct {
@@ -329,7 +340,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
+			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir, ja.maxConcurrentSends)
 		})
 }
 

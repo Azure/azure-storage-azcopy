@@ -34,9 +34,9 @@ type sendLimiter struct {
 	semaphore *semaphore.Weighted
 }
 
-func NewSendLimiter(maxConcurrentSends int64) SendLimiter {
+func NewSendLimiter(maxConcurrentSends int) SendLimiter {
 	return &sendLimiter {
-		semaphore: semaphore.NewWeighted(maxConcurrentSends)}
+		semaphore: semaphore.NewWeighted(int64(maxConcurrentSends))}
 	}
 
 func (s *sendLimiter) AcquireSendSlot(ctx context.Context) error{

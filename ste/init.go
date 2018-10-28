@@ -49,9 +49,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) error {
+func MainSTE(concurrencyParams ConcurrencyParams, targetRateInMBps int64, azcopyAppPathFolder string) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrentConnections, targetRateInMBps, azcopyAppPathFolder)
+	initJobsAdmin(steCtx, concurrencyParams, targetRateInMBps, azcopyAppPathFolder)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
