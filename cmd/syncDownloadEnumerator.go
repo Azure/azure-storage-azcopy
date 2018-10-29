@@ -57,7 +57,7 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 	// means no transfer has been to queue to send to STE
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
 		glcm.Exit("cannot start job because there are no transfer to upload or delete. "+
-			"The source and destination are in sync", 1)
+			"The source and destination are in sync", 0)
 		return nil
 	}
 	if numberOfCopyTransfers > 0 {
@@ -84,8 +84,8 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 		// read a line from stdin, if the answer is not yes, then is No, then ignore the transfers queued for deletion and continue
 		if !strings.EqualFold(answer, "y") {
 			if numberOfCopyTransfers == 0 {
-				return fmt.Errorf("cannot start job because there are no transfer to upload or delete. " +
-					"The source and destination are in sync")
+				glcm.Exit("cannot start job because there are no transfer to upload or delete. "+
+					"The source and destination are in sync", 0)
 			}
 			cca.isEnumerationComplete = true
 			return nil
@@ -174,6 +174,11 @@ func (e *syncDownloadEnumerator) listSourceAndCompare(cca *cookedSyncCmdArgs, p 
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
+			// check if the listed blob segment does not matches the sourcePath pattern
+			// if it does not comparison is not required
+			if !util.matchBlobNameAgainstPattern(pattern, blobInfo.Name, cca.recursive) {
+				continue
+			}
 			// realtivePathofBlobLocally is the local path relative to source at which blob should be downloaded
 			// Example: cca.source ="C:\User1\user-1" cca.destination = "https://<container-name>/virtual-dir?<sig>" blob name = "virtual-dir/a.txt"
 			// realtivePathofBlobLocally = virtual-dir/a.txt
@@ -181,12 +186,6 @@ func (e *syncDownloadEnumerator) listSourceAndCompare(cca *cookedSyncCmdArgs, p 
 			relativePathofBlobLocally = strings.Replace(relativePathofBlobLocally, virtualDirectory, "", 1)
 
 			blobLocalPath := util.generateLocalPath(cca.destination, relativePathofBlobLocally)
-
-			// check if the listed blob segment does not matches the sourcePath pattern
-			// if it does not comparison is not required
-			if !util.blobNameMatchesThePattern(pattern, relativePathofBlobLocally) {
-				continue
-			}
 
 			// Increment the number of files scanned at the destination.
 			atomic.AddUint64(&cca.atomicSourceFilesScanned, 1)
