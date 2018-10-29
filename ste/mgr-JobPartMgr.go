@@ -37,7 +37,7 @@ type IJobPartMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
-	GetPrefetchedByteCounter() *common.SharedCounter
+	GetPrefetchedByteCounter() common.PrefetchedByteCounter
 	GetSendLimiter() common.SendLimiter
 	common.ILogger
 }
@@ -624,7 +624,7 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
 }
 
-func (jpm *jobPartMgr) GetPrefetchedByteCounter() *common.SharedCounter {
+func (jpm *jobPartMgr) GetPrefetchedByteCounter() common.PrefetchedByteCounter {
 	return jpm.jobMgr.GetPrefetchedByteCounter()
 }
 

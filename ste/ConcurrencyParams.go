@@ -20,7 +20,10 @@
 
 package ste
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
+)
 
 type ConcurrencyParams struct {
 	// How many go-routines, at most, should be actively sending network traffic at any given time?
@@ -58,5 +61,16 @@ func (c *ConcurrencyParams) Dump(){
 	fmt.Printf("%s=%d\n", AZCOPY_CONCURRENT_SEND_COUNT_NAME, c.ConcurrentSendCount)
 	fmt.Printf("%s=%d\n", AZCOPY_CONCURRENT_WAIT_COUNT_NAME, c.ConcurrentWaitCount)
 	fmt.Printf("%s=%d\n", AZCOPY_CONCURRENT_FILE_READ_COUNT_NAME, c.ConcurrentFileReadCount)
+	fmt.Printf("Max prefetch GB = %.1f\n", float32(c.GetMaxPrefetchBytes()) / (1024 * 1024 * 1024))
+}
+
+
+/// Gets an estimate of a good number of bytes for us to prefetch
+// (i.e. to have read of disk, and to have not yet finished sending yet)
+func (c *ConcurrencyParams) GetMaxPrefetchBytes() int64 {
+	// TODO: improve caching approach to deal with other block sizes
+	return common.DefaultBlockBlobBlockSize *  // size of a block
+		int64(c.ConcurrentSendCount) *         // number of senders
+		2                                      // two blocks per sender (the one they're sending now, and one more that's ready for them)
 }
 

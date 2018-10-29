@@ -149,7 +149,7 @@ func initJobsAdmin(appCtx context.Context, concurrencyParams ConcurrencyParams, 
 			lowChunkCh:       lowChunkCh,
 			suicideCh:        suicideCh,
 		},
-		maxConcurrentSends: concurrencyParams.ConcurrentSendCount,
+		concurrencyParams: concurrencyParams,
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
@@ -282,7 +282,7 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
-	maxConcurrentSends  int
+	concurrencyParams   ConcurrencyParams
 }
 
 type CoordinatorChannels struct {
@@ -340,7 +340,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir, ja.maxConcurrentSends)
+			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir, ja.concurrencyParams)
 		})
 }
 

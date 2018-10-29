@@ -29,7 +29,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -252,10 +251,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		context := jptm.Context()
 		sendLimiter := jptm.GetSendLimiter()
 		prefetchedByteCounter := jptm.GetPrefetchedByteCounter()
-		const prefetchByteLimit = 1024 * 1024 * // one MB
-		                          8 *           // 8 MB per block in standard block size
-		                          96 *          // default max concurrent senders
-		                          2             // * 2 so that we have about as much "ready to send" as we do in actually being sent right ow
 
 		// Go through the file and schedule chunk messages to upload each chunk
 		// As we do this, we force preload of each chunk to memory, and we wait (block)
@@ -272,10 +267,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			}
 
 			// block if we already have too much prefetch data in in RAM
-			for prefetchedByteCounter.Read() > prefetchByteLimit {
-				// TODO: check context here, for cancellation?
-				time.Sleep(time.Second/2)
-			}
+			prefetchedByteCounter.WaitUntilBelowLimit()
 
 			// Make reader for this chunk, and prefetch its contents right now.
 			// To take advantage of the good sequential read performance provided by many file systems,

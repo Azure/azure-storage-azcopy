@@ -64,7 +64,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
 	// TODO: added for debugging purpose. remove later
-	GetPrefetchedByteCounter() *common.SharedCounter
+	GetPrefetchedByteCounter() common.PrefetchedByteCounter
 	GetSendLimiter() common.SendLimiter
 	ActiveConnections() int64
 	//Close()
@@ -76,12 +76,12 @@ type IJobMgr interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string, logFileFolder string, maxConcurrentSends int) IJobMgr {
+func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string, logFileFolder string, concurrencyParams ConcurrencyParams) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
 		logger: common.NewJobLogger(jobID, level, appLogger, logFileFolder),
-		prefetchedByteCounter: new(common.SharedCounter) ,
-		sendLimiter: common.NewSendLimiter(maxConcurrentSends),
+		prefetchedByteCounter: common.NewPrefetchedByteCounter(concurrencyParams.GetMaxPrefetchBytes()) ,
+		sendLimiter: common.NewSendLimiter(concurrencyParams.ConcurrentSendCount),
 	   /*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
@@ -128,7 +128,7 @@ type jobMgr struct {
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
-	prefetchedByteCounter *common.SharedCounter
+	prefetchedByteCounter common.PrefetchedByteCounter
 	sendLimiter common.SendLimiter
 }
 
@@ -161,7 +161,7 @@ func (jm *jobMgr) ReleaseAConnection() {
 	atomic.AddInt64(&jm.atomicCurrentConcurrentConnections, -1)
 }
 
-func (jm *jobMgr) GetPrefetchedByteCounter() *common.SharedCounter {
+func (jm *jobMgr) GetPrefetchedByteCounter() common.PrefetchedByteCounter {
 	return jm.prefetchedByteCounter
 }
 

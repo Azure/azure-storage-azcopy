@@ -20,17 +20,39 @@
 
 package common
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+)
 
-type SharedCounter struct {
-	value int64
+/// Used to limit the amount of pre-fetched data in RAM, to keep it an a suitable level
+/// Similar to SendLimiter, but for now the "waiting" and the "adding" are separate in this class
+/// TODO: review whether "waiting" and "adding" should remain separate
+type PrefetchedByteCounter interface {
+	Add(increment int64)
+	WaitUntilBelowLimit()
 }
 
-func (c *SharedCounter) Add(increment int64) {
+type countWithLimit struct {
+	value int64
+	limit int64
+}
+
+func NewPrefetchedByteCounter(limit int64) PrefetchedByteCounter{
+	return &countWithLimit{
+		limit: limit	}
+}
+
+func (c *countWithLimit) Add(increment int64) {
 	atomic.AddInt64(&c.value, increment)
 }
 
-func (c *SharedCounter) Read() int64 {
-	return atomic.LoadInt64(&c.value)
+func (c *countWithLimit) WaitUntilBelowLimit() {
+	for atomic.LoadInt64(&c.value) > c.limit {
+		// TODO: check context here, for cancellation?
+		// TODO: consider a non-sleep-based solution
+		time.Sleep(time.Second/2)
+	}
 }
+
 

@@ -25,6 +25,9 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+/// Used to limit the number of actively-sending go-routines. This lets us run a very large overall pool of goroutines
+// (some of which are actively sending and many of which are not) while mitigating the risk of having too many sending at once
+// - e.g. risks of excessive CPU usage and/or self-inflicted network congestion.
 type SendLimiter interface {
 	AcquireSendSlot(ctx context.Context) error
 	ReleaseSendSlot()

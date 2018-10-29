@@ -39,7 +39,7 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
-	GetPrefetchedByteCounter() *common.SharedCounter
+	GetPrefetchedByteCounter() common.PrefetchedByteCounter
 	GetSendLimiter() common.SendLimiter
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
@@ -249,7 +249,7 @@ func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
 }
 
-func (jptm *jobPartTransferMgr) GetPrefetchedByteCounter() *common.SharedCounter {
+func (jptm *jobPartTransferMgr) GetPrefetchedByteCounter() common.PrefetchedByteCounter {
 	return jptm.jobPartMgr.GetPrefetchedByteCounter()
 }
 

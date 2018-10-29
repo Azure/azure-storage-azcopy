@@ -73,7 +73,7 @@ type simpleFileChunkReader struct {
 
 	// used to track how many unread bytes we have prefetched, so that
 	// callers can prevent excessive prefetching (to control RAM usage)
-	prefetchedByteTracker *SharedCounter
+	prefetchedByteTracker PrefetchedByteCounter
 
 	// do we currently own/hold one of the active "slots" for sending
 	sendSlotHeld bool
@@ -83,17 +83,17 @@ type simpleFileChunkReader struct {
 // TODO: that might work by having it preftech the start, and then, when that part is being sent out to the network, use a
 // separate goroutine to read the next.  OR, we can just say, if you want to use 100 MB chunk sizes, use lots of RAM.
 
-func NewSimpleFileChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, offset int64, length int64, sendLimiter SendLimiter, prefetchedByteTracker *SharedCounter) FileChunkReader {
+func NewSimpleFileChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, offset int64, length int64, sendLimiter SendLimiter, prefetchedByteCounter PrefetchedByteCounter) FileChunkReader {
 	if length <= 0 {
 		panic("length must be greater than zero")
 	}
 	return &simpleFileChunkReader{
-		ctx:				   ctx,
+		ctx:                   ctx,
 		sendLimiter:           sendLimiter,
 		sourceFactory:         sourceFactory,
 		offsetInFile:          offset,
 		length:                length,
-		prefetchedByteTracker: prefetchedByteTracker}
+		prefetchedByteTracker: prefetchedByteCounter}
 }
 
 // Prefetch, and ignore any errors (just leave in not-prefetch-yet state, if there was an error)
