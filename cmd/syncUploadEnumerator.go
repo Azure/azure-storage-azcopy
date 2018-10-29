@@ -545,8 +545,8 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 			return err
 		}
 	}
-	cca.setScanningComplete()
 	e.queueSourceFilesForUpload(cca)
+
 	// No Job Part has been dispatched, then dispatch the JobPart.
 	if e.PartNumber == 0 ||
 		len(e.CopyJobRequest.Transfers) > 0 ||
@@ -558,5 +558,6 @@ func (e *syncUploadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 		//cca.waitUntilJobCompletion(true)
 		cca.setFirstPartOrdered()
 	}
+	cca.setScanningComplete()
 	return nil
 }
