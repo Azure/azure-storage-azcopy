@@ -129,6 +129,7 @@ func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF
 	return &bodyPacer{body: requestBody, p: p, mmf: srcMMF}
 }
 
+// creates pacer that's not coupled to MMF
 func newLiteRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
 	if p == nil {
 		panic("pr must not be nil")

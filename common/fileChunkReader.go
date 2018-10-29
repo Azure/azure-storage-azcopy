@@ -35,7 +35,7 @@ import (
 type FileChunkReader interface {
 	io.ReadSeeker
 	io.Closer
-	Prefetch(fileReader CloseableReaderAt) error
+	TryPrefetch(fileReader CloseableReaderAt) bool
 }
 
 // Simple aggregation of existing io interfaces
@@ -83,7 +83,7 @@ type simpleFileChunkReader struct {
 // TODO: that might work by having it preftech the start, and then, when that part is being sent out to the network, use a
 // separate goroutine to read the next.  OR, we can just say, if you want to use 100 MB chunk sizes, use lots of RAM.
 
-func NewSimpleFileChunkReader(ctx context.Context, sendLimiter SendLimiter, sourceFactory ChunkReaderSourceFactory, offset int64, length int64, prefetchedByteTracker *SharedCounter) FileChunkReader {
+func NewSimpleFileChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, offset int64, length int64, sendLimiter SendLimiter, prefetchedByteTracker *SharedCounter) FileChunkReader {
 	if length <= 0 {
 		panic("length must be greater than zero")
 	}
@@ -96,10 +96,21 @@ func NewSimpleFileChunkReader(ctx context.Context, sendLimiter SendLimiter, sour
 		prefetchedByteTracker: prefetchedByteTracker}
 }
 
+// Prefetch, and ignore any errors (just leave in not-prefetch-yet state, if there was an error)
+func (cr *simpleFileChunkReader) TryPrefetch(fileReader CloseableReaderAt) bool {
+	err := cr.prefetch(fileReader)
+	if err != nil {
+		// if where was an error, be sure to put us back into a valid "not-yet-prefetched" state
+		cr.buffer = nil
+		return false
+	}
+	return true
+}
+
 // Prefetch the data in this chunk, using a file object that is provided to us (providing it to us supports sequential read, in the non-retry scenario)
 // We use io.ReaderAt, rather than io.Reader, just for maintainablity/ensuring correctness. (Since just using Reader requires the caller to
 // follow certain assumptions about positioning the file pointer at the right place before calling us, but using ReaderAt does not).
-func (cr *simpleFileChunkReader) Prefetch(fileReader CloseableReaderAt) error {
+func (cr *simpleFileChunkReader) prefetch(fileReader CloseableReaderAt) error {
 	if cr.buffer != nil {
 		return nil // already prefetched
 	}
@@ -110,18 +121,16 @@ func (cr *simpleFileChunkReader) Prefetch(fileReader CloseableReaderAt) error {
 	if err != nil && err != io.EOF {
 		return err
 	}
-
 	if int64(totalBytesRead) != cr.length {
 		return errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
 	}
 
 	// increase count of unused prefetched bytes
 	cr.prefetchedByteTracker.Add(int64(totalBytesRead))
-
 	return nil
 }
 
-func (cr *simpleFileChunkReader) RedoPrefetchIfNecessary() error {
+func (cr *simpleFileChunkReader) redoPrefetchIfNecessary() error {
 	if cr.buffer != nil {
 		return nil // nothing to do
 	}
@@ -134,7 +143,7 @@ func (cr *simpleFileChunkReader) RedoPrefetchIfNecessary() error {
 	defer sourceFile.Close()
 
 	// no need to seek first, because its a ReaderAt
-	return cr.Prefetch(sourceFile)
+	return cr.prefetch(sourceFile)
 }
 
 // Seeks within this chunk
@@ -174,7 +183,7 @@ func (cr *simpleFileChunkReader) Read(p []byte) (n int, err error) {
 	// Always use the prefetch logic to read the data
 	// This is simpler to maintain than using a different code path for the (rare) cases
 	// where there has been no prefetch before this routine is called
-	err = cr.RedoPrefetchIfNecessary()
+	err = cr.redoPrefetchIfNecessary()
 	if err != nil {
 		return 0, err
 	}
@@ -231,6 +240,8 @@ func (cr *simpleFileChunkReader) deactivate() {
 // Some code paths can call this, when cleaning up. (Even though in the normal, non error, code path, we don't NEED this
 // because we close at the completion of a successful read of the whole prefetch buffer.
 // We still want this though, to handle cases where for some reason the transfer stops before all the buffer has been read.)
+// Without this close, if something failed part way through, we would keep counting this object's bytes in prefetchedByteTracker
+// "for ever", even after the object is gone.
 func (cr *simpleFileChunkReader) Close() error {
 	cr.deactivate()
 	return nil

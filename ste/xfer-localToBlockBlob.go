@@ -46,7 +46,7 @@ type blockBlobUpload struct {
 	blockIds     []string
 }
 
-/*
+/* TODO Uncomment and re-enable withOUT MMF
 type pageBlobUpload struct {
 	jptm        IJobPartTransferMgr
 	srcMmf      *common.MMF
@@ -98,7 +98,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 
 	// step 2a: Open the Source File.
-	// declare factory func, because we need it later too
+	// Declare factory func, because we need it later too
 	sourceFileFactory := func()(common.CloseableReaderAt, error) {
 		return os.Open(info.Source)
 	}
@@ -109,26 +109,12 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		jptm.ReportTransferDone()
 		return
 	}
-	defer sourceFile.Close() // we read all the chunks in this routine, so can close a the end
+	defer sourceFile.Close() // we read all the chunks in this routine, so can close the file at the end
 
 
-	/*
-		// 2b: Memory map the source file. If the file size if not greater than 0, then doesn't memory map the file.
-		srcMmf := &common.MMF{}
-		if blobSize > 0 {
-			// file needs to be memory mapped only when the file size is greater than 0.
-			srcMmf, err = common.NewMMF(srcFile, false, 0, blobSize)
-			if err != nil {
-				jptm.LogUploadError(info.Source, info.Destination, "Memory Map Error-"+err.Error(), 0)
-				jptm.SetStatus(common.ETransferStatus.Failed())
-				jptm.ReportTransferDone()
-				return
-			}
-		}
-	*/
 
 	if EndsWith(info.Source, ".vhd") && (blobSize%azblob.PageBlobPageBytes == 0) {
-		panic("Disabled in this test")
+		panic("page blobs disabled in this test")
 		/*
 			// step 3.b: If the Source is vhd file and its size is multiple of 512,
 			// then upload the blob as a pageBlob.
@@ -208,21 +194,32 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				// schedule the chunk job/msg
 				jptm.ScheduleChunks(pbu.pageBlobUploadFunc(startIndex, adjustedPageSize))
 			}*/
-	} else if blobSize == 0 || blobSize <= chunkSize {
-		panic("disabled in this test")
-		/*
-			    // step 3.b: if blob size is smaller than chunk size and it is not a vhd file
-				// we should do a put blob instead of chunk up the file
-				PutBlobUploadFunc(jptm, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
-				return */
 	} else {
-		// step 3.c: If the source is not a vhd and size is greater than chunk Size,
-		// then uploading the source as block Blob.
+		// BEGIN Removed step 3.b
+		// TODO: review. Remove for now, using putBlock, because making the choice here, as we used to, relied on older
+		// file size measurement, made during scan phase of job.  And that figure might now be out of date
+
+		//if blobSize == 0 || blobSize <= chunkSize {
+		/*  step 3.b: if blob size is smaller than chunk size and it is not a vhd file
+		// we should do a put blob instead of chunk up the file
+		PutBlobUploadFunc(jptm, srcMmf, blobUrl.ToBlockBlobURL(), pacer)
+		return */
+		// END removed step 3.b
+
+		// TODO: address the issue where file size may have change since the scan happened
+
+		// step 3.c: If the source is not a vhd uploading the source as block Blob.
 		// calculating num of chunks using the source size and chunkSize.
 		numChunks := common.Iffuint32(
 			blobSize%chunkSize == 0,
 			uint32(blobSize/chunkSize),
 			uint32(blobSize/chunkSize)+1)
+
+		// TODO: remove this if we re-enable step 3.b, above
+		// Force a zero-size blob to contain 1 chuck (of zero size), rather than zero chunks
+		if numChunks == 0 {
+			numChunks = 1
+		}
 
 		// Set the number of chunk for the current transfer.
 		jptm.SetNumberOfChunks(numChunks)
@@ -236,8 +233,6 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
-			//TODO was: srcMmf.Unmap()
-			//srcFile.Close()
 			return
 		}
 		// creating a slice to contain the blockIds
@@ -257,7 +252,10 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		context := jptm.Context()
 		sendLimiter := jptm.GetSendLimiter()
 		prefetchedByteCounter := jptm.GetPrefetchedByteCounter()
-		const prefetchByteLimit = 512 * 1024 * 1024 // todo: make this parameterizable, and check reasonableness of this default value
+		const prefetchByteLimit = 1024 * 1024 * // one MB
+		                          8 *           // 8 MB per block in standard block size
+		                          96 *          // default max concurrent senders
+		                          2             // * 2 so that we have about as much "ready to send" as we do in actually being sent right ow
 
 		// Go through the file and schedule chunk messages to upload each chunk
 		// As we do this, we force preload of each chunk to memory, and we wait (block)
@@ -284,27 +282,13 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			// we work sequentially through the file here.
 			// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat it's part
 			// of the file read later (when doing a retry)
-			chunkReader := common.NewSimpleFileChunkReader(context, sendLimiter, sourceFileFactory, startIndex, adjustedChunkSize, prefetchedByteCounter)
-			err = chunkReader.Prefetch(sourceFile)  // use the file handle we have already opened, instead of getting each chunk reader to open its own here
-			if err != nil {
-				jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
-				return          // TODO: is this needed after jptm.Panic?
-			}
+			chunkReader := common.NewSimpleFileChunkReader(context, sourceFileFactory, startIndex, adjustedChunkSize, sendLimiter, prefetchedByteCounter)
+			// There is no error returned by PerfectIfPossible
+			// We need to schedule the chunks, even if the data is not fetchable, because all our error handing is in the chunkFunc
+			fetched := chunkReader.TryPrefetch(sourceFile)  // use the file handle we have already opened, instead of getting each chunk reader to open its own here
 
-			if startIndex == 0 {
-				// grab the leading bytes, for later MIME type recognition
-				// (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
-				// reads as much as possible)
-				// TODO: tidy/refactor this code?
-				const mimeRecgonitionLen = 512
-				bbu.leadingBytes = make([]byte, mimeRecgonitionLen)
-				_, err := chunkReader.Read(bbu.leadingBytes)
-				if err != nil {
-					jptm.Panic(err) // TODO: what do we do about file unreadable type errors (locked, deleted etc)?
-					return          // TODO: is this needed after jptm.Panic?
-				}
-				// MUST re-wind, so that the bytes we read will get transferred too!
-				chunkReader.Seek(0, io.SeekStart)
+			if startIndex == 0 && fetched {
+				bbu.leadingBytes = captureLeadingBytes(chunkReader)
 			}
 
 			// schedule the chunk job/msg
@@ -320,11 +304,26 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 	}
 }
 
+// Grab the leading bytes, for later MIME type recognition
+// (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
+// reads as much as possible)
+func captureLeadingBytes(chunkReader common.FileChunkReader) []byte {
+	const mimeRecgonitionLen = 512
+	leadingBytes := make([]byte, mimeRecgonitionLen)
+	_, err := chunkReader.Read(leadingBytes)
+	if err != nil {
+		return nil // we just can't sniff the mime type
+	}
+	// MUST re-wind, so that the bytes we read will get transferred too!
+	chunkReader.Seek(0, io.SeekStart)
+	return leadingBytes
+}
+
 // This method blockBlobUploadFunc uploads the block of src data
 func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, chunkReader common.FileChunkReader) chunkFunc {
 	return func(workerId int) {
 
-		defer chunkReader.Close() // just make doubly sure that, no matter what, this reader gets closed
+		defer chunkReader.Close()
 
 		// TODO: added the two operations for debugging purpose. remove later
 		// Increment a number of goroutine performing the transfer / acting on chunks msg by 1
@@ -349,10 +348,9 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, chunkReader commo
 		//}(bbu.jptm)
 
 		// and the chunkFunc has been changed to the version without param workId
-		// transfer done is internal function which marks the transfer done, unmaps the src file and close the  source file.
+		// transfer done is internal function which marks the transfer done
 		transferDone := func() {
 			bbu.jptm.Log(pipeline.LogInfo, "Transfer done")
-			chunkReader.Close()
 			// Get the Status of the transfer
 			// If the transfer status value < 0, then transfer failed with some failure
 			// there is a possibility that some uncommitted blocks will be there
@@ -437,6 +435,8 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, chunkReader commo
 			blobHttpHeader, metaData := bbu.jptm.BlobDstData(bbu.leadingBytes)
 
 			// commit the blocks.
+			// TODO: we don't have any way to hook this into sendLimiter at present, because it doesn't read from a Reader...
+			// ... so review whether we need to find a way to hook it in, or if its OK to leave it as-is
 			_, err := blockBlobUrl.CommitBlockList(bbu.jptm.Context(), bbu.blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
