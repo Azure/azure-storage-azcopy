@@ -162,7 +162,12 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 				return
 			}
 		}
-
+		// If the size of vhd is 0, then we need don't need to upload any ranges and
+		// mark the transfer as successful
+		if blobSize == 0 {
+			jptm.SetStatus(common.ETransferStatus.Success())
+			jptm.ReportTransferDone()
+		}
 		// Calculate the number of Page Ranges for the given PageSize.
 		numPages := common.Iffuint32(blobSize%chunkSize == 0,
 			uint32(blobSize/chunkSize),
