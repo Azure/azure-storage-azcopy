@@ -176,6 +176,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 type JobPartPlanDstBlob struct {
 	// Once set, the following fields are constants; they should never be modified
 
+	BlobType common.BlobType
 	// represents user decision to interpret the content-encoding from source file
 	NoGuessMimeType bool
 

@@ -49,12 +49,19 @@ const PacerTimeToWaitInMs = 50
 type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer)
 
 // the xfer factory is generated based on the type of source and destination
-func computeJobXfer(fromTo common.FromTo) newJobXfer {
+func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
+	fmt.Println("Blob Type ", blobType)
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 		return BlobToLocal
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-		return LocalToBlockBlob
+		switch blobType {
+		case common.EBlobType.None(),
+			common.EBlobType.BlockBlob():
+			return LocalToBlockBlob
+		case common.EBlobType.PageBlob():
+			return LocalToPageBlob
+		}
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
