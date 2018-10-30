@@ -261,17 +261,23 @@ func (util copyHandlerUtil) relativePathToRoot(rootPath, filePath string, pathSe
 	return result
 }
 
+// evaluateSymlinkPath evaluates the symlinkPath and returns the evaluated symlinkPath
 func (util copyHandlerUtil) evaluateSymlinkPath(path string) (string, error) {
 	if len(path) == 0 {
 		return "" , fmt.Errorf("cannot evaluate empty symlinkPath")
 	}
 	symLinkPath, err := filepath.EvalSymlinks(path)
 	if err != nil{
+		// Network drives are not evaluated using the api "filepath.EvalSymlinks" since it returns error for the network drives.
+		// So readlink api is used to evaluate the symlinks.
 		symLinkPath, err = os.Readlink(path)
 		if err != nil {
 			return "", fmt.Errorf("error %s evaluating symlink path %s", err.Error(), path)
 		}
 	}
+	// If the evaluated symlinkPath is same as the given path,
+	// then path cannot be evaluated due to some reason and to avoid
+	// indefinite recursive calls, this check is added.
 	if symLinkPath == path {
 		return "", fmt.Errorf("symlink path %s evaluated back to itself", path)
 	}

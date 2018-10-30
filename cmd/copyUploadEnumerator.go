@@ -241,7 +241,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						if !cca.followSymlinks {
 							return nil
 						}
-						//evaluatedSymlinkPath, err := filepath.EvalSymlinks(pathToFile)
+						// evaluate the symlinkPath.
 						evaluatedSymlinkPath, err := util.evaluateSymlinkPath(pathToFile)
 						if err != nil {
 							glcm.Info(fmt.Sprintf("error evaluating the symlink path %s", evaluatedSymlinkPath))
@@ -249,19 +249,13 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						}
 						// If the path is a windows file system path, replace '\\' with '/'
 						// to maintain the consistency with other system paths.
-						if common.AZCOPY_PATH_SEPARATOR_CHAR == '\\' {
-							evaluatedSymlinkPath = strings.Replace(evaluatedSymlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if common.OS_PATH_SEPARATOR == "\\" {
+							pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 						}
-						e.getSymlinkTransferList(evaluatedSymlinkPath, fileOrDirectoryPath, parentSourcePath, cleanContainerPath, destinationURL, cca)
-						// Iterate though the list of all transfers and add it to the CopyJobPartOrder Request
-						//for _, tl := range tList {
-						//	e.addTransfer(tl, cca)
-						//}
-						//// Iterate through all the errors occurred while traversing the symlinks and
-						//// put them into the lifecycle manager
-						//for _, err := range errorList {
-						//	glcm.Info(err.Error())
-						//}
+						err = e.getSymlinkTransferList(evaluatedSymlinkPath, pathToFile, parentSourcePath, cleanContainerPath, destinationURL, cca)
+						if err != nil {
+							glcm.Info(fmt.Sprintf("error %s evaluating the symlinkPath %s", err.Error(), evaluatedSymlinkPath))
+						}
 					}
 					return nil
 				})
@@ -289,6 +283,8 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					return err
 				}
 			}
+		}else{
+			glcm.Info(fmt.Sprintf("error %s accessing the filepath %s", err.Error(), fileOrDirectoryPath))
 		}
 	}
 
@@ -313,6 +309,7 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 	// replace the "\\" path separator with "/" separator
 	symlinkPath = strings.Replace(symlinkPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
+	// Glob the evaluated symlinkPath and iterate through each files and sub-directories.
 	listOfFilesDirs, err := filepath.Glob(symlinkPath)
 	if err != nil {
 		return fmt.Errorf(fmt.Sprintf("found cycle in symlink path %s", symlinkPath))
@@ -322,7 +319,7 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 		files = strings.Replace(files, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 		fInfo, err := os.Stat(files)
 		if err != nil {
-			return err
+			glcm.Info(fmt.Sprintf("error %s fetching the fileInfo for filePath %s", err.Error(), files))
 		} else if fInfo.IsDir() {
 			filepath.Walk(files, func(path string, fileInfo os.FileInfo, err error) error {
 				if err != nil {
@@ -359,7 +356,6 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 					if util.resourceShouldBeExcluded(parentSource, e.Exclude, sourcePath) {
 						return nil
 					}
-
 					// create the transfer and add to the list
 					destinationUrl.Path = util.generateObjectPath(cleanContainerPath,
 						util.getRelativePath(parentSource, sourcePath))
@@ -369,7 +365,10 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 						LastModifiedTime: fileInfo.ModTime(),
 						SourceSize:       fileInfo.Size(),
 					}
-					e.addTransfer(transfer, cca)
+					err = e.addTransfer(transfer, cca)
+					if err != nil {
+						glcm.Info(fmt.Sprintf("error %s adding the transfer source %s and destination %s", err.Error(), path, destinationUrl.String()))
+					}
 					return nil
 				} else if fileInfo.Mode()&os.ModeSymlink != 0 { // If the file is a symlink
 					// replace the windows path separator in the path with "/" path separator
@@ -377,12 +376,17 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 					// Evaulate the symlink path
 					sLinkPath, err := util.evaluateSymlinkPath(path)
 					if err != nil {
-						return err
+						glcm.Info(fmt.Sprintf("error %s evaluating the symlink path %s ", err.Error(), path))
+						return nil
 					}
 					// strip the original symlink path and concatenate the relativePath to the original sourcePath
 					// for Example: source = C:\MountedD sLinkPath = D:\MountedE
 					// relativePath = MountedE , sourcePath = C;\MountedD\MountedE
 					relativePath := strings.Replace(path, symlinkPath, "", 1)
+					// If char of relative Path is the path separator, strip the path separator
+					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						relativePath = relativePath[1:]
+					}
 					var sourcePath = ""
 					// concatenate the relative symlink path to the original source
 					if len(source) > 0 && source[len(source)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
@@ -390,9 +394,11 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 					} else {
 						sourcePath = fmt.Sprintf("%s%s%s", source, common.AZCOPY_PATH_SEPARATOR_STRING, relativePath)
 					}
-					return e.getSymlinkTransferList(sLinkPath, sourcePath,
+					err = e.getSymlinkTransferList(sLinkPath, sourcePath,
 						parentSource, cleanContainerPath, destinationUrl, cca)
-
+					if err != nil {
+						glcm.Info(fmt.Sprintf("error %s iterating through the symlink %s", err.Error(), sLinkPath))
+					}
 				}
 				return nil
 			})
@@ -426,7 +432,10 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 				LastModifiedTime: fInfo.ModTime(),
 				SourceSize:       fInfo.Size(),
 			}
-			e.addTransfer(transfer, cca)
+			err = e.addTransfer(transfer, cca)
+			if err != nil {
+				glcm.Info(fmt.Sprintf("error %s adding the transfer source %s and destination %s", err.Error(), files, destinationUrl.String()))
+			}
 		} else {
 			continue
 		}
