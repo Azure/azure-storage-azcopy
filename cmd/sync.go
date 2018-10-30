@@ -46,12 +46,12 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize    uint32
-	logVerbosity string
-	include      string
-	exclude      string
+	blockSize      uint32
+	logVerbosity   string
+	include        string
+	exclude        string
 	followSymlinks bool
-	output       string
+	output         string
 	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
