@@ -24,14 +24,9 @@ package main
 
 import (
 	"os"
-	"os/exec"
 	"path"
 	"syscall"
 )
-
-func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
-	return cmd
-}
 
 // ProcessOSSpecificInitialization changes the soft limit for file descriptor for process
 // and returns the file descriptor limit for process. If the function fails with some error

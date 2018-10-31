@@ -95,7 +95,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -127,9 +127,9 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	}
 
 	ja := &jobsAdmin{
-		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyAppPathFolder),
+		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr: newJobIDToJobMgr(),
-		logDir:        azcopyAppPathFolder,
+		logDir:        azcopyLogPathFolder,
 		planDir:       planDir,
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
 		appCtx:        appCtx,

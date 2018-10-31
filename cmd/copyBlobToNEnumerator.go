@@ -2,14 +2,13 @@ package cmd
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // copyBlobToNEnumerator enumerates blob source, and submit request for copy blob to N,
@@ -225,12 +224,6 @@ func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, prop
 			common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
 	}
 
-	// work around an existing client bug, the contentMD5 returned from list is base64 encoded bytes, and should be base64 decoded bytes.
-	md5DecodedBytes, err := base64.StdEncoding.DecodeString(string(properties.ContentMD5))
-	if err != nil {
-		return err
-	}
-
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
 		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
@@ -241,7 +234,7 @@ func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, prop
 		ContentDisposition: *properties.ContentDisposition,
 		ContentLanguage:    *properties.ContentLanguage,
 		CacheControl:       *properties.CacheControl,
-		ContentMD5:         md5DecodedBytes,
+		ContentMD5:         properties.ContentMD5,
 		Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata),
 		BlobType:           properties.BlobType},
 		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly

@@ -10,15 +10,12 @@
   version = "0.1.7"
 
 [[projects]]
-  branch = "master"
-  digest = "1:75b36c8cc8d49e2b33c9e3c3583cea94ec7a26667637ccfab55ca0637665a2d7"
+  digest = "1:c4a5edf3b0f38e709a78dcc945997678a364c2b5adfd48842a3dd349c352f833"
   name = "github.com/Azure/azure-storage-blob-go"
-  packages = [
-    "2016-05-31/azblob",
-    "2018-03-28/azblob",
-  ]
+  packages = ["azblob"]
   pruneopts = "UT"
-  revision = "197d1c0aea1b9eedbbaee0a1a32bf81e879bde80"
+  revision = "5152f14ace1c6db66bd9cb57840703a8358fa7bc"
+  version = "0.3.0"
 
 [[projects]]
   branch = "dev"
@@ -125,8 +122,7 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Azure/azure-pipeline-go/pipeline",
-    "github.com/Azure/azure-storage-blob-go/2016-05-31/azblob",
-    "github.com/Azure/azure-storage-blob-go/2018-03-28/azblob",
+    "github.com/Azure/azure-storage-blob-go/azblob",
     "github.com/Azure/azure-storage-file-go/2017-07-29/azfile",
     "github.com/Azure/go-autorest/autorest/adal",
     "github.com/JeffreyRichter/enum/enum",

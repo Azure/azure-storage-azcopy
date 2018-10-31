@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -104,15 +104,15 @@ func listContainer(resourceUrl string, numberOfresource int64) {
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
-		listBlob, err := containerUrl.ListBlobs(context.TODO(), marker,
-			azblob.ListBlobsOptions{Prefix: searchPrefix})
+		listBlob, err := containerUrl.ListBlobsFlatSegment(context.TODO(), marker,
+			azblob.ListBlobsSegmentOptions{Prefix: searchPrefix})
 		if err != nil {
 			fmt.Println(fmt.Sprintf("cannot list blobs for download. Failed with error %s", err.Error()))
 			os.Exit(1)
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			blobName := blobInfo.Name
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
