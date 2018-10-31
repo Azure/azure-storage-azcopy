@@ -50,7 +50,6 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
-	fmt.Println("Blob Type ", blobType)
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 		return BlobToLocal
@@ -61,6 +60,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 			return LocalToBlockBlob
 		case common.EBlobType.PageBlob():
 			return LocalToPageBlob
+		case common.EBlobType.AppendBlob():
+			return LocalToAppendBlob
 		}
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
