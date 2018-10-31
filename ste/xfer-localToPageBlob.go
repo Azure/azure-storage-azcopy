@@ -93,7 +93,6 @@ func LocalToPageBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
-		jptm.ReportTransferDone()
 		return
 	}
 
