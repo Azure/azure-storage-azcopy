@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 
+	"net/http"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -91,6 +93,11 @@ func LocalToAppendBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pac
 		jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-"+msg, status)
 		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
+		// If the status code was 403, it means there was an authentication error and we exit.
+		// User can resume the job if completely ordered with a new sas.
+		if status == http.StatusForbidden {
+			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+		}
 		return
 	}
 
@@ -126,12 +133,17 @@ func LocalToAppendBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pac
 			jptm.LogUploadError(info.Source, info.Destination, "PageBlob Create-"+msg, status)
 			jptm.SetErrorCode(int32(status))
 			// before reporting the transfer done, try deleting the above created blob
-			_, err := appendBlobURL.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, deletErr := appendBlobURL.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 			if err != nil {
 				// Log the error if deleting the page blob failed.
-				jptm.LogError(appendBlobURL.String(), "Delete Append Blob ", err)
+				jptm.LogError(appendBlobURL.String(), "Delete Append Blob ", deletErr)
 			}
 			jptm.ReportTransferDone()
+			// If the status code was 403, it means there was an authentication error and we exit.
+			// User can resume the job if completely ordered with a new sas.
+			if status == http.StatusForbidden {
+				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			}
 			return
 		}
 	}

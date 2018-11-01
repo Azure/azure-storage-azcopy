@@ -328,3 +328,7 @@ venv*
 
 #json create files
 *.json
+
+# go files
+*.mod
+*.sum

@@ -1,12 +1,12 @@
 package ste
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
@@ -45,9 +45,14 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 	_, err := srcFileUrl.Delete(jptm.Context())
 	if err != nil {
 		// If the delete failed with err 404, i.e resource not found, then mark the transfer as success.
-		if err.(azblob.StorageError) != nil {
-			if err.(azblob.StorageError).Response().StatusCode == http.StatusNotFound {
+		if strErr, ok := err.(azfile.StorageError); ok {
+			if strErr.Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
+			}
+			// If the status code was 403, it means there was an authentication error and we exit.
+			// User can resume the job if completely ordered with a new sas.
+			if strErr.Response().StatusCode == http.StatusForbidden {
+				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
 			}
 		} else {
 			transferDone(common.ETransferStatus.Failed(), err)

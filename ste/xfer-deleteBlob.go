@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"fmt"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
@@ -46,6 +48,11 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 		if strErr, ok := err.(azblob.StorageError); ok {
 			if strErr.Response().StatusCode == http.StatusNotFound {
 				transferDone(common.ETransferStatus.Success(), nil)
+			}
+			// If the status code was 403, it means there was an authentication error and we exit.
+			// User can resume the job if completely ordered with a new sas.
+			if strErr.Response().StatusCode == http.StatusForbidden {
+				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
 			}
 		} else {
 			transferDone(common.ETransferStatus.Failed(), err)
