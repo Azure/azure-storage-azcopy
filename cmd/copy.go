@@ -143,7 +143,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-	// file names to include explicitly and include file may mention at pattern.
+	// file names to include explicitly and include file may mention the pattern.
 	// This could conflict enumerating the files to queue up for transfer.
 	if len(raw.listOfFilesToCopy) > 0 && len(raw.include) > 0 {
 		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
@@ -155,12 +155,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
 	// any limit on the number of files that can be copied.
 	if len(raw.listOfFilesToCopy) > 0 {
-		//files := strings.Split(raw.listOfFilesToCopy, ";")
 		jsonFile, err := os.Open(raw.listOfFilesToCopy)
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
 		}
-		// read our opened xmlFile as a byte array.
+		// read opened json file as a byte array.
 		jsonBytes, err := ioutil.ReadAll(jsonFile)
 		if err != nil {
 			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
