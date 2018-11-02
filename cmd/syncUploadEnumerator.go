@@ -266,7 +266,7 @@ func (e *syncUploadEnumerator) listTheSourceIfRequired(cca *cookedSyncCmdArgs, p
 					pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
 					if util.resourceShouldBeExcluded(parentSourcePath, e.Exclude, pathToFile) {
-						e.SourceFilesToExclude[fileOrDir] = f.ModTime()
+						e.SourceFilesToExclude[pathToFile] = f.ModTime()
 						return nil
 					}
 					if len(e.SourceFiles) > 100000 {
