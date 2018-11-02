@@ -32,12 +32,13 @@ import (
 	"strings"
 	"time"
 
+	"io/ioutil"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
-	"io/ioutil"
 )
 
 // upload related
@@ -83,13 +84,15 @@ type rawCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
-	blockBlobTier            string
-	pageBlobTier             string
-	background               bool
-	output                   string
-	acl                      string
-	logVerbosity             string
-	cancelFromStdin          bool
+	// defines the type of the blob at the destination in case of upload / account to account copy
+	blobType        string
+	blockBlobTier   string
+	pageBlobTier    string
+	background      bool
+	output          string
+	acl             string
+	logVerbosity    string
+	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
 }
@@ -114,6 +117,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.forceWrite = raw.forceWrite
 	cooked.blockSize = raw.blockSize
 
+	// parse the given blob type.
+	err = cooked.blobType.Parse(raw.blobType)
+	if err != nil {
+		return cooked, err
+	}
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
 	if err != nil {
 		return cooked, err
@@ -314,6 +322,7 @@ type cookedCopyCmdArgs struct {
 	blockSize uint32
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType          []azblob.BlobType
+	blobType                 common.BlobType
 	blockBlobTier            common.BlockBlobTier
 	pageBlobTier             common.PageBlobTier
 	metadata                 string
@@ -485,6 +494,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		Exclude:         cca.exclude,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
+			BlobType:                 cca.blobType,
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
@@ -938,6 +948,7 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blobType", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")

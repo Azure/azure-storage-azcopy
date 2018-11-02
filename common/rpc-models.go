@@ -108,7 +108,7 @@ type ListRequest struct {
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
-	//BlobType                 BlobType // The type of a blob - BlockBlob, PageBlob, AppendBlob
+	BlobType                 BlobType      // The type of a blob - BlockBlob, PageBlob, AppendBlob
 	ContentType              string        //The content type specified for the blob.
 	ContentEncoding          string        //Specifies which content encodings have been applied to the blob.
 	BlockBlobTier            BlockBlobTier // Specifies the tier to set on the block blobs.

@@ -143,7 +143,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		NumTransfers:        uint32(len(order.Transfers)),
 		LogLevel:            order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
-			//BlobType:              order.OptionalAttributes.BlobType,
+			BlobType:              order.BlobAttributes.BlobType,
 			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
 			ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
 			ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
