@@ -86,3 +86,7 @@ if __name__ == "__main__":
         else:
             zip_dir("{}.zip".format(output_folder_name), output_folder_name,
                     cwd=os.path.abspath(args.output_folder))
+
+    # step 4: create version file
+    with open(os.path.join(args.output_folder, "latest_version.txt"), "w+") as f:
+        f.write(args.version + "\n")

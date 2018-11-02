@@ -33,7 +33,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type blockBlobUpload struct {
@@ -143,7 +143,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 		if pageBlobTier != common.EPageBlobTier.None() {
 			// for blob tier, set the latest service version from sdk as service version in the context.
 			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			_, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType())
+			_, err := pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				jptm.LogUploadError(info.Source, info.Destination, "PageBlob SetTier-"+msg, status)
@@ -334,7 +334,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 		// step 3: perform put block
 		blockBlobUrl := bbu.blobURL.ToBlockBlobURL()
 		body := newRequestBodyPacer(bytes.NewReader(srcMMF.Slice()), bbu.pacer, srcMMF)
-		_, err = blockBlobUrl.StageBlock(bbu.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{})
+		_, err = blockBlobUrl.StageBlock(bbu.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
 		if err != nil {
 			// check if the transfer was cancelled while Stage Block was in process.
 			if bbu.jptm.WasCanceled() {
@@ -399,7 +399,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if blockBlobTier != common.EBlockBlobTier.None() {
 				// for blob tier, set the latest service version from sdk as service version in the context.
 				ctxWithValue := context.WithValue(bbu.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-				_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType())
+				_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 				if err != nil {
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
 					bbu.jptm.LogUploadError(bbu.source, bbu.destination, "BlockBlob SetTier "+msg, status)
@@ -469,7 +469,7 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, blockBlobUrl 
 		if blockBlobTier != common.EBlockBlobTier.None() {
 			// for blob tier, set the latest service version from sdk as service version in the context.
 			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType())
+			_, err := blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			if err != nil {
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				jptm.LogUploadError(tInfo.Source, tInfo.Destination, "BlockBlob SetTier "+msg, status)
@@ -577,7 +577,7 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 
 			body := newRequestBodyPacer(bytes.NewReader(pageBytes), pbu.pacer, srcMMF)
 			pageBlobUrl := pbu.blobUrl.ToPageBlobURL()
-			_, err := pageBlobUrl.UploadPages(pbu.jptm.Context(), startPage, body, azblob.BlobAccessConditions{})
+			_, err := pageBlobUrl.UploadPages(pbu.jptm.Context(), startPage, body, azblob.PageBlobAccessConditions{}, nil)
 			if err != nil {
 				if pbu.jptm.WasCanceled() {
 					pbu.jptm.LogError(pageBlobUrl.String(), "PutPageFailed ", err)

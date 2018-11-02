@@ -38,7 +38,7 @@ import (
 // When user logout, the session keyring is recycled.
 type CredCache struct {
 	state          string // reserved for use
-	cachedTokenKey string // the name of key would be cached in keyring, composed with current UID, in case user su
+	cachedTokenKey string // the Name of key would be cached in keyring, composed with current UID, in case user su
 	lock           sync.Mutex
 
 	key       *keyctl.Key

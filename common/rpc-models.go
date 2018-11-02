@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/JeffreyRichter/enum/enum"
 )
 
@@ -109,7 +109,7 @@ type BlobTransferAttributes struct {
 	ContentEncoding          string        //Specifies which content encodings have been applied to the blob.
 	BlockBlobTier            BlockBlobTier // Specifies the tier to set on the block blobs.
 	PageBlobTier             PageBlobTier  // Specifies the tier to set on the page blobs.
-	Metadata                 string        //User-defined name-value pairs associated with the blob
+	Metadata                 string        //User-defined Name-value pairs associated with the blob
 	NoGuessMimeType          bool          // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool          // when downloading, tell engine to set file's timestamp to timestamp of blob
 	BlockSizeInBytes         uint32

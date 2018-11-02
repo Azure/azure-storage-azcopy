@@ -50,7 +50,7 @@ type ILoggerResetable interface {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 func NewAppLogger(minimumLevelToLog pipeline.LogLevel, logFileFolder string) ILoggerCloser {
-	// TODO: Put start date time in file name
+	// TODO: Put start date time in file Name
 	// TODO: log life time management.
 	//appLogFile, err := os.OpenFile(path.Join(logFileFolder, "azcopy.log"), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
 	//PanicIfErr(err)

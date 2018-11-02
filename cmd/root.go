@@ -24,7 +24,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 	"net/url"
 	"os"
@@ -33,6 +33,7 @@ import (
 )
 
 var azcopyAppPathFolder string
+var azcopyLogPathFolder string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -63,8 +64,9 @@ var glcm = common.GetLifecycleMgr()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder string) {
+func Execute(azsAppPathFolder, logPathFolder string) {
 	azcopyAppPathFolder = azsAppPathFolder
+	azcopyLogPathFolder = logPathFolder
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Exit(err.Error(), common.EExitCode.Error())
