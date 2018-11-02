@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 
+	"net/http"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -188,6 +190,11 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 					bffd.jptm.LogDownloadError(bffd.source, bffd.destination, msg, status)
 					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
 					bffd.jptm.SetErrorCode(int32(status))
+					// If the status code was 403, it means there was an authentication error and we exit.
+					// User can resume the job if completely ordered with a new sas.
+					if status == http.StatusForbidden {
+						common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					}
 				}
 				chunkDone()
 				return
@@ -210,6 +217,11 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 					bffd.jptm.LogDownloadError(bffd.source, bffd.destination, msg, status)
 					bffd.jptm.SetStatus(common.ETransferStatus.Failed())
 					bffd.jptm.SetErrorCode(int32(status))
+					// If the status code was 403, it means there was an authentication error and we exit.
+					// User can resume the job if completely ordered with a new sas.
+					if status == http.StatusForbidden {
+						common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					}
 				}
 				chunkDone()
 				return

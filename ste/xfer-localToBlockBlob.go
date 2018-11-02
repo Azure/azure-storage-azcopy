@@ -251,6 +251,11 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 				bbu.jptm.SetErrorCode(int32(status))
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 			}
 
 			if lastChunk, _ := bbu.jptm.ReportChunkDone(); lastChunk {
@@ -288,6 +293,11 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 				bbu.jptm.SetStatus(common.ETransferStatus.Failed())
 				bbu.jptm.SetErrorCode(int32(status))
 				transferDone()
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 				return
 			}
 
@@ -305,6 +315,11 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 					bbu.jptm.LogUploadError(bbu.source, bbu.destination, "BlockBlob SetTier "+msg, status)
 					bbu.jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 					bbu.jptm.SetErrorCode(int32(status))
+					// If the status code was 403, it means there was an authentication error and we exit.
+					// User can resume the job if completely ordered with a new sas.
+					if status == http.StatusForbidden {
+						common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					}
 				}
 			}
 			bbu.jptm.SetStatus(common.ETransferStatus.Success())
@@ -358,6 +373,11 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, blockBlobUrl 
 		if !jptm.WasCanceled() {
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.SetErrorCode(int32(status))
+			// If the status code was 403, it means there was an authentication error and we exit.
+			// User can resume the job if completely ordered with a new sas.
+			if status == http.StatusForbidden {
+				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			}
 		}
 	} else {
 		// if the put blob is a success, updating the transfer status to success
@@ -375,6 +395,11 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, blockBlobUrl 
 				jptm.LogUploadError(tInfo.Source, tInfo.Destination, "BlockBlob SetTier "+msg, status)
 				jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 				jptm.SetErrorCode(int32(status))
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 				// since blob tier failed, the transfer failed
 				// the blob created should be deleted
 				_, err := blockBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})

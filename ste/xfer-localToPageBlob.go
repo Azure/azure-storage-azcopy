@@ -8,6 +8,8 @@ import (
 	"os"
 	"unsafe"
 
+	"net/http"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -93,6 +95,11 @@ func LocalToPageBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.SetErrorCode(int32(status))
 		jptm.ReportTransferDone()
+		// If the status code was 403, it means there was an authentication error and we exit.
+		// User can resume the job if completely ordered with a new sas.
+		if status == http.StatusForbidden {
+			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+		}
 		return
 	}
 
@@ -109,6 +116,11 @@ func LocalToPageBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer
 			jptm.Cancel()
 			jptm.SetStatus(common.ETransferStatus.BlobTierFailure())
 			jptm.SetErrorCode(int32(status))
+			// If the status code was 403, it means there was an authentication error and we exit.
+			// User can resume the job if completely ordered with a new sas.
+			if status == http.StatusForbidden {
+				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			}
 			// Since transfer failed while setting the page blob tier
 			// Deleting the created page blob
 			_, err := pageBlobUrl.Delete(context.TODO(), azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
@@ -252,6 +264,11 @@ func (pbu *pageBlobUpload) pageBlobUploadFunc(startPage int64, calculatedPageSiz
 					pbu.jptm.Cancel()
 					pbu.jptm.SetStatus(common.ETransferStatus.Failed())
 					pbu.jptm.SetErrorCode(int32(status))
+					// If the status code was 403, it means there was an authentication error and we exit.
+					// User can resume the job if completely ordered with a new sas.
+					if status == http.StatusForbidden {
+						common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					}
 				}
 				pageDone()
 				return
