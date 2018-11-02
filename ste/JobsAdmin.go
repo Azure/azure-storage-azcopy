@@ -95,10 +95,13 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrencyParams ConcurrencyParams, targetRateInMBps int64, azcopyAppPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
+
+	// total connections is the number we allow to be sending PLUS the number we allow to waiting for replies
+	concurrentConnections := concurrencyParams.ConcurrentSendCount + concurrencyParams.ConcurrentWaitCount
 
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
@@ -146,6 +149,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 			lowChunkCh:       lowChunkCh,
 			suicideCh:        suicideCh,
 		},
+		concurrencyParams: concurrencyParams,
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
@@ -155,9 +159,16 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
-	// Spin up the desired number of executionEngine workers to process transfers/chunks
+	// Spin up the desired number of executionEngine workers to process chunks
 	for cc := 0; cc < concurrentConnections; cc++ {
-		go ja.transferAndChunkProcessor(cc)
+		go ja.chunkProcessor(cc)
+	}
+	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
+	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
+	// anyway.)
+	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
+	for cc := 0; cc < concurrencyParams.ConcurrentFileReadCount; cc++ {
+		go ja.transferProcessor(cc)
 	}
 }
 
@@ -186,8 +197,38 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	}
 }
 
-// general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs
-func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
+// general purpose worker that reads in schedules chunk jobs, and executes chunk jobs
+func (ja *jobsAdmin) chunkProcessor(workerID int) {
+	for {
+		// We check for suicides first to shrink goroutine pool
+		// Then, we check chunks: normal & low priority
+		select {
+		case <-ja.xferChannels.suicideCh:
+			return
+		default:
+			select {
+			case chunkFunc := <-ja.xferChannels.normalChunckCh:
+				chunkFunc(workerID)
+			default:
+				select {
+				case chunkFunc := <-ja.xferChannels.lowChunkCh:
+					chunkFunc(workerID)
+				default:
+					time.Sleep(100 * time.Millisecond) // Sleep before looping around
+					                                   // TODO: In order to safely support high goroutine counts,
+					                                   // review sleep duration, or find an approach that does not require waking every x milliseconds
+					                                   // For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
+					                                   // the wake-ups. Also, if we continue using sendLimiter then, depending on how much buffered data
+					                                   // has been read from disk, most go-routines may wait on the sendLimiter instead of waiting here
+				}
+			}
+		}
+	}
+}
+
+// separate from the chunkProcessor, this dedicated worker that reads in and executes transfer initiation jobs
+// (which in turn schedule chunks that get picked up by chunkProcessor)
+func (ja *jobsAdmin) transferProcessor(workerID int) {
 	startTransfer := func(jptm IJobPartTransferMgr) {
 		if jptm.WasCanceled() {
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -204,35 +245,26 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 	}
 
 	for {
-		// We check for suicides first to shrink goroutine pool
-		// Then, we check chunks: normal & low priority
-		// Then, we check transfers: normal & low priority
+		// No suicide check here, because this routine runs only in a small number of goroutines, so no need to kill them off
+		// TODO: review the above??? Maybe do need to kill them at end of job
+		// TODO: is the suicide channel mechnanism still used?  I can't find the usage - JR
+//		select {
+//		case <-ja.xferChannels.suicideCh:
+//			return
+//		default:
+
 		select {
-		case <-ja.xferChannels.suicideCh:
-			return
+		case jptm := <-ja.xferChannels.normalTransferCh:
+			startTransfer(jptm)
 		default:
 			select {
-			case chunkFunc := <-ja.xferChannels.normalChunckCh:
-				chunkFunc(workerID)
+			case jptm := <-ja.xferChannels.lowTransferCh:
+				startTransfer(jptm)
 			default:
-				select {
-				case chunkFunc := <-ja.xferChannels.lowChunkCh:
-					chunkFunc(workerID)
-				default:
-					select {
-					case jptm := <-ja.xferChannels.normalTransferCh:
-						startTransfer(jptm)
-					default:
-						select {
-						case jptm := <-ja.xferChannels.lowTransferCh:
-							startTransfer(jptm)
-						default:
-							time.Sleep(1 * time.Millisecond) // Sleep before looping around
-						}
-					}
-				}
+				time.Sleep(10 * time.Millisecond) // Sleep before looping around
 			}
 		}
+//		}
 	}
 }
 
@@ -250,6 +282,7 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
+	concurrencyParams   ConcurrencyParams
 }
 
 type CoordinatorChannels struct {
@@ -307,7 +340,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
+			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir, ja.concurrencyParams)
 		})
 }
 

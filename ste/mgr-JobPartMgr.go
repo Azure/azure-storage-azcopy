@@ -37,6 +37,7 @@ type IJobPartMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	GetSendLimiter() common.SendLimiter
 	common.ILogger
 }
 
@@ -620,6 +621,10 @@ func (jpm *jobPartMgr) OccupyAConnection() {
 // TODO: added for debugging purpose. remove later
 func (jpm *jobPartMgr) ReleaseAConnection() {
 	jpm.jobMgr.ReleaseAConnection()
+}
+
+func (jpm *jobPartMgr) GetSendLimiter() common.SendLimiter {
+	return jpm.jobMgr.GetSendLimiter()
 }
 
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
