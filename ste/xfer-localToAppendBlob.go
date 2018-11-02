@@ -11,7 +11,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 func LocalToAppendBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -123,7 +123,7 @@ func LocalToAppendBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pac
 		}
 		// requesting (startIndex + adjustedChunkSize) bytes from pacer to be send to service.
 		body := newRequestBodyPacer(bytes.NewReader(srcMMF.Slice()[startIndex:startIndex+adjustedBlockSize]), pacer, srcMMF)
-		_, err := appendBlobURL.AppendBlock(jptm.Context(), body, azblob.BlobAccessConditions{})
+		_, err := appendBlobURL.AppendBlock(jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
 		if err != nil {
 			if !jptm.WasCanceled() {
 				jptm.Cancel()
