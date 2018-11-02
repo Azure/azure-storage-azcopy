@@ -311,7 +311,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 	for _, fileOrDir := range listOfFilesAndDir {
 		f, err := os.Stat(fileOrDir)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("cannot get the file Info for %s. failed with error %s", fileOrDir, err.Error()))
+			glcm.Info(fmt.Sprintf("cannot get the file info for %s. failed with error %s", fileOrDir, err.Error()))
 		}
 		// directories are uploaded only if recursive is on
 		if f.IsDir() && cca.recursive {

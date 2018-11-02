@@ -53,7 +53,7 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 	numberOfCopyTransfers := uint64(len(e.CopyJobRequest.Transfers))
 	numberOfDeleteTransfers := uint64(len(e.DeleteJobRequest.Transfers))
 	if numberOfCopyTransfers == 0 && numberOfDeleteTransfers == 0 {
-		glcm.Exit("cannot start job because there are no transfers to upload or delete. "+
+		glcm.Exit("cannot start job because there are no files to upload or delete. "+
 			"The source and destination are in sync", 0)
 		return nil
 	}
@@ -89,7 +89,7 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 			if !resp.JobStarted {
 				return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 			}
-			// If the part sent above was the first, then set atomicSyncStatus to 1, so that progress can be fetched.
+			// If the part sent above was the first, then set setFirstPartOrdered, so that progress can be fetched.
 			if deleteJobRequest.PartNum == 0 {
 				cca.setFirstPartOrdered()
 			}
@@ -118,7 +118,7 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 		if !resp.JobStarted {
 			return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNumber, resp.ErrorMsg)
 		}
-		// If the part sent above was the first, then set atomicSyncStatus to 1, so that progress can be fetched.
+		// If the part sent above was the first, then setFirstPartOrdered, so that progress can be fetched.
 		if e.PartNumber == 0 {
 			cca.setFirstPartOrdered()
 		}
@@ -446,7 +446,7 @@ func (e *syncUploadEnumerator) queueSourceFilesForUpload(cca *cookedSyncCmdArgs)
 		// get the file Info
 		f, err := os.Stat(file)
 		if err != nil {
-			glcm.Info(fmt.Sprintf("Error %s getting the file Info for file %s", err.Error(), file))
+			glcm.Info(fmt.Sprintf("Error %s getting the file info for file %s", err.Error(), file))
 			continue
 		}
 		// localfileRelativePath is the path of file relative to root directory
