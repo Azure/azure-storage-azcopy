@@ -88,6 +88,10 @@ type SyncJobPartOrderRequest struct {
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
+
+	SourceFiles map[string]time.Time
+
+	SourceFilesToExclude map[string]time.Time
 }
 
 type CopyJobPartOrderResponse struct {
