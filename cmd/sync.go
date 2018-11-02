@@ -179,8 +179,8 @@ func (cca *cookedSyncCmdArgs) setFirstPartOrdered() {
 }
 
 // firstPartOrdered returns the value of atomicFirstPartOrdered.
-func (cca *cookedSyncCmdArgs) firstPartOrdered() uint32 {
-	return atomic.LoadUint32(&cca.atomicFirstPartOrdered)
+func (cca *cookedSyncCmdArgs) firstPartOrdered() bool {
+	return atomic.LoadUint32(&cca.atomicFirstPartOrdered) > 0
 }
 
 // setScanningComplete sets the value of atomicScanningStatus to 1.
@@ -189,8 +189,8 @@ func (cca *cookedSyncCmdArgs) setScanningComplete() {
 }
 
 // scanningComplete returns the value of atomicScanningStatus.
-func (cca *cookedSyncCmdArgs) scanningComplete() uint32 {
-	return atomic.LoadUint32(&cca.atomicScanningStatus)
+func (cca *cookedSyncCmdArgs) scanningComplete() bool {
+	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -237,13 +237,13 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
-	if cca.scanningComplete() == 0 {
+	if !cca.scanningComplete() {
 		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
 			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
 		return
 	}
 	// If the first part isn't ordered yet, no need to fetch the progress summary.
-	if cca.firstPartOrdered() == 0 {
+	if !cca.firstPartOrdered() {
 		return
 	}
 	// fetch a job status
