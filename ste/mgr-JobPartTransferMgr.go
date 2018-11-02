@@ -184,11 +184,11 @@ func (jptm *jobPartTransferMgr) ScheduleChunks(chunkFunc chunkFunc) {
 }
 
 func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
-	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(dataFileToXfer)
+	return jptm.jobPartMgr.(*jobPartMgr).blobDstData(jptm.Info().Source, dataFileToXfer)
 }
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
-	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(dataFileToXfer)
+	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
 }
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.

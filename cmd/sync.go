@@ -422,7 +422,20 @@ func init() {
 		Use:     "sync",
 		Aliases: []string{"sc", "s"},
 		Short:   "Replicates source to the destination location",
-		Long:    `Replicates source to the destination location. The last modified times are used for comparison.`,
+		Long: `
+Replicates source to the destination location. The last modified times are used for comparison. The supported pairs are:
+  - local <-> Azure Blob (SAS or OAuth authentication)
+
+Advanced:
+Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
+
+The built-in lookup table is small but on unix it is augmented by the local system's mime.types file(s) if available under one or more of these names:
+  - /etc/mime.types
+  - /etc/apache2/mime.types
+  - /etc/apache/mime.types
+
+On Windows, MIME types are extracted from the registry.
+`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))
@@ -457,4 +470,6 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
 	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete file in difference in source and destination. "+
 		"If false, user will again be prompted with a question while queuing transfers for deletion")
+
+	// TODO sync does not support any BlobAttributes, this functionality should be added
 }

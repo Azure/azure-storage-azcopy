@@ -60,5 +60,5 @@ func (EnvironmentVariable) ProfileCPU() EnvironmentVariable {
 }
 
 func (EnvironmentVariable) ProfileMemory() EnvironmentVariable {
-	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM", DefaultValue: ""}
+	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM"}
 }

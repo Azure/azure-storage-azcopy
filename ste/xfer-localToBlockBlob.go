@@ -308,8 +308,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if bbu.jptm.WasCanceled() {
 				if bbu.jptm.ShouldLog(pipeline.LogDebug) {
 					bbu.jptm.Log(pipeline.LogDebug,
-						fmt.Sprintf("Chunk %d upload failed because transfer was cancelled",
-							workerId, chunkId))
+						fmt.Sprintf("Chunk %d upload failed because transfer was cancelled", chunkId))
 				}
 			} else {
 				// cancel entire transfer because this chunk has failed
@@ -340,8 +339,7 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 			if bbu.jptm.WasCanceled() {
 				if bbu.jptm.ShouldLog(pipeline.LogDebug) {
 					bbu.jptm.Log(pipeline.LogDebug,
-						fmt.Sprintf("Chunk %d upload failed because transfer was cancelled",
-							workerId, chunkId))
+						fmt.Sprintf("Chunk %d upload failed because transfer was cancelled", chunkId))
 				}
 			} else {
 				// cancel entire transfer because this chunk has failed

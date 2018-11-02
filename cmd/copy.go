@@ -829,6 +829,16 @@ Copies source data to a destination location. The supported pairs are:
   - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
+
+Advanced:
+Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
+
+The built-in lookup table is small but on unix it is augmented by the local system's mime.types file(s) if available under one or more of these names:
+  - /etc/mime.types
+  - /etc/apache2/mime.types
+  - /etc/apache/mime.types
+
+On Windows, MIME types are extracted from the registry. This feature can be turned off with the help of a flag. Please refer to the flag section.
 `,
 		Example: `Upload a single file with SAS:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
@@ -943,7 +953,7 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "specifies content type of the file. Implies no-guess-mime-type.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
-	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "this sets the content-type based on the extension of the file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
