@@ -139,8 +139,6 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if util.doesBlobRepresentAFolder(blobProperties.NewMetadata()) {
 					continue
 				}
-				//blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
-				//blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
 				blobRelativePath := strings.Replace(blobPath, parentSourcePath, "", 1)
 				if len(blobRelativePath) > 0 && blobRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 					blobRelativePath = blobRelativePath[1:]

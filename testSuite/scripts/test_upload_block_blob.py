@@ -611,7 +611,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
             add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
-        self.assertFalse(result)
+        self.assertTrue(result)
         try:
             shutil.rmtree(sub_dir_n_file_path)
         except:
@@ -723,7 +723,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         result = util.Command("sync").add_arguments(dir_n_files_path_wcard).add_arguments(dir_sas). \
             add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
-        self.assertFalse(result)
+        self.assertTrue(result)
 
         # sync all the files the ends with .txt extension inside all sub-dirs inside inside
         # sd_dir_n_files_path_wcard is in format dir/*/*.txt
@@ -731,7 +731,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
             add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
-        self.assertFalse(result)
+        self.assertTrue(result)
 
         # remove 5 files inside both the sub-directories
         for r in range(5, 10):

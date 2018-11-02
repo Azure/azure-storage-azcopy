@@ -39,16 +39,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const MaxNumberOfFilesAllowedInSync = 10000000
+
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize    uint32
-	logVerbosity string
-	include      string
-	exclude      string
-	output       string
+	blockSize      uint32
+	logVerbosity   string
+	include        string
+	exclude        string
+	followSymlinks bool
+	output         string
 	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
@@ -73,6 +76,8 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	cooked.blockSize = raw.blockSize
+
+	cooked.followSymlinks = raw.followSymlinks
 
 	err := cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
@@ -125,7 +130,7 @@ type cookedSyncCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 	recursive      bool
-
+	followSymlinks bool
 	// options from flags
 	include      map[string]int
 	exclude      map[string]int
@@ -152,7 +157,11 @@ type cookedSyncCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
 
+	// defines the scanning status of the sync operation.
+	// 0 means scanning is in progress and 1 means scanning is complete.
+	atomicScanningStatus uint32
 	// defines whether first part has been ordered or not.
+	// 0 means first part is not ordered and 1 means first part is ordered.
 	atomicFirstPartOrdered uint32
 	// defines the number of files listed at the source and compared.
 	atomicSourceFilesScanned uint64
@@ -162,6 +171,26 @@ type cookedSyncCmdArgs struct {
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
+}
+
+// setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
+func (cca *cookedSyncCmdArgs) setFirstPartOrdered() {
+	atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+}
+
+// firstPartOrdered returns the value of atomicFirstPartOrdered.
+func (cca *cookedSyncCmdArgs) firstPartOrdered() bool {
+	return atomic.LoadUint32(&cca.atomicFirstPartOrdered) > 0
+}
+
+// setScanningComplete sets the value of atomicScanningStatus to 1.
+func (cca *cookedSyncCmdArgs) setScanningComplete() {
+	atomic.StoreUint32(&cca.atomicScanningStatus, 1)
+}
+
+// scanningComplete returns the value of atomicScanningStatus.
+func (cca *cookedSyncCmdArgs) scanningComplete() bool {
+	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -207,11 +236,14 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
-	// Report the number of files scanned at source and destination to the user.
-	lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
-		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+
+	if !cca.scanningComplete() {
+		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
+			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+		return
+	}
 	// If the first part isn't ordered yet, no need to fetch the progress summary.
-	if atomic.LoadUint32(&cca.atomicFirstPartOrdered) == 0 {
+	if !cca.firstPartOrdered() {
 		return
 	}
 	// fetch a job status
@@ -452,6 +484,7 @@ func init() {
 	// hidden filters
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")
+	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when performing sync from local file system.")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")

@@ -251,7 +251,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
-	jpm.newJobXfer = computeJobXfer(plan.FromTo)
+	jpm.newJobXfer = computeJobXfer(plan.FromTo, plan.DstBlobData.BlobType)
 
 	jpm.priority = plan.Priority
 

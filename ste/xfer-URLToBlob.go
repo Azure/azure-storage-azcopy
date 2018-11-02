@@ -111,6 +111,11 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			if !jptm.WasCanceled() {
 				jptm.SetStatus(common.ETransferStatus.Failed())
 				jptm.SetErrorCode(int32(status))
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 			}
 		} else {
 			// if the create blob is a success, updating the transfer status to success
@@ -254,6 +259,11 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 				bbc.jptm.SetErrorCode(int32(status))
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 			}
 
 			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
@@ -286,6 +296,11 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				bbc.jptm.SetErrorCode(int32(status))
 				bbc.jptm.SetErrorCode(int32(status))
 				transferDone()
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 				return
 			}
 

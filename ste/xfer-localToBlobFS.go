@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 
+	"net/http"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -76,6 +78,11 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogUploadError(info.Source, info.Destination, "File creation Eror "+msg, status)
 			transferDone(common.ETransferStatus.Failed())
+			// If the status code was 403, it means there was an authentication error and we exit.
+			// User can resume the job if completely ordered with a new sas.
+			if status == http.StatusForbidden {
+				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			}
 			return
 		}
 		if jptm.ShouldLog(pipeline.LogInfo) {
@@ -102,6 +109,11 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
 		jptm.LogUploadError(info.Source, info.Destination, "File creation Eror "+msg, status)
 		transferDone(common.ETransferStatus.Failed())
+		// If the status code was 403, it means there was an authentication error and we exit.
+		// User can resume the job if completely ordered with a new sas.
+		if status == http.StatusForbidden {
+			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+		}
 		return
 	}
 	// Calculate the number of file Ranges for the given fileSize.
@@ -210,6 +222,11 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				fru.jptm.Cancel()
 				fru.jptm.SetStatus(common.ETransferStatus.Failed())
 				fru.jptm.SetErrorCode(int32(status))
+				// If the status code was 403, it means there was an authentication error and we exit.
+				// User can resume the job if completely ordered with a new sas.
+				if status == http.StatusForbidden {
+					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				}
 			}
 			// report the number of range done
 			lastRangeDone, _ := fru.jptm.ReportChunkDone()
@@ -248,6 +265,11 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 					fru.jptm.Cancel()
 					fru.jptm.SetStatus(common.ETransferStatus.Failed())
 					fru.jptm.SetErrorCode(int32(status))
+					// If the status code was 403, it means there was an authentication error and we exit.
+					// User can resume the job if completely ordered with a new sas.
+					if status == http.StatusForbidden {
+						common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					}
 				}
 				transferDone()
 				return
