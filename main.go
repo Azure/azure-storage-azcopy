@@ -34,9 +34,14 @@ var glcm = common.GetLifecycleMgr()
 
 func main() {
 	azcopyAppPathFolder := GetAzCopyAppPath()
+	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())
+	if azcopyLogPathFolder == "" {
+		azcopyLogPathFolder = azcopyAppPathFolder
+	}
+
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder)
+		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)
 		return
 	}
 
@@ -46,7 +51,7 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder)
-	cmd.Execute(azcopyAppPathFolder)
+	ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder, azcopyLogPathFolder)
+	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)
 	glcm.Exit("", common.EExitCode.Success())
 }

@@ -32,12 +32,13 @@ import (
 	"strings"
 	"time"
 
+	"io/ioutil"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
-	"io/ioutil"
 )
 
 // upload related
@@ -83,13 +84,15 @@ type rawCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
-	blockBlobTier            string
-	pageBlobTier             string
-	background               bool
-	output                   string
-	acl                      string
-	logVerbosity             string
-	cancelFromStdin          bool
+	// defines the type of the blob at the destination in case of upload / account to account copy
+	blobType        string
+	blockBlobTier   string
+	pageBlobTier    string
+	background      bool
+	output          string
+	acl             string
+	logVerbosity    string
+	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
 }
@@ -114,6 +117,19 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.forceWrite = raw.forceWrite
 	cooked.blockSize = raw.blockSize
 
+	// parse the given blob type.
+	err = cooked.blobType.Parse(raw.blobType)
+	if err != nil {
+		return cooked, err
+	}
+
+	// If the given blobType is AppendBlob, block-size should not be greater than
+	// 4MB.
+	if cooked.blobType == common.EBlobType.AppendBlob() &&
+		raw.blockSize > common.MaxAppendBlobBlockSize {
+		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
+	}
+
 	err = cooked.blockBlobTier.Parse(raw.blockBlobTier)
 	if err != nil {
 		return cooked, err
@@ -127,7 +143,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-	// file names to include explicitly and include file may mention at pattern.
+	// file names to include explicitly and include file may mention the pattern.
 	// This could conflict enumerating the files to queue up for transfer.
 	if len(raw.listOfFilesToCopy) > 0 && len(raw.include) > 0 {
 		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
@@ -139,12 +155,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
 	// any limit on the number of files that can be copied.
 	if len(raw.listOfFilesToCopy) > 0 {
-		//files := strings.Split(raw.listOfFilesToCopy, ";")
 		jsonFile, err := os.Open(raw.listOfFilesToCopy)
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
 		}
-		// read our opened xmlFile as a byte array.
+		// read opened json file as a byte array.
 		jsonBytes, err := ioutil.ReadAll(jsonFile)
 		if err != nil {
 			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
@@ -314,6 +329,7 @@ type cookedCopyCmdArgs struct {
 	blockSize uint32
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType          []azblob.BlobType
+	blobType                 common.BlobType
 	blockBlobTier            common.BlockBlobTier
 	pageBlobTier             common.PageBlobTier
 	metadata                 string
@@ -485,6 +501,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		Exclude:         cca.exclude,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
+			BlobType:                 cca.blobType,
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
@@ -595,7 +612,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// path differently, replace the path separator with the
 		// the linux path separator '/'
 		if os.PathSeparator == '\\' {
-			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, "/", -1)
+			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 		}
 	}
 
@@ -683,7 +700,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, azcopyAppPathFolder))
+	glcm.Info(fmt.Sprintf("Log file is located at: %s/%s.log", azcopyLogPathFolder, cca.jobID))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -790,7 +807,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.TotalTransfers,
 			scanningString))
 	} else {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped %v Total %s, 2-sec Throughput (Mb/s): %v",
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total %s, 2-sec Throughput (Mb/s): %v",
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
@@ -829,6 +846,16 @@ Copies source data to a destination location. The supported pairs are:
   - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
+
+Advanced:
+Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
+
+The built-in lookup table is small but on unix it is augmented by the local system's mime.types file(s) if available under one or more of these names:
+  - /etc/mime.types
+  - /etc/apache2/mime.types
+  - /etc/apache/mime.types
+
+On Windows, MIME types are extracted from the registry. This feature can be turned off with the help of a flag. Please refer to the flag section.
 `,
 		Example: `Upload a single file with SAS:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
@@ -938,12 +965,13 @@ Copy an entire account with SAS:
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blobType", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "specifies content type of the file. Implies no-guess-mime-type.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
-	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "this sets the content-type based on the extension of the file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")

@@ -3,7 +3,7 @@
   version = "0.1.7"
 
 [[constraint]]
-  branch = "master"
+  version = "0.3.0"
   name = "github.com/Azure/azure-storage-blob-go"
 
 [[constraint]]

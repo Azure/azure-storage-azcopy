@@ -30,23 +30,32 @@ import (
 	"os"
 	"strings"
 
+	"sync/atomic"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/spf13/cobra"
 )
+
+const MaxNumberOfFilesAllowedInSync = 10000000
 
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize    uint32
-	logVerbosity string
-	include      string
-	exclude      string
-	output       string
+	blockSize      uint32
+	logVerbosity   string
+	include        string
+	exclude        string
+	followSymlinks bool
+	output         string
+	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
+	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
+	// deleting the flag.
+	force bool
 }
 
 // validates and transform raw input into cooked input
@@ -67,6 +76,8 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	cooked.blockSize = raw.blockSize
+
+	cooked.followSymlinks = raw.followSymlinks
 
 	err := cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
@@ -108,6 +119,7 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.recursive = raw.recursive
 	cooked.output.Parse(raw.output)
 	cooked.jobID = common.NewJobID()
+	cooked.force = raw.force
 	return cooked, nil
 }
 
@@ -118,7 +130,7 @@ type cookedSyncCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 	recursive      bool
-
+	followSymlinks bool
 	// options from flags
 	include      map[string]int
 	exclude      map[string]int
@@ -144,6 +156,41 @@ type cookedSyncCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// defines the scanning status of the sync operation.
+	// 0 means scanning is in progress and 1 means scanning is complete.
+	atomicScanningStatus uint32
+	// defines whether first part has been ordered or not.
+	// 0 means first part is not ordered and 1 means first part is ordered.
+	atomicFirstPartOrdered uint32
+	// defines the number of files listed at the source and compared.
+	atomicSourceFilesScanned uint64
+	// defines the number of files listed at the destination and compared.
+	atomicDestinationFilesScanned uint64
+	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
+	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
+	// deleting the flag.
+	force bool
+}
+
+// setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
+func (cca *cookedSyncCmdArgs) setFirstPartOrdered() {
+	atomic.StoreUint32(&cca.atomicFirstPartOrdered, 1)
+}
+
+// firstPartOrdered returns the value of atomicFirstPartOrdered.
+func (cca *cookedSyncCmdArgs) firstPartOrdered() bool {
+	return atomic.LoadUint32(&cca.atomicFirstPartOrdered) > 0
+}
+
+// setScanningComplete sets the value of atomicScanningStatus to 1.
+func (cca *cookedSyncCmdArgs) setScanningComplete() {
+	atomic.StoreUint32(&cca.atomicScanningStatus, 1)
+}
+
+// scanningComplete returns the value of atomicScanningStatus.
+func (cca *cookedSyncCmdArgs) scanningComplete() bool {
+	return atomic.LoadUint32(&cca.atomicScanningStatus) > 0
 }
 
 // wraps call to lifecycle manager to wait for the job to complete
@@ -152,7 +199,7 @@ type cookedSyncCmdArgs struct {
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, azcopyAppPathFolder))
+	glcm.Info(fmt.Sprintf("Log file is located at: %s/%s.log", azcopyLogPathFolder, cca.jobID))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -189,9 +236,19 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+
+	if !cca.scanningComplete() {
+		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
+			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
+		return
+	}
+	// If the first part isn't ordered yet, no need to fetch the progress summary.
+	if !cca.firstPartOrdered() {
+		return
+	}
 	// fetch a job status
-	var summary common.ListJobSummaryResponse
-	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	var summary common.ListSyncJobSummaryResponse
+	Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
 	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
 
 	// if json output is desired, simply marshal and return
@@ -203,7 +260,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 		if jobDone {
 			exitCode := common.EExitCode.Success()
-			if summary.TransfersFailed > 0 {
+			if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 				exitCode = common.EExitCode.Error()
 			}
 			lcm.Exit(string(jsonOutput), exitCode)
@@ -217,18 +274,19 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if jobDone {
 		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 		exitCode := common.EExitCode.Success()
-		if summary.TransfersFailed > 0 {
+		if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
 		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Copy Transfers: %v\nTotal Number Of Delete Transfers: %v\nNumber of Copy Transfers Completed: %v\nNumber of Copy Transfers Failed: %v\nNumber of Delete Transfers Completed: %v\nNumber of Delete Transfers Failed: %v\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			ste.ToFixed(duration.Minutes(), 4),
-			summary.TotalTransfers,
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TransfersSkipped,
-			summary.TotalBytesTransferred,
+			summary.CopyTotalTransfers,
+			summary.DeleteTotalTransfers,
+			summary.CopyTransfersCompleted,
+			summary.CopyTransfersFailed,
+			summary.DeleteTransfersCompleted,
+			summary.DeleteTransfersFailed,
 			summary.JobStatus), exitCode)
 	}
 
@@ -248,12 +306,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, 2-sec Throughput (Mb/s): %v",
-		summary.TransfersCompleted,
-		summary.TransfersFailed,
-		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-		summary.TransfersSkipped,
-		summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v",
+		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
+		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
@@ -397,7 +454,20 @@ func init() {
 		Use:     "sync",
 		Aliases: []string{"sc", "s"},
 		Short:   "Replicates source to the destination location",
-		Long:    `Replicates source to the destination location. The last modified times are used for comparison.`,
+		Long: `
+Replicates source to the destination location. The last modified times are used for comparison. The supported pairs are:
+  - local <-> Azure Blob (SAS or OAuth authentication)
+
+Advanced:
+Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
+
+The built-in lookup table is small but on unix it is augmented by the local system's mime.types file(s) if available under one or more of these names:
+  - /etc/mime.types
+  - /etc/apache2/mime.types
+  - /etc/apache/mime.types
+
+On Windows, MIME types are extracted from the registry.
+`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))
@@ -427,7 +497,12 @@ func init() {
 	// hidden filters
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
 		"Support use of *. More than one file are separated by ';'")
+	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when performing sync from local file system.")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
+	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete file in difference in source and destination. "+
+		"If false, user will again be prompted with a question while queuing transfers for deletion")
+
+	// TODO sync does not support any BlobAttributes, this functionality should be added
 }

@@ -188,6 +188,15 @@ You can resume a failed/cancelled job using its identifier along with the SAS to
 
 Raise an issue on this repository for any feedback or issue encountered.
 
+### FAQ
+
+- What is the difference between `sync` and `copy`?
+  - The `copy` command is a simple transferring operation, it scans the source and attempts to transfer every single file/blob. The supported source/destination pairs are listed in the help message of the tool. On the other hand, `sync` makes sure that whatever is present in the source will be replicated to the destination, and also whatever is not at the source will be deleted from the destination. If your goal is to simply move some files, then `copy` is definitely the right command, since it offers much better performance.
+  - For `sync`, last modified times are used to determine whether to transfer the same file present at both the source and the destination.
+  - If the use case is to incrementally transfer data, then `sync` is the better choice, since only the modified/missing files are transferred.
+- Will `copy` overwrite my files?
+  - By default, AzCopy will overwrite the files at the destination if they already exist. To avoid this behavior, please use the flag `--overwrite`. 
+
 ## Contributing
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a

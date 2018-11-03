@@ -33,13 +33,14 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Progress(string)                                // print on the same line over and over again, not allowed to float up
-	Info(string)                                    // simple print, allowed to float up
-	Prompt(string) string                           // ask the user a question(after erasing the progress), then return the response
-	Exit(string, ExitCode)                          // exit after printing
-	Error(string)                                   // print to stderr
-	SurrenderControl()                              // give up control, this should never return
-	InitiateProgressReporting(WorkController, bool) // start writing progress with another routine
+	Progress(string)                                   // print on the same line over and over again, not allowed to float up
+	Info(string)                                       // simple print, allowed to float up
+	Prompt(string) string                              // ask the user a question(after erasing the progress), then return the response
+	Exit(string, ExitCode)                             // exit after printing
+	Error(string)                                      // print to stderr
+	SurrenderControl()                                 // give up control, this should never return
+	InitiateProgressReporting(WorkController, bool)    // start writing progress with another routine
+	GetEnvironmentVariable(EnvironmentVariable) string // get the environment variable or its default value
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -331,6 +332,14 @@ func (lcm *lifecycleMgr) readInCleanLineFromStdIn() string {
 	// remove the delimiter "\n" and spaces before/after the content
 	input = strings.TrimSpace(input)
 	return strings.Trim(input, " ")
+}
+
+func (lcm *lifecycleMgr) GetEnvironmentVariable(env EnvironmentVariable) string {
+	value := os.Getenv(env.Name)
+	if value == "" {
+		return env.DefaultValue
+	}
+	return value
 }
 
 // captures the common logic of exiting if there's an expected error

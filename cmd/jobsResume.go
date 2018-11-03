@@ -55,7 +55,7 @@ type resumeJobController struct {
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
 	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	glcm.Info(fmt.Sprintf("%s.log file created in %s", cca.jobID, azcopyAppPathFolder))
+	glcm.Info(fmt.Sprintf("Log file is located at: %s/%s.log", azcopyLogPathFolder, cca.jobID))
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
 	cca.intervalStartTime = time.Now()
@@ -109,19 +109,31 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		scanningString = "(scanning...)"
 	}
 
+	// compute the average throughput for the last time interval
+	bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+
 	// reset the interval timer and byte count
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
 	// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-	progressStr := fmt.Sprintf("%v Done, %v Failed, %v Skipped, %v Pending, %v Total%s",
-		summary.TransfersCompleted,
-		summary.TransfersFailed,
-		summary.TransfersSkipped,
-		summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed),
-		summary.TotalTransfers,
-		scanningString)
-	glcm.Progress(progressStr)
+	if throughPut == 0 {
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+			summary.TransfersSkipped,
+			summary.TotalTransfers,
+			scanningString))
+	} else {
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped %v Total %s, 2-sec Throughput (Mb/s): %v",
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+			summary.TransfersSkipped, summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+	}
 }
 
 func init() {

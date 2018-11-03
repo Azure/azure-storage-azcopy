@@ -10,7 +10,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type copyDownloadBlobEnumerator common.CopyJobPartOrderRequest
@@ -139,8 +139,6 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if util.doesBlobRepresentAFolder(blobProperties.NewMetadata()) {
 					continue
 				}
-				//blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
-				//blobRelativePath := util.getRelativePath(parentSourcePath, blobPath)
 				blobRelativePath := strings.Replace(blobPath, parentSourcePath, "", 1)
 				if len(blobRelativePath) > 0 && blobRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 					blobRelativePath = blobRelativePath[1:]

@@ -32,7 +32,7 @@ import (
 	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 )
@@ -526,6 +526,7 @@ func (ct *CredentialType) Parse(s string) error {
 const (
 	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
+	MaxAppendBlobBlockSize    = 4 * 1024 * 1024
 	DefaultPageBlobChunkSize  = 4 * 1024 * 1024
 	DefaultAzureFileChunkSize = 4 * 1024 * 1024
 	MaxNumberOfBlocksPerBlob  = 50000

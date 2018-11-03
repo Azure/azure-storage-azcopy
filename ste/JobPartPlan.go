@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -176,6 +176,7 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 type JobPartPlanDstBlob struct {
 	// Once set, the following fields are constants; they should never be modified
 
+	BlobType common.BlobType
 	// represents user decision to interpret the content-encoding from source file
 	NoGuessMimeType bool
 

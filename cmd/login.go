@@ -36,8 +36,9 @@ func init() {
 	lgCmd := &cobra.Command{
 		Use:        "login",
 		SuggestFor: []string{"login"},
-		Short:      "Log in to use OAuth token to access Azure storage resources.",
-		Long: `Log in to use OAuth token to access Azure storage resources. 
+		Short:      "Log in to Azure Active Directory to access Azure storage resources.",
+		Long: `Log in to Azure Active Directory to access Azure storage resources. 
+		Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
 This command will cache encrypted login info for current user with OS built-in mechanisms.
 Please refer to the examples for more information.`,
 		Example: `Log in interactively with default AAD tenant ID (microsoft.com):

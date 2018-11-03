@@ -1,6 +1,9 @@
 # ignore DS_STORE on Mac OS
 *.DS_Store
 
+# ignore built packages
+dist/
+
 #CI
 azure-storage-azcopy_*_amd64
 test-validator
@@ -328,3 +331,7 @@ venv*
 
 #json create files
 *.json
+
+# go files
+*.mod
+*.sum

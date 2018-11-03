@@ -609,9 +609,9 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # execute a sync command
         dir_sas = util.get_resource_sas(dir_name)
         result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
-        self.assertFalse(result)
+        self.assertTrue(result)
         try:
             shutil.rmtree(sub_dir_n_file_path)
         except:
@@ -621,7 +621,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # sync between source and destination should delete the sub-dir on container
         # number of successful transfer should be equal to 10
         result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output",
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").add_flags("output",
                                                                                   "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -632,8 +632,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             self.fail('error parsing the output in Json Format')
 
         # Number of Expected Transfer should be 10 since sub-dir is to exclude which has 10 files in it.
-        self.assertEquals(x.TransfersCompleted, 10)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.DeleteTransfersCompleted, 10)
+        self.assertEquals(x.DeleteTransfersFailed, 0)
 
         # delete 5 files inside the directory
         for r in range(5, 10):
@@ -647,7 +647,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # sync between source and destination should delete the deleted files on container
         # number of successful transfer should be equal to 5
         result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output",
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").add_flags("output",
                                                                                   "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -658,8 +658,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             self.fail('error parsing the output in Json Format')
 
         # Number of Expected Transfer should be 10 since 10 files were deleted
-        self.assertEquals(x.TransfersCompleted, 5)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.DeleteTransfersCompleted, 5)
+        self.assertEquals(x.DeleteTransfersFailed, 0)
 
         # change the modified time of file
         # perform the sync
@@ -672,7 +672,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         os.utime(filepath, (atime, new_mtime))
         # sync source to destination
         result = util.Command("sync").add_arguments(dir_n_files_path).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output",
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").add_flags("output",
                                                                                   "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -682,8 +682,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
         # Number of Expected Transfer should be 1 since 1 file's modified time was changed
-        self.assertEquals(x.TransfersCompleted, 1)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.CopyTransfersCompleted, 1)
+        self.assertEquals(x.CopyTransfersFailed, 0)
 
     def test_sync_local_to_blob_with_wildCards(self):
         # create 10 files inside the dir 'sync_local_blob'
@@ -721,17 +721,17 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # execute a sync command
         dir_sas = util.get_resource_sas(dir_name)
         result = util.Command("sync").add_arguments(dir_n_files_path_wcard).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
-        self.assertFalse(result)
+        self.assertTrue(result)
 
         # sync all the files the ends with .txt extension inside all sub-dirs inside inside
         # sd_dir_n_files_path_wcard is in format dir/*/*.txt
         sd_dir_n_files_path_wcard = os.path.join(dir_n_files_path_wcard, "*.txt")
         result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").execute_azcopy_copy_command()
         # since source and destination both are in sync, there should no sync and the azcopy should exit with error code
-        self.assertFalse(result)
+        self.assertTrue(result)
 
         # remove 5 files inside both the sub-directories
         for r in range(5, 10):
@@ -751,7 +751,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # 10 files will deleted from container
         sd_dir_n_files_path_wcard = os.path.join(dir_n_files_path_wcard, "*.txt")
         result = util.Command("sync").add_arguments(sd_dir_n_files_path_wcard).add_arguments(dir_sas). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("output",
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("force", "true").add_flags("output",
                                                                                   "json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -761,8 +761,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in Json Format')
         # Number of Expected Transfer should be 10 since 10 files were deleted
-        self.assertEquals(x.TransfersCompleted, 10)
-        self.assertEquals(x.TransfersFailed, 0)
+        self.assertEquals(x.DeleteTransfersCompleted, 10)
+        self.assertEquals(x.DeleteTransfersFailed, 0)
 
 
     def test_0KB_blob_upload(self):

@@ -11,7 +11,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-blob-go/2016-05-31/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 	"github.com/spf13/cobra"
@@ -142,14 +142,14 @@ func cleanContainer(container string) {
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		listBlob, err := containerUrl.ListBlobs(context.Background(), marker, azblob.ListBlobsOptions{})
+		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker, azblob.ListBlobsSegmentOptions{})
 		if err != nil {
 			fmt.Println("error listing blobs inside the container. Please check the container sas")
 			os.Exit(1)
 		}
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
-		for _, blobInfo := range listBlob.Blobs.Blob {
+		for _, blobInfo := range listBlob.Segment.BlobItems {
 			_, err := containerUrl.NewBlobURL(blobInfo.Name).Delete(context.Background(), "include", azblob.BlobAccessConditions{})
 			if err != nil {
 				fmt.Println("error deleting the blob from container ", blobInfo.Name)
@@ -301,13 +301,13 @@ func cleanBlobAccount(resourceURL string) {
 	// perform a list account
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
-		lResp, err := accountURL.ListContainers(context.Background(), marker, azblob.ListContainersOptions{})
+		lResp, err := accountURL.ListContainersSegment(context.Background(), marker, azblob.ListContainersSegmentOptions{})
 		if err != nil {
 			fmt.Println("error listing containers inside the container. Please check the container sas")
 			os.Exit(1)
 		}
 
-		for _, containerItem := range lResp.Containers {
+		for _, containerItem := range lResp.ContainerItems {
 			_, err := accountURL.NewContainerURL(containerItem.Name).Delete(context.Background(), azblob.ContainerAccessConditions{})
 			if err != nil {
 				fmt.Println("error deleting the container from account, ", err)

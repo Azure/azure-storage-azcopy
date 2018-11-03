@@ -3,8 +3,10 @@ package ste
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -12,7 +14,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/2018-03-28/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 )
 
@@ -251,7 +253,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
-	jpm.newJobXfer = computeJobXfer(plan.FromTo)
+	jpm.newJobXfer = computeJobXfer(plan.FromTo, plan.DstBlobData.BlobType)
 
 	jpm.priority = plan.Priority
 
@@ -425,20 +427,27 @@ func (jpm *jobPartMgr) IsForceWriteTrue() bool {
 	return jpm.Plan().ForceWrite
 }
 
-func (jpm *jobPartMgr) blobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
+func (jpm *jobPartMgr) blobDstData(fullFilePath string, dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
-	//TODO: detect the content type using file extension first (mime package)
-	// TODO: mime.TypeByExtension() might return "" if it is not able to guess the mime type
-	return azblob.BlobHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.blobMetadata
+
+	return azblob.BlobHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer)}, jpm.blobMetadata
 }
 
-func (jpm *jobPartMgr) fileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
+func (jpm *jobPartMgr) fileDstData(fullFilePath string, dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.fileHTTPHeaders, jpm.fileMetadata
 	}
-	return azfile.FileHTTPHeaders{ContentType: http.DetectContentType(dataFileToXfer)}, jpm.fileMetadata
+	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer)}, jpm.fileMetadata
+}
+
+func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
+	if guessedType := mime.TypeByExtension(filepath.Ext(fullFilePath)); guessedType != "" {
+		return guessedType
+	}
+
+	return http.DetectContentType(dataFileToXfer)
 }
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
