@@ -26,6 +26,11 @@ import (
 	"io"
 )
 
+type ReadSeekCloser interface {
+	io.ReadSeeker
+	io.Closer
+}
+
 type sendLimitingReader struct {
 	// context used when waiting for permission to supply data
 	ctx context.Context
@@ -43,7 +48,7 @@ type sendLimitingReader struct {
 	sendSlotHeld bool
 }
 
-func NewSendLimitingReader(ctx context.Context, contents []byte, sendLimiter SendLimiter) io.ReadSeeker {
+func NewSendLimitingReader(ctx context.Context, contents []byte, sendLimiter SendLimiter) ReadSeekCloser {
 	if len(contents) <= 0 {
 		panic("length must be greater than zero")
 	}
@@ -86,6 +91,7 @@ func (cr *sendLimitingReader) Read(p []byte) (n int, err error) {
 	}
 
 	if cr.positionInChunk == 0 && !cr.sendSlotHeld {
+		// (must check sendSlotHeld in case we've been Seek'd back to the start and already hold a slot)
 		// Wait until we are allowed to be one of the actively-sending goroutines
 		// (The total count of active senders is limited to provide better network performance,
 		// on a per-CPU-usage basis. Without this, CPU usage in the OS's network stack is much higher
@@ -108,8 +114,20 @@ func (cr *sendLimitingReader) Read(p []byte) (n int, err error) {
 	// check for EOF
 	isEof := cr.positionInChunk >= int64(len(cr.chunkContents))
 	if isEof {
+		cr.Close()
 		return bytesCopied, io.EOF
 	}
 
 	return bytesCopied, nil
 }
+
+func (cr *sendLimitingReader) Close() error {
+	if cr.sendSlotHeld {
+		cr.sendLimiter.ReleaseSendSlot()
+		cr.sendSlotHeld = false
+	}
+	return nil
+}
+
+
+

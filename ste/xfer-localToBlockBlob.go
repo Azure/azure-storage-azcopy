@@ -332,7 +332,11 @@ func (bbu *blockBlobUpload) blockBlobUploadFunc(chunkId int32, startIndex int64,
 
 		// step 3: perform put block
 		blockBlobUrl := bbu.blobURL.ToBlockBlobURL()
-		body := newRequestBodyPacer(bytes.NewReader(bbu.srcMmf.Slice()[startIndex:startIndex+adjustedChunkSize]), bbu.pacer, bbu.srcMmf)
+		sendLimiter := bbu.jptm.GetSendLimiter()
+		contentsSlice := bbu.srcMmf.Slice()[startIndex:startIndex+adjustedChunkSize]
+		limitingReader := common.NewSendLimitingReader(bbu.jptm.Context(), contentsSlice, sendLimiter)
+		defer limitingReader.Close()
+		body := newRequestBodyPacer(limitingReader, bbu.pacer, bbu.srcMmf)
 		_, err := blockBlobUrl.StageBlock(bbu.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{})
 		if err != nil {
 			// check if the transfer was cancelled while Stage Block was in process.
