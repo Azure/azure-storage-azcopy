@@ -500,7 +500,7 @@ On Windows, MIME types are extracted from the registry.
 	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when performing sync from local file system.")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "defines the log verbosity to be saved to log file")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete file in difference in source and destination. "+
 		"If false, user will again be prompted with a question while queuing transfers for deletion")
 

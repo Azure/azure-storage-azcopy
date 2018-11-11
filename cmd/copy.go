@@ -963,7 +963,7 @@ Copy an entire account with SAS:
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: DEBUG, INFO, WARNING, ERROR, PANIC, and FATAL.")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blobType", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
