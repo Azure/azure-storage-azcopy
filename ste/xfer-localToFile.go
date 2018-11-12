@@ -216,6 +216,9 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.F
 				return
 			}
 		}
+
+		defer srcMMF.Unmap()
+
 		if jptm.WasCanceled() {
 			if jptm.ShouldLog(pipeline.LogDebug) {
 				jptm.Log(pipeline.LogDebug,
@@ -223,7 +226,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.F
 			}
 			rangeDone()
 		} else {
-			// rangeBytes is the byte slice of Page for the given range range
+			// rangeBytes is the byte slice of Page for the given range.
 			rangeBytes := srcMMF.Slice()
 			// converted the bytes slice to int64 array.
 			// converting each of 8 bytes of byteSlice to an integer.
