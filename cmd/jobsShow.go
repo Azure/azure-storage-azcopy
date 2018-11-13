@@ -42,10 +42,8 @@ func init() {
 	// shJob represents the ls command
 	shJob := &cobra.Command{
 		Use:   "show [jobID]",
-		Short: "Show detailed information for the given job ID",
-		Long: `
-Show detailed information for the given job ID: if only the job ID is supplied without flag, then the progress summary of the job is returned.
-If the with-status flag is set, then the list of transfers in the job with the given value will be shown.`,
+		Short: showJobsCmdShortDescription,
+		Long:  showJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 
 			// if there is any argument passed

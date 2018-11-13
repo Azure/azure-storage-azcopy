@@ -39,16 +39,8 @@ var azcopyLogPathFolder string
 var rootCmd = &cobra.Command{
 	Version: common.AzcopyVersion, // will enable the user to see the version info in the standard posix way: --version
 	Use:     "azcopy",
-	Short:   "AzCopy is a command line tool that moves data into/out of Azure Storage.",
-	Long: "AzCopy " + common.AzcopyVersion +
-		`
-Project URL: github.com/Azure/azure-storage-azcopy
-
-AzCopy is a command line tool that moves data into/out of Azure Storage.
-To report issues or to learn more about the tool, go to github.com/Azure/azure-storage-azcopy
-
-The general format of the commands is: 'azcopy [command] [arguments] --[flag-name]=[flag-value]'.
-`,
+	Short:   rootCmdShortDescription,
+	Long:    rootCmdLongDescription,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr

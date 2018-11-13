@@ -453,21 +453,8 @@ func init() {
 	var syncCmd = &cobra.Command{
 		Use:     "sync",
 		Aliases: []string{"sc", "s"},
-		Short:   "Replicates source to the destination location",
-		Long: `
-Replicates source to the destination location. The last modified times are used for comparison. The supported pairs are:
-  - local <-> Azure Blob (SAS or OAuth authentication)
-
-Advanced:
-Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
-
-The built-in lookup table is small but on unix it is augmented by the local system's mime.types file(s) if available under one or more of these names:
-  - /etc/mime.types
-  - /etc/apache2/mime.types
-  - /etc/apache/mime.types
-
-On Windows, MIME types are extracted from the registry.
-`,
+		Short:   syncCmdShortDescription,
+		Long:    syncCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))
