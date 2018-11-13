@@ -23,8 +23,8 @@ import (
 // envCmd represents the env command
 var envCmd = &cobra.Command{
 	Use:   "env",
-	Short: "Shows the environment variables that can configure AzCopy's behavior",
-	Long:  `Shows the environment variables that can configure AzCopy's behavior.`,
+	Short: envCmdShortDescription,
+	Long:  envCmdLongDescription,
 	Run: func(cmd *cobra.Command, args []string) {
 		for _, env := range common.VisibleEnvironmentVariables {
 			glcm.Info(fmt.Sprintf("Name: %s\nCurrent Value: %s\nDescription: %s\n",

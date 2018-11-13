@@ -36,30 +36,9 @@ func init() {
 	lgCmd := &cobra.Command{
 		Use:        "login",
 		SuggestFor: []string{"login"},
-		Short:      "Log in to Azure Active Directory to access Azure storage resources.",
-		Long: `Log in to Azure Active Directory to access Azure storage resources. 
-		Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
-This command will cache encrypted login info for current user with OS built-in mechanisms.
-Please refer to the examples for more information.`,
-		Example: `Log in interactively with default AAD tenant ID set to common:
-- azcopy login
-
-Log in interactively with specified tenant ID:
-- azcopy login --tenant-id "[TenantID]"
-
-Log in using a VM's system-assigned identity:
-- azcopy login --identity
-
-Log in using a VM's user-assigned identity with Client ID of the service identity:
-- azcopy login --identity --identity-client-id "[ServiceIdentityClientID]"
-
-Log in using a VM's user-assigned identity with Object ID of the service identity:
-- azcopy login --identity --identity-object-id "[ServiceIdentityObjectID]"
-
-Log in using a VM's user-assigned identity with Resource ID of the service identity:
-- azcopy login --identity --identity-resource-id "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
-
-`,
+		Short:      loginCmdShortDescription,
+		Long:       loginCmdLongDescription,
+		Example:    loginCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			return nil
 		},
