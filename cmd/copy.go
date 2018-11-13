@@ -837,75 +837,9 @@ func init() {
 		Use:        "copy [source] [destination]",
 		Aliases:    []string{"cp", "c"},
 		SuggestFor: []string{"cpy", "cy", "mv"}, //TODO why does message appear twice on the console
-		Short:      "Copies source data to a destination location",
-		Long: `
-Copies source data to a destination location. The supported pairs are:
-  - local <-> Azure Blob (SAS or OAuth authentication)
-  - local <-> Azure File (SAS authentication)
-  - local <-> ADLS Gen 2 (OAuth or SharedKey authentication)
-  - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
-
-Please refer to the examples for more information.
-
-Advanced:
-Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
-
-The built-in lookup table is small but on unix it is augmented by the local system's mime.types file(s) if available under one or more of these names:
-  - /etc/mime.types
-  - /etc/apache2/mime.types
-  - /etc/apache/mime.types
-
-On Windows, MIME types are extracted from the registry. This feature can be turned off with the help of a flag. Please refer to the flag section.
-`,
-		Example: `Upload a single file with SAS:
-  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
-
-Upload a single file with OAuth token, please use login command first if not yet logged in:
-  - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
-
-Upload a single file through piping(block blob only) with SAS:
-  - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
-
-Upload an entire directory with SAS:
-  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
-
-Upload only files using wildcards with SAS:
-  - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]"
-
-Upload files and directories using wildcards with SAS:
-  - azcopy cp "/path/*foo/*bar*" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
-
-Download a single file with SAS:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "/path/to/file.txt"
-
-Download a single file with OAuth token, please use login command first if not yet logged in:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]" "/path/to/file.txt"
-
-Download a single file through piping(blobs only) with SAS:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
-
-Download an entire directory with SAS:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "/path/to/dir" --recursive=true
-
-Download files using wildcards with SAS:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir"
-
-Download files and directories using wildcards with SAS:
-  - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
-
-Copy a single file with SAS:
-  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
-
-Copy a single file with OAuth token, please use login command first if not yet logged in and note that OAuth token is used by destination:
-- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
-
-Copy an entire directory with SAS:
-- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
-
-Copy an entire account with SAS:
-- azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
-
-`,
+		Short:      copyCmdShortDescription,
+		Long:       copyCmdLongDescription,
+		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 { // redirection
 				if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {

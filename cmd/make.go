@@ -185,11 +185,9 @@ func init() {
 		Use:        "make [resourceURL]",
 		Aliases:    []string{"mk", "mkdir"},
 		SuggestFor: []string{"mak", "makeCmd"},
-		Short:      "Create a container/share/filesystem",
-		Long:       `Create a container/share/filesystem represented by the given resource URL.`,
-		Example: `
-  - azcopy make "https://[account-name].[blob,file,dfs].core.windows.net/[top-level-resource-name]"
-`,
+		Short:      makeCmdShortDescription,
+		Long:       makeCmdLongDescription,
+		Example:    makeCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			// verify that there is exactly one argument
 			if len(args) != 1 {

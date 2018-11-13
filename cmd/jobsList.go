@@ -36,9 +36,8 @@ func init() {
 	lsCmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
-		Short:   "Display information on all jobs",
-		Long: `
-Display information on all jobs.`,
+		Short:   listJobsCmdShortDescription,
+		Long:    listJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 
 			// if there is any argument passed
