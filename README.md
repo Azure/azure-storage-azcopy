@@ -27,16 +27,19 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 ## Installation
 
 1. Download the AzCopy executable using one of the following links:
-    * [Windows x64](https://aka.ms/downloadazcopy-v10-windows)
-    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux)
-    * [MacOS x64](https://aka.ms/downloadazcopy-v10-mac)
+    * [Windows x64](https://aka.ms/downloadazcopy-v10-windows) (zip)
+    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux) (tar)
+    * [MacOS x64](https://aka.ms/downloadazcopy-v10-mac) (zip)
 
-2. Unzip and get started
+2. Unzip (or untar on Linux) and get started
     
-    * unzip azcopy_linux_amd64_10.0.0.zip
-    * cd azcopy_linux_amd64_10.0.0
-    * ./azcopy
-
+On Linux:
+```
+wget -O azcopyv10.tar https://aka.ms/downloadazcopy-v10-linux
+tar -xf azcopyv10.tar
+cd azcopy_linux_amd64_10.0.4
+./azcopy
+```
 ## Manual
 
 ### Authenticating with Azure Storage
