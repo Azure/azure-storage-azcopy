@@ -41,7 +41,7 @@ func init() {
 		Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
 This command will cache encrypted login info for current user with OS built-in mechanisms.
 Please refer to the examples for more information.`,
-		Example: `Log in interactively with default AAD tenant ID (microsoft.com):
+		Example: `Log in interactively with default AAD tenant ID set to common:
 - azcopy login
 
 Log in interactively with specified tenant ID:

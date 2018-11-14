@@ -42,7 +42,7 @@ const ApplicationID = "579a7132-0e58-4d80-b1e1-7a1e2d337859"
 
 // Resource used in azure storage OAuth authentication
 const Resource = "https://storage.azure.com"
-const DefaultTenantID = "microsoft.com"
+const DefaultTenantID = "common"
 const DefaultActiveDirectoryEndpoint = "https://login.microsoftonline.com"
 const IMDSAPIVersion = "2018-02-01"
 const MSIEndpoint = "http://169.254.169.254/metadata/identity/oauth2/token"
