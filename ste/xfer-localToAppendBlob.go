@@ -73,6 +73,8 @@ func LocalToAppendBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pac
 		return
 	}
 
+	defer srcMMF.Unmap()
+
 	appendBlobURL := blobUrl.ToAppendBlobURL()
 
 	byteLength := common.Iffint64(blobSize > 512, 512, blobSize)
