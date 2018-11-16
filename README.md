@@ -40,6 +40,15 @@ tar -xf azcopyv10.tar
 cd azcopy_linux_amd64_10.0.4
 ./azcopy
 ```
+
+On Windows:
+```
+Invoke-WebRequest -Uri https://aka.ms/downloadazcopy-v10-windows -OutFile .\azcopyv10.zip
+Expand-Archive azcopyv10.zip -DestinationPath .
+cd .\azcopy_windows_amd64_10.0.4
+.\azcopy.exe
+```
+
 ## Manual
 
 ### Authenticating with Azure Storage
