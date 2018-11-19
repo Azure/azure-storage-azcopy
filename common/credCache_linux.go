@@ -24,9 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jiacfan/keyctl" // forked form "github.com/jsipprell/keyctl", todo: make a release to ensure stability
-	"os"
 	"runtime"
-	"strconv"
 	"sync"
 	"syscall"
 )
@@ -37,21 +35,17 @@ import (
 // So the session is inherited by processes created from login session.
 // When user logout, the session keyring is recycled.
 type CredCache struct {
-	state          string // reserved for use
-	cachedTokenKey string // the Name of key would be cached in keyring, composed with current UID, in case user su
-	lock           sync.Mutex
+	keyName string // the Name of key would be cached in keyring, composed with current UID, in case user su
+	lock    sync.Mutex
 
 	key       *keyctl.Key
 	isPermSet bool // state used to ensure key has been set permission correctly
 }
 
-const cachedTokenKeySuffix = "AzCopyOAuthTokenCache"
-
 // NewCredCache creates a cred cache.
-func NewCredCache(state string) *CredCache {
+func NewCredCache(options CredCacheOptions) *CredCache {
 	c := &CredCache{
-		state:          state,
-		cachedTokenKey: strconv.Itoa(os.Geteuid()) + cachedTokenKeySuffix,
+		keyName: options.KeyName,
 	}
 
 	runtime.SetFinalizer(c, func(CredCache *CredCache) {
@@ -119,7 +113,7 @@ func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, err = keyring.Search(c.cachedTokenKey)
+	_, err = keyring.Search(c.keyName)
 	// TODO: better logging what's cause for token caching failure
 	// e.g. Error message: "required key not available"
 	// the source library could be updated to use keyctl_search
@@ -136,7 +130,7 @@ func (c *CredCache) removeCachedTokenInternal() error {
 	if err != nil {
 		return fmt.Errorf("failed to get keyring during removing cached token, %v", err)
 	}
-	key, err := keyring.Search(c.cachedTokenKey)
+	key, err := keyring.Search(c.keyName)
 	if err != nil {
 		if err == syscall.ENOKEY {
 			return fmt.Errorf("no cached token found for current user")
@@ -167,7 +161,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	if err != nil {
 		return fmt.Errorf("failed to get keyring during saving token, %v", err)
 	}
-	k, err := keyring.Add(c.cachedTokenKey, b)
+	k, err := keyring.Add(c.keyName, b)
 	if err != nil {
 		return fmt.Errorf("failed to save key, %v", err)
 	}
@@ -195,7 +189,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get keyring during loading token, %v", err)
 	}
-	key, err := keyring.Search(c.cachedTokenKey)
+	key, err := keyring.Search(c.keyName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find cached token during loading token, %v", err)
 	}
