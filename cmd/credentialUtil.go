@@ -49,7 +49,12 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 		if azcopyAppPathFolder == "" {
 			panic("invalid state, azcopyAppPathFolder should be initialized by root")
 		}
-		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(azcopyAppPathFolder)
+		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
+			DPAPIFilePath: azcopyAppPathFolder,
+			KeyName:       "AzCopyOAuthTokenCache",
+			ServiceName:   "AzCopyV10",
+			AccountName:   "AzCopyOAuthTokenCache",
+		})
 	})
 
 	return currentUserOAuthTokenManager
