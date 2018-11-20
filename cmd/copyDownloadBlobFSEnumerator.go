@@ -43,7 +43,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	directoryURL := azbfs.NewDirectoryURL(*sourceURL, p)
 	props, err := directoryURL.GetProperties(ctx)
 
-	// if the source URL is actually a file
+	// Case-1: If the source URL is actually a file
 	// then we should short-circuit and simply download that file
 	if err == nil && strings.EqualFold(props.XMsResourceType(), "file") {
 		var destination = ""
@@ -68,42 +68,124 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			SourceSize:       fileSize,
 		}, cca)
 
-	} else {
-		// if downloading entire file system, then create a local directory with the file system's name
-		if fsUrlParts.DirectoryOrFilePath == "" {
-			cca.destination = util.generateLocalPath(cca.destination, fsUrlParts.FileSystemName)
+		return e.dispatchFinalPart(cca)
+	}
+
+	// Case-2: Source is a filesystem or directory
+	// In this case, the destination should be a directory.
+	if !gCopyUtil.isPathALocalDirectory(cca.destination) {
+		return fmt.Errorf("the destination must be an existing directory in this download scenario")
+	}
+
+	srcADLSGen2PathURLPartExtension := adlsGen2PathURLPartsExtension{fsUrlParts}
+	parentSourcePath := srcADLSGen2PathURLPartExtension.getParentSourcePath()
+	// The case when user provide list of files to copy. It is used by internal integration.
+	if len(cca.listOfFilesToCopy) > 0 {
+		for _, fileOrDir := range cca.listOfFilesToCopy {
+			tempURLPartsExtension := srcADLSGen2PathURLPartExtension
+
+			// Try to see if this is a file path, and download the file if it is.
+			// Create the path using the given source and files mentioned with listOfFile flag.
+			// For Example:
+			// 1. source = "https://sdksampleperftest.dfs.core.windows.net/bigdata" file = "file1.txt" blobPath= "file1.txt"
+			// 2. source = "https://sdksampleperftest.dfs.core.windows.net/bigdata/dir-1" file = "file1.txt" blobPath= "dir-1/file1.txt"
+			filePath := fmt.Sprintf("%s%s", parentSourcePath, fileOrDir)
+			if len(filePath) > 0 && filePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				filePath = filePath[1:]
+			}
+			tempURLPartsExtension.DirectoryOrFilePath = filePath
+			fileURL := azbfs.NewFileURL(tempURLPartsExtension.URL(), p)
+			if fileProperties, err := fileURL.GetProperties(ctx); err == nil && strings.EqualFold(fileProperties.XMsResourceType(), "file") {
+				// file exists
+				fileSize, err := strconv.ParseInt(fileProperties.ContentLength(), 10, 64)
+				if err != nil {
+					panic(err)
+				}
+				srcURL := tempURLPartsExtension.createADLSGen2PathURLFromFileSystem(filePath)
+				e.addTransfer(common.CopyTransfer{
+					Source:           srcURL.String(),
+					Destination:      util.generateLocalPath(cca.destination, fileOrDir),
+					LastModifiedTime: e.parseLmt(fileProperties.LastModified()),
+					SourceSize:       fileSize}, cca)
+				continue
+			}
+
+			if !cca.recursive {
+				glcm.Info(fmt.Sprintf("error fetching properties of %s. Either it is a directory or getting the file properties failed. For directories try using the recursive flag.", filePath))
+				continue
+			}
+
+			// Try to see if this is a directory, and download the directory if it is.
+			dirURL := azbfs.NewDirectoryURL(tempURLPartsExtension.URL(), p)
+			err := enumerateFilesInADLSGen2Directory(
+				ctx,
+				dirURL,
+				func(fileItem azbfs.ListEntrySchema) bool {
+					return true
+				},
+				func(fileItem azbfs.ListEntrySchema) error {
+					relativePath := util.blobPathWOSpecialCharacters(util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *fileItem.Name))
+					return e.addTransfer(common.CopyTransfer{
+						Source:           dirURL.FileSystemURL().NewDirectoryURL(*fileItem.Name).String(),
+						Destination:      util.generateLocalPath(cca.destination, relativePath),
+						LastModifiedTime: e.parseLmt(*fileItem.LastModified),
+						SourceSize:       *fileItem.ContentLength,
+					}, cca)
+				},
+			)
+			if err != nil {
+				glcm.Info(fmt.Sprintf("cannot list files inside directory %s mentioned", filePath))
+				continue
+			}
+		}
+		// If there are no transfer to queue up, exit with message
+		if len(e.Transfers) == 0 {
+			glcm.Exit(fmt.Sprintf("no transfer queued for copying data from %s to %s", cca.source, cca.destination), 1)
+			return nil
+		}
+		// dispatch the JobPart as Final Part of the Job
+		err = e.dispatchFinalPart(cca)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Following is original code path, which handles the case when list of files are not specified
+	// if downloading entire file system, then create a local directory with the file system's name
+	if fsUrlParts.DirectoryOrFilePath == "" {
+		cca.destination = util.generateLocalPath(cca.destination, fsUrlParts.FileSystemName)
+	}
+
+	// initialize an empty continuation marker
+	continuationMarker := ""
+
+	// list out the directory and download its files
+	// loop will continue unless the continuationMarker received in the response is empty
+	for {
+		dListResp, err := directoryURL.ListDirectorySegment(ctx, &continuationMarker, true)
+		if err != nil {
+			return fmt.Errorf("error listing the files inside the given source url %s", directoryURL.String())
 		}
 
-		// initialize an empty continuation marker
-		continuationMarker := ""
+		// get only the files inside the given path
+		// TODO: currently empty directories are not created, consider creating them
+		for _, path := range dListResp.Files() {
+			// Queue the transfer
+			e.addTransfer(common.CopyTransfer{
+				Source:           directoryURL.FileSystemURL().NewDirectoryURL(*path.Name).String(),
+				Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name)),
+				LastModifiedTime: e.parseLmt(*path.LastModified),
+				SourceSize:       *path.ContentLength,
+			}, cca)
+		}
 
-		// list out the directory and download its files
-		// loop will continue unless the continuationMarker received in the response is empty
-		for {
-			dListResp, err := directoryURL.ListDirectorySegment(ctx, &continuationMarker, true)
-			if err != nil {
-				return fmt.Errorf("error listing the files inside the given source url %s", directoryURL.String())
-			}
+		// update the continuation token for the next list operation
+		continuationMarker = dListResp.XMsContinuation()
 
-			// get only the files inside the given path
-			// TODO: currently empty directories are not created, consider creating them
-			for _, path := range dListResp.Files() {
-				// Queue the transfer
-				e.addTransfer(common.CopyTransfer{
-					Source:           directoryURL.FileSystemURL().NewDirectoryURL(*path.Name).String(),
-					Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name)),
-					LastModifiedTime: e.parseLmt(*path.LastModified),
-					SourceSize:       *path.ContentLength,
-				}, cca)
-			}
-
-			// update the continuation token for the next list operation
-			continuationMarker = dListResp.XMsContinuation()
-
-			// determine whether listing should be done
-			if continuationMarker == "" {
-				break
-			}
+		// determine whether listing should be done
+		if continuationMarker == "" {
+			break
 		}
 	}
 
