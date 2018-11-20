@@ -375,6 +375,8 @@ func (TransferStatus) BlobAlreadyExistsFailure() TransferStatus { return Transfe
 
 func (TransferStatus) FileAlreadyExistsFailure() TransferStatus { return TransferStatus(-4) }
 
+func (TransferStatus) ADLSGen2PathAlreadyExistsFailure() TransferStatus { return TransferStatus(-5) }
+
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()
 }
