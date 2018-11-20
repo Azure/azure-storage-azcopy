@@ -151,7 +151,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return nil
 	}
 
-	// Following is original code path, which handles the case when list of files are not specified
+	// Following is original code path, which handles the case when list of files is not specified
 	// if downloading entire file system, then create a local directory with the file system's name
 	if fsUrlParts.DirectoryOrFilePath == "" {
 		cca.destination = util.generateLocalPath(cca.destination, fsUrlParts.FileSystemName)
