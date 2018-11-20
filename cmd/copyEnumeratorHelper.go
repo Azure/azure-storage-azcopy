@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
@@ -208,6 +210,43 @@ func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.D
 		}
 
 		marker = listDirResp.NextMarker
+	}
+	return nil
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// ADLS Gen2 service enumerators.
+//////////////////////////////////////////////////////////////////////////////////////////
+// enumerateFilesInADLSGen2Directory enumerates files in ADLS Gen2 directory.
+func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.DirectoryURL,
+	filter func(fileItem azbfs.ListEntrySchema) bool,
+	callback func(fileItem azbfs.ListEntrySchema) error) error {
+	marker := ""
+	for {
+		listDirResp, err := directoryURL.ListDirectorySegment(ctx, &marker, true)
+		if err != nil {
+			return fmt.Errorf("cannot list files, %v", err)
+		}
+
+		// Process the files returned in this result segment
+		for _, filePath := range listDirResp.Files() {
+			if !filter(filePath) {
+				continue
+			}
+
+			if err := callback(filePath); err != nil {
+				return err
+			}
+		}
+
+		// update the continuation token for the next list operation
+		marker = listDirResp.XMsContinuation()
+
+		// determine whether enumerating should be done
+		if marker == "" {
+			break
+		}
+
 	}
 	return nil
 }
