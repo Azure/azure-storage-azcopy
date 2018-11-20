@@ -17,7 +17,7 @@ import (
 type fileRangeAppend struct {
 	jptm    IJobPartTransferMgr
 	srcFile *os.File
-	fileUrl azbfs.FileURL
+	fileURL azbfs.FileURL
 	pacer   *pacer
 }
 
@@ -54,6 +54,20 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		dirUrl := azbfs.NewDirectoryURL(*dUrl, p)
 		_, err := dirUrl.Create(jptm.Context())
 		if err != nil {
+			// Note: As description in document https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create,
+			// the default behavior of creating directory is overwrite, unless there is lease, or destination exists, and there is If-None-Match:"*".
+			// Check for overwrite flag correspondingly, if overwrite is true, and fail to recreate directory, report error.
+			// If overwrite is false, and fail to recreate directoroy, report directory already exists.
+			if !jptm.IsForceWriteTrue() {
+				if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.Response().StatusCode == http.StatusConflict {
+					jptm.LogUploadError(info.Source, info.Destination, "Directory already exists ", 0)
+					// Mark the transfer as failed with ADLSGen2PathAlreadyExistsFailure
+					jptm.SetStatus(common.ETransferStatus.ADLSGen2PathAlreadyExistsFailure())
+					jptm.ReportTransferDone()
+					return
+				}
+			}
+
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogUploadError(info.Source, info.Destination, "Directory creation error "+msg, status)
 			if jptm.WasCanceled() {
@@ -70,10 +84,27 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 		return
 	}
 
+	// If the source is a file
+	fileURL := azbfs.NewFileURL(*dUrl, p)
+
+	// If the force Write flags is set to false
+	// then check the file exists or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := fileURL.GetProperties(jptm.Context())
+		if err == nil {
+			// If the error is nil, then file exists and it doesn't needs to be uploaded.
+			jptm.LogUploadError(info.Source, info.Destination, "File already exists ", 0)
+			// Mark the transfer as failed with ADLSGen2PathAlreadyExistsFailure
+			jptm.SetStatus(common.ETransferStatus.ADLSGen2PathAlreadyExistsFailure())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// If the file Size is 0, there is no need to open the file and memory map it
 	if fInfo.Size() == 0 {
-		fileUrl := azbfs.NewFileURL(*dUrl, p)
-		_, err = fileUrl.Create(jptm.Context())
+		_, err = fileURL.Create(jptm.Context())
 		if err != nil {
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogUploadError(info.Source, info.Destination, "File creation Eror "+msg, status)
@@ -102,9 +133,8 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 
 	// Since the source is a file, it can be uploaded by appending the ranges to file concurrently
 	// before the ranges are appended, file has to be created first and the ranges are scheduled to append
-	//Create the fileUrl and then create the file on FileSystem
-	fileUrl := azbfs.NewFileURL(*dUrl, p)
-	_, err = fileUrl.Create(jptm.Context())
+	// Create the fileURL and then create the file on FileSystem
+	_, err = fileURL.Create(jptm.Context())
 	if err != nil {
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
 		jptm.LogUploadError(info.Source, info.Destination, "File creation Eror "+msg, status)
@@ -127,7 +157,7 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	fru := &fileRangeAppend{
 		jptm:    jptm,
 		srcFile: srcfile,
-		fileUrl: fileUrl,
+		fileURL: fileURL,
 		pacer:   pacer}
 
 	// Scheduling page range update to the Page Blob created above.
@@ -155,9 +185,9 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 			// if the transfer status is less than or equal to 0, it means that transfer was cancelled or failed
 			// in this case, we need to delete the file which was created before any range was appended
 			if fru.jptm.TransferStatus() <= 0 {
-				_, err := fru.fileUrl.Delete(context.Background())
+				_, err := fru.fileURL.Delete(context.Background())
 				if err != nil {
-					fru.jptm.LogError(fru.fileUrl.String(), "Delete Remote File Error ", err)
+					fru.jptm.LogError(fru.fileURL.String(), "Delete Remote File Error ", err)
 				}
 			}
 			// report transfer done
@@ -206,7 +236,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 		defer srcMMF.Unmap()
 
 		body := newRequestBodyPacer(bytes.NewReader(srcMMF.Slice()), fru.pacer, srcMMF)
-		_, err = fru.fileUrl.AppendData(fru.jptm.Context(), startRange, body)
+		_, err = fru.fileURL.AppendData(fru.jptm.Context(), startRange, body)
 		if err != nil {
 			// If the file append range failed, it could be that transfer was cancelled
 			// status of transfer does not change when it is cancelled
@@ -252,7 +282,7 @@ func (fru *fileRangeAppend) fileRangeAppend(startRange int64, calculatedRangeInt
 				transferDone()
 				return
 			}
-			_, err = fru.fileUrl.FlushData(fru.jptm.Context(), fru.jptm.Info().SourceSize)
+			_, err = fru.fileURL.FlushData(fru.jptm.Context(), fru.jptm.Info().SourceSize)
 			if err != nil {
 				if fru.jptm.WasCanceled() {
 					// Flush Range failed because the transfer was cancelled
