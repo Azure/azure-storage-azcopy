@@ -274,7 +274,7 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat it's part
 			// of the file read later (when doing a retry)
 			chunkReader := common.NewSimpleFileChunkReader(context, sourceFileFactory, startIndex, adjustedChunkSize, sendLimiter, prefetchedByteCounter)
-			// There is no error returned by PerfectIfPossible
+			// There is no error returned by TryPrefetch (instead just a boolean indication of whether we fetched something)
 			// We need to schedule the chunks, even if the data is not fetchable, because all our error handing is in the chunkFunc
 			fetched := chunkReader.TryPrefetch(sourceFile)  // use the file handle we have already opened, instead of getting each chunk reader to open its own here
 
@@ -301,9 +301,13 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 func captureLeadingBytes(chunkReader common.FileChunkReader) []byte {
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)
-	_, err := chunkReader.Read(leadingBytes)
-	if err != nil {
+	n, err := chunkReader.ReadAndRetain(leadingBytes) // ReadAndRetain, instead of Read, so that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
+	if err != nil && err != io.EOF {
 		return nil // we just can't sniff the mime type
+	}
+	if n < len(leadingBytes) {
+		// truncate if we read less than expected (very small file, so err was EOF above)
+		leadingBytes = leadingBytes[:n]
 	}
 	// MUST re-wind, so that the bytes we read will get transferred too!
 	chunkReader.Seek(0, io.SeekStart)

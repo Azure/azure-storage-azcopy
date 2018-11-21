@@ -36,6 +36,7 @@ type FileChunkReader interface {
 	io.ReadSeeker
 	io.Closer
 	TryPrefetch(fileReader CloseableReaderAt) bool
+	ReadAndRetain(p []byte) (int, error)
 }
 
 // Simple aggregation of existing io interfaces
@@ -174,6 +175,19 @@ func (cr *simpleFileChunkReader) Seek(offset int64, whence int) (int64, error) {
 
 // Reads from within this chunk
 func (cr *simpleFileChunkReader) Read(p []byte) (n int, err error) {
+	// This is a normal read, so free the prefetch buffer when hit EOF (i.e. end of this chunk).
+	// We do so on the assumption that if we've read to the end we don't need the prefetched data any longer.
+	// (If later, there's a retry that forces seek back to start and re-read, we'll automatically trigger a re-fetch at that time)
+	return cr.doRead(p, true)
+}
+
+// Special version of Read, for cases where we don't want the usual automatic behaviour when the end of
+func (cr *simpleFileChunkReader) ReadAndRetain(p []byte) (n int, err error){
+	// Caller has asked us to retain the prefetch buffer no matter what, even if we hit EOF (end of this chunk)
+	return cr.doRead(p,false)
+}
+
+func (cr *simpleFileChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err error) {
 	// check for EOF, BEFORE we ensure prefetch
 	// (Otherwise, some readers can call as after EOF, and we end up re-pre-fetching)
 	if cr.positionInChunk >= cr.length {
@@ -214,7 +228,9 @@ func (cr *simpleFileChunkReader) Read(p []byte) (n int, err error) {
 	// check for EOF
 	isEof := cr.positionInChunk >= cr.length
 	if isEof {
-		cr.deactivate()
+		if freeBufferOnEof {
+			cr.deactivate()
+		}
 		return bytesCopied, io.EOF
 	}
 
