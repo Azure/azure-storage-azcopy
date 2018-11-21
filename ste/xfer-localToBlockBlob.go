@@ -214,10 +214,9 @@ func LocalToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pace
 			uint32(blobSize/chunkSize),
 			uint32(blobSize/chunkSize)+1)
 
-		// TODO: remove this if we re-enable step 3.b, above
-		// Force a zero-size blob to contain 1 chuck (of zero size), rather than zero chunks
+		// TODO: remove this if when re-enable step 3.b, above
 		if numChunks == 0 {
-			numChunks = 1
+			panic("Zero size files not yet supported in this refactoring") // the code below doesn't work properly with them
 		}
 
 		// Set the number of chunk for the current transfer.
