@@ -60,8 +60,8 @@ func NewCredCache(options CredCacheOptions) *CredCache {
 	}
 }
 
-// To ensure big secrets can be stored and read, it use a segmented pattern to save/load tokens when necessary.
-var NewCredCacheSegmented = NewCredCache
+// keychain is used for intenal integration as well.
+var NewCredCacheInternalIntegration = NewCredCache
 
 // HasCachedToken returns if there is cached token for current executing user.
 func (c *CredCache) HasCachedToken() (bool, error) {

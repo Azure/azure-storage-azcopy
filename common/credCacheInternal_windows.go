@@ -29,22 +29,22 @@ import (
 	"github.com/danieljoos/wincred"
 )
 
-// CredCacheSegmented manages credential caches with Windows credential manager.
+// CredCacheInternalIntegration manages credential caches with Windows credential manager.
 // To ensure big secrets can be stored and read, it use a segmented pattern to save/load tokens when necessary.
-type CredCacheSegmented struct {
+type CredCacheInternalIntegration struct {
 	keyName string
 	lock    sync.Mutex
 }
 
-// NewCredCacheSegmented creates a cred cache.
-func NewCredCacheSegmented(options CredCacheOptions) *CredCacheSegmented {
-	return &CredCacheSegmented{
+// NewCredCacheInternalIntegration creates a cred cache.
+func NewCredCacheInternalIntegration(options CredCacheOptions) *CredCacheInternalIntegration {
+	return &CredCacheInternalIntegration{
 		keyName: options.KeyName,
 	}
 }
 
 // HasCachedToken returns if there is cached token for current executing user.
-func (c *CredCacheSegmented) HasCachedToken() (bool, error) {
+func (c *CredCacheInternalIntegration) HasCachedToken() (bool, error) {
 	c.lock.Lock()
 	has, err := c.hasCachedTokenInternal()
 	c.lock.Unlock()
@@ -52,7 +52,7 @@ func (c *CredCacheSegmented) HasCachedToken() (bool, error) {
 }
 
 // RemoveCachedToken deletes the cached token.
-func (c *CredCacheSegmented) RemoveCachedToken() error {
+func (c *CredCacheInternalIntegration) RemoveCachedToken() error {
 	c.lock.Lock()
 	err := c.removeCachedTokenInternal()
 	c.lock.Unlock()
@@ -60,7 +60,7 @@ func (c *CredCacheSegmented) RemoveCachedToken() error {
 }
 
 // SaveToken saves an oauth token.
-func (c *CredCacheSegmented) SaveToken(token OAuthTokenInfo) error {
+func (c *CredCacheInternalIntegration) SaveToken(token OAuthTokenInfo) error {
 	c.lock.Lock()
 	err := c.saveTokenInternal(token)
 	c.lock.Unlock()
@@ -68,7 +68,7 @@ func (c *CredCacheSegmented) SaveToken(token OAuthTokenInfo) error {
 }
 
 // LoadToken gets the cached oauth token.
-func (c *CredCacheSegmented) LoadToken() (*OAuthTokenInfo, error) {
+func (c *CredCacheInternalIntegration) LoadToken() (*OAuthTokenInfo, error) {
 	c.lock.Lock()
 	token, err := c.loadTokenInternal()
 	c.lock.Unlock()
@@ -90,7 +90,7 @@ func (c *CredCacheSegmented) LoadToken() (*OAuthTokenInfo, error) {
 const errNotFound = "Element not found."
 
 // hasCachedTokenInternal returns if there is cached token in token manager.
-func (c *CredCacheSegmented) hasCachedTokenInternal() (bool, error) {
+func (c *CredCacheInternalIntegration) hasCachedTokenInternal() (bool, error) {
 	_, err := wincred.GetGenericCredential(c.keyName)
 	if err != nil {
 		if err.Error() == errNotFound {
@@ -103,13 +103,13 @@ func (c *CredCacheSegmented) hasCachedTokenInternal() (bool, error) {
 }
 
 // removeCachedTokenInternal deletes all the cached token.
-func (c *CredCacheSegmented) removeCachedTokenInternal() error {
+func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 	// By design, not useful currently.
 	return errors.New("Not implemented")
 }
 
 // loadTokenInternal restores a Token object from file cache.
-func (c *CredCacheSegmented) loadTokenInternal() (*OAuthTokenInfo, error) {
+func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
 	cred, err := wincred.GetGenericCredential(c.keyName)
 	if err != nil {
 		return nil, err
@@ -146,7 +146,7 @@ func (c *CredCacheSegmented) loadTokenInternal() (*OAuthTokenInfo, error) {
 }
 
 // saveTokenInternal persists an oauth token on disk.
-func (c *CredCacheSegmented) saveTokenInternal(token OAuthTokenInfo) error {
+func (c *CredCacheInternalIntegration) saveTokenInternal(token OAuthTokenInfo) error {
 	// By design, not useful currently.
 	return errors.New("Not implemented")
 }
