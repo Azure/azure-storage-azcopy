@@ -27,7 +27,7 @@ type CredCacheOptions struct {
 
 	// Used by credCacheSegmented in Windows, and keyring in Linux.
 	KeyName string
-	// Used by keychain in Mac OS.
+	// Used by keychain in Mac OS, and gnome keyring in Linux.
 	ServiceName string
 	AccountName string
 }

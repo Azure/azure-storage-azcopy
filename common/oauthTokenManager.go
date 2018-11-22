@@ -365,7 +365,7 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 var msiTokenHTTPClient = newAzcopyHTTPClient()
 
 // Single instance token store credential cache shared by entire azcopy process.
-var tokenStoreCredCache = NewCredCacheSegmented(CredCacheOptions{
+var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
 	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
 	ServiceName: "azcopy",
 	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
@@ -503,8 +503,7 @@ type TestOAuthInjection struct {
 
 // GlobalTestOAuthInjection is the global setting for OAuth testing injection control
 var GlobalTestOAuthInjection = TestOAuthInjection{
-	// TODO: get this back to false before release
-	DoTokenRefreshInjection: true,
+	DoTokenRefreshInjection: false,
 	TokenRefreshDuration:    time.Second * 10,
 }
 

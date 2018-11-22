@@ -12,7 +12,10 @@ RUN go get -u golang.org/x/lint/golint
 # For other platform's cross compilation, please refer to https://github.com/karalabe/xgo.
 RUN \
   apt-get update && \
-  apt-get install -y clang patch xz-utils
+  apt-get install -y clang patch xz-utils && \
+  apt-get install -y libglib2.0-dev && \
+  apt-get install -y libgnome-keyring-dev && \
+  apt-get install -y libsecret-1-dev
 
 ENV OSX_SDK     MacOSX10.11.sdk
 ENV OSX_NDK_X86 /usr/local/osx-ndk-x86
