@@ -1,3 +1,4 @@
+// +build se_integration
 // Note: This implementation is initially forked from https://github.com/tmc/keyring.
 // And Azcopy customized the code for its own usage.
 

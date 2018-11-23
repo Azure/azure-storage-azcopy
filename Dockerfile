@@ -10,6 +10,7 @@ RUN go get -u golang.org/x/lint/golint
 # Note: Cross-compile might be considered to be replaced, when MacOS's container is used for testing.
 # In that case, OSX's binary can be compiled directly in MacOS.
 # For other platform's cross compilation, please refer to https://github.com/karalabe/xgo.
+
 RUN \
   apt-get update && \
   apt-get install -y clang patch xz-utils && \
