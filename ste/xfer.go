@@ -48,11 +48,21 @@ const PacerTimeToWaitInMs = 50
 // These types are define the STE Coordinator
 type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer)
 
+// same as newJobXfer, but with an extra parameter
+type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df DownloaderFactory)
+
+// Takes a multi-purpose downloader function, and makes it ready to use with a specific type of downloader
+func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df DownloaderFactory) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer){
+		targetFunction(jptm, pipeline, pacer, df)
+	}
+}
+
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-		return BlobToLocal
+		return parameterizeDownload(RemoteToLocal, newBlobDownloader)
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 		switch blobType {
 		case common.EBlobType.None(),

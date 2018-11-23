@@ -1,0 +1,223 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package ste
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+)
+
+// general-purpose "any remote persistence location" to local
+func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, df DownloaderFactory) {
+	// step 1: create downloader instance for this transfer
+	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
+	dl := df()
+
+	// step 2: get the source, destination info for the transfer.
+	info := jptm.Info()
+	blobSize := int64(info.SourceSize)
+	downloadChunkSize := int64(info.BlockSize) // TODO: is this available for non-Blob cases?
+
+	// step 3: Perform initial checks
+	// If the transfer was cancelled, then report transfer as done
+	// TODO the above comment had this text too. What does it mean: "and increasing the bytestransferred by the size of the source."
+	if jptm.WasCanceled() {
+		jptm.ReportTransferDone()
+		return
+	}
+	// If the force Write flags is set to false
+	// then check the file exists locally or not.
+	// If it does, mark transfer as failed.
+	if !jptm.IsForceWriteTrue() {
+		_, err := os.Stat(info.Destination)
+		if err == nil {
+			// TODO: Confirm if this is an error condition or not
+			// If the error is nil, then file exists locally and it doesn't need to be downloaded.
+			jptm.LogDownloadError(info.Source, info.Destination, "File already exists", 0)
+			// Mark the transfer as failed
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: this was BlobAlreadyExists, but its local, so IMHO its a file. And "file" makes this code here re-usable for multiple remotes - JR.
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
+	// step 4a: special handling for empty files
+	if blobSize == 0 {
+		err := createEmptyFile(info.Destination)
+		if err != nil {
+			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+		}
+		epilogueWithCleanup(jptm, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		return
+	}
+
+	// step 4b: normal file creation when source has content
+	dstFile, err := common.CreateFileOfSize(info.Destination, blobSize)
+	if err != nil {
+		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		epilogueWithCleanup(jptm, nil)
+		return
+	}
+	dstWriter := common.NewFileChunkWriter(dstFile, 1024 * 1024) // TODO: parameterize write size?
+	// TODO: why do we need to Stat the file, to check its size, after explicitly making it with the desired size?
+	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
+	/*
+	dstFileInfo, err := dstFile.Stat()
+	if err != nil || (dstFileInfo.Size() != blobSize) {
+		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		// Since the transfer failed, the file created above should be deleted
+		// If there was an error while opening / creating the file, delete will fail.
+		// But delete is required when error occurred while truncating the file and
+		// in this case file should be deleted.
+		tryDeleteFile(info, jptm)
+		jptm.ReportTransferDone()
+		return
+	}*/
+
+	// step 5: tell jptm what to expect, and how to clean up at the end
+	numChunks := uint32(0)
+	if rem := blobSize % downloadChunkSize; rem == 0 {
+		numChunks = uint32(blobSize / downloadChunkSize)
+	} else {
+		numChunks = uint32(blobSize/downloadChunkSize + 1)
+	}
+	jptm.SetNumberOfChunks(numChunks)
+	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanup(jptm, dstFile)})
+
+	// step 6: go through the blob range and schedule download chunk jobs
+	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
+	// TODO: ...which means that we can't exit this loop early, if there is a cancellation or failure (because we
+	// TODO: ...must schedule the expected number of chunks, so that the last of them will trigger the epilogue).
+	// TODO: ...To decide: is that OK?
+	//blockIdCount := int32(0)
+	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
+		adjustedChunkSize := downloadChunkSize
+
+		// compute exact size of the chunk
+		if startIndex+downloadChunkSize > blobSize {
+			adjustedChunkSize = blobSize - startIndex
+		}
+
+		// create download func that is a appropriate to the remote data source
+		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, startIndex, adjustedChunkSize, pacer)
+
+		// schedule the download chunk job
+		jptm.ScheduleChunks(downloadFunc)
+		//blockIdCount++  TODO: why was this originally used?  What should be done with it now
+	}
+}
+
+// complete epilogue. Handles both success and failure
+func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File){
+	// TODO: do we need to pass the Downloader in here, and call a close method on it, in case its stateful? Only do that if we find that we need to
+	info := jptm.Info()
+
+	if activeDstFile != nil {
+		// Close file
+		fileCloseErr := activeDstFile.Close()
+		if fileCloseErr != nil && !jptm.TransferStatus().DidFail() {
+			// it WAS successful up to now, but the file closing failed
+			jptm.LogDownloadError(info.Source, info.Destination, "File Closure Error "+fileCloseErr.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+		}
+	}
+
+	// Preserve modified time
+	if !jptm.TransferStatus().DidFail(){
+		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
+		// So I have preserved that behavior here.  But is that correct? (see the code for zero-size files, which does consdier a failure here to be failing the transfer)
+		lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
+		if preserveLastModifiedTime {
+			err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
+			if err != nil {
+				jptm.LogError(info.Destination, "Changing Modified Time ", err)
+				return
+			}
+			if jptm.ShouldLog(pipeline.LogInfo) {
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Preserved Modified Time for %s", info.Destination))
+			}
+		}
+	}
+
+	if jptm.TransferStatus() <= 0 {
+		// If failed, log and delete the "bad" local file
+		// If the current transfer status value is less than or equal to 0
+		// then transfer either failed or was cancelled
+		// TODO: is it right that 0 (not started) is _included_ here?  And, related, why is there no Cancelled Status?
+		// .. or at least a IsFailedOrUnstarted method?
+		if jptm.ShouldLog(pipeline.LogDebug) {
+			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
+		}
+		// the file created locally should be deleted
+		tryDeleteFile(info, jptm)
+	} else {
+		// We know all chunks are done (because this routine was called)
+		// and we know the transfer didn't fail (because just checked its status above),
+		// so it must have succeeded. So make sure its not left "in progress" state
+		jptm.SetStatus(common.ETransferStatus.Success())
+
+		// Final logging
+		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: can we remove these ShouldLogs?  Aren't they inside Log?
+			jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
+		}
+		if jptm.ShouldLog(pipeline.LogDebug) {
+			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
+		}
+	}
+
+	// successful or unsuccessful, it's definitely over
+	jptm.ReportTransferDone()
+}
+
+// create an empty file and its parent directories, without any content
+func createEmptyFile(destinationPath string) error {
+	err := common.CreateParentDirectoryIfNotExist(destinationPath)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	_ = f.Close()
+	return nil
+}
+
+// deletes the file
+func deleteFile(destinationPath string) error {
+	return os.Remove(destinationPath)
+}
+
+// tries to delete file, but if that fails just logs and returns
+func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
+	err := deleteFile(info.Destination)
+	if err != nil {
+		// If there was an error deleting the file, log the error
+		jptm.LogError(info.Destination, "Delete File Error ", err)
+	}
+}
+

@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync/atomic"
 	"time"
 
@@ -31,6 +32,7 @@ type IJobPartTransferMgr interface {
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
 	SetNumberOfChunks(numChunks uint32)
+	SetActionAfterLastChunk(f func())
 	ReportTransferDone() uint32
 	RescheduleTransfer()
 	ScheduleChunks(chunkFunc chunkFunc)
@@ -40,6 +42,7 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	FailActiveDownload(err error)
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -82,6 +85,9 @@ type jobPartTransferMgr struct {
 	cancel context.CancelFunc
 
 	numChunks uint32
+
+	actionAfterLastChunk func()
+
 	// NumberOfChunksDone represents the number of chunks of a transfer
 	// which are either completed or failed.
 	// NumberOfChunksDone determines the final cancellation or completion of a transfer
@@ -209,10 +215,30 @@ func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32) {
 	jptm.numChunks = numChunks
 }
 
+func (jptm *jobPartTransferMgr) SetActionAfterLastChunk(f func()) {
+	jptm.actionAfterLastChunk = f
+}
+
 // Call Done when a chunk has completed its transfer; this method returns the number of chunks completed so far
 func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone uint32) {
 	chunksDone = atomic.AddUint32(&jptm.atomicChunksDone, 1)
-	return chunksDone == jptm.numChunks, chunksDone
+	lastChunk = chunksDone == jptm.numChunks
+	if lastChunk {
+		jptm.runActionAfterLastChunk()
+	}
+	return lastChunk, chunksDone
+}
+
+// If an automatic action has been specified for after the last chunk, run it now
+// (Prior to introduction of this routine, individual chunkfuncs had to check the return values
+// of ReportChunkDone and then implement their own versions of the necessary transfer epilogue code.
+// But that led to unwanted duplication of epilogue code, in the various types of chunkfunc. This routine
+// makes it easier to create DRY epilogue code.)
+func (jptm *jobPartTransferMgr) runActionAfterLastChunk(){
+	if jptm.actionAfterLastChunk != nil {
+		jptm.actionAfterLastChunk()
+		jptm.actionAfterLastChunk = nil // make sure it can't be run again, since epilogue methods are not expected to be idempotent
+	}
 }
 
 //
@@ -261,6 +287,30 @@ func (jptm *jobPartTransferMgr) OccupyAConnection() {
 // TODO: added for debugging purpose. remove later
 func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
+}
+
+// Use this to mark active uploads (i.e. those where chunk funcs have been scheduled) as failed
+// Unlike just setting the status to failed, this also handles cancellation correctly
+func (jptm *jobPartTransferMgr) FailActiveDownload(err error){
+	if !jptm.WasCanceled() {
+		jptm.Cancel()
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogDownloadError(jptm.Info().Source, jptm.Info().Destination, msg, status)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
+		// If the status code was 403, it means there was an authentication error and we exit.
+		// User can resume the job if completely ordered with a new sas.
+		if status == http.StatusForbidden {
+			// TODO: should this really exit??? why not just log like everything else does???  We've Failed the transfer anyway....
+			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+		}
+	}
+
+	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
+	// TODO: ... call ReportChunkDone (with the latter being done for ALL the expnected chunks). Is that maintainable?
+	// TODO: ... Is that really ideal, having to call ReportChunkDone for all the chunks AFTER cancellation?
+	// TODO: ... but it is currently necesary, beause of the way the transfer is only considered done (and automatic epilogue only triggers)
+	// TODO: ... if all expected chunks report as done
 }
 
 func (jptm *jobPartTransferMgr) PipelineLogInfo() pipeline.LogOptions {
