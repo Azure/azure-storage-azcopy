@@ -112,8 +112,6 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
 
-	//fmt.Println("GetTokenInfo returned token info: ", *tokenInfo)
-
 	return tokenInfo, nil
 }
 
