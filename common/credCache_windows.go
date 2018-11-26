@@ -85,12 +85,12 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // This internal method pattern is applied to avoid defer locks.
 // The reason is:
-// We use locks to protect shared dpapiFilePath from being accessed from multiple threads/goroutines at the same time.
+// We use locks to protect shared state from being accessed from multiple threads/goroutines at the same time.
 // If a bug is in this method that causes a panic,
-// then the defer will unlock another thread/goroutine allowing it to access the shared dpapiFilePath.
-// BUT, if a panic happened, the shared dpapiFilePath is hard to be decide whether in a good or corrupted dpapiFilePath.
-// So currently let the other threads/goroutines hang forever instead of letting them access the potentially corrupted shared dpapiFilePath.
-// Once having bad dpapiFilePath, more bad dpapiFilePath gets injected into app and figuring out how it happened and how to recover from it is near impossible.
+// then the defer will unlock another thread/goroutine allowing it to access the shared state.
+// BUT, if a panic happened, the shared state is hard to be decide whether in a good or corrupted state.
+// So currently let the other threads/goroutines hang forever instead of letting them access the potentially corrupted shared state.
+// Once having bad state, more bad state gets injected into app and figuring out how it happened and how to recover from it is near impossible.
 // On the other hand, hanging threads is MUCH easier to detect and devs can fix the bug in code to make sure that the panic doesn't happen in the first place.
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
