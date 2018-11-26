@@ -127,6 +127,8 @@ func refreshPolicyHalfOfExpiryWithin(token *adal.Token, options CredentialOpOpti
 		waitDuration = GlobalTestOAuthInjection.TokenRefreshDuration
 	}
 
+	options.logInfo(fmt.Sprintf("next token refresh's wait duration: %v", waitDuration))
+
 	return waitDuration
 }
 
@@ -145,7 +147,7 @@ func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCreden
 
 	// Token has been refreshed successfully.
 	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed", time.Now().UTC()))
+	options.logInfo(fmt.Sprintf("%v token refreshed succesfully", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
 	return refreshPolicyHalfOfExpiryWithin(newToken, options)
@@ -199,7 +201,7 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 
 	// Token has been refreshed successfully.
 	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed", time.Now().UTC()))
+	options.logInfo(fmt.Sprintf("%v token refreshed succesfully", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
 	return refreshPolicyHalfOfExpiryWithin(newToken, options)
