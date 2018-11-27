@@ -68,6 +68,7 @@ To view the help page and examples, run:
  # Example:
 ./azcopy cp <source path> <destination path> --<flag-name>=<flag-value>
 ./azcopy cp "/path/to/local" "https://account.blob.core.windows.net/container?sastoken" --recursive=true
+./azcopy cp "/mnt/myfile.txt" "https://myaccount.blob.core.windows.net/mycontainer/myfile.txt?sv=2017-11-09&ss=bf&srt=co&sp=rwac&se=2018-11-16T03:59:09Z&st=2018-11-15T19:59:09Z&sip=10.102.166.17&spr=https,http&sig=k8xSm2K3crBbtNpfoxyvh9n%2BMjDTqRk2XpY8JYIAMaA%3D"
  ```
 
 To see more examples:
