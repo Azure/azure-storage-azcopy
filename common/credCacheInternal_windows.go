@@ -22,7 +22,10 @@ package common
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 
@@ -108,6 +111,12 @@ func (c *CredCacheInternalIntegration) removeCachedTokenInternal() error {
 	return errors.New("Not implemented")
 }
 
+// segmentTokenInfo is used to present information about segmented token saved in credential manager.
+type segmentedTokenHeader struct {
+	SegmentNum string `json:"SegmentNum"`
+	MD5Hash    string `json:"MD5Hash"`
+}
+
 // loadTokenInternal restores a Token object from file cache.
 func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, error) {
 	cred, err := wincred.GetGenericCredential(c.keyName)
@@ -115,25 +124,35 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 		return nil, err
 	}
 
-	// Check if it's in segmented pattern.
 	tokenInfo := cred.CredentialBlob
-	if partNum, err := strconv.Atoi(string(tokenInfo)); err == nil && partNum > 0 {
-		// The generic tokenInfo is a number, it could be in segmented pattern, try to get token segments.
-		// If all the token segments can be get, azcopy regards it's a segmented credential,
-		// otherwise, azcopy regard it as a normal credential.
+
+	// Check whether it's in segmented pattern by trying to parse the root token with segmentedTokenHeader.
+	// If it's not in segmented pattern, treat the token as a non-segmented one.
+	var segmentedTokenHeader segmentedTokenHeader
+	if err := json.Unmarshal(tokenInfo, &segmentedTokenHeader); err == nil {
+		// The generic tokenInfo is in segmented pattern as the segmentedTokenHeader can be parsed properly
+
 		var buffer bytes.Buffer
-		partBroken := false
+		partNum, err := strconv.Atoi(segmentedTokenHeader.SegmentNum)
+		if err != nil || partNum <= 0 {
+			return nil, fmt.Errorf("segmented token broken, cannot get number of segments or the value is <= 0, %v", err)
+		}
 		for i := 0; i < partNum; i++ {
 			subKey := c.keyName + "/" + strconv.Itoa(i)
 			if subCred, err := wincred.GetGenericCredential(subKey); err != nil {
-				partBroken = true
-				break
+				return nil, fmt.Errorf("segmented token broken, failed to read %s, %v", subKey, err)
 			} else {
 				buffer.Write(subCred.CredentialBlob)
 			}
 		}
-		if !partBroken { // All the part fetched
-			tokenInfo = buffer.Bytes()
+		tokenInfo = buffer.Bytes()
+
+		// Do md5 validation, ensuring the token is consistent
+		md5OfReadTokenInfo := fmt.Sprintf("%x", md5.Sum(tokenInfo))
+		if md5OfReadTokenInfo != segmentedTokenHeader.MD5Hash {
+			return nil, fmt.Errorf(
+				"segmented token broken, MD5 mismatch, expected: %s, get: %s",
+				segmentedTokenHeader.MD5Hash, md5OfReadTokenInfo)
 		}
 	}
 
