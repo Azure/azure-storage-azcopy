@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"io"
 	"net/url"
 )
 
@@ -34,7 +35,7 @@ func newBlobDownloader() Downloader {
 }
 
 // Returns a chunk-func for blob downloads
-func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.FileChunkWriter, offsetInFile int64, length int64, pacer *pacer) chunkFunc {
+func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, offsetInFile int64, length int64, pacer *pacer) chunkFunc {
 	return func(workerId int) {
 
 		defer jptm.ReportChunkDone()  // whether successful or failed, it's always "done" and we must always tell the jptm
@@ -59,14 +60,25 @@ func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipel
 			jptm.FailActiveDownload(err)  // cancel entire transfer because this chunk has failed
 			return
 		}
-		// step 2: write the body into its destination
+
+		// step 2: Read the response body into memory
 		// The retryableBodyReader encapsulates any retries that may be necessary while downloading the body
 		// TODO: get.Body returns a ReadCloser. Do we need to close it?
 		retryableBodyReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		wrappedBodyReader := newLiteResponseBodyPacer(retryableBodyReader, pacer)
-		err = destWriter.CopyAllToFile(wrappedBodyReader, offsetInFile, length)
+		buffer := make([]byte, length)                                               // TODO: consider pooling, if perf tuning shows to be necessary
+		_, err = io.ReadFull(wrappedBodyReader, buffer)
 		if err != nil {
-			jptm.FailActiveDownload(err)  // cancel entire transfer because this chunk has failed
+			jptm.FailActiveDownload(err)
+			return
+		}
+
+		// TODO: cap the amount of unwritten data we can have...
+
+		// step 3: Enqueue the chunk to be written out to disk
+		err = destWriter.EnqueueChunk(jptm.Context(), buffer, offsetInFile)
+		if err != nil {
+			jptm.FailActiveDownload(err)
 			return
 		}
 	}

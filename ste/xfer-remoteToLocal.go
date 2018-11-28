@@ -69,7 +69,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
-		epilogueWithCleanup(jptm, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		epilogueWithCleanup(jptm, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
 
@@ -78,10 +78,10 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if err != nil {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		epilogueWithCleanup(jptm, nil)
+		epilogueWithCleanup(jptm, nil, nil)
 		return
 	}
-	dstWriter := common.NewFileChunkWriter(dstFile, 1024 * 1024) // TODO: parameterize write size?
+	dstWriter := common.NewChunkedFileWriter(jptm.Context(), dstFile, 1024 * 1024) // TODO: parameterize write size?
 	// TODO: why do we need to Stat the file, to check its size, after explicitly making it with the desired size?
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
 	/*
@@ -106,7 +106,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		numChunks = uint32(blobSize/downloadChunkSize + 1)
 	}
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanup(jptm, dstFile)})
+	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanup(jptm, dstFile, dstWriter)})
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -132,16 +132,22 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File){
-	// TODO: do we need to pass the Downloader in here, and call a close method on it, in case its stateful? Only do that if we find that we need to
+func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter){
 	info := jptm.Info()
 
 	if activeDstFile != nil {
+		// wait until all received chunks are flushed out
+		_, flushError := cw.Flush(jptm.Context())    // todo: use, and check the MD5 hash returned here
+
 		// Close file
-		fileCloseErr := activeDstFile.Close()
-		if fileCloseErr != nil && !jptm.TransferStatus().DidFail() {
-			// it WAS successful up to now, but the file closing failed
-			jptm.LogDownloadError(info.Source, info.Destination, "File Closure Error "+fileCloseErr.Error(), 0)
+		fileCloseErr := activeDstFile.Close()  // always try to close if, even if flush failed
+		if flushError != nil && fileCloseErr != nil && !jptm.TransferStatus().DidFail() {
+			// it WAS successful up to now, but the file flush/closing failed
+			message := "File Closure Error "+fileCloseErr.Error()
+			if flushError != nil {
+				message = "File Flush Error " + flushError.Error()
+			}
+			jptm.LogDownloadError(info.Source, info.Destination, message, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
 	}

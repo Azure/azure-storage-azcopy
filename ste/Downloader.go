@@ -31,7 +31,7 @@ type Downloader interface {
 	// Returns a func() that will download the specified portion of the remote file into dstFile
 	// Instead of taking destination file as a parameter, it takes a helper that will write to the file. That keeps details of
 	// file IO out out the download func, and lets that func concentrate only on the details of the remote endpoint
-	GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, writer common.FileChunkWriter, offsetInFile int64, length int64, pacer *pacer) chunkFunc
+	GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, writer common.ChunkedFileWriter, offsetInFile int64, length int64, pacer *pacer) chunkFunc
 }
 
 type DownloaderFactory func() Downloader
