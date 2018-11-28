@@ -83,13 +83,16 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if len(cca.listOfFilesToCopy) > 0 {
 		for _, fileOrDir := range cca.listOfFilesToCopy {
 			tempURLPartsExtension := srcADLSGen2PathURLPartExtension
+			if len(parentSourcePath) > 0 && parentSourcePath[len(parentSourcePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+				parentSourcePath = parentSourcePath[0 : len(parentSourcePath)-1]
+			}
 
 			// Try to see if this is a file path, and download the file if it is.
 			// Create the path using the given source and files mentioned with listOfFile flag.
 			// For Example:
 			// 1. source = "https://sdksampleperftest.dfs.core.windows.net/bigdata" file = "file1.txt" blobPath= "file1.txt"
 			// 2. source = "https://sdksampleperftest.dfs.core.windows.net/bigdata/dir-1" file = "file1.txt" blobPath= "dir-1/file1.txt"
-			filePath := fmt.Sprintf("%s%s", parentSourcePath, fileOrDir)
+			filePath := fmt.Sprintf("%s%s%s", parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING, fileOrDir)
 			if len(filePath) > 0 && filePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 				filePath = filePath[1:]
 			}
@@ -101,10 +104,20 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				if err != nil {
 					panic(err)
 				}
+
+				// assembling the file relative path
+				fileRelativePath := fileOrDir
+				// ensure there is no additional AZCOPY_PATH_SEPARATOR_CHAR at the start of file name
+				if len(fileRelativePath) > 0 && fileRelativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+					fileRelativePath = fileRelativePath[1:]
+				}
+				// check for the special character in blob relative path and get path without special character.
+				fileRelativePath = util.blobPathWOSpecialCharacters(fileRelativePath)
+
 				srcURL := tempURLPartsExtension.createADLSGen2PathURLFromFileSystem(filePath)
 				e.addTransfer(common.CopyTransfer{
 					Source:           srcURL.String(),
-					Destination:      util.generateLocalPath(cca.destination, fileOrDir),
+					Destination:      util.generateLocalPath(cca.destination, fileRelativePath),
 					LastModifiedTime: e.parseLmt(fileProperties.LastModified()),
 					SourceSize:       fileSize}, cca)
 				continue
@@ -120,13 +133,17 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			err := enumerateFilesInADLSGen2Directory(
 				ctx,
 				dirURL,
-				func(fileItem azbfs.ListEntrySchema) bool {
+				func(fileItem azbfs.ListEntrySchema) bool { // filter always return true in this case
 					return true
 				},
 				func(fileItem azbfs.ListEntrySchema) error {
-					relativePath := util.blobPathWOSpecialCharacters(util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *fileItem.Name))
+					relativePath := strings.Replace(*fileItem.Name, parentSourcePath, "", 1)
+					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
+						relativePath = relativePath[1:]
+					}
+					relativePath = util.blobPathWOSpecialCharacters(relativePath)
 					return e.addTransfer(common.CopyTransfer{
-						Source:           dirURL.FileSystemURL().NewDirectoryURL(*fileItem.Name).String(),
+						Source:           dirURL.FileSystemURL().NewDirectoryURL(*fileItem.Name).String(), // This point to file
 						Destination:      util.generateLocalPath(cca.destination, relativePath),
 						LastModifiedTime: e.parseLmt(*fileItem.LastModified),
 						SourceSize:       *fileItem.ContentLength,
