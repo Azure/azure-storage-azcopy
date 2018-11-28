@@ -264,10 +264,10 @@ func (util copyHandlerUtil) relativePathToRoot(rootPath, filePath string, pathSe
 // evaluateSymlinkPath evaluates the symlinkPath and returns the evaluated symlinkPath
 func (util copyHandlerUtil) evaluateSymlinkPath(path string) (string, error) {
 	if len(path) == 0 {
-		return "" , fmt.Errorf("cannot evaluate empty symlinkPath")
+		return "", fmt.Errorf("cannot evaluate empty symlinkPath")
 	}
 	symLinkPath, err := filepath.EvalSymlinks(path)
-	if err != nil{
+	if err != nil {
 		// Network drives are not evaluated using the api "filepath.EvalSymlinks" since it returns error for the network drives.
 		// So readlink api is used to evaluate the symlinks.
 		symLinkPath, err = os.Readlink(path)
@@ -985,5 +985,73 @@ func (parts fileURLPartsExtension) getShareURL() url.URL {
 func (parts fileURLPartsExtension) getServiceURL() url.URL {
 	parts.ShareName = ""
 	parts.DirectoryOrFilePath = ""
+	return parts.URL()
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type adlsGen2PathURLPartsExtension struct {
+	azbfs.BfsURLParts
+}
+
+// searchPrefixFromFileURL aligns to blobURL's method searchPrefixFromBlobURL
+// Note: This method doesn't validate if the provided URL points to a FileURL, and will treat the input without
+// wildcard as directory URL.
+func (parts adlsGen2PathURLPartsExtension) searchPrefixFromADLSGen2PathURL() (prefix, pattern string, isWildcardSearch bool) {
+	// If the DirectoryOrFilePath is empty, it means the url provided is of a filesystem,
+	// then all files inside filesystem needs to be included, so pattern is set to *
+	if parts.DirectoryOrFilePath == "" {
+		pattern = "*"
+		return
+	}
+	// Check for wildcards and get the index of first wildcard
+	// If the wild card does not exists, then index returned is -1
+	wildCardIndex := gCopyUtil.firstIndexOfWildCard(parts.DirectoryOrFilePath)
+	if wildCardIndex < 0 {
+		// If no wild card exits and url represents a directory
+		// prefix is the path of directory after the filesystem.
+		// Example: https://<filesystem-name>/d-1?<signature>, prefix = /d-1
+		// Example: https://<filesystem-name>/d-1/d-2?<signature>, prefix = /d-1/d-2
+		prefix = parts.DirectoryOrFilePath
+		// check for separator at the end of directory
+		if prefix[len(prefix)-1] != '/' {
+			prefix += "/"
+		}
+		// since the url is a directory, then all files inside the directory
+		// needs to be downloaded, so the pattern is "*"
+		pattern = "*"
+		return
+	}
+
+	isWildcardSearch = true
+	// wild card exists prefix will be the content of file name till the wildcard index
+	// Example: https://<filesystem-name>/vd-1/vd-2/abc*
+	// prefix = /vd-1/vd-2/abc and pattern = /vd-1/vd-2/abc*
+	// All the file inside the filesystem in dir vd-2 that have the prefix "abc"
+	prefix = parts.DirectoryOrFilePath[:wildCardIndex]
+	pattern = parts.DirectoryOrFilePath
+
+	return
+}
+
+// Aligns to blobURL's getParentSourcePath
+func (parts adlsGen2PathURLPartsExtension) getParentSourcePath() string {
+	parentSourcePath := parts.DirectoryOrFilePath
+	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		}
+	}
+
+	return parentSourcePath
+}
+
+// createFileURLFromFileSystem returns a url for given ADLS gen2 parts and directoryOrFilePath.
+func (parts adlsGen2PathURLPartsExtension) createADLSGen2PathURLFromFileSystem(directoryOrFilePath string) url.URL {
+	parts.DirectoryOrFilePath = directoryOrFilePath
 	return parts.URL()
 }
