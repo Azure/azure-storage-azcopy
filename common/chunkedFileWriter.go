@@ -22,7 +22,6 @@
 package common
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -30,13 +29,20 @@ import (
 
 // Used to write all the chunks to a disk file
 type ChunkedFileWriter interface {
-	EnqueueChunk(ctx context.Context, chunkContents []byte, offsetInFile int64) error
+	WaitToScheduleChunk(ctx context.Context, chunkSize int64) error
+	EnqueueChunk(ctx context.Context, chunkContents io.Reader, offsetInFile int64, chunkSize int64) error
 	Flush(ctx context.Context) (md5Hash string, err error)
 }
+
+// TODO: move this pool to a better home
+var tempPool = NewMultiSizeSlicePool(100 * 1024 * 1024)  // max size of 100 MB is based on max supported block size for block blobs
 
 type chunkedFileWriter struct {
 	// the file we are writing to (type as interface to somewhat abstract away io.File - e.g. for unit testing)
 	file io.WriteCloser
+
+	// used to track (potentially) in RAM bytes
+	cacheLimiter CacheLimiter
 
 	// how chunky should our file writes be?  Value might be tweaked for perf tuning
 	writeSize int
@@ -55,9 +61,10 @@ type fileChunk struct {
 }
 
 
-func NewChunkedFileWriter(ctx context.Context, file io.WriteCloser, writeSize int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file io.WriteCloser, writeSize int) ChunkedFileWriter {
 	w := &chunkedFileWriter{
 		file: file,
+		cacheLimiter: cacheLimiter,
 		writeSize: writeSize,
 		successMd5: make(chan string),
 		failureError: make(chan error, 1),
@@ -69,8 +76,27 @@ func NewChunkedFileWriter(ctx context.Context, file io.WriteCloser, writeSize in
 
 var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 
+// Waits until we have enough RAM, within our pre-determined allocation, to accommodate the chunk.
+// After any necessary wait, it updates the count of scheduled-but-unsaved bytes
+// Note: we considered tracking only received-but-unsaved-bytes (i.e. increment the count at time of making the
+// request to the remote data source) but decided it was simpler and no less effective to increment the count
+// at the time of scheduling the chunk (which is when this routine should be called).
+// Is here, as method of this struct, for symmetry with the point where we remove it's count
+// from the cache limiter, which is also in this struct.
+func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, chunkSize int64) error{
+	return w.cacheLimiter.WaitUntilBytesAdded(ctx, chunkSize)
+}
+
 // Threadsafe method to enqueue a new chunk for processing
-func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, chunkContents []byte, offsetInFile int64) error {
+func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, chunkContents io.Reader, offsetInFile int64, chunkSize int64) error {
+	// read into a buffer
+	buffer := tempPool.RentSlice(uint32(chunkSize))
+	_, err := io.ReadFull(chunkContents, buffer)
+	if err != nil {
+		return err
+	}
+
+	// enqueue it
 	select {
 	case err := <- w.failureError:
 		if err != nil {
@@ -79,7 +105,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, chunkContents []by
 		return ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
 	case <-ctx.Done():
 		return ctx.Err()
-	case w.newUnorderedChunks <- fileChunk{data: chunkContents, offsetInFile: offsetInFile}:
+	case w.newUnorderedChunks <- fileChunk{data: buffer, offsetInFile: offsetInFile}:
 		return nil
 	}
 }
@@ -160,20 +186,22 @@ func (w *chunkedFileWriter)saveAvailableChunks(unsavedChunksByFileOffset map[int
 	}
 }
 
-// Saves one chunk to its destination, with configurable
-// granularity of writes via w.writeSize (so we can experiment and optimize the write
-// granularity)
+// Saves one chunk to its destination
 func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
-	bytesWritten := int64(0)
-	r := bytes.NewReader(chunk.data)
+	defer func() {
+		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
+		tempPool.ReturnSlice(chunk.data)
+	}()
+
+	bytesWritten := 0
 	for {
-		n, err := io.CopyN(w.file, r, int64(w.writeSize))
-		bytesWritten += n
-		if err == io.EOF && bytesWritten == int64(len(chunk.data)) {
-			return nil  // we reached the end of chunk.data
-		} else if err != nil {
+		n, err := w.file.Write(chunk.data[bytesWritten:])
+		if err != nil {
 			return err
 		}
+		bytesWritten += n
+		if bytesWritten == len(chunk.data) {
+			return nil
+		}
 	}
-	return nil
 }

@@ -36,6 +36,7 @@ type IJobPartMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	CacheLimiter() common.CacheLimiter
 	common.ILogger
 }
 
@@ -200,6 +201,8 @@ type jobPartMgr struct {
 	priority common.JobPriority
 
 	pacer *pacer // Pacer used by chunks when uploading data
+
+	cacheLimiter common.CacheLimiter
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
@@ -417,6 +420,11 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 			panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
 		}
 	}
+}
+
+
+func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter{
+	return jpm.cacheLimiter
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {

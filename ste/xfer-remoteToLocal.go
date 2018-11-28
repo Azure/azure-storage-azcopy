@@ -81,7 +81,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		epilogueWithCleanup(jptm, nil, nil)
 		return
 	}
-	dstWriter := common.NewChunkedFileWriter(jptm.Context(), dstFile, 1024 * 1024) // TODO: parameterize write size?
+	dstWriter := common.NewChunkedFileWriter(jptm.Context(), jptm.CacheLimiter(), dstFile, 1024 * 1024) // TODO: parameterize write size?
 	// TODO: why do we need to Stat the file, to check its size, after explicitly making it with the desired size?
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
 	/*
@@ -121,6 +121,12 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		if startIndex+downloadChunkSize > blobSize {
 			adjustedChunkSize = blobSize - startIndex
 		}
+
+		// Wait until its OK to schedule it
+		// To prevent excessive RAM consumption, we have a limit on the amount of scheduled-but-not-yet-saved data
+		// TODO: as per comment above, currently, if there's an error here we must continue because we must schedule all chunks
+		// Can we refactor/improve that?
+		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), adjustedChunkSize)
 
 		// create download func that is a appropriate to the remote data source
 		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, startIndex, adjustedChunkSize, pacer)

@@ -24,7 +24,6 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"io"
 	"net/url"
 )
 
@@ -61,22 +60,12 @@ func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipel
 			return
 		}
 
-		// step 2: Read the response body into memory
+		// step 2: Enqueue the response body to be written out to disk
 		// The retryableBodyReader encapsulates any retries that may be necessary while downloading the body
 		// TODO: get.Body returns a ReadCloser. Do we need to close it?
 		retryableBodyReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		wrappedBodyReader := newLiteResponseBodyPacer(retryableBodyReader, pacer)
-		buffer := make([]byte, length)                                               // TODO: consider pooling, if perf tuning shows to be necessary
-		_, err = io.ReadFull(wrappedBodyReader, buffer)
-		if err != nil {
-			jptm.FailActiveDownload(err)
-			return
-		}
-
-		// TODO: cap the amount of unwritten data we can have...
-
-		// step 3: Enqueue the chunk to be written out to disk
-		err = destWriter.EnqueueChunk(jptm.Context(), buffer, offsetInFile)
+		err = destWriter.EnqueueChunk(jptm.Context(), wrappedBodyReader, offsetInFile, length)
 		if err != nil {
 			jptm.FailActiveDownload(err)
 			return

@@ -25,6 +25,7 @@ type IJobPartTransferMgr interface {
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
+	CacheLimiter() common.CacheLimiter
 	StartJobXfer()
 	IsForceWriteTrue() bool
 	ReportChunkDone() (lastChunk bool, chunksDone uint32)
@@ -179,6 +180,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 
 func (jptm *jobPartTransferMgr) Context() context.Context {
 	return jptm.ctx
+}
+
+func (jptm * jobPartTransferMgr) CacheLimiter() common.CacheLimiter {
+	return jptm.jobPartMgr.CacheLimiter()
 }
 
 func (jptm *jobPartTransferMgr) RescheduleTransfer() {
