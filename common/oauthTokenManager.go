@@ -30,6 +30,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,10 +57,10 @@ type UserOAuthTokenManager struct {
 }
 
 // NewUserOAuthTokenManagerInstance creates a token manager instance.
-func NewUserOAuthTokenManagerInstance(userTokenCachePath string) *UserOAuthTokenManager {
+func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOAuthTokenManager {
 	return &UserOAuthTokenManager{
 		oauthClient: newAzcopyHTTPClient(),
-		credCache:   NewCredCache(userTokenCachePath),
+		credCache:   NewCredCache(credCacheOptions),
 	}
 }
 
@@ -288,25 +289,35 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (
 		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %v", err)
 	}
 
-	freshToken, err := tokenInfo.Refresh(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
+	freshToken := tokenInfo.Token
+	if tokenInfo.TokenRefreshSource != TokenRefreshSourceTokenStore {
+		refreshedToken, err := tokenInfo.Refresh(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
+		}
+		freshToken = *refreshedToken
 	}
 
 	return &OAuthTokenInfo{
-		Token:                   *freshToken,
+		Token:                   freshToken,
 		Tenant:                  tokenInfo.Tenant,
 		ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+		TokenRefreshSource:      tokenInfo.TokenRefreshSource,
 	}, nil
 }
 
 //====================================================================================
+
+// TokenRefreshSourceTokenStore indicates enabling azcopy oauth integration through tokenstore.
+// Note: This should be only used for internal integrations.
+const TokenRefreshSourceTokenStore = "tokenstore"
 
 // OAuthTokenInfo contains info necessary for refresh OAuth credentials.
 type OAuthTokenInfo struct {
 	adal.Token
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
+	TokenRefreshSource      string `json:"_token_refresh_source"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
 }
@@ -338,6 +349,10 @@ func (identityInfo *IdentityInfo) Validate() error {
 
 // Refresh gets new token with token info.
 func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error) {
+	if credInfo.TokenRefreshSource == TokenRefreshSourceTokenStore {
+		return credInfo.GetNewTokenFromTokenStore(ctx)
+	}
+
 	if credInfo.Identity {
 		return credInfo.GetNewTokenFromMSI(ctx)
 	}
@@ -347,7 +362,30 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 
 var msiTokenHTTPClient = newAzcopyHTTPClient()
 
-// GetNewTokenFromMSI get token from Azure Instance Metadata Service identity endpoint.
+// Single instance token store credential cache shared by entire azcopy process.
+var tokenStoreCredCache = NewCredCacheInternalIntegration(CredCacheOptions{
+	KeyName:     "azcopy/aadtoken/" + strconv.Itoa(os.Getpid()),
+	ServiceName: "azcopy",
+	AccountName: "aadtoken/" + strconv.Itoa(os.Getpid()),
+})
+
+// GetNewTokenFromTokenStore gets token from token store. (Credential Manager in Windows, keyring in Linux and keychain in MacOS.)
+// Note: This approach should only be used in internal integrations.
+func (credInfo *OAuthTokenInfo) GetNewTokenFromTokenStore(ctx context.Context) (*adal.Token, error) {
+	hasToken, err := tokenStoreCredCache.HasCachedToken()
+	if err != nil || !hasToken {
+		return nil, fmt.Errorf("no cached token found in Token Store Mode(SE), %v", err)
+	}
+
+	tokenInfo, err := tokenStoreCredCache.LoadToken()
+	if err != nil {
+		return nil, fmt.Errorf("get cached token failed in Token Store Mode(SE), %v", err)
+	}
+
+	return &(tokenInfo.Token), nil
+}
+
+// GetNewTokenFromMSI gets token from Azure Instance Metadata Service identity endpoint.
 // For details, please refer to https://docs.microsoft.com/en-us/azure/active-directory/managed-identities-azure-resources/overview
 func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.Token, error) {
 	// Prepare request to get token from Azure Instance Metadata Service identity endpoint.
@@ -406,7 +444,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromMSI(ctx context.Context) (*adal.T
 	return result, nil
 }
 
-// RefreshTokenWithUserCredential get new token with user credential through refresh.
+// RefreshTokenWithUserCredential gets new token with user credential through refresh.
 func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Context) (*adal.Token, error) {
 	oauthConfig, err := adal.NewOAuthConfig(credInfo.ActiveDirectoryEndpoint, credInfo.Tenant)
 	if err != nil {

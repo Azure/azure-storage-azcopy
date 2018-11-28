@@ -34,19 +34,19 @@ import (
 
 // CredCache manages credential caches.
 type CredCache struct {
-	state   string
-	entropy *dataBlob
-	lock    sync.Mutex
+	dpapiFilePath string
+	entropy       *dataBlob
+	lock          sync.Mutex
 }
 
 const azcopyverbose = "azcopyverbose"
 const defaultTokenFileName = "accessToken.json"
 
 // NewCredCache creates a cred cache.
-func NewCredCache(state string) *CredCache {
+func NewCredCache(options CredCacheOptions) *CredCache {
 	return &CredCache{
-		state:   state,
-		entropy: newDataBlob([]byte(azcopyverbose)),
+		dpapiFilePath: options.DPAPIFilePath,
+		entropy:       newDataBlob([]byte(azcopyverbose)),
 	}
 }
 
@@ -198,7 +198,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 }
 
 func (c *CredCache) tokenFilePath() string {
-	return path.Join(c.state, "/", defaultTokenFileName)
+	return path.Join(c.dpapiFilePath, "/", defaultTokenFileName)
 }
 
 // ======================================================================================

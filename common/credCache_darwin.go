@@ -28,16 +28,14 @@ import (
 	"github.com/jiacfan/keychain" // forked and customized from github.com/keybase/go-keychain, todo: make a release to ensure stability
 )
 
-const cachedTokenKey = "AzCopyOAuthTokenCache"
-const serviceName = "AzCopyV10"
-
 // For SSH environment, user need unlock login keychain once, to enable AzCopy to Add/Update/Retrieve/Delete key.
 // For Mac UI or terminal environment, unlock is not mandatory.
 // For more details about Apple keychain support: https://developer.apple.com/documentation/security/keychain_services?language=objc
 // CredCache manages credential caches.
 type CredCache struct {
-	state string
-	lock  sync.Mutex
+	serviceName string
+	accountName string
+	lock        sync.Mutex
 
 	// KeyChain settings
 	kcSecClass       keychain.SecClass
@@ -47,10 +45,11 @@ type CredCache struct {
 	// for more details, refer to https://developer.apple.com/documentation/security/ksecattraccessgroup?language=objc
 }
 
-func NewCredCache(state string) *CredCache {
+func NewCredCache(options CredCacheOptions) *CredCache {
 	return &CredCache{
-		state:      state,
-		kcSecClass: keychain.SecClassGenericPassword,
+		serviceName: options.ServiceName,
+		accountName: options.AccountName,
+		kcSecClass:  keychain.SecClassGenericPassword,
 		// do not synchronize this through ICloud.
 		// for more details, refer to https://developer.apple.com/documentation/security/ksecattrsynchronizable?language=objc
 		kcSynchronizable: keychain.SynchronizableNo,
@@ -60,6 +59,9 @@ func NewCredCache(state string) *CredCache {
 		kcAccessible: keychain.AccessibleAfterFirstUnlockThisDeviceOnly,
 	}
 }
+
+// keychain is used for intenal integration as well.
+var NewCredCacheInternalIntegration = NewCredCache
 
 // HasCachedToken returns if there is cached token for current executing user.
 func (c *CredCache) HasCachedToken() (bool, error) {
@@ -109,8 +111,8 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 	query := keychain.NewItem()
 	query.SetSecClass(c.kcSecClass)
-	query.SetService(serviceName)
-	query.SetAccount(cachedTokenKey)
+	query.SetService(c.serviceName)
+	query.SetAccount(c.accountName)
 	query.SetMatchLimit(keychain.MatchLimitOne)
 	query.SetReturnAttributes(true)
 	results, err := keychain.QueryItem(query)
@@ -129,7 +131,7 @@ func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 
 // removeCachedTokenInternal delete the cached token.
 func (c *CredCache) removeCachedTokenInternal() error {
-	err := keychain.DeleteGenericPasswordItem(serviceName, cachedTokenKey)
+	err := keychain.DeleteGenericPasswordItem(c.serviceName, c.accountName)
 	if err != nil {
 		err = handleGenericKeyChainSecError(err)
 
@@ -150,8 +152,8 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	}
 	item := keychain.NewItem()
 	item.SetSecClass(c.kcSecClass)
-	item.SetService(serviceName)
-	item.SetAccount(cachedTokenKey)
+	item.SetService(c.serviceName)
+	item.SetAccount(c.accountName)
 	item.SetData(b)
 	item.SetSynchronizable(c.kcSynchronizable)
 	item.SetAccessible(c.kcAccessible)
@@ -167,8 +169,8 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 		// Update the key
 		query := keychain.NewItem()
 		query.SetSecClass(c.kcSecClass)
-		query.SetService(serviceName)
-		query.SetAccount(cachedTokenKey)
+		query.SetService(c.serviceName)
+		query.SetAccount(c.accountName)
 		query.SetMatchLimit(keychain.MatchLimitOne)
 		query.SetReturnData(true)
 		err := keychain.UpdateItem(query, item)
@@ -184,8 +186,8 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	query := keychain.NewItem()
 	query.SetSecClass(c.kcSecClass)
-	query.SetService(serviceName)
-	query.SetAccount(cachedTokenKey)
+	query.SetService(c.serviceName)
+	query.SetAccount(c.accountName)
 	query.SetMatchLimit(keychain.MatchLimitOne)
 	query.SetReturnData(true)
 	results, err := keychain.QueryItem(query)

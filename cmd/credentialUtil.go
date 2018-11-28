@@ -42,6 +42,10 @@ var once sync.Once
 // (given appAppPathFolder is mapped to current user)
 var currentUserOAuthTokenManager *common.UserOAuthTokenManager
 
+const oauthLoginSessionCacheKeyName = "AzCopyOAuthTokenCache"
+const oauthLoginSessionCacheServiceName = "AzCopyV10"
+const oauthLoginSessionCacheAccountName = "AzCopyOAuthTokenCache"
+
 // GetUserOAuthTokenManagerInstance gets or creates OAuthTokenManager for current user.
 // Note: Currently, only support to have TokenManager for one user mapping to one tenantID.
 func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
@@ -49,7 +53,12 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 		if azcopyAppPathFolder == "" {
 			panic("invalid state, azcopyAppPathFolder should be initialized by root")
 		}
-		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(azcopyAppPathFolder)
+		currentUserOAuthTokenManager = common.NewUserOAuthTokenManagerInstance(common.CredCacheOptions{
+			DPAPIFilePath: azcopyAppPathFolder,
+			KeyName:       oauthLoginSessionCacheKeyName,
+			ServiceName:   oauthLoginSessionCacheServiceName,
+			AccountName:   oauthLoginSessionCacheAccountName,
+		})
 	})
 
 	return currentUserOAuthTokenManager

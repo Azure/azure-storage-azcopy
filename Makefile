@@ -28,6 +28,7 @@ test: setup ## run go tests
 build: setup ## build binaries for the project
     # the environment variables need to be passed into the container explicitly
 	GOARCH=amd64 GOOS=linux $(call with_docker,go build -o "azcopy_linux_amd64",-e GOARCH -e GOOS)
+	GOARCH=amd64 GOOS=linux $(call with_docker,go build -tags "se_integration" -o "azcopy_linux_se_amd64",-e GOARCH -e GOOS)
 	GOARCH=amd64 GOOS=windows $(call with_docker,go build -o "azcopy_windows_amd64.exe",-e GOARCH -e GOOS)
 	GOARCH=386 GOOS=windows $(call with_docker,go build -o "azcopy_windows_386.exe",-e GOARCH -e GOOS)
 
