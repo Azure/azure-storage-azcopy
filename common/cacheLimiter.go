@@ -21,10 +21,7 @@
 package common
 
 import (
-	"context"
-	"math/rand"
 	"sync/atomic"
-	"time"
 )
 
 // Used to limit the amount of in-flight data in RAM, to keep it an an acceptable level.
@@ -32,7 +29,8 @@ import (
 // In either case, if the producer is faster than the consumer, this CacheLimiter is necessary
 // prevent unbounded RAM usage
 type CacheLimiter interface {
-	WaitUntilBytesAdded(ctx context.Context, count int64) error
+	AddIfBelowStrictLimit(count int64) (added bool)
+	AddIfBelowRelaxedLimit(count int64) (added bool)
 	RemoveBytes(count int64 )
 }
 
@@ -50,18 +48,25 @@ func (c *cacheLimiter) RemoveBytes(count int64) {
 	atomic.AddInt64(&c.value, negativeDelta)
 }
 
-func (c *cacheLimiter) WaitUntilBytesAdded(ctx context.Context, count int64) error {
-	for {
-		if atomic.AddInt64(&c.value, count) <= c.limit {
-			return nil
-		}
-		// else, we are over the limit, so immediately subtract back what we've added, and wait before trying again
-		atomic.AddInt64(&c.value, -count)
-		select {
-			case <- ctx.Done():
-				return ctx.Err()
-			case <- time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
-				// nothing to do, just loop around again
-		}
+func (c *cacheLimiter) AddIfBelowStrictLimit(count int64) (added bool) {
+	return c.tryAdd(count, true)
+}
+
+func (c *cacheLimiter) AddIfBelowRelaxedLimit(count int64) (added bool) {
+	return c.tryAdd(count, false)
+}
+
+
+func (c *cacheLimiter) tryAdd(count int64, strict bool) (added bool) {
+	lim := c.limit
+	if strict {
+		lim = lim  / 2
 	}
+
+	if atomic.AddInt64(&c.value, count) <= lim {
+		return true
+	}
+	// else, we are over the limit, so immediately subtract back what we've added, and return false
+	atomic.AddInt64(&c.value, -count)
+	return false
 }

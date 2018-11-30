@@ -164,7 +164,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < 32; cc++ {
+	for cc := 0; cc < 64; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }

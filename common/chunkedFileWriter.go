@@ -25,6 +25,9 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand"
+	"sync/atomic"
+	"time"
 )
 
 // Used to write all the chunks to a disk file
@@ -49,6 +52,9 @@ type chunkedFileWriter struct {
 
 	// file chunks that have arrived and not been sorted yet
 	newUnorderedChunks chan fileChunk
+
+	// used to control scheduling of new chunks against this file
+	activeChunkCount int32
 
 	// used for completion
 	successMd5 chan string
@@ -84,7 +90,28 @@ var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
 func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, chunkSize int64) error{
-	return w.cacheLimiter.WaitUntilBytesAdded(ctx, chunkSize)
+	for {
+		// Proceed if there's room in the cache, using a less strict cache limit
+		// if we have relatively few chunks in progress for THIS file
+		// We use the less strict limit if we have few in progress to try to spread
+		// the work in progress across a larger number of files, instead of having it
+		// get concentrated in one
+		// TODO: can we find a sensible way to remove the hard-coded count threshold here?
+		if w.cacheLimiter.AddIfBelowStrictLimit(chunkSize) ||
+			(atomic.LoadInt32(&w.activeChunkCount) <= 10 && w.cacheLimiter.AddIfBelowRelaxedLimit(chunkSize)){
+			atomic.AddInt32(&w.activeChunkCount, 1)
+			return nil // the cache limited has accepted our addition
+		}
+
+		// else wait and repeat
+		select {
+		case <- ctx.Done():
+			return ctx.Err()
+		case <- time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
+			// Nothing to do, just loop around again
+			// The wait is randomized to prevent the establishment of repetitive oscillations in cache size
+		}
+	}
 }
 
 // Threadsafe method to enqueue a new chunk for processing
@@ -190,6 +217,7 @@ func (w *chunkedFileWriter)saveAvailableChunks(unsavedChunksByFileOffset map[int
 func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 	defer func() {
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
+		atomic.AddInt32(&w.activeChunkCount, -1)
 		tempPool.ReturnSlice(chunk.data)
 	}()
 
