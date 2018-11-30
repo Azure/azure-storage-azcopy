@@ -159,6 +159,8 @@ func (lcm *lifecycleMgr) Exit(msg string, exitCode ExitCode) {
 	// Check if there is ongoing CPU profiling, and stop CPU profiling.
 	lcm.checkAndStopCPUProfiling()
 
+	StopChunkWaitLogger() // TODO: this is temp
+
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
 		msgType:    eMessageType.Exit(),

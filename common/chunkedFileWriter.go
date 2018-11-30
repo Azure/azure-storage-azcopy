@@ -32,8 +32,8 @@ import (
 
 // Used to write all the chunks to a disk file
 type ChunkedFileWriter interface {
-	WaitToScheduleChunk(ctx context.Context, chunkSize int64) error
-	EnqueueChunk(ctx context.Context, chunkContents io.Reader, offsetInFile int64, chunkSize int64) error
+	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
+	EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader) error
 	Flush(ctx context.Context) (md5Hash string, err error)
 }
 
@@ -62,8 +62,8 @@ type chunkedFileWriter struct {
 }
 
 type fileChunk struct {
+	id ChunkID
 	data []byte
-	offsetInFile int64
 }
 
 
@@ -89,7 +89,8 @@ var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 // at the time of scheduling the chunk (which is when this routine should be called).
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
-func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, chunkSize int64) error{
+func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
+	LogChunkWaitReason(id, EWaitReason.RAMToSchedule())
 	for {
 		// Proceed if there's room in the cache, using a less strict cache limit
 		// if we have relatively few chunks in progress for THIS file
@@ -115,7 +116,7 @@ func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, chunkSize i
 }
 
 // Threadsafe method to enqueue a new chunk for processing
-func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, chunkContents io.Reader, offsetInFile int64, chunkSize int64) error {
+func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader) error {
 	// read into a buffer
 	buffer := tempPool.RentSlice(uint32(chunkSize))
 	_, err := io.ReadFull(chunkContents, buffer)
@@ -124,15 +125,16 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, chunkContents io.R
 	}
 
 	// enqueue it
+	LogChunkWaitReason(id, EWaitReason.WriterChannel())
 	select {
-	case err := <- w.failureError:
+	case err = <- w.failureError:
 		if err != nil {
 			return err
 		}
 		return ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
 	case <-ctx.Done():
 		return ctx.Err()
-	case w.newUnorderedChunks <- fileChunk{data: buffer, offsetInFile: offsetInFile}:
+	case w.newUnorderedChunks <- fileChunk{id: id, data: buffer}:
 		return nil
 	}
 }
@@ -184,7 +186,8 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context){
 		}
 
 		// index the new chunk
-		unsavedChunksByFileOffset[newChunk.offsetInFile] = newChunk
+		unsavedChunksByFileOffset[newChunk.id.OffsetInFile] = newChunk
+		LogChunkWaitReason(newChunk.id, EWaitReason.PriorChunk())             // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
 		err := w.saveAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave)
@@ -219,8 +222,10 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
 		tempPool.ReturnSlice(chunk.data)
+		LogChunkWaitReason(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 
+	LogChunkWaitReason(chunk.id, EWaitReason.Disk())
 	bytesWritten := 0
 	for {
 		n, err := w.file.Write(chunk.data[bytesWritten:])

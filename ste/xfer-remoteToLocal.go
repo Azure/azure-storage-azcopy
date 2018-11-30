@@ -115,6 +115,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// TODO: ...To decide: is that OK?
 	//blockIdCount := int32(0)
 	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
+		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
 		adjustedChunkSize := downloadChunkSize
 
 		// compute exact size of the chunk
@@ -126,14 +127,16 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		// To prevent excessive RAM consumption, we have a limit on the amount of scheduled-but-not-yet-saved data
 		// TODO: as per comment above, currently, if there's an error here we must continue because we must schedule all chunks
 		// Can we refactor/improve that?
-		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), adjustedChunkSize)
+		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
 
 		// create download func that is a appropriate to the remote data source
-		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, startIndex, adjustedChunkSize, pacer)
+		downloadFunc := dl.GenerateDownloadFunc(jptm, p, dstWriter, id, adjustedChunkSize, pacer)
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)
 		//blockIdCount++  TODO: why was this originally used?  What should be done with it now
+
+		common.LogChunkWaitReason(id, common.EWaitReason.WorkerGR())
 	}
 }
 
