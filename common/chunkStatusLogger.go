@@ -54,6 +54,7 @@ func (wr WaitReason) String() string{
 
 // TODO: stop this using globals
 var cw chan chunkWait
+const chunkLogEnabled = false  // TODO make this controllable by command line parameter
 
 type chunkWait struct {
 	ChunkID
@@ -63,6 +64,9 @@ type chunkWait struct {
 
 
 func LogChunkWaitReason(id ChunkID, reason WaitReason){
+	if !chunkLogEnabled {
+		return
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			// recover panic from writing to closed channel
@@ -74,11 +78,17 @@ func LogChunkWaitReason(id ChunkID, reason WaitReason){
 }
 
 func StartChunkWaitLogger(azCopyLogFolder string){
+	if !chunkLogEnabled {
+		return
+	}
 	cw = make(chan chunkWait, 1000000)
 	go chunkWaitLogger(azCopyLogFolder)
 }
 
 func StopChunkWaitLogger(){
+	if !chunkLogEnabled {
+		return
+	}
 	close(cw)
 	for len(cw) > 0 {
 		time.Sleep(time.Second)
