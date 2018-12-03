@@ -46,8 +46,8 @@ func BlobFSToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 	if !jptm.IsForceWriteTrue() {
 		_, err := os.Stat(info.Destination)
 		if err == nil {
-			// If the error is nil, then blob exists locally and it doesn't needs to be downloaded.
-			jptm.LogError(info.Destination, "File Already Exists", err)
+			// If the error is nil, then file exists locally and it doesn't needs to be downloaded.
+			jptm.LogDownloadError(info.Source, info.Destination, "File already exists", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
 			jptm.ReportTransferDone()
