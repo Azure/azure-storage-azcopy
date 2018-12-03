@@ -68,6 +68,7 @@ func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipel
 		common.LogChunkWaitReason(id, common.EWaitReason.BodyResponse())
 		retryableBodyReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		wrappedBodyReader := newLiteResponseBodyPacer(retryableBodyReader, pacer)
+		defer wrappedBodyReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), id, length, wrappedBodyReader)
 		if err != nil {
 			jptm.FailActiveDownload(err)
