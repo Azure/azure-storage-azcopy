@@ -82,6 +82,8 @@ func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file i
 
 var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 
+const maxDesirableActiveChunks = 10 		// TODO: can we find a sensible way to remove the hard-coded count threshold here?
+
 // Waits until we have enough RAM, within our pre-determined allocation, to accommodate the chunk.
 // After any necessary wait, it updates the count of scheduled-but-unsaved bytes
 // Note: we considered tracking only received-but-unsaved-bytes (i.e. increment the count at time of making the
@@ -97,9 +99,8 @@ func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID,
 		// We use the less strict limit if we have few in progress to try to spread
 		// the work in progress across a larger number of files, instead of having it
 		// get concentrated in one
-		// TODO: can we find a sensible way to remove the hard-coded count threshold here?
 		if w.cacheLimiter.AddIfBelowStrictLimit(chunkSize) ||
-			(atomic.LoadInt32(&w.activeChunkCount) <= 10 && w.cacheLimiter.AddIfBelowRelaxedLimit(chunkSize)){
+			(atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks && w.cacheLimiter.AddIfBelowRelaxedLimit(chunkSize)){
 			atomic.AddInt32(&w.activeChunkCount, 1)
 			return nil // the cache limited has accepted our addition
 		}
