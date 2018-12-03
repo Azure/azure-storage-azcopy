@@ -177,6 +177,30 @@ func getAzureFileCredentialType() (common.CredentialType, error) {
 	return common.ECredentialType.Anonymous(), nil
 }
 
+// envVarCredentialType used for passing credential type into AzCopy through environment variable.
+// Note: This is only used for internal integration, and not encouraged to be used directly.
+const envVarCredentialType = "AZCOPY_CRED_TYPE"
+
+// GetCredTypeFromEnvVar tries to get credential type from environment variable defined by envVarCredentialType.
+func GetCredTypeFromEnvVar() common.CredentialType {
+	rawVal := os.Getenv(envVarCredentialType)
+	if rawVal == "" {
+		return common.ECredentialType.Unknown()
+	}
+
+	// Remove the env var after successfully fetching once,
+	// in case of env var is further spreading into child processes unexpectly.
+	os.Setenv(envVarCredentialType, "")
+
+	// Try to get the value set.
+	var credType common.CredentialType
+	if err := credType.Parse(rawVal); err != nil {
+		return common.ECredentialType.Unknown()
+	}
+
+	return credType
+}
+
 type rawFromToInfo struct {
 	fromTo                    common.FromTo
 	source, destination       string
@@ -186,6 +210,11 @@ type rawFromToInfo struct {
 // getCredentialType checks user provided info, and gets the proper credential type
 // for current command.
 func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType common.CredentialType, err error) {
+	// In the integration case, AzCopy directly use caller provided credential type if specified and not Unknown.
+	if credType := GetCredTypeFromEnvVar(); credType != common.ECredentialType.Unknown() {
+		return credType, nil
+	}
+
 	// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
 	// verify credential type with cached token info, src or dest resource URL.
 	switch raw.fromTo {
