@@ -474,5 +474,11 @@ func (rc *contextCancelReadCloser) Close() error {
 	return err
 }
 
+func (rc *contextCancelReadCloser) CancelRequest() {
+	if rc.cf != nil {
+		rc.cf()
+	}
+}
+
 // According to https://github.com/golang/go/wiki/CompilerOptimizations, the compiler will inline this method and hopefully optimize all calls to it away
 var logf = func(format string, a ...interface{}) {}

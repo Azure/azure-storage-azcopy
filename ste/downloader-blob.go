@@ -34,6 +34,7 @@ func newBlobDownloader() Downloader {
 }
 
 // Returns a chunk-func for blob downloads
+//noinspection GoUnhandledErrorResult
 func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
 	return func(workerId int) {
 
@@ -63,13 +64,11 @@ func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipel
 		}
 
 		// step 2: Enqueue the response body to be written out to disk
-		// The retryableBodyReader encapsulates any retries that may be necessary while downloading the body
-		// TODO: get.Body returns a ReadCloser. Do we need to close it?
+		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		common.LogChunkWaitReason(id, common.EWaitReason.BodyResponse())
-		retryableBodyReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-		wrappedBodyReader := newLiteResponseBodyPacer(retryableBodyReader, pacer)
-		defer wrappedBodyReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, wrappedBodyReader)
+		retryReader, retryForcer := get.BodyWithForceableRetry(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		defer retryReader.Close()
+		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
 		if err != nil {
 			jptm.FailActiveDownload(err)
 			return

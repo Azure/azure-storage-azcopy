@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -33,7 +34,7 @@ import (
 // Used to write all the chunks to a disk file
 type ChunkedFileWriter interface {
 	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
-	EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader) error
+	EnqueueChunk(ctx context.Context, retryForcer func(), id ChunkID, chunkSize int64, chunkContents io.Reader) error
 	Flush(ctx context.Context) (md5Hash string, err error)
 }
 
@@ -53,8 +54,14 @@ type chunkedFileWriter struct {
 	// file chunks that have arrived and not been sorted yet
 	newUnorderedChunks chan fileChunk
 
-	// used to control scheduling of new chunks against this file
+	// used to control scheduling of new chunks against this file,
+	// to make sure we don't get too many sitting in RAM all waiting to be
+	// saved at the same time
+	// activeChunkCount includes all active chunks, including those scheduled but
+	// not yet received
+	// receivedChunkCount includes only the latter
 	activeChunkCount int32
+	receivedChunkCount int32
 
 	// used for completion
 	successMd5 chan string
@@ -94,22 +101,17 @@ const maxDesirableActiveChunks = 10 		// TODO: can we find a sensible way to rem
 func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
 	LogChunkWaitReason(id, EWaitReason.RAMToSchedule())
 	for {
-		// Proceed if there's room in the cache, using a less strict cache limit
-		// if we have relatively few chunks in progress for THIS file
-		// We use the less strict limit if we have few in progress to try to spread
-		// the work in progress across a larger number of files, instead of having it
-		// get concentrated in one
-		if w.cacheLimiter.AddIfBelowStrictLimit(chunkSize) ||
-			(atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks && w.cacheLimiter.AddIfBelowRelaxedLimit(chunkSize)){
+		// Proceed if there's room in the cache
+		if w.tryAddMemoryAllocation(chunkSize) {
 			atomic.AddInt32(&w.activeChunkCount, 1)
-			return nil // the cache limited has accepted our addition
+			return nil // the cache limiter has accepted our addition
 		}
 
 		// else wait and repeat
 		select {
-		case <- ctx.Done():
+		case <-ctx.Done():
 			return ctx.Err()
-		case <- time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
+		case <-time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
 			// Nothing to do, just loop around again
 			// The wait is randomized to prevent the establishment of repetitive oscillations in cache size
 		}
@@ -117,10 +119,14 @@ func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID,
 }
 
 // Threadsafe method to enqueue a new chunk for processing
-func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader) error {
+func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, retryForcer func(), id ChunkID, chunkSize int64, chunkContents io.Reader) error {
+	readDone := make(chan struct{})
+	w.setupProgressMonitoring(readDone, id, chunkSize, retryForcer)
+
 	// read into a buffer
 	buffer := tempPool.RentSlice(uint32(chunkSize))
 	_, err := io.ReadFull(chunkContents, buffer)
+	close(readDone)
 	if err != nil {
 		return err
 	}
@@ -188,6 +194,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context){
 
 		// index the new chunk
 		unsavedChunksByFileOffset[newChunk.id.OffsetInFile] = newChunk
+		atomic.AddInt32(&w.receivedChunkCount, 1)
 		LogChunkWaitReason(newChunk.id, EWaitReason.PriorChunk())             // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
@@ -222,6 +229,7 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 	defer func() {
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
+		atomic.AddInt32(&w.receivedChunkCount, -1)
 		tempPool.ReturnSlice(chunk.data)
 		LogChunkWaitReason(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
@@ -238,4 +246,68 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 			return nil
 		}
 	}
+}
+
+// Tries to add the specified number of bytes to the count of in-use bytes.
+// We use a less strict cache limit
+// if we have relatively few chunks in progress for THIS file. Why? To try to spread
+// the work in progress across a larger number of files, instead of having it
+// get concentrated in one. I.e. when we have a lot of in-flight chunks for this file,
+// we'll tend to prefer allocating for other files, with fewer in-flight
+func (w *chunkedFileWriter) tryAddMemoryAllocation(chunkSize int64) bool {
+	return w.cacheLimiter.AddIfBelowStrictLimit(chunkSize) ||
+		(atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks && w.cacheLimiter.AddIfBelowRelaxedLimit(chunkSize))
+}
+
+// Are we currently in a memory-constrained situation?
+func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {
+	didAdd := w.tryAddMemoryAllocation(chunkSize)
+	if didAdd {
+		w.cacheLimiter.RemoveBytes(chunkSize) // remove immediately, since this was only a test
+	}
+	return !didAdd
+}
+
+// Looks to see if read operation is slow AND is preventing the writing of later chunks of the file AND
+// we are thereby running up against our RAM limit. Forces retry of body read if all those conditions are met.
+// This is to work around the rare cases when some body reads are very, very slow, and therefore hold
+// up the sequential saving of subsequent chunks of the same file.  By retrying the slow chunk, we usually get a
+// fast read, and can then also write the following chunks to disk.
+func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id ChunkID, chunkSize int64, retryForcer func()){
+	if retryForcer == nil {
+		panic("retryForcer is nil. This probably means that the request pipeline is not producing cancelable requests. I.e. it is not producing response bodies that implement RequestCanceller")
+	}
+	initialReceivedCount := atomic.LoadInt32(&w.receivedChunkCount)
+
+	// Create parameters for exponential backoff such that, in only a small number of tries,
+	// our timeout here is as big as the expected max timeout for a download try.
+	// I.e. on our early tries, we may timeout earlier than that, but we won't on our later tries
+	// (in case the full timeout really is needed).
+	initialWaitSeconds := 15  // arbitrarily selected, to give minimal impression of waiting, to user
+	                          // Is on the low side, but should be safe to be on the low side, since
+	                          // we only force the retry if other later chunks are coming through OK
+    const maxWaitMinutes = 15      // TODO: share this with ste.XXXTryTimeoutSetting..., if possible without circular dependency
+	multiplierForMaxWait := (maxWaitMinutes * 60) / float64(initialWaitSeconds)
+	base := math.Pow(multiplierForMaxWait, float64(1)/3)    // find base, which, to the power of three, gives the desired multiplier, so that we'll get there where try = 3
+
+	// Run a goroutine to monitor progress and force retries when necessary
+	// Note that the retries are transparent to the main body Read call, due to use of retry reader
+	go func() {
+		// no try limit here. Let retryReader take care of that
+		for try := 0;  ; try++ {
+			waitSeconds := int32(float64(initialWaitSeconds) * math.Pow(base, float64(try)))
+			select {
+			case <-readDone:
+				// the read has finished
+				return
+			case <-time.After(time.Duration(waitSeconds) * time.Second):
+				severalLaterChunksHaveArrived := atomic.LoadInt32(&w.receivedChunkCount) > initialReceivedCount + 1
+				// if we know that later chunks are coming through fine AND we are getting tight on RAM, then force retry of this chunk
+				if severalLaterChunksHaveArrived && w.haveMemoryPressure(chunkSize) {
+					LogChunkWaitReason(id, EWaitReason.BodyReRead())
+					retryForcer()
+				}
+			}
+		}
+	}()
 }

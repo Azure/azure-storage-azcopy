@@ -38,10 +38,11 @@ var EWaitReason = WaitReason(0)
 
 type WaitReason string
 
-func (WaitReason) RAMToSchedule() WaitReason   { return WaitReason("RAM") }
-func (WaitReason) WorkerGR() WaitReason        { return WaitReason("GR") }
-func (WaitReason) HeaderResponse() WaitReason  { return WaitReason("Head") }
-func (WaitReason) BodyResponse() WaitReason    { return WaitReason("Body") }
+func (WaitReason) RAMToSchedule() WaitReason    { return WaitReason("RAM") }
+func (WaitReason) WorkerGR() WaitReason         { return WaitReason("GR") }
+func (WaitReason) HeaderResponse() WaitReason   { return WaitReason("Head") }
+func (WaitReason) BodyResponse() WaitReason     { return WaitReason("Body") }
+func (WaitReason) BodyReRead() WaitReason       { return WaitReason("BodyReRead") }
 func (WaitReason) WriterChannel() WaitReason 	{ return WaitReason("Writer") }
 func (WaitReason) PriorChunk() WaitReason 		{ return WaitReason("Prior") }
 func (WaitReason) Disk() WaitReason 			{ return WaitReason("Disk") }
@@ -54,7 +55,7 @@ func (wr WaitReason) String() string{
 
 // TODO: stop this using globals
 var cw chan chunkWait
-const chunkLogEnabled = false  // TODO make this controllable by command line parameter
+const chunkLogEnabled = true  // TODO make this controllable by command line parameter
 
 type chunkWait struct {
 	ChunkID
