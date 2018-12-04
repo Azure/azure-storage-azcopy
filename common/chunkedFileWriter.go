@@ -283,9 +283,10 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 	// our timeout here is as big as the expected max timeout for a download try.
 	// I.e. on our early tries, we may timeout earlier than that, but we won't on our later tries
 	// (in case the full timeout really is needed).
-	initialWaitSeconds := 15  // arbitrarily selected, to give minimal impression of waiting, to user
-	                          // Is on the low side, but should be safe to be on the low side, since
-	                          // we only force the retry if other later chunks are coming through OK
+	initialWaitSeconds := 15  // arbitrarily selected, to give minimal impression of waiting, to user.
+	                          // (in testing, 30 seconds did occasionally show total throughput drops of a new 10's of percent)
+	                          // While this figure is low, in terms of total time an operation is allowed to take on the service side,
+	                          // it should be safe to use this timeout because we ONLY force the retry if other later chunks are coming through OK
     const maxWaitMinutes = 15      // TODO: share this with ste.XXXTryTimeoutSetting..., if possible without circular dependency
 	multiplierForMaxWait := (maxWaitMinutes * 60) / float64(initialWaitSeconds)
 	base := math.Pow(multiplierForMaxWait, float64(1)/3)    // find base, which, to the power of three, gives the desired multiplier, so that we'll get there where try = 3
