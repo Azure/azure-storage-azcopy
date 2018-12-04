@@ -26,7 +26,7 @@ func (e *copyS2SEnumerator) initDestPipeline(ctx context.Context) error {
 	switch e.FromTo {
 	// Currently, e.CredentialInfo is always for the target needs to trigger copy API.
 	// In this case, blob destination will use it which needs to call StageBlockFromURL later.
-	case common.EFromTo.BlobBlob():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
 		p, err := createBlobPipeline(ctx, e.CredentialInfo)
 		if err != nil {
 			return err
@@ -40,7 +40,7 @@ func (e *copyS2SEnumerator) initDestPipeline(ctx context.Context) error {
 // TODO: Ensure if metadata in bucket level need be copied, currently not copy metadata in bucket level as azcopy-v1.
 func (e *copyS2SEnumerator) createDestBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
 	switch e.FromTo {
-	case common.EFromTo.BlobBlob():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
 		if e.destBlobPipeline == nil {
 			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
 		}
@@ -64,7 +64,7 @@ func (e *copyS2SEnumerator) createDestBucket(ctx context.Context, destURL url.UR
 // validateDestIsService check if destination is a service level URL.
 func (e *copyS2SEnumerator) validateDestIsService(ctx context.Context, destURL url.URL) error {
 	switch e.FromTo {
-	case common.EFromTo.BlobBlob():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
 		if e.destBlobPipeline == nil {
 			panic(errors.New("invalid state, blob type destination's pipeline is not initialized"))
 		}

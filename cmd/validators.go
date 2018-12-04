@@ -92,15 +92,13 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BlobFSLocal()
 	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.BlobBlob()
+	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.FileBlob()
 		//TODO: Add PipeFile and FilePipe support.
 		// case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.File():
 		// 	return common.EFromTo.PipeFile()
 		// case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Pipe():
 		// 	return common.EFromTo.FilePipe()
-
-		// TODO: Add File to Blob direction, when service side support is ready.
-		// case srcLocation == ELocation.File() && dstLocation == ELocation.Blob():
-		// 	return common.EFromTo.FileBlob()
 	}
 	return common.EFromTo.Unknown()
 }

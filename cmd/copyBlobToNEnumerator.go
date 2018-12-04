@@ -217,12 +217,12 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 
 func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
-	if properties.BlobType != azblob.BlobBlockBlob {
-		glcm.Info(fmt.Sprintf(
-			"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
-			properties.BlobType,
-			common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
-	}
+	// if properties.BlobType != azblob.BlobBlockBlob {
+	// 	glcm.Info(fmt.Sprintf(
+	// 		"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
+	// 		properties.BlobType,
+	// 		common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
+	// }
 
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -236,19 +236,19 @@ func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, prop
 		CacheControl:       *properties.CacheControl,
 		ContentMD5:         properties.ContentMD5,
 		Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata),
-		BlobType:           properties.BlobType},
+		BlobType:           getBlobType(properties.BlobType, cca.blobType)},
 		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly
 		cca)
 }
 
 func (e *copyBlobToNEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
-	if properties.BlobType() != azblob.BlobBlockBlob {
-		glcm.Info(fmt.Sprintf(
-			"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
-			properties.BlobType(),
-			common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
-	}
+	// if properties.BlobType() != azblob.BlobBlockBlob {
+	// 	glcm.Info(fmt.Sprintf(
+	// 		"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
+	// 		properties.BlobType(),
+	// 		common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
+	// }
 
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -262,9 +262,20 @@ func (e *copyBlobToNEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, pro
 		CacheControl:       properties.CacheControl(),
 		ContentMD5:         properties.ContentMD5(),
 		Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata()),
-		BlobType:           properties.BlobType()},
+		BlobType:           getBlobType(properties.BlobType(), cca.blobType)},
 		//BlobTier:           properties.AccessTier()}, // TODO: blob tier setting correctly
 		cca)
+}
+
+func getBlobType(srcBlobType azblob.BlobType, specifiedBlobType common.BlobType) azblob.BlobType {
+	blobType := srcBlobType
+	if specifiedBlobType != common.EBlobType.None() {
+		blobType = azblob.BlobType(specifiedBlobType.String())
+
+		glcm.Info(fmt.Sprintf("Saving blob as %v.", blobType))
+	}
+
+	return blobType
 }
 
 func (e *copyBlobToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {

@@ -43,7 +43,8 @@ type blockBlobCopy struct {
 	srcMetadata    azblob.Metadata
 }
 
-func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+// URLToBlockBlob copies resource could be get through URL to Azure Blob.
+func URLToBlockBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 
 	// step 1: Get the source, destination info for the transfer.
 	info := jptm.Info()
@@ -74,24 +75,12 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 		_, err := destBlobURL.GetProperties(jptm.Context(), azblob.BlobAccessConditions{})
 		if err == nil {
 			// If the error is nil, then blob exists and doesn't needs to be copied.
-			jptm.LogS2SCopyError(info.Source, info.Destination, "Blob Already Exists ", 0)
+			jptm.LogS2SCopyError(info.Source, info.Destination, "Blob already exists", 0)
 			// Mark the transfer as failed with BlobAlreadyExistsFailure
 			jptm.SetStatus(common.ETransferStatus.BlobAlreadyExistsFailure())
 			jptm.ReportTransferDone()
 			return
 		}
-	}
-
-	// validate blob type and fail for page/append blob temporarily.
-	// TODO: support page/append blob when service side is ready.
-	if info.SrcBlobType != azblob.BlobNone && info.SrcBlobType != azblob.BlobBlockBlob {
-		err := fmt.Errorf("skipping %v. This version of AzCopy only supports BlockBlob transfer", info.SrcBlobType)
-		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogS2SCopyError(info.Source, info.Destination, msg, status)
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.SetErrorCode(int32(status))
-		jptm.ReportTransferDone()
-		return
 	}
 
 	var azblobMetadata azblob.Metadata
@@ -150,8 +139,6 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 			return
 		}
 
-		// TODO: Dispatch according to blob types
-
 		// creating a slice to contain the block IDs
 		blockIDs := make([]string, numChunks)
 		blockIDCount := int32(0)
@@ -181,7 +168,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 }
 
-func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
+func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkID int32, startIndex int64, adjustedChunkSize int64) chunkFunc {
 	return func(workerId int) {
 
 		// TODO: added the two operations for debugging purpose. remove later
@@ -190,23 +177,6 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 		defer bbc.jptm.ReleaseAConnection()
 
-		// This function allows routine to manage behavior of unexpected panics.
-		// The panic error along with transfer details are logged.
-		// The transfer is marked as failed and is reported as done.
-		//defer func(jptm IJobPartTransferMgr) {
-		//	r := recover()
-		//	if r != nil {
-		//		info := jptm.Info()
-		//		if jptm.ShouldLog(pipeline.LogError) {
-		//			jptm.Log(pipeline.LogError, fmt.Sprintf(" recovered from unexpected crash %s. Transfer Src %s Dst %s SrcSize %v startIndex %v chunkSize %v",
-		//				r, info.Source, info.Destination, info.SourceSize, startIndex, adjustedChunkSize))
-		//		}
-		//		jptm.SetStatus(common.ETransferStatus.Failed())
-		//		jptm.ReportTransferDone()
-		//	}
-		//}(bbc.jptm)
-
-		// and the chunkFunc has been changed to the version without param workId
 		// transfer done is internal function which marks the transfer done.
 		transferDone := func() {
 			bbc.jptm.Log(pipeline.LogInfo, "Transfer Done")
@@ -219,7 +189,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 					// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 					// Other errors report that uncommitted blocks are there
-					bbc.jptm.LogError(bbc.destBlobURL.String(), "Delete Uncommitted blocks ", err)
+					bbc.jptm.LogError(bbc.destBlobURL.String(), "Delete uncommitted blocks ", err)
 				}
 			}
 			bbc.jptm.ReportTransferDone()
@@ -227,7 +197,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 
 		if bbc.jptm.WasCanceled() {
 			if bbc.jptm.ShouldLog(pipeline.LogDebug) {
-				bbc.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled. not picking up chunk %d", chunkId))
+				bbc.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled. Not picking up chunk %d", chunkID))
 			}
 			if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
@@ -242,7 +212,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		encodedBlockID := base64.StdEncoding.EncodeToString([]byte(blockID))
 
 		// step 2: save the block ID into the list of block IDs
-		(bbc.blockIDs)[chunkId] = encodedBlockID
+		(bbc.blockIDs)[chunkID] = encodedBlockID
 
 		// step 3: perform put block
 		destBlockBlobURL := bbc.destBlobURL.ToBlockBlobURL()
@@ -256,7 +226,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				bbc.jptm.Cancel()
 				status, msg := ErrorEx{err}.ErrorCodeAndString()
 				bbc.jptm.LogS2SCopyError(bbc.srcURL.String(), bbc.destBlobURL.String(), msg, status)
-				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkId), ChunkTransferStatusFailed, jobsInfoMap)
+				//updateChunkInfo(jobId, partNum, transferId, uint16(chunkID), ChunkTransferStatusFailed, jobsInfoMap)
 				bbc.jptm.SetStatus(common.ETransferStatus.Failed())
 				bbc.jptm.SetErrorCode(int32(status))
 				// If the status code was 403, it means there was an authentication error and we exit.
