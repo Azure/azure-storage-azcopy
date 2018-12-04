@@ -42,7 +42,8 @@ func (WaitReason) RAMToSchedule() WaitReason    { return WaitReason("RAM") }
 func (WaitReason) WorkerGR() WaitReason         { return WaitReason("GR") }
 func (WaitReason) HeaderResponse() WaitReason   { return WaitReason("Head") }
 func (WaitReason) BodyResponse() WaitReason     { return WaitReason("Body") }
-func (WaitReason) BodyReRead() WaitReason       { return WaitReason("BodyReRead") }
+func (WaitReason) BodyReReadDueToMem() WaitReason     { return WaitReason("BodyReRead-LowRam") }
+func (WaitReason) BodyReReadDueToSpeed() WaitReason   { return WaitReason("BodyReRead-TooSlow") }
 func (WaitReason) WriterChannel() WaitReason 	{ return WaitReason("Writer") }
 func (WaitReason) PriorChunk() WaitReason 		{ return WaitReason("Prior") }
 func (WaitReason) Disk() WaitReason 			{ return WaitReason("Disk") }
