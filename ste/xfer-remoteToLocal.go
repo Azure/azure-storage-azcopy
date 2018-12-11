@@ -36,9 +36,11 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 2: get the source, destination info for the transfer.
 	info := jptm.Info()
-	blobSize := int64(info.SourceSize)
+	fileSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize) // TODO: is this available for non-Blob cases?
 
+        // TODO: we are not logging chunk size here (as was done for some remotes in previous code, notably Azure files.  Should we?)
+	
 	// step 3: Perform initial checks
 	// If the transfer was cancelled, then report transfer as done
 	// TODO the above comment had this text too. What does it mean: "and increasing the bytestransferred by the size of the source."
@@ -63,7 +65,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 4a: special handling for empty files
-	if blobSize == 0 {
+	if fileSize == 0 {
 		err := createEmptyFile(info.Destination)
 		if err != nil {
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
@@ -75,10 +77,10 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 4b: normal file creation when source has content
 	writeThrough := true     // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
-	if blobSize < 512 {
+	if fileSize < 512 {
 		writeThrough = false // but, for very small files, we do  need it. TODO: double-check with more testing, do we really need this
 	}
-	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, blobSize, writeThrough)
+	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
 	if err != nil {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
@@ -104,10 +106,10 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 5: tell jptm what to expect, and how to clean up at the end
 	numChunks := uint32(0)
-	if rem := blobSize % downloadChunkSize; rem == 0 {
-		numChunks = uint32(blobSize / downloadChunkSize)
+	if rem := fileSize % downloadChunkSize; rem == 0 {
+		numChunks = uint32(fileSize / downloadChunkSize)
 	} else {
-		numChunks = uint32(blobSize/downloadChunkSize + 1)
+		numChunks = uint32(fileSize/downloadChunkSize + 1)
 	}
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanup(jptm, dstFile, dstWriter)})
@@ -118,13 +120,13 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// TODO: ...must schedule the expected number of chunks, so that the last of them will trigger the epilogue).
 	// TODO: ...To decide: is that OK?
 	//blockIdCount := int32(0)
-	for startIndex := int64(0); startIndex < blobSize; startIndex += downloadChunkSize {
+	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
 		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
 		adjustedChunkSize := downloadChunkSize
 
 		// compute exact size of the chunk
-		if startIndex+downloadChunkSize > blobSize {
-			adjustedChunkSize = blobSize - startIndex
+		if startIndex+downloadChunkSize > fileSize {
+			adjustedChunkSize = fileSize - startIndex
 		}
 
 		// Wait until its OK to schedule it

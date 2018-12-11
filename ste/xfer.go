@@ -76,7 +76,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
-		return FileToLocal
+		return parameterizeDownload(RemoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
 		return LocalToFile
 	case common.EFromTo.FileTrash():
