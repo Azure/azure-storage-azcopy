@@ -216,3 +216,34 @@ func (dus *DirectoryUrlSuite) TestDirectoryStructure(c *chk.C) {
 	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
 	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
 }
+
+func (dus *DirectoryUrlSuite) TestListDirectoryWithSpaces(c *chk.C) {
+	// Create file system
+	fsu := getBfsServiceURL()
+	fsURL, _ := createNewFileSystem(c, fsu)
+	defer delFileSystem(c, fsURL)
+
+	// Create a directory inside filesystem
+	dirUrl := fsURL.NewDirectoryURL("New Folder Test 2")
+	_, err := dirUrl.Create(context.Background())
+	defer deleteDirectory(c, dirUrl)
+
+	// Create a file inside directory
+	fileUrl, _ := getFileURLFromDirectory(c, dirUrl)
+	_, err = fileUrl.Create(context.Background())
+	defer delFile(c, fileUrl)
+
+	// list the directory created above.
+	// expected number of files inside the dir is 1
+	continuationMarker := ""
+	lresp, err := dirUrl.ListDirectorySegment(context.Background(), &continuationMarker, true)
+	c.Assert(err, chk.IsNil)
+	c.Assert(lresp.Response().StatusCode, chk.Equals, http.StatusOK)
+	c.Assert(len(lresp.Files()), chk.Equals, 1)
+	c.Assert(len(lresp.Directories()), chk.Equals, 0)
+	c.Assert(lresp.ETag(), chk.Equals, "")
+	c.Assert(lresp.LastModified(), chk.Equals, "")
+	c.Assert(lresp.XMsRequestID(), chk.Not(chk.Equals), "")
+	c.Assert(lresp.XMsVersion(), chk.Not(chk.Equals), "")
+	c.Assert(lresp.Date(), chk.Not(chk.Equals), "")
+}
