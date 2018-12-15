@@ -7,7 +7,10 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -127,6 +130,39 @@ func (o RetryOptions) calcDelay(try int32) time.Duration { // try is >=1; never 
 	return delay
 }
 
+// Note: forked from the standard package url.go
+// The content is exactly the same but the spaces are encoded as %20 instead of +
+// TODO: remove after the service fix
+// Encode encodes the values into ``URL encoded'' form
+// ("bar=baz&foo=quux") sorted by key.
+func alternativeEncode(v url.Values) string {
+	if v == nil {
+		return ""
+	}
+	var buf strings.Builder
+	keys := make([]string, 0, len(v))
+	for k := range v {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		vs := v[k]
+		keyEscaped := url.QueryEscape(k)
+		for _, v := range vs {
+			if buf.Len() > 0 {
+				buf.WriteByte('&')
+			}
+			buf.WriteString(keyEscaped)
+			buf.WriteByte('=')
+
+			escapedValue := url.QueryEscape(v)
+			// make an exception here and replace all "+"s with %20, which can be processed by the service
+			buf.WriteString(strings.Replace(escapedValue, "+", "%20", -1))
+		}
+	}
+	return buf.String()
+}
+
 // NewRetryPolicyFactory creates a RetryPolicyFactory object configured using the specified options.
 func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 	o = o.defaults() // Force defaults to be calculated
@@ -190,7 +226,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 				}
 				q := requestCopy.Request.URL.Query()
 				q.Set("timeout", strconv.Itoa(int(timeout+1))) // Add 1 to "round up"
-				requestCopy.Request.URL.RawQuery = q.Encode()
+				requestCopy.Request.URL.RawQuery = alternativeEncode(q)
 				logf("Url=%s\n", requestCopy.Request.URL.String())
 
 				// Set the time for this particular retry operation and then Do the operation.
