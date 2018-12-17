@@ -116,43 +116,66 @@ func chunkWaitLogger(azCopyLogFolder string){
 
 /* LinqPad query used to analyze/visualize the CSV as is follows:
 
-var data = chunkwaitlog_bigFreeze;
+var data = chunkwaitlog_noForcedRetries;
 
 const int assumedMBPerChunk = 8;
 
-data.Max(c => c.StateStartTime).Dump();
+DateTime? ParseStart(string s)
+{
+	const string format = "yyyy-MM-dd HH:mm:ss.fff";
+	var s2 = s.Substring(0, format.Length);
+	try
+	{
+		return DateTime.ParseExact(s2, format, CultureInfo.CurrentCulture);
+	}
+	catch
+	{
+		return null;
+	}
+}
 
-var allChunkIds = data.Select(c => new {c.Name, c.Offset}).Distinct();
-var doneChunkIds = data.Where(c => c.State == "Done" || c.State == "Cancelled").Select(c => new {c.Name, c.Offset}).Distinct();
-var unfinishedChunkIds = allChunkIds.Except(doneChunkIds).ToList();
+// convert to real datetime (default unparseable ones to a fixed value, simply to avoid needing to deal with nulls below, and because all valid records should be parseable. Only exception would be something partially written a time of a crash)
+var parsed = data.Select(d => new { d.Name, d.Offset, d.State, StateStartTime = ParseStart(d.StateStartTime) ?? DateTime.MaxValue}).ToList();
 
-unfinishedChunkIds.Count().Dump();
+var grouped = parsed.GroupBy(c => new {c.Name, c.Offset});
 
-var rawDataWithUnfinishedChunks = (from c in data
-								  join u in unfinishedChunkIds on new {c.Name, c.Offset} equals u
-								  select c);
-
-var unfinishedGrouped = rawDataWithUnfinishedChunks.GroupBy(c => new {c.Name, c.Offset});
-
-var statesForOffset = unfinishedGrouped.Select(g => new
+var statesForOffset = grouped.Select(g => new
 {
 	g.Key,
-	States = g.Select(x => new { x.State, x.StateStartTime }).OrderBy(x => x.StateStartTime)
+	States = g.Select(x => new { x.State, x.StateStartTime }).OrderBy(x => x.StateStartTime).ToList()
 }).ToList();
 
-var countsForFile = statesForOffset.GroupBy(sfo => sfo.Key.Name).Select(g => new { Name = g.Key, Count = g.Count()}).ToList();
+var withStatesOfInterest = (from sfo in statesForOffset
+let states = sfo.States
+let lastIndex = states.Count - 1
+let statesWithDurations = states.Select((s, i) => new{ s.State, s.StateStartTime, Duration = ( i == lastIndex ? new TimeSpan(0) : states[i+1].StateStartTime - s.StateStartTime) })
+let hasLongBodyRead = statesWithDurations.Any(x => (x.State == "Body" && x.Duration.TotalSeconds > 30)  // detect slowness in tests where we turn off the forced restarts
+|| x.State.StartsWith("BodyReRead"))                       // detect slowness where we solved it by a forced restart
+select new {sfo.Key, States = statesWithDurations, HasLongBodyRead = hasLongBodyRead})
+.ToList();
 
-var final = (from sfo in statesForOffset
-	        join cff in countsForFile on sfo.Key.Name equals cff.Name
-			select new {
-				ChunkID = sfo.Key,
-				LiveChunkCountForFile = cff.Count,
-				ChunkStates = sfo.States
-			})
+var filesWithLongBodyReads = withStatesOfInterest.Where(x => x.HasLongBodyRead).Select(x => x.Key.Name).Distinct().ToList();
+
+filesWithLongBodyReads.Count().Dump("Number of files with at least one long chunk read");
+
+var final = (from wsi in withStatesOfInterest
+join f in filesWithLongBodyReads on wsi.Key.Name equals f
+select new
+{
+ChunkID = wsi.Key,
+wsi.HasLongBodyRead,
+wsi.States
+
+})
 .GroupBy(f => f.ChunkID.Name)
-.Select(g => new {Name = g.Key, CountForFile = g.First().LiveChunkCountForFile, Chuncks = g.Select(x => new {OffsetNumber = (int)(long.Parse(x.ChunkID.Offset)/(assumedMBPerChunk*1024*1024)), OffsetValue = x.ChunkID.Offset, States = x.ChunkStates}).OrderBy(x => x.OffsetNumber)})
+.Select(g => new {
+Name = g.Key,
+Chunks = g.Select(x => new {
+OffsetNumber = (int)(long.Parse(x.ChunkID.Offset)/(assumedMBPerChunk*1024*1024)),
+OffsetValue = x.HasLongBodyRead ? Util.Highlight(x.ChunkID.Offset) : x.ChunkID.Offset, States = x.States}
+).OrderBy(x => x.OffsetNumber)
+})
 .OrderBy(x => x.Name);
-
 
 final.Dump();
 
