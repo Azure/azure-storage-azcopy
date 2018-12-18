@@ -22,6 +22,8 @@ package common
 
 import (
 	"os"
+	"syscall"
+	"strings"
 )
 
 func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
@@ -37,7 +39,6 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
 	if writeThrough {
 		flags = flags | os.O_SYNC  // technically, O_DSYNC may be very slightly faster, but its not exposed in the os package
-		                           // TODO: does this form of write-through, on Linux, deliver as much useful benefit as write-though does on Windows (for large ingestion jobs)?
 	}
 	f, err := os.OpenFile(destinationPath, flags, 0644)
 	if err != nil {
@@ -55,9 +56,6 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 			return nil, err
 		}
 	}
-	//if truncateError := f.Truncate(fileSize); truncateError != nil {
-	//	return nil, truncateError
-	//}
 	return f, nil
 }
 

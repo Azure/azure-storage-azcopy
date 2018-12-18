@@ -24,7 +24,6 @@ package common
 
 import (
 	"os"
-	"strings"
 	"sync"
 	"syscall"
 )
