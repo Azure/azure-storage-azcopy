@@ -48,9 +48,6 @@ type chunkedFileWriter struct {
 	// used to track (potentially) in RAM bytes
 	cacheLimiter CacheLimiter
 
-	// how chunky should our file writes be?  Value might be tweaked for perf tuning
-	writeSize int
-
 	// file chunks that have arrived and not been sorted yet
 	newUnorderedChunks chan fileChunk
 
@@ -65,7 +62,7 @@ type chunkedFileWriter struct {
 	creationTime time.Time
 
 	// used for completion
-	successMd5 chan string
+	successMd5 chan string  // TODO: use this when we do MD5s
 	failureError chan error
 }
 
@@ -75,11 +72,10 @@ type fileChunk struct {
 }
 
 
-func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file io.WriteCloser, writeSize int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file io.WriteCloser) ChunkedFileWriter {
 	w := &chunkedFileWriter{
 		file: file,
 		cacheLimiter: cacheLimiter,
-		writeSize: writeSize,
 		successMd5: make(chan string),
 		failureError: make(chan error, 1),
 		newUnorderedChunks: make(chan fileChunk, 10000), // TODO: parameterize, OR make >= max expected number of chunks in any file
@@ -236,17 +232,11 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 	}()
 
 	LogChunkWaitReason(chunk.id, EWaitReason.Disk())
-	bytesWritten := 0
-	for {
-		n, err := w.file.Write(chunk.data[bytesWritten:])
-		if err != nil {
-			return err
-		}
-		bytesWritten += n
-		if bytesWritten == len(chunk.data) {
-			return nil
-		}
+	_, err := w.file.Write(chunk.data)  // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
+	if err != nil {
+		return err
 	}
+	return nil
 }
 
 // Tries to add the specified number of bytes to the count of in-use bytes.

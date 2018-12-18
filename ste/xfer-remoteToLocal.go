@@ -87,7 +87,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		epilogueWithCleanup(jptm, nil, nil)
 		return
 	}
-	dstWriter := common.NewChunkedFileWriter(jptm.Context(), jptm.CacheLimiter(), dstFile, 1024 * 1024) // TODO: parameterize write size?
+	dstWriter := common.NewChunkedFileWriter(jptm.Context(), jptm.CacheLimiter(), dstFile) 
 	// TODO: why do we need to Stat the file, to check its size, after explicitly making it with the desired size?
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
 	/*
