@@ -65,7 +65,11 @@ func(bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipel
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		common.LogChunkWaitReason(id, common.EWaitReason.BodyResponse())
-		retryReader, retryForcer := get.BodyWithForceableRetry(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		//TODO: retryReader, retryForcer := get.BodyWithForceableRetry(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		retryReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		retryForcer := func(){}
+		// TODO: replace the above with real retry forcer
+
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
 		if err != nil {
