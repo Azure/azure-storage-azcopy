@@ -36,6 +36,7 @@ type IJobPartMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	common.ILogger
 }
@@ -201,6 +202,8 @@ type jobPartMgr struct {
 	priority common.JobPriority
 
 	pacer *pacer // Pacer used by chunks when uploading data
+
+	slicePool common.ByteSlicePooler
 
 	cacheLimiter common.CacheLimiter
 
@@ -422,6 +425,9 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 	}
 }
 
+func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler{
+	return jpm.slicePool
+}
 
 func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter{
 	return jpm.cacheLimiter

@@ -39,14 +39,14 @@ type ChunkedFileWriter interface {
 	MaxRetryPerDownloadBody() int
 }
 
-// TODO: move this pool to a better home
-var tempPool = NewMultiSizeSlicePool(100 * 1024 * 1024)  // max size of 100 MB is based on max supported block size for block blobs
-
 type chunkedFileWriter struct {
 	// the file we are writing to (type as interface to somewhat abstract away io.File - e.g. for unit testing)
 	file io.WriteCloser
 
-	// used to track (potentially) in RAM bytes
+	// pool of byte slices (to avoid constant GC)
+	slicePool ByteSlicePooler
+
+	// used to track the count of bytes that are (potentially) in RAM
 	cacheLimiter CacheLimiter
 
 	// file chunks that have arrived and not been sorted yet
@@ -76,9 +76,10 @@ type fileChunk struct {
 }
 
 
-func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file io.WriteCloser, maxBodyRetries int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, file io.WriteCloser, maxBodyRetries int) ChunkedFileWriter {
 	w := &chunkedFileWriter{
 		file: file,
+		slicePool: slicePool,
 		cacheLimiter: cacheLimiter,
 		successMd5: make(chan string),
 		failureError: make(chan error, 1),
@@ -127,7 +128,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, retryForcer func()
 	w.setupProgressMonitoring(readDone, id, chunkSize, retryForcer)
 
 	// read into a buffer
-	buffer := tempPool.RentSlice(uint32(chunkSize))
+	buffer := w.slicePool.RentSlice(uint32(chunkSize))
 	_, err := io.ReadFull(chunkContents, buffer)
 	close(readDone)
 	if err != nil {
@@ -237,7 +238,7 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 	defer func() {
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
-		tempPool.ReturnSlice(chunk.data)
+		w.slicePool.ReturnSlice(chunk.data)
 		LogChunkWaitReason(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 

@@ -25,6 +25,7 @@ type IJobPartTransferMgr interface {
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
+	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	StartJobXfer()
 	IsForceWriteTrue() bool
@@ -180,6 +181,10 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 
 func (jptm *jobPartTransferMgr) Context() context.Context {
 	return jptm.ctx
+}
+
+func (jptm * jobPartTransferMgr) SlicePool() common.ByteSlicePooler {
+	return jptm.jobPartMgr.SlicePool()
 }
 
 func (jptm * jobPartTransferMgr) CacheLimiter() common.CacheLimiter {

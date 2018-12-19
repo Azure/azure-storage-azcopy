@@ -143,6 +143,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		logDir:        azcopyLogPathFolder,
 		planDir:       planDir,
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
+		slicePool:     common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:  common.NewCacheLimiter(maxRamBytesToUse),
 		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
@@ -285,6 +286,7 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
+	slicePool 			common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 }
 
