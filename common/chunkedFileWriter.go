@@ -36,6 +36,7 @@ type ChunkedFileWriter interface {
 	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
 	EnqueueChunk(ctx context.Context, retryForcer func(), id ChunkID, chunkSize int64, chunkContents io.Reader) error
 	Flush(ctx context.Context) (md5Hash string, err error)
+	MaxRetryPerDownloadBody() int
 }
 
 // TODO: move this pool to a better home
@@ -64,6 +65,9 @@ type chunkedFileWriter struct {
 	// used for completion
 	successMd5 chan string  // TODO: use this when we do MD5s
 	failureError chan error
+
+	// controls body-read retries. Public so value can be shared with retryReader
+	maxRetryPerDownloadBody int
 }
 
 type fileChunk struct {
@@ -72,14 +76,15 @@ type fileChunk struct {
 }
 
 
-func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file io.WriteCloser) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, cacheLimiter CacheLimiter, file io.WriteCloser, maxBodyRetries int) ChunkedFileWriter {
 	w := &chunkedFileWriter{
 		file: file,
 		cacheLimiter: cacheLimiter,
 		successMd5: make(chan string),
 		failureError: make(chan error, 1),
-		newUnorderedChunks: make(chan fileChunk, 10000), // TODO: parameterize, OR make >= max expected number of chunks in any file
+		newUnorderedChunks: make(chan fileChunk, 10000), // TODO: set to a smallish value, and integrate that value with the test for whether a chunk can be scheduled
 		creationTime: time.Now(),
+		maxRetryPerDownloadBody: maxBodyRetries,
 	}
 	go w.workerRoutine(ctx)
 	return w
@@ -161,6 +166,11 @@ func (w *chunkedFileWriter) Flush(ctx context.Context) (string, error) {
 	case hashAsAtCompletion := <- w.successMd5:
 		return hashAsAtCompletion, nil
 	}
+}
+
+// Used so that callers can set their retry readers to the same retry count as what we are using here
+func (w *chunkedFileWriter) MaxRetryPerDownloadBody() int {
+	return w.maxRetryPerDownloadBody
 }
 
 // Each fileChunkWriter needs exactly one goroutine running this, to service the channel and save the data
@@ -274,25 +284,23 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 	// our timeout here gets very big.  Why? Because, if things really _are_ slow, e.g. on the network,
 	// we don't want to keep forcing very frequent retries. We want to do one early if needed, but if that doesn't
 	// result in fast completion, we want to back our checking frequency off very quickly and basically leave it alone.
-	initialWaitSeconds := 15  // arbitrarily selected, to give minimal impression of waiting, to user.
-	                          // (in testing, 30 seconds did occasionally show total throughput drops of a new 10's of percent)
-    const maxWaitMinutes = 15      // TODO: share this with ste.XXXTryTimeoutSetting..., if possible without circular dependency
-	multiplierForMaxWait := (maxWaitMinutes * 60) / float64(initialWaitSeconds)
-	base := math.Pow(multiplierForMaxWait, float64(1)/3)    // find base, which, to the power of three, gives the desired multiplier, so that we'll get there where try = 3
+	initialWaitSeconds := 15  // arbitrarily selected, to give minimal impression of waiting, to user (in testing, 30 seconds did occasionally show total throughput drops of a new 10's of percent)
+	base := float64(4)        // a steep exponential backoff
 
 	// set up a conservative timeout threshold based on average throughput so far
-	averageDurationPerChunkSoFar := 60 * 60 * time.Second
+	averageDurationPerChunkSoFar := time.Hour
 	if initialReceivedCount > 0 {
 		averageDurationPerChunkSoFar = time.Since(w.creationTime) / time.Duration(initialReceivedCount)
 	}
-	conservativeTimeout := averageDurationPerChunkSoFar * 10
+	conservativeTimeout := averageDurationPerChunkSoFar * 10  // multiplier is small enough that in high-throughput test cases, conservativeTimeout has typically expired by end of first try, so we can force retry at that time if needed
 
 	// Run a goroutine to monitor progress and force retries when necessary
 	// Note that the retries are transparent to the main body Read call, due to use of retry reader. I.e.
-	// our externally caller's call to Read just keeps on running, and the external caller never even knows the retry happened
+	// our external caller's call to Read just keeps on running, and the external caller never even knows the retry happened
 	go func() {
-		// no try limit here. Let retryReader take care of that
-		for try := 0;  ; try++ {
+		maxConfiguredRetries := w.maxRetryPerDownloadBody
+		maxForcedRetries := maxConfiguredRetries - 1   // leave one retry unused by us, to keep it available for non-forced, REAL, errors (handled by retryReader)
+		for try := 0; try < maxForcedRetries ; try++ {
 			waitSeconds := int32(float64(initialWaitSeconds) * math.Pow(base, float64(try)))
 			select {
 			case <-readDone:
