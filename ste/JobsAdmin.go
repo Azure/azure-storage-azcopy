@@ -213,7 +213,7 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 		// We check for suicides first to shrink goroutine pool
 		// Then, we check chunks: normal & low priority
 		select {
-		case <-ja.xferChannels.suicideCh:
+		case <-ja.xferChannels.suicideCh:   // note: as at Dec 2018, this channel is not (yet) used
 			return
 		default:
 			select {
@@ -256,13 +256,6 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 
 	for {
 		// No suicide check here, because this routine runs only in a small number of goroutines, so no need to kill them off
-		// TODO: review the above??? Maybe do need to kill them at end of job
-		// TODO: is the suicide channel mechnanism still used?  I can't find the usage - JR
-//		select {
-//		case <-ja.xferChannels.suicideCh:
-//			return
-//		default:
-
 		select {
 		case jptm := <-ja.xferChannels.normalTransferCh:
 			startTransfer(jptm)
