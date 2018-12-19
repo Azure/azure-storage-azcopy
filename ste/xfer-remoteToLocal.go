@@ -37,13 +37,13 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// step 2: get the source, destination info for the transfer.
 	info := jptm.Info()
 	fileSize := int64(info.SourceSize)
-	downloadChunkSize := int64(info.BlockSize) // TODO: is this available for non-Blob cases?
+	downloadChunkSize := int64(info.BlockSize)
 
-        // TODO: we are not logging chunk size here (as was done for some remotes in previous code, notably Azure files.  Should we?)
+	// TODO: Question: we are not logging chunk size here (as was done for some remotes in previous code, notably Azure files.  Should we?)
 	
 	// step 3: Perform initial checks
 	// If the transfer was cancelled, then report transfer as done
-	// TODO the above comment had this text too. What does it mean: "and increasing the bytestransferred by the size of the source."
+	// TODO Question: the above comment had this following text too: "and increasing the bytestransferred by the size of the source." what does it mean?
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
 		return
@@ -54,11 +54,10 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if !jptm.IsForceWriteTrue() {
 		_, err := os.Stat(info.Destination)
 		if err == nil {
-			// TODO: Confirm if this is an error condition or not
 			// If the error is nil, then file exists locally and it doesn't need to be downloaded.
 			jptm.LogDownloadError(info.Source, info.Destination, "File already exists", 0)
 			// Mark the transfer as failed
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: this was BlobAlreadyExists, but its local, so IMHO its a file. And "file" makes this code here re-usable for multiple remotes - JR.
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // Deliberately not using BlobAlreadyExists, as was previously done in the old xfer-blobToLocal, since this is not blob-specific code, and its the local file we are talking about
 			jptm.ReportTransferDone()
 			return
 		}
@@ -87,8 +86,8 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		epilogueWithCleanup(jptm, nil, nil)
 		return
 	}
-	dstWriter := common.NewChunkedFileWriter(jptm.Context(), jptm.SlicePool(), jptm.CacheLimiter(), dstFile, MaxRetryPerDownloadBody)
-	// TODO: why do we need to Stat the file, to check its size, after explicitly making it with the desired size?
+	// TODO: Question: do we need to Stat the file, to check its size, after explicitly making it with the desired size?
+	// That was what the old xfer-blobToLocal code used to do
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
 	/*
 	dstFileInfo, err := dstFile.Stat()
@@ -104,22 +103,27 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		return
 	}*/
 
-	// step 5: tell jptm what to expect, and how to clean up at the end
+	// step 5a: compute num chunks
 	numChunks := uint32(0)
 	if rem := fileSize % downloadChunkSize; rem == 0 {
 		numChunks = uint32(fileSize / downloadChunkSize)
 	} else {
 		numChunks = uint32(fileSize/downloadChunkSize + 1)
 	}
+
+	// step 5b: create destination writer
+	dstWriter := common.NewChunkedFileWriter(jptm.Context(), jptm.SlicePool(), jptm.CacheLimiter(), dstFile, numChunks, MaxRetryPerDownloadBody)
+
+	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanup(jptm, dstFile, dstWriter)})
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
-	// TODO: ...which means that we can't exit this loop early, if there is a cancellation or failure (because we
-	// TODO: ...must schedule the expected number of chunks, so that the last of them will trigger the epilogue).
-	// TODO: ...To decide: is that OK?
-	//blockIdCount := int32(0)
+	// TODO: ...which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
+	// TODO: ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
+	// TODO: ...so that the last of them will trigger the epilogue.
+	// TODO: ...Question: is that OK?
 	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
 		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
 		adjustedChunkSize := downloadChunkSize
@@ -132,7 +136,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		// Wait until its OK to schedule it
 		// To prevent excessive RAM consumption, we have a limit on the amount of scheduled-but-not-yet-saved data
 		// TODO: as per comment above, currently, if there's an error here we must continue because we must schedule all chunks
-		// Can we refactor/improve that?
+		// TODO: ... Can we refactor/improve that?
 		_ = dstWriter.WaitToScheduleChunk(jptm.Context(), id, adjustedChunkSize)
 
 		// create download func that is a appropriate to the remote data source
@@ -140,7 +144,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)
-		//blockIdCount++  TODO: why was this originally used?  What should be done with it now
+		//blockIdCount++  TODO: why was this originally used?  Question: can we remove it? It was never used, AFAICT
 
 		common.LogChunkWaitReason(id, common.EWaitReason.WorkerGR())
 	}
@@ -170,7 +174,8 @@ func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw co
 	// Preserve modified time
 	if !jptm.TransferStatus().DidFail(){
 		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
-		// So I have preserved that behavior here.  But is that correct? (see the code for zero-size files, which does consdier a failure here to be failing the transfer)
+		// TODO: ...So I have preserved that behavior here.
+		// TODO: question: But is that correct?
 		lastModifiedTime, preserveLastModifiedTime := jptm.PreserveLastModifiedTime()
 		if preserveLastModifiedTime {
 			err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
@@ -188,8 +193,7 @@ func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw co
 		// If failed, log and delete the "bad" local file
 		// If the current transfer status value is less than or equal to 0
 		// then transfer either failed or was cancelled
-		// TODO: is it right that 0 (not started) is _included_ here?  And, related, why is there no Cancelled Status?
-		// .. or at least a IsFailedOrUnstarted method?
+		// TODO: question: is it right that 0 (not started) is _included_ here? It was included in the previous version of this code.
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
 		}
@@ -202,7 +206,7 @@ func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw co
 		jptm.SetStatus(common.ETransferStatus.Success())
 
 		// Final logging
-		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: can we remove these ShouldLogs?  Aren't they inside Log?
+		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {

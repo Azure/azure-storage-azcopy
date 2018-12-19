@@ -226,11 +226,10 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 					chunkFunc(workerID)
 				default:
 					time.Sleep(100 * time.Millisecond) // Sleep before looping around
-					                                   // TODO: In order to safely support high goroutine counts,
-					                                   // review sleep duration, or find an approach that does not require waking every x milliseconds
+					                                   // TODO: Question: In order to safely support high goroutine counts,
+					                                   // do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
 					                                   // For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
-					                                   // the wake-ups. Also, if we continue using sendLimiter then, depending on how much buffered data
-					                                   // has been read from disk, most go-routines may wait on the sendLimiter instead of waiting here
+					                                   // the wake-ups.
 				}
 			}
 		}

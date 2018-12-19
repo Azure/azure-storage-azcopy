@@ -76,14 +76,19 @@ type fileChunk struct {
 }
 
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, file io.WriteCloser, maxBodyRetries int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, file io.WriteCloser, numChunks uint32, maxBodyRetries int) ChunkedFileWriter {
+	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
+	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
+	// very large numbers of very small files.
+	chanBufferSize := int(math.Min(float64(numChunks), 1000))
+
 	w := &chunkedFileWriter{
 		file: file,
 		slicePool: slicePool,
 		cacheLimiter: cacheLimiter,
 		successMd5: make(chan string),
 		failureError: make(chan error, 1),
-		newUnorderedChunks: make(chan fileChunk, 10000), // TODO: set to a smallish value, and integrate that value with the test for whether a chunk can be scheduled
+		newUnorderedChunks: make(chan fileChunk, chanBufferSize),
 		creationTime: time.Now(),
 		maxRetryPerDownloadBody: maxBodyRetries,
 	}
@@ -93,7 +98,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 
 var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 
-const maxDesirableActiveChunks = 10 		// TODO: can we find a sensible way to remove the hard-coded count threshold here?
+const maxDesirableActiveChunks = 20 		// TODO: can we find a sensible way to remove the hard-coded count threshold here?
 
 // Waits until we have enough RAM, within our pre-determined allocation, to accommodate the chunk.
 // After any necessary wait, it updates the count of scheduled-but-unsaved bytes

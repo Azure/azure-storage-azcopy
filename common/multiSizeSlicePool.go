@@ -48,7 +48,7 @@ func NewMultiSizeSlicePool(maxSliceLength uint32) ByteSlicePooler {
 	maxSlotIndex, _ :=  getSlotInfo(maxSliceLength)
 	poolsBySize := make([]*sync.Pool, maxSlotIndex + 1)
 	for i := 0; i <= maxSlotIndex; i++ {
-		poolsBySize[i] = new(sync.Pool)
+		poolsBySize[i] = &sync.Pool{}
 	}
 	return &multiSizeSlicePool{poolsBySize: poolsBySize}
 }
@@ -68,7 +68,10 @@ func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
 	return
 }
 
-// Borrows a slice from the pool (or creates a new one if none of suitable capacity is available)
+// RentSlice borrows a slice from the pool (or creates a new one if none of suitable capacity is available)
+// Note that the returned slice may contain non-zero data - i.e. old data from the previous time it was used.
+// That's safe IFF you are going to do the likes of io.ReadFull to read into it, since you know that all of the
+// old bytes will be overwritten in that case.
 func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
 	slotIndex, maxCapInSlot := getSlotInfo(desiredSize)
 
@@ -77,15 +80,17 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
 
 	// try to get a pooled slice
 	if typedSlice, ok := pool.Get().([]byte); ok {
-		// capacity will be equal to maxCapInSlot, but we need to set len to the
-		// exact desired size that was requested
+		// Capacity will be equal to maxCapInSlot.
+		// Here we set len to the exact desired size that was requested
 		typedSlice = typedSlice[0:desiredSize]
-		// TODO: should we also zero out the content of the slice?
-		// There seems to be no in-built way to do that, on an existing slice, in Go, other than
-		// by having a slice full of zeros and using the built-in copy() function to move the data over.
-		// Is it really worth doing that, when the only reason to zero it out is to offer some kind of
-		// protection against any bug in which old data is accidentally read
-		// TODO: or should we re-work this code to return bytes.Buffer instances instead of simple slices??
+		// We do not zero out the content of the slice, so it will still have the content it had
+		// the previous time it was used (before it was returned to the pool)
+		// Why don't we zero it out? Because there would be some performance cost to doing so.
+		// So instead, we rely on the caller to user io.ReadFull or similar, to fully populate the
+		// returned slice (up to its len) with their own data.
+		// A possible alternative would be to change this to return bytes.Buffers instead of slices.
+		// That would require changes to the usage of the returned objects too, since they are Readers/Writers not slices.
+		// TODO: Question: are we happy with leaving this as it is?
 		return typedSlice
 	}
 
