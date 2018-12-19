@@ -50,6 +50,7 @@ type IJobPartTransferMgr interface {
 	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
 	LogTransferStart(source, destination, description string)
+	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	common.ILogger
 }
 
@@ -286,6 +287,11 @@ func (jptm *jobPartTransferMgr) WasCanceled() bool { return jptm.ctx.Err() != ni
 func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }
+
+func (jptm *jobPartTransferMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason){
+	jptm.jobPartMgr.LogChunkStatus(id, reason)
+}
+
 
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
 // TODO: added for debugging purpose. remove later

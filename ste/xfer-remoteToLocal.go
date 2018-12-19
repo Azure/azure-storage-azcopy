@@ -112,7 +112,15 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 5b: create destination writer
-	dstWriter := common.NewChunkedFileWriter(jptm.Context(), jptm.SlicePool(), jptm.CacheLimiter(), dstFile, numChunks, MaxRetryPerDownloadBody)
+	chunkLogger := jptm;
+	dstWriter := common.NewChunkedFileWriter(
+		jptm.Context(),
+		jptm.SlicePool(),
+		jptm.CacheLimiter(),
+		chunkLogger,
+		dstFile,
+		numChunks,
+		MaxRetryPerDownloadBody)
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
@@ -146,7 +154,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		jptm.ScheduleChunks(downloadFunc)
 		//blockIdCount++  TODO: why was this originally used?  Question: can we remove it? It was never used, AFAICT
 
-		common.LogChunkWaitReason(id, common.EWaitReason.WorkerGR())
+		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 	}
 }
 

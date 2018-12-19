@@ -49,6 +49,9 @@ type chunkedFileWriter struct {
 	// used to track the count of bytes that are (potentially) in RAM
 	cacheLimiter CacheLimiter
 
+	// for logging chunk state transitions
+	chunkLogger ChunkStatusLogger
+
 	// file chunks that have arrived and not been sorted yet
 	newUnorderedChunks chan fileChunk
 
@@ -76,7 +79,7 @@ type fileChunk struct {
 }
 
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, file io.WriteCloser, numChunks uint32, maxBodyRetries int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
 	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
 	// very large numbers of very small files.
@@ -86,6 +89,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		file: file,
 		slicePool: slicePool,
 		cacheLimiter: cacheLimiter,
+		chunkLogger: chunkLogger,
 		successMd5: make(chan string),
 		failureError: make(chan error, 1),
 		newUnorderedChunks: make(chan fileChunk, chanBufferSize),
@@ -108,7 +112,7 @@ const maxDesirableActiveChunks = 20 		// TODO: can we find a sensible way to rem
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
 func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
-	LogChunkWaitReason(id, EWaitReason.RAMToSchedule())
+	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
 	for {
 		// Proceed if there's room in the cache
 		if w.tryAddMemoryAllocation(chunkSize) {
@@ -141,7 +145,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, retryForcer func()
 	}
 
 	// enqueue it
-	LogChunkWaitReason(id, EWaitReason.WriterChannel())
+	w.chunkLogger.LogChunkStatus(id, EWaitReason.WriterChannel())
 	select {
 	case err = <- w.failureError:
 		if err != nil {
@@ -209,7 +213,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context){
 		// index the new chunk
 		unsavedChunksByFileOffset[newChunk.id.OffsetInFile] = newChunk
 		atomic.AddInt32(&w.totalReceivedChunkCount, 1)
-		LogChunkWaitReason(newChunk.id, EWaitReason.PriorChunk())             // may have to wait on prior chunks to arrive
+		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk())             // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
 		err := w.saveAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave)
@@ -244,10 +248,10 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
 		w.slicePool.ReturnSlice(chunk.data)
-		LogChunkWaitReason(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
+		w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 
-	LogChunkWaitReason(chunk.id, EWaitReason.Disk())
+	w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.Disk())
 	_, err := w.file.Write(chunk.data)  // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
 	if err != nil {
 		return err
@@ -321,14 +325,14 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 					// It's necessary because we write sequentially to the file.
 					// It does not have to take into account average throughput, because later chucks arriving and RAM running out
 					// is proof enough.
-					LogChunkWaitReason(id, EWaitReason.BodyReReadDueToMem())
+					w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToMem())
 					retryForcer()
 				}else if time.Since(start) > conservativeTimeout {
 					// This is the secondary purpose of this routine: preventing 'stalls' near the end of the transfer, where
 					// RAM usage is no longer an issue, but slow chunks can cause a long tail in job progress.
 					// Here we do have to take into account average throughput (in the form of conservativeTimeout) because
 					// user may have a very slow network, so timeouts here must be relative to prior performance.
-					LogChunkWaitReason(id, EWaitReason.BodyReReadDueToSpeed())
+					w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToSpeed())
 					retryForcer()
 					conservativeTimeout = conservativeTimeout * 5  // ramp this up really quickly, since the last thing we want to do is keep forcing retries on slow things that actually were making useful progress
 				}

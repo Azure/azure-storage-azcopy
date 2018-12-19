@@ -165,8 +165,6 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 
 	JobsAdmin = ja
 
-	common.StartChunkWaitLogger(azcopyLogPathFolder) // TODO: this is temp. Review/remove
-
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()

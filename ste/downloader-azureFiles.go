@@ -46,7 +46,7 @@ func(bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, sr
 		defer jptm.ReleaseAConnection() 	// defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
 
 		if jptm.WasCanceled() {
-			common.LogChunkWaitReason(id, common.EWaitReason.Cancelled())
+			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
 			return
 		}
 
@@ -57,7 +57,7 @@ func(bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, sr
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
-		common.LogChunkWaitReason(id, common.EWaitReason.HeaderResponse())
+		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile, length, false)
 		if err != nil {
 			jptm.FailActiveDownload(err)  // cancel entire transfer because this chunk has failed
@@ -66,7 +66,7 @@ func(bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, sr
 
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
-		common.LogChunkWaitReason(id, common.EWaitReason.BodyResponse())
+		jptm.LogChunkStatus(id, common.EWaitReason.BodyResponse())
 		retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		defer retryReader.Close()
 		retryForcer := func() {

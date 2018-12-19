@@ -25,7 +25,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"time"
 )
 
@@ -54,51 +54,65 @@ func (wr WaitReason) String() string{
 	return string(wr)   // avoiding reflection here, for speed, since will be called a lot
 }
 
-// TODO: stop this using globals
-var cw chan chunkWait
-const chunkLogEnabled = true  // TODO make this controllable by command line parameter
+type ChunkStatusLogger interface {
+	LogChunkStatus(id ChunkID, reason WaitReason)
+}
 
-type chunkWait struct {
+type ChunkStatusLoggerCloser interface {
+	ChunkStatusLogger
+	CloseLog()
+}
+
+type chunkStatusLogger struct {
+	enabled bool
+	unsavedEntries chan chunkWaitState
+}
+
+func NewChunkStatusLogger(jobID JobID, logFileFolder string, enable bool) ChunkStatusLoggerCloser {
+	logger := &chunkStatusLogger{
+		enabled: enable,
+		unsavedEntries: make(chan chunkWaitState, 1000000),
+	}
+	if enable {
+		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
+		go logger.main(chunkLogPath)
+	}
+	return logger
+}
+
+type chunkWaitState struct {
 	ChunkID
 	reason WaitReason
 	waitStart time.Time
 }
 
 
-func LogChunkWaitReason(id ChunkID, reason WaitReason){
-	if !chunkLogEnabled {
+func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason){
+	if !csl.enabled {
 		return
 	}
 	defer func() {
 		if r := recover(); r != nil {
 			// recover panic from writing to closed channel
-			// May happen in early exit of app, when StopChunkWaitLogger is called before last call to this routine
+			// May happen in early exit of app, when Close is called before last call to this routine
 		}
 	}()
 
-	cw <- chunkWait{ChunkID: id, reason: reason, waitStart:time.Now() }
+	csl.unsavedEntries <- chunkWaitState{ChunkID: id, reason: reason, waitStart:time.Now() }
 }
 
-func StartChunkWaitLogger(azCopyLogFolder string){
-	if !chunkLogEnabled {
+func (csl *chunkStatusLogger) CloseLog(){
+	if !csl.enabled {
 		return
 	}
-	cw = make(chan chunkWait, 1000000)
-	go chunkWaitLogger(azCopyLogFolder)
-}
-
-func StopChunkWaitLogger(){
-	if !chunkLogEnabled {
-		return
-	}
-	close(cw)
-	for len(cw) > 0 {
-		time.Sleep(time.Second)
+	close(csl.unsavedEntries)
+	for len(csl.unsavedEntries) > 0 {
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-func chunkWaitLogger(azCopyLogFolder string){
-	f, err := os.Create(filepath.Join(azCopyLogFolder, "chunkwaitlog.csv"))  // only saves the latest run, at present...
+func (csl *chunkStatusLogger) main(chunkLogPath string){
+	f, err := os.Create(chunkLogPath)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -109,7 +123,7 @@ func chunkWaitLogger(azCopyLogFolder string){
 
 	_,_ = w.WriteString("Name,Offset,State,StateStartTime\n")
 
-	for x := range cw {
+	for x := range csl.unsavedEntries {
 		_,_ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
 	}
 }
