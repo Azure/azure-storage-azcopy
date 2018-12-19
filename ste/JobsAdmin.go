@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -126,13 +127,23 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		common.PanicIfErr(err)
 	}
 
+	// TODO: make ram usage configurable, with the following as just the default
+	// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
+	// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on CPU count.
+	const gbToUsePerCpu = 0.75  // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
+	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
+	if gbToUse > 8 {
+		gbToUse = 8     // cap it. We don't need more than this. Even 6 is enough at 10 Gbps with standard chunk sizes, but allow a little extra here to help if larger blob block sizes are selected by user
+	}
+	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+
 	ja := &jobsAdmin{
 		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr: newJobIDToJobMgr(),
 		logDir:        azcopyLogPathFolder,
 		planDir:       planDir,
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
-		cacheLimiter:  common.NewCacheLimiter(6 * 1024 * 1024 * 1024), // 4 GB not enough for 10 Gbps without furethe optinmizatoin TODO should this be a jobsAdmin level, or at job level?
+		cacheLimiter:  common.NewCacheLimiter(maxRamBytesToUse),
 		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
