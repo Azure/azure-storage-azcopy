@@ -129,6 +129,7 @@ func (csl *chunkStatusLogger) main(chunkLogPath string){
 }
 
 /* LinqPad query used to analyze/visualize the CSV as is follows:
+   Needs CSV driver for LinqPad to open the CSV - e.g. https://github.com/dobrou/CsvLINQPadDriver
 
 var data = chunkwaitlog_noForcedRetries;
 
