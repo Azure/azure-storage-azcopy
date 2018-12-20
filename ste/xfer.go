@@ -84,7 +84,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.LocalBlobFS():
 		return LocalToBlobFS
 	case common.EFromTo.BlobFSLocal():
-		return BlobFSToLocal
+		return parameterizeDownload(RemoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():
 		fallthrough
 	case common.EFromTo.FileBlob():

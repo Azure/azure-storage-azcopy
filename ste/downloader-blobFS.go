@@ -22,20 +22,20 @@ package ste
 
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"net/url"
 )
 
-type azureFilesDownloader struct {}
+type blobFSDownloader struct {}
 
-func newAzureFilesDownloader() Downloader {
-	return &azureFilesDownloader{}
+func newBlobFSDownloader() Downloader {
+	return &blobFSDownloader{}
 }
 
 // Returns a chunk-func for blob downloads
 
-func(bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
+func(bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
 	return func(workerId int) {
 
 		defer jptm.ReportChunkDone()  // whether successful or failed, it's always "done" and we must always tell the jptm
@@ -52,12 +52,12 @@ func(bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, sr
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 		info := jptm.Info()
 		u, _ := url.Parse(info.Source)
-		srcFileURL := azfile.NewFileURL(*u, srcPipeline)
+		srcFileURL := azbfs.NewDirectoryURL(*u, srcPipeline).NewFileUrl()
 		// At this point we create an HTTP(S) request for the desired portion of the file, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile, length, false)
+		get, err := srcFileURL.Download(jptm.Context(), id.OffsetInFile, length)
 		if err != nil {
 			jptm.FailActiveDownload(err)  // cancel entire transfer because this chunk has failed
 			return
@@ -66,7 +66,7 @@ func(bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, sr
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.BodyResponse())
-		retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		retryReader := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		defer retryReader.Close()
 		retryForcer := func() {
 		    // TODO: implement this, or implement GetBodyWithForceableRetry above
