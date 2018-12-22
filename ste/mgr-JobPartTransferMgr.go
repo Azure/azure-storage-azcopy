@@ -44,7 +44,10 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	FailActiveUpload(err error)
 	FailActiveDownload(err error)
+	FailActiveUploadWithDetails(err error, prefix string, failureStatus common.TransferStatus)
+	FailActiveDownloadWithDetails(err error, prefix string, failureStatus common.TransferStatus)
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -305,14 +308,37 @@ func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
 }
 
-// Use this to mark active uploads (i.e. those where chunk funcs have been scheduled) as failed
+func (jptm *jobPartTransferMgr) FailActiveUpload(err error) {
+	jptm.failActiveTransfer(err, "", common.ETransferStatus.Failed(), true)
+}
+
+func (jptm *jobPartTransferMgr) FailActiveDownload(err error) {
+	jptm.failActiveTransfer(err, "", common.ETransferStatus.Failed(), false)
+}
+
+func (jptm *jobPartTransferMgr) FailActiveUploadWithDetails(err error, prefix string, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(err, prefix, failureStatus, true)
+}
+
+func (jptm *jobPartTransferMgr) FailActiveDownloadWithDetails(err error, prefix string, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(err, prefix, failureStatus, false)
+}
+
+// Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
 // Unlike just setting the status to failed, this also handles cancellation correctly
-func (jptm *jobPartTransferMgr) FailActiveDownload(err error){
+func (jptm *jobPartTransferMgr) failActiveTransfer(err error, prefix string, failureStatus common.TransferStatus, isUpload bool){
+	// TODO: question. Prior to refactoring some code did a debug level log when WasCancelled is true (e.g. blob upload did)
+	// TODO: .. do we really need that? It's ommitted, for now.
+
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogDownloadError(jptm.Info().Source, jptm.Info().Destination, msg, status)
-		jptm.SetStatus(common.ETransferStatus.Failed())
+		typ := transferErrorCodeDownloadFailed
+		if isUpload {
+			typ = transferErrorCodeUploadFailed
+		}
+		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, prefix + msg, status)
+		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
@@ -321,7 +347,6 @@ func (jptm *jobPartTransferMgr) FailActiveDownload(err error){
 			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
 		}
 	}
-
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
 	// TODO: ... call ReportChunkDone (with the latter being done for ALL the expnected chunks). Is that maintainable?
 	// TODO: ... Is that really ideal, having to call ReportChunkDone for all the chunks AFTER cancellation?
