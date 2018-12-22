@@ -20,6 +20,9 @@
 
 package ste
 
+// TODO: remove this file
+/* replaced by uploader-blockBlob
+
 import (
 	"bytes"
 	"context"
@@ -411,4 +414,4 @@ func PutBlobUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, blockBlobUrl 
 
 	// updating number of transfers done for job part order
 	jptm.ReportTransferDone()
-}
+} */
