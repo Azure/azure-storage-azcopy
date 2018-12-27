@@ -51,13 +51,22 @@ cd .\azcopy_windows_amd64_10.0.4
 
 ## Manual
 
-### Authenticating with Azure Storage
+### Authenticating with Azure Blob and File Storage
 
 AzCopy supports two types of authentication:
 * Pre-signed URLs (URLs with Shared Access Signature aka. SAS tokens): Simply generate a SAS token from the Azure Portal, Storage Explorer, or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path).
 * Azure Active Directory Authentication : Add your user to the 'Blob Data Contributor' role in the Azure Portal, and log on to AzCopy using `azcopy login`. You can then simply use AzCopy commands without any SAS token appended to the path. e.g. `azcopy cp https://myaccount.blob.core.windows.net/container/data /mydata --recursive`
 
 > :exclamation::exclamation::exclamation:Note a [SAS token](https://docs.microsoft.com/en-us/azure/storage/common/storage-dotnet-shared-access-signature-part-1) is *NOT* an account key. SAS tokens are limited in scope and validity, and starts with a question mark which can be appended to a Blob URL. Here is an example: `?sv=2017-11-09&ss=bf&srt=co&sp=rwac&se=2018-11-16T03:59:09Z&st=2018-11-15T19:59:09Z&sip=10.102.166.17&spr=https,http&sig=k8xSm2K3crBbtNpfoxyvh9n%2BMjDTqRk2XpY8JYIAMaA%3D`.
+
+### Authenticating with Azure Data Lake Storage Gen2
+
+For the ADLS Gen2 endpoint (*.dfs.core.windows.net) only shared key authentication is supported. To do so, set the environment variables for ACCOUNT_NAME and ACCOUNT_KEY with your Storage account name and key.
+```
+set ACCOUNT_NAME=mystorageaccountname
+set ACCOUNT_KEY=myaccountkey
+
+```
 
 ### Getting started
 
