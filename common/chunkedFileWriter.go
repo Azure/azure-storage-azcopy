@@ -123,6 +123,10 @@ func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID,
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
+			// Duration of delay is somewhat arbitrary. Don't want to use anything very tiny (e.g. milliseconds) because that
+			// just adds CPU load for no real benefit.  Is this value too big?  Probably not, because even at 10 Gbps,
+			// it would take longer than this to fill or drain our full memory allocation.
+
 			// Nothing to do, just loop around again
 			// The wait is randomized to prevent the establishment of repetitive oscillations in cache size
 		}
