@@ -309,6 +309,7 @@ type OAuthTokenInfo struct {
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
+	ClientID                string `json:"_client_id"`
 }
 
 // IdentityInfo contains info for MSI.
@@ -413,9 +414,14 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 		return nil, err
 	}
 
+	var applicationId = credInfo.ClientID
+	if applicationId == "" {
+		applicationId = ApplicationID
+	}
+
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
-		ApplicationID,
+		applicationId,
 		Resource,
 		credInfo.Token)
 	if err != nil {
