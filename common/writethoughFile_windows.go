@@ -31,7 +31,6 @@ func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) 
 	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false)
 }
 
-
 func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int64, writeThrough bool) (*os.File, error) {
 	err := CreateParentDirectoryIfNotExist(destinationPath)
 	if err != nil {
@@ -69,7 +68,6 @@ func CreateParentDirectoryIfNotExist(destinationPath string) error {
 	return nil
 }
 
-
 func makeInheritSa() *syscall.SecurityAttributes {
 	var sa syscall.SecurityAttributes
 	sa.Length = uint32(unsafe.Sizeof(sa))
@@ -77,7 +75,7 @@ func makeInheritSa() *syscall.SecurityAttributes {
 	return &sa
 }
 
-const FILE_ATTRIBUTE_WRITE_THROUGH        = 0x80000000
+const FILE_ATTRIBUTE_WRITE_THROUGH = 0x80000000
 
 // Copied from syscall.open, but modified to allow setting of writeThrough option
 // Param "perm" is unused both here and in the original Windows version of this routine.
@@ -129,9 +127,6 @@ func OpenWithWriteThroughSetting(path string, mode int, perm uint32, writeThroug
 	if writeThrough {
 		attr |= FILE_ATTRIBUTE_WRITE_THROUGH
 	}
-	h, e := syscall.CreateFile(pathp, access, sharemode, sa, createmode,  attr, 0)
+	h, e := syscall.CreateFile(pathp, access, sharemode, sa, createmode, attr, 0)
 	return h, e
 }
-
-
-

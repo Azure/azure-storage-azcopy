@@ -31,7 +31,7 @@ import (
 type CacheLimiter interface {
 	AddIfBelowStrictLimit(count int64) (added bool)
 	AddIfBelowRelaxedLimit(count int64) (added bool)
-	RemoveBytes(count int64 )
+	RemoveBytes(count int64)
 }
 
 type cacheLimiter struct {
@@ -39,7 +39,7 @@ type cacheLimiter struct {
 	limit int64
 }
 
-func NewCacheLimiter(limit int64) CacheLimiter{
+func NewCacheLimiter(limit int64) CacheLimiter {
 	return &cacheLimiter{limit: limit}
 }
 
@@ -56,11 +56,10 @@ func (c *cacheLimiter) AddIfBelowRelaxedLimit(count int64) (added bool) {
 	return c.tryAdd(count, false)
 }
 
-
 func (c *cacheLimiter) tryAdd(count int64, strict bool) (added bool) {
 	lim := c.limit
 	if strict {
-		lim = lim  / 2
+		lim = lim / 2
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {

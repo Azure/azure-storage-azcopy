@@ -22,8 +22,8 @@ package common
 
 import (
 	"os"
-	"syscall"
 	"strings"
+	"syscall"
 )
 
 func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
@@ -39,7 +39,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
 	if writeThrough {
 		// TODO: conduct further testing of this code path, on Linux
-		flags = flags | os.O_SYNC  // technically, O_DSYNC may be very slightly faster, but its not exposed in the os package
+		flags = flags | os.O_SYNC // technically, O_DSYNC may be very slightly faster, but its not exposed in the os package
 	}
 	f, err := os.OpenFile(destinationPath, flags, 0644)
 	if err != nil {

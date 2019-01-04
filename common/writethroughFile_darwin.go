@@ -27,7 +27,6 @@ import (
 	"strings"
 )
 
-
 // create a file, given its path and length
 func CreateFileOfSize(destinationPath string, fileSize int64) (*os.File, error) {
 	return CreateFileOfSizeWithWriteThroughOption(destinationPath, fileSize, false)
@@ -41,7 +40,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	// TODO: currently writeThrough is ignored here on darwin. Review, and use it if we have an implementation we are comfortable with
 	// A quick internet search returned conflicting opinions on whether MacOS suppose O_SYNC or uses a different flag with the same meaning.
 	// If different with same meaning, can we just use O_SYNC here?  That's what we need to find out before implementing.
-	
+
 	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return nil, err

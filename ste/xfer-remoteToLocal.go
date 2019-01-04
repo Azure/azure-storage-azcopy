@@ -40,7 +40,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	downloadChunkSize := int64(info.BlockSize)
 
 	// TODO: Question: we are not logging chunk size here (as was done for some remotes in previous code, notably Azure files.  Should we?)
-	
+
 	// step 3: Perform initial checks
 	// If the transfer was cancelled, then report transfer as done
 	// TODO Question: the above comment had this following text too: "and increasing the bytestransferred by the size of the source." what does it mean?
@@ -75,7 +75,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 4b: normal file creation when source has content
-	writeThrough := true     // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
+	writeThrough := true // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
 	if fileSize < 512 {
 		writeThrough = false // but, for very small files, we do  need it. TODO: double-check with more testing, do we really need this
 	}
@@ -90,18 +90,18 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// That was what the old xfer-blobToLocal code used to do
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
 	/*
-	dstFileInfo, err := dstFile.Stat()
-	if err != nil || (dstFileInfo.Size() != blobSize) {
-		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		// Since the transfer failed, the file created above should be deleted
-		// If there was an error while opening / creating the file, delete will fail.
-		// But delete is required when error occurred while truncating the file and
-		// in this case file should be deleted.
-		tryDeleteFile(info, jptm)
-		jptm.ReportTransferDone()
-		return
-	}*/
+		dstFileInfo, err := dstFile.Stat()
+		if err != nil || (dstFileInfo.Size() != blobSize) {
+			jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			// Since the transfer failed, the file created above should be deleted
+			// If there was an error while opening / creating the file, delete will fail.
+			// But delete is required when error occurred while truncating the file and
+			// in this case file should be deleted.
+			tryDeleteFile(info, jptm)
+			jptm.ReportTransferDone()
+			return
+		}*/
 
 	// step 5a: compute num chunks
 	numChunks := uint32(0)
@@ -112,7 +112,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 5b: create destination writer
-	chunkLogger := jptm;
+	chunkLogger := jptm
 	dstWriter := common.NewChunkedFileWriter(
 		jptm.Context(),
 		jptm.SlicePool(),
@@ -124,7 +124,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanup(jptm, dstFile, dstWriter)})
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanup(jptm, dstFile, dstWriter) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -159,18 +159,18 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter){
+func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	if activeDstFile != nil {
 		// wait until all received chunks are flushed out
-		_, flushError := cw.Flush(jptm.Context())    // todo: use, and check the MD5 hash returned here
+		_, flushError := cw.Flush(jptm.Context()) // todo: use, and check the MD5 hash returned here
 
 		// Close file
-		fileCloseErr := activeDstFile.Close()  // always try to close if, even if flush failed
+		fileCloseErr := activeDstFile.Close() // always try to close if, even if flush failed
 		if flushError != nil && fileCloseErr != nil && !jptm.TransferStatus().DidFail() {
 			// it WAS successful up to now, but the file flush/closing failed
-			message := "File Closure Error "+fileCloseErr.Error()
+			message := "File Closure Error " + fileCloseErr.Error()
 			if flushError != nil {
 				message = "File Flush Error " + flushError.Error()
 			}
@@ -180,7 +180,7 @@ func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw co
 	}
 
 	// Preserve modified time
-	if !jptm.TransferStatus().DidFail(){
+	if !jptm.TransferStatus().DidFail() {
 		// TODO: the old version of this code did NOT consider it an error to be unable to set the modification date/time
 		// TODO: ...So I have preserved that behavior here.
 		// TODO: question: But is that correct?
@@ -253,4 +253,3 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
 }
-

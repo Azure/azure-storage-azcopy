@@ -1,4 +1,3 @@
-
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -66,7 +65,7 @@ type chunkedFileWriter struct {
 	creationTime time.Time
 
 	// used for completion
-	successMd5 chan string  // TODO: use this when we do MD5s
+	successMd5   chan string // TODO: use this when we do MD5s
 	failureError chan error
 
 	// controls body-read retries. Public so value can be shared with retryReader
@@ -74,10 +73,9 @@ type chunkedFileWriter struct {
 }
 
 type fileChunk struct {
-	id ChunkID
+	id   ChunkID
 	data []byte
 }
-
 
 func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
@@ -86,14 +84,14 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 	chanBufferSize := int(math.Min(float64(numChunks), 1000))
 
 	w := &chunkedFileWriter{
-		file: file,
-		slicePool: slicePool,
-		cacheLimiter: cacheLimiter,
-		chunkLogger: chunkLogger,
-		successMd5: make(chan string),
-		failureError: make(chan error, 1),
-		newUnorderedChunks: make(chan fileChunk, chanBufferSize),
-		creationTime: time.Now(),
+		file:                    file,
+		slicePool:               slicePool,
+		cacheLimiter:            cacheLimiter,
+		chunkLogger:             chunkLogger,
+		successMd5:              make(chan string),
+		failureError:            make(chan error, 1),
+		newUnorderedChunks:      make(chan fileChunk, chanBufferSize),
+		creationTime:            time.Now(),
 		maxRetryPerDownloadBody: maxBodyRetries,
 	}
 	go w.workerRoutine(ctx)
@@ -102,7 +100,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 
 var ChunkWriterAlreadyFailed = errors.New("chunk Writer already failed")
 
-const maxDesirableActiveChunks = 20 		// TODO: can we find a sensible way to remove the hard-coded count threshold here?
+const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remove the hard-coded count threshold here?
 
 // Waits until we have enough RAM, within our pre-determined allocation, to accommodate the chunk.
 // After any necessary wait, it updates the count of scheduled-but-unsaved bytes
@@ -111,7 +109,7 @@ const maxDesirableActiveChunks = 20 		// TODO: can we find a sensible way to rem
 // at the time of scheduling the chunk (which is when this routine should be called).
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
-func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
+func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error {
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
 	for {
 		// Proceed if there's room in the cache
@@ -147,7 +145,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, retryForcer func()
 	// enqueue it
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.WriterChannel())
 	select {
-	case err = <- w.failureError:
+	case err = <-w.failureError:
 		if err != nil {
 			return err
 		}
@@ -166,14 +164,14 @@ func (w *chunkedFileWriter) Flush(ctx context.Context) (string, error) {
 
 	// wait until all written to disk
 	select {
-	case err := <- w.failureError:
+	case err := <-w.failureError:
 		if err != nil {
 			return "", err
 		}
-		return "", ChunkWriterAlreadyFailed  // channel returned nil because it was closed and empty
+		return "", ChunkWriterAlreadyFailed // channel returned nil because it was closed and empty
 	case <-ctx.Done():
 		return "", ctx.Err()
-	case hashAsAtCompletion := <- w.successMd5:
+	case hashAsAtCompletion := <-w.successMd5:
 		return hashAsAtCompletion, nil
 	}
 }
@@ -187,7 +185,7 @@ func (w *chunkedFileWriter) MaxRetryPerDownloadBody() int {
 // This routine orders the data sequentially, so that (a) we can get maximum performance without
 // resorting to the likes of SetFileValidData (https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-setfilevaliddata)
 // and (b) we can compute MD5 hashes - which can only be computed when moving through the data sequentially
-func (w *chunkedFileWriter) workerRoutine(ctx context.Context){
+func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 	nextOffsetToSave := int64(0)
 	unsavedChunksByFileOffset := make(map[int64]fileChunk)
 
@@ -213,25 +211,25 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context){
 		// index the new chunk
 		unsavedChunksByFileOffset[newChunk.id.OffsetInFile] = newChunk
 		atomic.AddInt32(&w.totalReceivedChunkCount, 1)
-		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk())             // may have to wait on prior chunks to arrive
+		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk()) // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
 		err := w.saveAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave)
-		if err != nil{
+		if err != nil {
 			w.failureError <- err
-			close(w.failureError)  // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
-			return                 // no point in processing any more after a failure
+			close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
+			return                // no point in processing any more after a failure
 		}
 	}
 }
 
 // Saves available chunks that are sequential from nextOffsetToSave. Stops and returns as soon as it hits
 // a gap (i.e. the position of a chunk that hasn't arrived yet)
-func (w *chunkedFileWriter)saveAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64) error {
+func (w *chunkedFileWriter) saveAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64) error {
 	for {
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[*nextOffsetToSave]
 		if !exists {
-			return  nil   //its not there yet. That's OK.
+			return nil //its not there yet. That's OK.
 		}
 		*nextOffsetToSave += int64(len(nextChunkInSequence.data))
 
@@ -243,7 +241,7 @@ func (w *chunkedFileWriter)saveAvailableChunks(unsavedChunksByFileOffset map[int
 }
 
 // Saves one chunk to its destination
-func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
+func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 	defer func() {
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
@@ -252,7 +250,7 @@ func (w *chunkedFileWriter)saveOneChunk(chunk fileChunk) error{
 	}()
 
 	w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.Disk())
-	_, err := w.file.Write(chunk.data)  // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
+	_, err := w.file.Write(chunk.data) // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
 	if err != nil {
 		return err
 	}
@@ -283,7 +281,7 @@ func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {
 // This is to work around the rare cases when some body reads are much slower than usual therefore they (a) hold
 // up the sequential saving of subsequent chunks of the same file and/or (b) hold up completion of the whole job.
 // By retrying the slow chunk, we usually get a fast read.
-func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id ChunkID, chunkSize int64, retryForcer func()){
+func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id ChunkID, chunkSize int64, retryForcer func()) {
 	if retryForcer == nil {
 		panic("retryForcer is nil. This probably means that the request pipeline is not producing cancelable requests. I.e. it is not producing response bodies that implement RequestCanceller")
 	}
@@ -294,30 +292,30 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 	// our timeout here gets very big.  Why? Because, if things really _are_ slow, e.g. on the network,
 	// we don't want to keep forcing very frequent retries. We want to do one early if needed, but if that doesn't
 	// result in fast completion, we want to back our checking frequency off very quickly and basically leave it alone.
-	initialWaitSeconds := 15  // arbitrarily selected, to give minimal impression of waiting, to user (in testing, 30 seconds did occasionally show total throughput drops of a new 10's of percent)
-	base := float64(4)        // a steep exponential backoff
+	initialWaitSeconds := 15 // arbitrarily selected, to give minimal impression of waiting, to user (in testing, 30 seconds did occasionally show total throughput drops of a new 10's of percent)
+	base := float64(4)       // a steep exponential backoff
 
 	// set up a conservative timeout threshold based on average throughput so far
 	averageDurationPerChunkSoFar := time.Hour
 	if initialReceivedCount > 0 {
 		averageDurationPerChunkSoFar = time.Since(w.creationTime) / time.Duration(initialReceivedCount)
 	}
-	conservativeTimeout := averageDurationPerChunkSoFar * 10  // multiplier is small enough that in high-throughput test cases, conservativeTimeout has typically expired by end of first try, so we can force retry at that time if needed
+	conservativeTimeout := averageDurationPerChunkSoFar * 10 // multiplier is small enough that in high-throughput test cases, conservativeTimeout has typically expired by end of first try, so we can force retry at that time if needed
 
 	// Run a goroutine to monitor progress and force retries when necessary
 	// Note that the retries are transparent to the main body Read call, due to use of retry reader. I.e.
 	// our external caller's call to Read just keeps on running, and the external caller never even knows the retry happened
 	go func() {
 		maxConfiguredRetries := w.maxRetryPerDownloadBody
-		maxForcedRetries := maxConfiguredRetries - 1   // leave one retry unused by us, to keep it available for non-forced, REAL, errors (handled by retryReader)
-		for try := 0; try < maxForcedRetries ; try++ {
+		maxForcedRetries := maxConfiguredRetries - 1 // leave one retry unused by us, to keep it available for non-forced, REAL, errors (handled by retryReader)
+		for try := 0; try < maxForcedRetries; try++ {
 			waitSeconds := int32(float64(initialWaitSeconds) * math.Pow(base, float64(try)))
 			select {
 			case <-readDone:
 				// the read has finished
 				return
 			case <-time.After(time.Duration(waitSeconds) * time.Second):
-				severalLaterChunksHaveArrived := atomic.LoadInt32(&w.totalReceivedChunkCount) > initialReceivedCount + 1
+				severalLaterChunksHaveArrived := atomic.LoadInt32(&w.totalReceivedChunkCount) > initialReceivedCount+1
 				if severalLaterChunksHaveArrived && w.haveMemoryPressure(chunkSize) {
 					// We know that later chunks are coming through fine AND we are getting tight on RAM, so force retry of this chunk
 					// (even if still within conservativeTimeout)
@@ -327,14 +325,14 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 					// is proof enough.
 					w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToMem())
 					retryForcer()
-				}else if time.Since(start) > conservativeTimeout {
+				} else if time.Since(start) > conservativeTimeout {
 					// This is the secondary purpose of this routine: preventing 'stalls' near the end of the transfer, where
 					// RAM usage is no longer an issue, but slow chunks can cause a long tail in job progress.
 					// Here we do have to take into account average throughput (in the form of conservativeTimeout) because
 					// user may have a very slow network, so timeouts here must be relative to prior performance.
 					w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToSpeed())
 					retryForcer()
-					conservativeTimeout = conservativeTimeout * 5  // ramp this up really quickly, since the last thing we want to do is keep forcing retries on slow things that actually were making useful progress
+					conservativeTimeout = conservativeTimeout * 5 // ramp this up really quickly, since the last thing we want to do is keep forcing retries on slow things that actually were making useful progress
 				}
 			}
 		}

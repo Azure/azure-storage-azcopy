@@ -88,4 +88,3 @@ func (m *MMF) UnuseMMF() {
 func (m *MMF) Slice() []byte {
 	return m.slice
 }
-

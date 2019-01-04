@@ -148,5 +148,3 @@ func prefetchVirtualMemory(virtualAddresses *memoryRangeEntry) (err error) {
 	}
 	return nil
 }
-
-

@@ -35,4 +35,3 @@ type Downloader interface {
 }
 
 type DownloaderFactory func() Downloader
-

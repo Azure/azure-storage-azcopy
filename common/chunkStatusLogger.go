@@ -1,4 +1,3 @@
-
 // Copyright © 2017 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -30,7 +29,7 @@ import (
 )
 
 type ChunkID struct {
-	Name string
+	Name         string
 	OffsetInFile int64
 }
 
@@ -38,20 +37,20 @@ var EWaitReason = WaitReason(0)
 
 type WaitReason string
 
-func (WaitReason) RAMToSchedule() WaitReason    { return WaitReason("RAM") }
-func (WaitReason) WorkerGR() WaitReason         { return WaitReason("GR") }
-func (WaitReason) HeaderResponse() WaitReason   { return WaitReason("Head") }
-func (WaitReason) BodyResponse() WaitReason     { return WaitReason("Body") }
-func (WaitReason) BodyReReadDueToMem() WaitReason     { return WaitReason("BodyReRead-LowRam") }
-func (WaitReason) BodyReReadDueToSpeed() WaitReason   { return WaitReason("BodyReRead-TooSlow") }
-func (WaitReason) WriterChannel() WaitReason 	{ return WaitReason("Writer") }
-func (WaitReason) PriorChunk() WaitReason 		{ return WaitReason("Prior") }
-func (WaitReason) Disk() WaitReason 			{ return WaitReason("Disk") }
-func (WaitReason) ChunkDone() WaitReason 		{ return WaitReason("Done") }
-func (WaitReason) Cancelled() WaitReason 		{ return WaitReason("Cancelled") }
+func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason("RAM") }
+func (WaitReason) WorkerGR() WaitReason             { return WaitReason("GR") }
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason("Head") }
+func (WaitReason) BodyResponse() WaitReason         { return WaitReason("Body") }
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason("BodyReRead-LowRam") }
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason("BodyReRead-TooSlow") }
+func (WaitReason) WriterChannel() WaitReason        { return WaitReason("Writer") }
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason("Prior") }
+func (WaitReason) Disk() WaitReason                 { return WaitReason("Disk") }
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason("Done") }
+func (WaitReason) Cancelled() WaitReason            { return WaitReason("Cancelled") }
 
-func (wr WaitReason) String() string{
-	return string(wr)   // avoiding reflection here, for speed, since will be called a lot
+func (wr WaitReason) String() string {
+	return string(wr) // avoiding reflection here, for speed, since will be called a lot
 }
 
 type ChunkStatusLogger interface {
@@ -64,13 +63,13 @@ type ChunkStatusLoggerCloser interface {
 }
 
 type chunkStatusLogger struct {
-	enabled bool
+	enabled        bool
 	unsavedEntries chan chunkWaitState
 }
 
 func NewChunkStatusLogger(jobID JobID, logFileFolder string, enable bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
-		enabled: enable,
+		enabled:        enable,
 		unsavedEntries: make(chan chunkWaitState, 1000000),
 	}
 	if enable {
@@ -82,12 +81,11 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enable bool) ChunkS
 
 type chunkWaitState struct {
 	ChunkID
-	reason WaitReason
+	reason    WaitReason
 	waitStart time.Time
 }
 
-
-func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason){
+func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 	if !csl.enabled {
 		return
 	}
@@ -98,10 +96,10 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason){
 		}
 	}()
 
-	csl.unsavedEntries <- chunkWaitState{ChunkID: id, reason: reason, waitStart:time.Now() }
+	csl.unsavedEntries <- chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
 }
 
-func (csl *chunkStatusLogger) CloseLog(){
+func (csl *chunkStatusLogger) CloseLog() {
 	if !csl.enabled {
 		return
 	}
@@ -111,20 +109,20 @@ func (csl *chunkStatusLogger) CloseLog(){
 	}
 }
 
-func (csl *chunkStatusLogger) main(chunkLogPath string){
+func (csl *chunkStatusLogger) main(chunkLogPath string) {
 	f, err := os.Create(chunkLogPath)
 	if err != nil {
 		panic(err.Error())
 	}
-	defer func () { _ = f.Close()}()
+	defer func() { _ = f.Close() }()
 
 	w := bufio.NewWriter(f)
-	defer func () { _ = w.Flush()}()
+	defer func() { _ = w.Flush() }()
 
-	_,_ = w.WriteString("Name,Offset,State,StateStartTime\n")
+	_, _ = w.WriteString("Name,Offset,State,StateStartTime\n")
 
 	for x := range csl.unsavedEntries {
-		_,_ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
+		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
 	}
 }
 
@@ -194,4 +192,4 @@ OffsetValue = x.HasLongBodyRead ? Util.Highlight(x.ChunkID.Offset) : x.ChunkID.O
 
 final.Dump();
 
- */
+*/

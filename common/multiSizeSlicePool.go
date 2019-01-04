@@ -45,8 +45,8 @@ type multiSizeSlicePool struct {
 
 // Create new slice pool capable of pooling slices up to maxSliceLength in size
 func NewMultiSizeSlicePool(maxSliceLength uint32) ByteSlicePooler {
-	maxSlotIndex, _ :=  getSlotInfo(maxSliceLength)
-	poolsBySize := make([]*sync.Pool, maxSlotIndex + 1)
+	maxSlotIndex, _ := getSlotInfo(maxSliceLength)
+	poolsBySize := make([]*sync.Pool, maxSlotIndex+1)
 	for i := 0; i <= maxSlotIndex; i++ {
 		poolsBySize[i] = &sync.Pool{}
 	}
@@ -62,7 +62,7 @@ func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
 	maxCapInSlot = (1 << uint(slotIndex)) - 1
 
 	// check  TODO: replace this check with a proper unit test
-	if 32 - bits.LeadingZeros32(uint32(maxCapInSlot)) != slotIndex {
+	if 32-bits.LeadingZeros32(uint32(maxCapInSlot)) != slotIndex {
 		panic("cross check of cap and slot index failed")
 	}
 	return
@@ -100,7 +100,7 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
 
 // returns the slice to its pool
 func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
-	slotIndex, _ := getSlotInfo(uint32(cap(slice)))   // be sure to use capacity, not length, here
+	slotIndex, _ := getSlotInfo(uint32(cap(slice))) // be sure to use capacity, not length, here
 
 	// get the pool that most closely corresponds to the desired size
 	pool := mp.poolsBySize[slotIndex]
@@ -108,4 +108,3 @@ func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
 	// put the slice back into the pool
 	pool.Put(slice)
 }
-
