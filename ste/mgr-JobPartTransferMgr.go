@@ -415,12 +415,9 @@ func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogL
 
 func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
 	// order of log elements here is mirrored, in subset, in LogForCurrentTransfer
-	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSigQueryParamForLogging() +
-		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSigQueryParamForLogging()
+	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSecretQueryParamForLogging() +
+		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSecretQueryParamForLogging()
 	jptm.Log(pipeline.LogError, msg)
-	//jptm.Log(pipeline.LogError, fmt.Sprintf("%v: %s: %03d : %s\n   Dst: %s",
-	//	errorCode, common.URLStringExtension(source).RedactSigQueryParamForLogging(),
-	//	status, errorMsg, common.URLStringExtension(destination).RedactSigQueryParamForLogging()))
 }
 
 func (jptm *jobPartTransferMgr) LogUploadError(source, destination, errorMsg string, status int) {
@@ -439,14 +436,14 @@ func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	status, msg := ErrorEx{err}.ErrorCodeAndString()
 	MSRequestID := ErrorEx{err}.MSRequestID()
 	jptm.Log(pipeline.LogError,
-		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg, MSRequestID))
+		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSecretQueryParamForLogging(), status, context, msg, MSRequestID))
 }
 
 func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
 	jptm.Log(pipeline.LogInfo,
 		fmt.Sprintf("Starting transfer: Source %q Destination %q. %s",
-			common.URLStringExtension(source).RedactSigQueryParamForLogging(),
-			common.URLStringExtension(destination).RedactSigQueryParamForLogging(),
+			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
+			common.URLStringExtension(destination).RedactSecretQueryParamForLogging(),
 			description))
 }
 

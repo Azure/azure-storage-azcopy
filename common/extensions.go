@@ -12,12 +12,20 @@ import (
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type URLStringExtension string
 
-func (s URLStringExtension) RedactSigQueryParamForLogging() string {
+func (s URLStringExtension) RedactSecretQueryParamForLogging() string {
 	u, err := url.Parse(string(s))
 	if err != nil {
 		return string(s)
 	}
-	return URLExtension{URL: *u}.RedactSigQueryParamForLogging()
+	ue := &URLExtension{URL: *u}
+
+	// redact sig= in Azure
+	ue = ue.RedactSigQueryParamForLogging()
+
+	// rediact x-amx-signature in S3
+	ue = ue.RedactAmzSignatureQueryParamForLogging()
+
+	return ue.String()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -25,27 +33,35 @@ type URLExtension struct {
 	url.URL
 }
 
-func (u URLExtension) RedactSigQueryParamForLogging() string {
-	if ok, rawQuery := redactSigQueryParam(u.RawQuery); ok {
+func (u *URLExtension) RedactSigQueryParamForLogging() *URLExtension {
+	if ok, rawQuery := redactSigQueryParam(u.RawQuery, "sig"); ok {
 		u.RawQuery = rawQuery
 	}
 
-	return u.String()
+	return u
 }
 
-func redactSigQueryParam(rawQuery string) (bool, string) {
-	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
-	sigFound := strings.Contains(rawQuery, "?sig=")
+func (u *URLExtension) RedactAmzSignatureQueryParamForLogging() *URLExtension {
+	if ok, rawQuery := redactSigQueryParam(u.RawQuery, "x-amz-signature"); ok {
+		u.RawQuery = rawQuery
+	}
+
+	return u
+}
+
+func redactSigQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
+	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?[queryKeyNeedRedact] and &[queryKeyNeedRedact]=
+	sigFound := strings.Contains(rawQuery, "?"+queryKeyNeedRedact+"=")
 	if !sigFound {
-		sigFound = strings.Contains(rawQuery, "&sig=")
+		sigFound = strings.Contains(rawQuery, "&"+queryKeyNeedRedact+"=")
 		if !sigFound {
-			return sigFound, rawQuery // [?|&]sig= not found; return same rawQuery passed in (no memory allocation)
+			return sigFound, rawQuery // [?|&][queryKeyNeedRedact]= not found; return same rawQuery passed in (no memory allocation)
 		}
 	}
-	// [?|&]sig= found, redact its value
+	// [?|&][queryKeyNeedRedact]= found, redact its value
 	values, _ := url.ParseQuery(rawQuery)
 	for name := range values {
-		if strings.EqualFold(name, "sig") {
+		if strings.EqualFold(name, queryKeyNeedRedact) {
 			values[name] = []string{"REDACTED"}
 		}
 	}

@@ -73,7 +73,7 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// Case-2: Source is account level, e.g.:
-	// a: https://<blob-service>/container
+	// a: https://<blob-service>/
 	// b: https://<blob-service>/containerprefix*/vd/blob
 	if isAccountLevel, containerPrefix := srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
 		if !cca.recursive {
@@ -92,7 +92,6 @@ func (e *copyBlobToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			containerPrefix, blobPrefix, blobNamePattern, cca); err != nil {
 			return err
 		}
-
 	} else { // Case-3: Source is a blob container or directory
 		blobPrefix, blobNamePattern, isWildcardSearch := srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
@@ -217,13 +216,6 @@ func (e *copyBlobToNEnumerator) addTransfersFromContainer(ctx context.Context, s
 
 func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
-	// if properties.BlobType != azblob.BlobBlockBlob {
-	// 	glcm.Info(fmt.Sprintf(
-	// 		"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
-	// 		properties.BlobType,
-	// 		common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
-	// }
-
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
 		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
@@ -243,13 +235,6 @@ func (e *copyBlobToNEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, prop
 
 func (e *copyBlobToNEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
-	// if properties.BlobType() != azblob.BlobBlockBlob {
-	// 	glcm.Info(fmt.Sprintf(
-	// 		"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
-	// 		properties.BlobType(),
-	// 		common.URLExtension{URL: srcURL}.RedactSigQueryParamForLogging()))
-	// }
-
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
 		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
