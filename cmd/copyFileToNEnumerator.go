@@ -201,17 +201,25 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 				fileRelativePath = gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
 			}
 
-			// TODO: Remove get attribute, when file's list method can return property and metadata.
-			p, err := fileURL.GetProperties(ctx)
-			if err != nil {
-				return err
-			}
+			// TODO: Remove get attribute, when file's list method can return directly property and metadata.
+			if cca.preserveProperties {
+				p, err := fileURL.GetProperties(ctx)
+				if err != nil {
+					return err
+				}
 
-			return e.addFileToNTransfer(
-				fileURL.URL(),
-				urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
-				p,
-				cca)
+				return e.addFileToNTransfer(
+					fileURL.URL(),
+					urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
+					p,
+					cca)
+			} else {
+				return e.addFileToNTransfer2(
+					fileURL.URL(),
+					urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
+					fileItem.Properties,
+					cca)
+			}
 		})
 }
 
@@ -219,7 +227,7 @@ func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, prop
 	cca *cookedCopyCmdArgs) error {
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
-		Destination:        gCopyUtil.stripSASFromFileShareUrl(destURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),
@@ -229,6 +237,15 @@ func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, prop
 		CacheControl:       properties.CacheControl(),
 		ContentMD5:         properties.ContentMD5(),
 		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata())},
+		cca)
+}
+
+func (e *copyFileToNEnumerator) addFileToNTransfer2(srcURL, destURL url.URL, properties *azfile.FileProperty,
+	cca *cookedCopyCmdArgs) error {
+	return e.addTransfer(common.CopyTransfer{
+		Source:      gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
+		Destination: gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
+		SourceSize:  properties.ContentLength},
 		cca)
 }
 
