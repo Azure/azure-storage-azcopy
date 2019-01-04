@@ -76,8 +76,8 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 4b: normal file creation when source has content
 	writeThrough := true // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
-	if fileSize < 512 {
-		writeThrough = false // but, for very small files, we do  need it. TODO: double-check with more testing, do we really need this
+	if fileSize <= 1 * 1024 * 1024 {
+		writeThrough = false // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
 	}
 	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
 	if err != nil {
