@@ -65,8 +65,15 @@ type CopyJobPartOrderRequest struct {
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType CredentialType
-	OAuthTokenInfo OAuthTokenInfo
+	CredentialType   CredentialType
+	OAuthTokenInfo   OAuthTokenInfo
+	S3CredentialInfo S3CredentialInfo
+}
+
+// S3CredentialInfo contains essential credential info which need to build up S3 c
+type S3CredentialInfo struct {
+	Endpoint string
+	Region   string
 }
 
 type CopyJobPartOrderResponse struct {

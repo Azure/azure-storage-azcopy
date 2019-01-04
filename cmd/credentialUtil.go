@@ -18,6 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// This file contains credential utils used only in cmd module.
+
 package cmd
 
 import (
@@ -34,6 +36,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	minio "github.com/minio/minio-go"
 )
 
 var once sync.Once
@@ -218,7 +221,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 	// Could be using oauth session mode or non-oauth scenario which uses SAS authentication or public endpoint,
 	// verify credential type with cached token info, src or dest resource URL.
 	switch raw.fromTo {
-	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		// For blob/file to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
 		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
 		fallthrough
@@ -315,4 +318,17 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				Value: common.UserAgent,
 			},
 		}), nil
+}
+
+// ==============================================================================================
+// s3 credential related factory methods
+// ==============================================================================================
+func createS3Client(ctx context.Context, credInfo common.CredentialInfo) (*minio.Client, error) {
+	// Currently only support access key
+	credential := common.CreateS3Credential(ctx, credInfo, common.CredentialOpOptions{
+		//LogInfo:  glcm.Info, //Comment out for debugging
+		LogError: glcm.Info,
+	})
+
+	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
 }

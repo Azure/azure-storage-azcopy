@@ -32,6 +32,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/minio/minio-go/pkg/credentials"
 )
 
 // ==============================================================================================
@@ -183,6 +184,26 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
 
+	panic("work around the compiling, logic wouldn't reach here")
+}
+
+// CreateS3Credential creates AWS S3 credential according to credential info.
+func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) *credentials.Credentials {
+	switch credInfo.CredentialType {
+	case ECredentialType.S3AccessKey():
+		accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+		secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+		sessionToken := os.Getenv("AWS_SESSION_TOKEN") // region is optional
+
+		if accessKeyID == "" || secretAccessKey == "" {
+			options.panicError(errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment vars must be set before creating the S3 AccessKey credential"))
+		}
+
+		// create and return s3 credential
+		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken) // S3 uses V4 signature
+	default:
+		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
+	}
 	panic("work around the compiling, logic wouldn't reach here")
 }
 

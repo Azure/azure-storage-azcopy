@@ -351,7 +351,7 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 		switch fromTo {
 		// Create pipeline for Azure Blob.
 		case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
-			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
+			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 			credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },

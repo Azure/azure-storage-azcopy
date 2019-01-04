@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	minio "github.com/minio/minio-go"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
@@ -250,5 +251,63 @@ func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.D
 		}
 
 	}
+	return nil
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// S3 service enumerators.
+//////////////////////////////////////////////////////////////////////////////////////////
+// enumerateBucketsInService enumerates buckets in S3 service with specified client(identity).
+// TODO: there is no WithContext version in minio client currently.
+func enumerateBucketsInServiceWithMinio(ctx context.Context, s3Client *minio.Client,
+	resolve func(bucketInfos []minio.BucketInfo) ([]minio.BucketInfo, error),
+	filter func(bucketInfo minio.BucketInfo) bool,
+	callback func(bucketInfo minio.BucketInfo) error) error {
+
+	bucketInfos, err := s3Client.ListBuckets()
+	if err != nil {
+		return fmt.Errorf("cannot list buckets, %v", err)
+	}
+
+	if resolve != nil {
+		bucketInfos, err = resolve(bucketInfos)
+		if err != nil {
+			return fmt.Errorf("cannot resolve bucket infos, %v", err)
+		}
+	}
+
+	// Process the shares returned in this result segment (if the segment is empty, the loop body won't execute)
+	for _, bucketInfo := range bucketInfos {
+		if !filter(bucketInfo) {
+			continue
+		}
+
+		if err := callback(bucketInfo); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// enumerateObjectsInBucket enumerates objects in bucket.
+func enumerateObjectsInBucketWithMinio(ctx context.Context, s3Client *minio.Client, bucketName, objectNamePrefix string,
+	filter func(objectInfo minio.ObjectInfo) bool,
+	callback func(objectInfo minio.ObjectInfo) error) error {
+
+	for objectInfo := range s3Client.ListObjectsV2(bucketName, objectNamePrefix, true, ctx.Done()) {
+		if objectInfo.Err != nil {
+			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
+		}
+
+		if !filter(objectInfo) {
+			continue
+		}
+
+		if err := callback(objectInfo); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

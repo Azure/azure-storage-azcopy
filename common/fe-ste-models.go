@@ -286,6 +286,7 @@ func (Location) Pipe() Location    { return Location(2) }
 func (Location) Blob() Location    { return Location(3) }
 func (Location) File() Location    { return Location(4) }
 func (Location) BlobFS() Location  { return Location(5) }
+func (Location) S3() Location      { return Location(6) }
 func (l Location) String() string {
 	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
@@ -321,6 +322,7 @@ func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local()
 func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
 func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
 func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
+func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -554,10 +556,11 @@ var ECredentialType = CredentialType(0)
 // CredentialType defines the different types of credentials
 type CredentialType uint8
 
-func (CredentialType) Unknown() CredentialType    { return CredentialType(0) }
-func (CredentialType) OAuthToken() CredentialType { return CredentialType(1) }
-func (CredentialType) Anonymous() CredentialType  { return CredentialType(2) } // For SAS or public.
-func (CredentialType) SharedKey() CredentialType  { return CredentialType(3) }
+func (CredentialType) Unknown() CredentialType     { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType  { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) Anonymous() CredentialType   { return CredentialType(2) } // For Azure, SAS or public.
+func (CredentialType) SharedKey() CredentialType   { return CredentialType(3) } // For Azure, SharedKey
+func (CredentialType) S3AccessKey() CredentialType { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))

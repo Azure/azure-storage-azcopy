@@ -94,11 +94,8 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BlobBlob()
 	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.FileBlob()
-		//TODO: Add PipeFile and FilePipe support.
-		// case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.File():
-		// 	return common.EFromTo.PipeFile()
-		// case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Pipe():
-		// 	return common.EFromTo.FilePipe()
+	case srcLocation == common.ELocation.S3() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.S3Blob()
 	}
 	return common.EFromTo.Unknown()
 }
@@ -121,6 +118,10 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.File()
 			case strings.Contains(host, ".dfs.core.windows.net"):
 				return common.ELocation.BlobFS()
+			}
+
+			if IsS3URL(*u) {
+				return common.ELocation.S3()
 			}
 		}
 	} else {

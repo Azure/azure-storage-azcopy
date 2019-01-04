@@ -94,6 +94,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobBlob():
 		fallthrough
 	case common.EFromTo.FileBlob():
+		fallthrough
+	case common.EFromTo.S3Blob():
 		switch blobType {
 		case common.EBlobType.None(),
 			common.EBlobType.BlockBlob():

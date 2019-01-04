@@ -96,6 +96,8 @@ type rawCopyCmdArgs struct {
 	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
+	// whether user wants to copy properties(including metadata) during service to service copy, True by default
+	preserveProperties bool
 }
 
 // validates and transform raw input into cooked input
@@ -278,7 +280,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob():
+		common.EFromTo.FileBlob(),
+		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from sevice to service")
 		}
@@ -313,6 +316,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 		}
 	}
+
+	cooked.preserveProperties = raw.preserveProperties
 
 	return cooked, nil
 }
@@ -381,15 +386,13 @@ type cookedCopyCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// whether user wants to copy properties(including metadata) during service to service copy, True by default
+	preserveProperties bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
 	switch cca.fromTo {
-	// File's piping is not supported temporarily.
-	// case common.EFromTo.PipeFile():
-	// 	fallthrough
-	// case common.EFromTo.FilePipe():
-	// 	fallthrough
 	case common.EFromTo.BlobPipe():
 		fallthrough
 	case common.EFromTo.PipeBlob():
@@ -696,6 +699,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
+	case common.EFromTo.S3Blob():
+		e := copyS3ToBlobEnumerator{
+			copyS2SEnumerator: copyS2SEnumerator{
+				CopyJobPartOrderRequest: jobPartOrder,
+			},
+		}
+		err = e.enumerate(cca)
+		lastPartNumber = e.PartNum
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
 	}
@@ -962,6 +973,9 @@ func init() {
 		"to the standard input. This is mostly used when the application is spawned by another process.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveProperties, "preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
+		"For S3 and Azure file source, as list operation doesn't return full properties of objects/files, to preserve full properties azcopy need send one additional request per object/file.")
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
