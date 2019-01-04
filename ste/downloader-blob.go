@@ -29,7 +29,7 @@ import (
 
 type blobDownloader struct{}
 
-func newBlobDownloader() Downloader {
+func newBlobDownloader() downloader {
 	return &blobDownloader{}
 }
 

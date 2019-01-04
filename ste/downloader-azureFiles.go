@@ -29,11 +29,11 @@ import (
 
 type azureFilesDownloader struct{}
 
-func newAzureFilesDownloader() Downloader {
+func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
-// Returns a chunk-func for blob downloads
+// Returns a chunk-func for file downloads
 
 func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
 	return func(workerId int) {

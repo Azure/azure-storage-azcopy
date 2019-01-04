@@ -32,9 +32,24 @@ import (
 
 // Used to write all the chunks to a disk file
 type ChunkedFileWriter interface {
+
+	// WaitToScheduleChunk blocks until enough RAM is available to handle the given chunk, then it
+	// "reserves" that amount of RAM in the CacheLimiter and returns. 
 	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
+
+	// EnqueueChunk hands the given chunkContents over to the ChunkedFileWriter, to be written to disk.
+	// Because ChunkedFileWriter writes sequentially, the actual time of writing is not known to the caller.
+	// All the caller knows, is that responsibility for writing the chunk has been passed to the ChunkedFileWriter.
+	// While any error may be returned immediately, errors are more likely to be returned later, on either a subsequent
+	// call to this routine or on the final return to Flush.
+	// After the chunk is written to disk, its reserved memory byte allocation is automatically subtracted from the CacheLimiter.
 	EnqueueChunk(ctx context.Context, retryForcer func(), id ChunkID, chunkSize int64, chunkContents io.Reader) error
+
+	// Flush will block until all the chunks have been written to disk.  err will be non-nil if and only in any chunk failed to write.
+	// Flush must be called exactly once, after all chunks have been enqueued with EnqueueChunk.
 	Flush(ctx context.Context) (md5Hash string, err error)
+
+	// MaxRetryPerDownloadBody returns the maximum number of retries that will be done for the download of a single chunk body
 	MaxRetryPerDownloadBody() int
 }
 

@@ -18,20 +18,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package common
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
+	"os"
+	"strings"
 )
 
-// Abstraction of the methods needed to download from a remote location
-type downloader interface {
-
-	// Returns a func() that will download the specified portion of the remote file into dstFile
-	// Instead of taking destination file as a parameter, it takes a helper that will write to the file. That keeps details of
-	// file IO out out the download func, and lets that func concentrate only on the details of the remote endpoint
-	GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, writer common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc
+func CreateParentDirectoryIfNotExist(destinationPath string) error {
+	// check if parent directory exists
+	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, AZCOPY_PATH_SEPARATOR_STRING)]
+	_, err := os.Stat(parentDirectory)
+	// if the parent directory does not exist, create it and all its parents
+	if os.IsNotExist(err) {
+		err = os.MkdirAll(parentDirectory, os.ModePerm)
+		if err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	return nil
 }
-
-type downloaderFactory func() downloader

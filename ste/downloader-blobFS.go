@@ -29,11 +29,11 @@ import (
 
 type blobFSDownloader struct{}
 
-func newBlobFSDownloader() Downloader {
+func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
-// Returns a chunk-func for blob downloads
+// Returns a chunk-func for ADLS gen2 downloads
 
 func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
 	return func(workerId int) {

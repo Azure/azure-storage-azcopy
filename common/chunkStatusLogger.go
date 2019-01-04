@@ -37,17 +37,17 @@ var EWaitReason = WaitReason(0)
 
 type WaitReason string
 
-func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason("RAM") }
-func (WaitReason) WorkerGR() WaitReason             { return WaitReason("GR") }
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason("Head") }
-func (WaitReason) BodyResponse() WaitReason         { return WaitReason("Body") }
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason("BodyReRead-LowRam") }
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason("BodyReRead-TooSlow") }
-func (WaitReason) WriterChannel() WaitReason        { return WaitReason("Writer") }
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason("Prior") }
-func (WaitReason) Disk() WaitReason                 { return WaitReason("Disk") }
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason("Done") }
-func (WaitReason) Cancelled() WaitReason            { return WaitReason("Cancelled") }
+func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason("RAM") }  // waiting for enough RAM to schedule the chunk
+func (WaitReason) WorkerGR() WaitReason             { return WaitReason("GR") }   // waiting for a goroutine to start running our chunkfunc
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason("Head") } // waiting to finish downloading the HEAD
+func (WaitReason) BodyResponse() WaitReason         { return WaitReason("Body") } // waiting to finish downloading the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason("BodyReRead-LowRam") }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason("BodyReRead-TooSlow") } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) WriterChannel() WaitReason        { return WaitReason("Writer") } // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason("Prior") }  // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) Disk() WaitReason                 { return WaitReason("Disk") }   // waiting on disk write to complete
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason("Done") }   // not waiting on anything. Chunk is done.
+func (WaitReason) Cancelled() WaitReason            { return WaitReason("Cancelled") } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 func (wr WaitReason) String() string {
 	return string(wr) // avoiding reflection here, for speed, since will be called a lot

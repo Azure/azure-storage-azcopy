@@ -49,10 +49,10 @@ const PacerTimeToWaitInMs = 50
 type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer)
 
 // same as newJobXfer, but with an extra parameter
-type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df DownloaderFactory)
+type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
 
 // Takes a multi-purpose downloader function, and makes it ready to use with a specific type of downloader
-func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df DownloaderFactory) newJobXfer {
+func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer){
 		targetFunction(jptm, pipeline, pacer, df)
 	}

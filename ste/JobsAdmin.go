@@ -265,7 +265,6 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 				time.Sleep(10 * time.Millisecond) // Sleep before looping around
 			}
 		}
-//		}
 	}
 }
 

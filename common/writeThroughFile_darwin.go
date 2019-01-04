@@ -24,7 +24,6 @@ package common
 
 import (
 	"os"
-	"strings"
 )
 
 // create a file, given its path and length
@@ -54,20 +53,4 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		return nil, truncateError
 	}
 	return f, nil
-}
-
-func CreateParentDirectoryIfNotExist(destinationPath string) error {
-	// check if parent directory exists
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, AZCOPY_PATH_SEPARATOR_STRING)]
-	_, err := os.Stat(parentDirectory)
-	// if the parent directory does not exist, create it and all its parents
-	if os.IsNotExist(err) {
-		err = os.MkdirAll(parentDirectory, os.ModePerm)
-		if err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-	return nil
 }
