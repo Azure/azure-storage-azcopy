@@ -111,6 +111,9 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
 
+	if tokenInfo.ClientID == "" {
+		tokenInfo.ClientID = ApplicationID
+	}
 	return tokenInfo, nil
 }
 
@@ -309,6 +312,10 @@ type OAuthTokenInfo struct {
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
+	//Note: ClientID should be only used for internal integrations. It indicates the Application ID assigned to your
+	//app when you registered it with Azure AD. For more details, please refer to
+	//https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
+	ClientID string `json:"_client_id"`
 }
 
 // IdentityInfo contains info for MSI.
@@ -415,7 +422,7 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
-		ApplicationID,
+		credInfo.ClientID,
 		Resource,
 		credInfo.Token)
 	if err != nil {
