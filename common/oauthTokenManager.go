@@ -457,6 +457,9 @@ func JSONToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
 	}
+	if OAuthTokenInfo.ClientID == "" {
+		OAuthTokenInfo.ClientID = ApplicationID
+	}
 	return &OAuthTokenInfo, nil
 }
 
