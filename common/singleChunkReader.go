@@ -48,8 +48,7 @@ type CloseableReaderAt interface {
 }
 
 // Factory method for data source for singleChunkReader
-type ChunkReaderSourceFactory func()(CloseableReaderAt, error)
-
+type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
 
 type singleChunkReader struct {
 	// context used to allow cancellation of blocking operations
@@ -82,10 +81,9 @@ type singleChunkReader struct {
 	// TODO: pooling of buffers to reduce pressure on GC?
 }
 
-
 func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
 	if length <= 0 {
-		panic("length must be greater than zero")
+		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
 		ctx:           ctx,
@@ -104,7 +102,7 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 func (cr *singleChunkReader) TryBlockingPrefetch(fileReader CloseableReaderAt) bool {
 	err := cr.prefetchWithBlocking(fileReader, false)
 	if err != nil {
-		cr.returnBuffer()  // if there was an error, be sure to put us back into a valid "not-yet-prefetched" state
+		cr.returnBuffer() // if there was an error, be sure to put us back into a valid "not-yet-prefetched" state
 		return false
 	}
 	return true
@@ -124,7 +122,7 @@ func (cr *singleChunkReader) prefetchWithBlocking(fileReader CloseableReaderAt, 
 	// here doing retries, but no RAM _will_ become available because its
 	// all used by queued chunkfuncs (that can't be processed because all goroutines are active).
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
-	err := cr.cacheLimiter.WaitUntilAddBytes(cr.ctx, cr.length, func() bool { return isRetry} )
+	err := cr.cacheLimiter.WaitUntilAddBytes(cr.ctx, cr.length, func() bool { return isRetry })
 	if err != nil {
 		return err
 	}
@@ -158,7 +156,7 @@ func (cr *singleChunkReader) retryBlockingPrefetchIfNecessary() error {
 	defer sourceFile.Close()
 
 	// no need to seek first, because its a ReaderAt
-	const isRetry = true  // retries are the only time we need to redo the prefetch
+	const isRetry = true // retries are the only time we need to redo the prefetch
 	return cr.prefetchWithBlocking(sourceFile, isRetry)
 }
 
@@ -195,7 +193,6 @@ func (cr *singleChunkReader) Read(p []byte) (n int, err error) {
 	// (If later, there's a retry that forces seek back to start and re-read, we'll automatically trigger a re-fetch at that time)
 	return cr.doRead(p, true)
 }
-
 
 func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err error) {
 	// check for EOF, BEFORE we ensure prefetch
@@ -250,7 +247,7 @@ func (cr *singleChunkReader) Close() error {
 // Grab the leading bytes, for later MIME type recognition
 // (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
 // reads as much as possible)
-func (cr *singleChunkReader)CaptureLeadingBytes() []byte {
+func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)
 	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
