@@ -29,7 +29,7 @@ import (
 )
 
 // general-purpose local to "any remote persistence location"
-func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf UploaderFactory) {
+func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory) {
 
 	// step 1a. get the source, destination info for the transfer.
 	info := jptm.Info()
@@ -167,7 +167,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 // Complete epilogue. Handles both success and failure.
 // Most of the processing is delegated to the uploader object, since details will
 // depend on the destination type
-func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul Uploader) {
+func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 
 	ul.Epilogue()
 

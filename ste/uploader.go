@@ -32,7 +32,7 @@ type ChunkStats struct {
 }
 
 // Abstraction of the methods needed to upload to a remote location
-type Uploader interface {
+type uploader interface {
 
 	RemoteFileExists() (bool, error)
 
@@ -48,7 +48,7 @@ type Uploader interface {
 	Epilogue()
 }
 
-type UploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (Uploader, error)
+type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (uploader, error)
 
 const (
 	epilogueNotNeeded = -1
