@@ -62,7 +62,7 @@ func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df dow
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-		return parameterizeDownload(RemoteToLocal, newBlobDownloader)
+		return parameterizeDownload(remoteToLocal, newBlobDownloader)
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 		switch blobType {
 		case common.EBlobType.None(),
@@ -76,7 +76,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
-		return parameterizeDownload(RemoteToLocal, newAzureFilesDownloader)
+		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
 		return LocalToFile
 	case common.EFromTo.FileTrash():
@@ -84,7 +84,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.LocalBlobFS():
 		return LocalToBlobFS
 	case common.EFromTo.BlobFSLocal():
-		return parameterizeDownload(RemoteToLocal, newBlobFSDownloader)
+		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():
 		fallthrough
 	case common.EFromTo.FileBlob():

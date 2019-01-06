@@ -29,7 +29,7 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local
-func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, df downloaderFactory) {
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
 	dl := df()
@@ -38,8 +38,6 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	info := jptm.Info()
 	fileSize := int64(info.SourceSize)
 	downloadChunkSize := int64(info.BlockSize)
-
-	// TODO: Question: we are not logging chunk size here (as was done for some remotes in previous code, notably Azure files.  Should we?)
 
 	// step 3: Perform initial checks
 	// If the transfer was cancelled, then report transfer as done
@@ -132,6 +130,7 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// TODO: ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
 	// TODO: ...so that the last of them will trigger the epilogue.
 	// TODO: ...Question: is that OK?
+	blockIdCount := uint32(0)
 	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
 		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
 		adjustedChunkSize := downloadChunkSize
@@ -152,10 +151,16 @@ func RemoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)
-		//blockIdCount++  TODO: why was this originally used?  Question: can we remove it? It was never used, AFAICT
+		blockIdCount++
 
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 	}
+
+	// sanity check to verify the number of chunks scheduled
+	if blockIdCount != numChunks {
+		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, blockIdCount, info.Source, fileSize))
+	}
+
 }
 
 // complete epilogue. Handles both success and failure
