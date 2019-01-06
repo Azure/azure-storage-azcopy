@@ -50,10 +50,10 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
-type newJobXferWithUploaderFactory   = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf UploaderFactory)
+type newJobXferWithUploaderFactory   = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory)
 
 // Takes a multi-purpose up/downloader function, and makes it ready to use with a specific type of up/downloader
-func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf UploaderFactory) newJobXfer {
+func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer){
 		targetFunction(jptm, pipeline, pacer, uf)
 	}

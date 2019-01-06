@@ -47,7 +47,7 @@ type blockBlobUploader struct {
 	leadingBytes []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (Uploader, error) {
+func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (uploader, error) {
 	// check chunk count
 	if proposedStats.NumChunks > common.MaxNumberOfBlocksPerBlob {
 		return nil, errors.New(
