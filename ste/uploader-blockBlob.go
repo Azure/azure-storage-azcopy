@@ -36,15 +36,15 @@ import (
 )
 
 type blockBlobUploader struct {
-	jptm IJobPartTransferMgr
-	blobURL azblob.BlobURL
+	jptm     IJobPartTransferMgr
+	blobURL  azblob.BlobURL
 	pipeline pipeline.Pipeline
-	pacer *pacer
+	pacer    *pacer
 
-	needEpilogueIndicator int32  // accessed via sync.atomic
-	mu *sync.Mutex               // protects the fields below
-	blockIds []string
-	leadingBytes []byte
+	needEpilogueIndicator int32       // accessed via sync.atomic
+	mu                    *sync.Mutex // protects the fields below
+	blockIds              []string
+	leadingBytes          []byte
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (uploader, error) {
@@ -63,23 +63,22 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 	}
 
 	return &blockBlobUploader{
-		jptm: jptm,
-		blobURL: azblob.NewBlobURL(*destURL, p),
+		jptm:     jptm,
+		blobURL:  azblob.NewBlobURL(*destURL, p),
 		pipeline: p,
-		pacer: pacer,
-		mu: &sync.Mutex{},
+		pacer:    pacer,
+		mu:       &sync.Mutex{},
 		blockIds: make([]string, proposedStats.NumChunks),
 	}, nil
 }
 
-
 func (bu *blockBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := bu.blobURL.GetProperties(bu.jptm.Context(), azblob.BlobAccessConditions{})
-	return err != nil, nil  // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
 // Returns a chunk-func for blob uploads
-func(bu *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
+func (bu *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
 	if blockIndex == 0 {
 		bu.mu.Lock()
@@ -174,14 +173,13 @@ func (bu *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex 
 	}
 }
 
-
-func(bu *blockBlobUploader) Epilogue() {
+func (bu *blockBlobUploader) Epilogue() {
 	bu.mu.Lock()
 	needed := bu.needEpilogueIndicator
 	blockIds := bu.blockIds
 	bu.mu.Unlock()
 	if needed == epilogueNotNeeded {
-		return   // nothing to do
+		return // nothing to do
 	} else if needed == epilogueNeedUnknown {
 		panic("epilogue need flag was never set")
 	}
@@ -192,7 +190,7 @@ func(bu *blockBlobUploader) Epilogue() {
 
 	// commit the blocks
 	if jptm.TransferStatus() > 0 {
-		jptm.Log(pipeline.LogDebug,	fmt.Sprintf("Conclude Transfer with BlockList %s", bu.blockIds))
+		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", bu.blockIds))
 
 		// fetching the blob http headers with content-type, content-encoding attributes
 		// fetching the metadata passed with the JobPartOrder
@@ -220,35 +218,34 @@ func(bu *blockBlobUploader) Epilogue() {
 	}
 
 	// Cleanup
-	if jptm.TransferStatus() <= 0 {   // TODO: <=0 or <0?
+	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
 		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
 		//    situation. Deletion has very different semantics then, compared to not deleting.
-		deletionContext, _ := context.WithTimeout(context.Background(), 30 * time.Second)
+		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
 		_, _ = bu.blobURL.ToBlockBlobURL().Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		// TODO: question, is it OK to remoe this logging of failures (since there's no adverse effect of failure)
 		//  if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
-			// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
-			// Other errors report that uncommitted blocks are there
-			// bbu.jptm.LogError(bbu.blobURL.String(), "Deleting uncommitted blocks", err)
+		// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
+		// Other errors report that uncommitted blocks are there
+		// bbu.jptm.LogError(bbu.blobURL.String(), "Deleting uncommitted blocks", err)
 		//  }
 
 	}
 
 }
 
-
-func (bu *blockBlobUploader) setEpilogueNeed(value int32){
+func (bu *blockBlobUploader) setEpilogueNeed(value int32) {
 	// atomic because uploaders are used by multiple threads at the same time
 	previous := atomic.SwapInt32(&bu.needEpilogueIndicator, value)
-	if previous != epilogueNeedUnknown  && previous != value {
+	if previous != epilogueNeedUnknown && previous != value {
 		panic("epilogue need cannot be set twice")
 	}
 }
 
-func (bu *blockBlobUploader) setBlockId(index int32, value string){
+func (bu *blockBlobUploader) setBlockId(index int32, value string) {
 	bu.mu.Lock()
 	defer bu.mu.Unlock()
 	if len(bu.blockIds[index]) > 0 {
@@ -256,7 +253,3 @@ func (bu *blockBlobUploader) setBlockId(index int32, value string){
 	}
 	bu.blockIds[index] = value
 }
-
-
-
-

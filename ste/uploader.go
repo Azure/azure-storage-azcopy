@@ -26,14 +26,13 @@ import (
 )
 
 type ChunkStats struct {
-	FileSize int64
+	FileSize  int64
 	ChunkSize int64
 	NumChunks uint32
 }
 
 // Abstraction of the methods needed to upload to a remote location
 type uploader interface {
-
 	RemoteFileExists() (bool, error)
 
 	// Returns a func() that will upload the specified portion of the local file to the remote location
@@ -51,8 +50,7 @@ type uploader interface {
 type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (uploader, error)
 
 const (
-	epilogueNotNeeded = -1
+	epilogueNotNeeded   = -1
 	epilogueNeedUnknown = 0
-	epilogueNeeded = 1
+	epilogueNeeded      = 1
 )
-
