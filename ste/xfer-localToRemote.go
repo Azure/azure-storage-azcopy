@@ -48,7 +48,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// step 1c: compute num chunks
 	// We map zero size files to ONE chunk (not zero chunks)
 	numChunks := uint32(1)
-	if fileSize > 0  {
+	if fileSize > 0 {
 		numChunks = common.Iffuint32(
 			fileSize%chunkSize == 0,
 			uint32(fileSize/chunkSize),
@@ -57,7 +57,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 2. Create uploader
 	proposedStats := ChunkStats{
-		FileSize: fileSize,
+		FileSize:  fileSize,
 		ChunkSize: chunkSize,
 		NumChunks: numChunks,
 	}
@@ -84,7 +84,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 			}
 			jptm.LogUploadError(info.Source, info.Destination, message, 0)
 			// Mark the transfer as failed
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())  // TODO: question: is it OK to use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
 			jptm.ReportTransferDone()
 			return
 		}
@@ -92,7 +92,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 4: Open the Source File.
 	// Declare factory func, because we need it later too
-	sourceFileFactory := func()(common.CloseableReaderAt, error) {
+	sourceFileFactory := func() (common.CloseableReaderAt, error) {
 		return os.Open(info.Source)
 	}
 	srcFile, err := sourceFileFactory()
@@ -104,10 +104,9 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 	defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 
-
 	// step 5: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func(){ epilogueWithCleanupUpload(jptm, ul)})
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupUpload(jptm, ul) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -198,7 +197,3 @@ func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 	// successful or unsuccessful, it's definitely over
 	jptm.ReportTransferDone()
 }
-
-
-
-
