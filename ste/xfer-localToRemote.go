@@ -130,7 +130,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	slicePool := jptm.SlicePool()
 	cacheLimiter := jptm.CacheLimiter()
 	blockIdCount := int32(0)
-	for startIndex := int64(0); startIndex < fileSize; startIndex += chunkSize {
+	for startIndex := int64(0); startIndex < fileSize || atStartOfEmptyFile(startIndex, proposedStats); startIndex += chunkSize {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
 		adjustedChunkSize := chunkSize
@@ -161,6 +161,11 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if blockIdCount != int32(numChunks) {
 		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, blockIdCount, info.Source, fileSize))
 	}
+}
+
+// even for empty files, we must transfer one (empty) chunk. If we don't do that, the file won't get created at the destination
+func atStartOfEmptyFile(startIndex int64, stats ChunkStats) bool {
+	return startIndex == 0 && stats.FileSize == 0
 }
 
 // Complete epilogue. Handles both success and failure.
