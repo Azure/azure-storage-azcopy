@@ -31,43 +31,29 @@ import (
 // general-purpose local to "any remote persistence location"
 func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory) {
 
-	// step 1a. get the source, destination info for the transfer.
 	info := jptm.Info()
-	fileSize := int64(info.SourceSize)
-	chunkSize := int64(info.BlockSize)
+	fileSize := info.SourceSize
 
-	// step 1b. perform initial checks
+	// step 1. perform initial checks
 	if jptm.WasCanceled() {
 		jptm.ReportTransferDone()
 		return
 	}
-	if jptm.ShouldLog(pipeline.LogInfo) {
-		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", chunkSize))
-	}
 
-	// step 1c: compute num chunks
-	// We map zero size files to ONE chunk (not zero chunks)
-	numChunks := uint32(1)
-	if fileSize > 0 {
-		numChunks = common.Iffuint32(
-			fileSize%chunkSize == 0,
-			uint32(fileSize/chunkSize),
-			uint32(fileSize/chunkSize)+1)
-	}
-
-	// step 2. Create uploader
-	proposedStats := ChunkStats{
-		FileSize:  fileSize,
-		ChunkSize: chunkSize,
-		NumChunks: numChunks,
-	}
-	ul, err := uf(jptm, info.Destination, p, proposedStats, pacer)
+	// step 2a. Create uploader
+	ul, err := uf(jptm, info.Destination, p, pacer)
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, err.Error(), 0)
 		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
+	}
+	// step 2b. Read chunk size and count from the uploader (since it may have applied its own defaults and/or calculations to produce these values
+	chunkSize := ul.ChunkSize()
+	numChunks := ul.NumChunks()
+	if jptm.ShouldLog(pipeline.LogInfo) {
+		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", chunkSize))
 	}
 
 	// step 3: Check overwrite
@@ -104,11 +90,19 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 	defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 
-	// step 5: tell jptm what to expect, and how to clean up at the end
+	// step 5: ask the uploader to do any pre-transfer preparation that it may require
+	err = ul.Prologue()
+	if err != nil {
+		jptm.LogUploadError(info.Source, info.Destination, "Remote service prologue failed-"+err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
+	// step 6: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupUpload(jptm, ul) })
 
-	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
 	// TODO: ...which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
 	// TODO: ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
@@ -118,7 +112,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// TODO: for at least some destinations (e.g. BlockBlobs) you can do a single chunk PUT (of the whole file)
 	//    for sizes that are larger than the normal single-chunk limit.  Do we want to support that?  What would the advantages be?
 
-	// Step 6: Go through the file and schedule chunk messages to upload each chunk
+	// Step 7: Go through the file and schedule chunk messages to upload each chunk
 	// As we do this, we force preload of each chunk to memory, and we wait (block)
 	// here if the amount of preloaded data gets excessive. That's OK to do,
 	// because if we already have that much data preloaded (and scheduled for sending in
@@ -130,13 +124,13 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	slicePool := jptm.SlicePool()
 	cacheLimiter := jptm.CacheLimiter()
 	blockIdCount := int32(0)
-	for startIndex := int64(0); startIndex < fileSize || atStartOfEmptyFile(startIndex, proposedStats); startIndex += chunkSize {
+	for startIndex := int64(0); startIndex < fileSize || startIndex == 0 && ul.EmptyFileNeedsChunk(); startIndex += int64(chunkSize) {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
 		adjustedChunkSize := chunkSize
 
 		// compute actual size of the chunk
-		if startIndex+chunkSize > fileSize {
+		if startIndex+int64(chunkSize) > fileSize {
 			adjustedChunkSize = fileSize - startIndex
 		}
 
@@ -164,8 +158,8 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // even for empty files, we must transfer one (empty) chunk. If we don't do that, the file won't get created at the destination
-func atStartOfEmptyFile(startIndex int64, stats ChunkStats) bool {
-	return startIndex == 0 && stats.FileSize == 0
+func atStartOfEmptyFile(startIndex int64, fileSize int64) bool {
+	return startIndex == 0 && fileSize == 0
 }
 
 // Complete epilogue. Handles both success and failure.
