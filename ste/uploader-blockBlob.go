@@ -36,10 +36,12 @@ import (
 )
 
 type blockBlobUploader struct {
-	jptm     IJobPartTransferMgr
-	blobURL  azblob.BlobURL
-	pipeline pipeline.Pipeline
-	pacer    *pacer
+	jptm      IJobPartTransferMgr
+	blobURL   azblob.BlobURL
+	chunkSize int64
+	numChunks uint32
+	pipeline  pipeline.Pipeline
+	pacer     *pacer
 
 	needEpilogueIndicator int32       // accessed via sync.atomic
 	mu                    *sync.Mutex // protects the fields below
@@ -47,13 +49,25 @@ type blockBlobUploader struct {
 	leadingBytes          []byte
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, proposedStats ChunkStats, pacer *pacer) (uploader, error) {
-	// check chunk count
-	if proposedStats.NumChunks > common.MaxNumberOfBlocksPerBlob {
+func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
+	// compute chunk count
+	info := jptm.Info()
+	fileSize := int64(info.SourceSize)
+	chunkSize := int64(info.BlockSize)
+
+	numChunks := uint32(1) // We map zero size files to ONE chunk (not zero chunks)
+	if fileSize > 0 {
+		numChunks = common.Iffuint32(
+			fileSize%chunkSize == 0,
+			uint32(fileSize/chunkSize),
+			uint32(fileSize/chunkSize)+1)
+	}
+
+	if numChunks > common.MaxNumberOfBlocksPerBlob {
 		return nil, errors.New(
 			fmt.Sprintf("BlockSize %d for uploading source of size %d is not correct. Number of blocks will exceed the limit",
-				proposedStats.ChunkSize,
-				proposedStats.FileSize))
+				chunkSize,
+				fileSize))
 	}
 
 	// make sure URL is parsable
@@ -63,18 +77,37 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 	}
 
 	return &blockBlobUploader{
-		jptm:     jptm,
-		blobURL:  azblob.NewBlobURL(*destURL, p),
-		pipeline: p,
-		pacer:    pacer,
-		mu:       &sync.Mutex{},
-		blockIds: make([]string, proposedStats.NumChunks),
+		jptm:      jptm,
+		blobURL:   azblob.NewBlobURL(*destURL, p),
+		chunkSize: chunkSize,
+		numChunks: numChunks,
+		pipeline:  p,
+		pacer:     pacer,
+		mu:        &sync.Mutex{},
+		blockIds:  make([]string, numChunks),
 	}, nil
+}
+
+func (bu *blockBlobUploader) ChunkSize() int64 {
+	return bu.chunkSize
+}
+
+func (bu *blockBlobUploader) NumChunks() uint32 {
+	return bu.numChunks
+}
+
+func (bu *blockBlobUploader) EmptyFileNeedsChunk() bool {
+	return true // with this uploader type, we process empty files as having a single zero size chunk
 }
 
 func (bu *blockBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := bu.blobURL.GetProperties(bu.jptm.Context(), azblob.BlobAccessConditions{})
 	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+}
+
+func (bu *blockBlobUploader) Prologue() error {
+	// nothing to do for blockBlobUploader
+	return nil
 }
 
 // Returns a chunk-func for blob uploads
