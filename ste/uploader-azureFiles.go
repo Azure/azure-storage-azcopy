@@ -99,6 +99,10 @@ func (au *azureFilesUploader) RemoteFileExists() (bool, error) {
 
 // For AzureFiles, it's necessary to create the file before sending any data to it
 // We use a sync.Once to help us do this exactly once.
+// Why do we do this with a sync.Once, and call it from the chunkfunc?  Instead, couldn't we call it just once at the start, from localToRemote?
+// No... or at least, not easily. The reason is that this needs the first bytes of the file, for MIME-type detection. And we don't really get to those
+// bytes in localToRemote until we are in the chunkfunc scheduling loop.   Getting those bytes earlier, without the perf cost of reading that part of the
+// file twice, would be a messy refactoring.  So we do this here instead.
 func (au *azureFilesUploader) runPrologueOnce() {
 	au.prologueOnce.Do(func() {
 
