@@ -44,7 +44,6 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	ul, err := uf(jptm, info.Destination, p, pacer)
 	if err != nil {
 		jptm.LogUploadError(info.Source, info.Destination, err.Error(), 0)
-		jptm.Cancel()
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		jptm.ReportTransferDone()
 		return
@@ -55,6 +54,9 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if jptm.ShouldLog(pipeline.LogInfo) {
 		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", chunkSize))
 	}
+	if numChunks == 0 {
+		panic("must always schedule one chunk, even if file is empty") // this keeps our code structure simpler, by using a dummy chunk for empty files
+	}
 
 	// step 3: Check overwrite
 	// If the force Write flags is set to false
@@ -63,13 +65,11 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if !jptm.IsForceWriteTrue() {
 		exists, err := ul.RemoteFileExists()
 		if exists || err != nil {
-			// TODO: Confirm if this is an error condition or not
 			message := err.Error()
 			if exists {
 				message = "File already exists"
 			}
-			jptm.LogUploadError(info.Source, info.Destination, message, 0)
-			// Mark the transfer as failed
+			jptm.LogUploadError(info.Source, info.Destination, message, 0)    // TODO: Confirm if this is an error condition or not. Or should it just be a warning, to skip an existing file when not overwiting?
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
 			jptm.ReportTransferDone()
 			return
@@ -90,16 +90,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 	defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 
-	// step 5: ask the uploader to do any pre-transfer preparation that it may require
-	err = ul.Prologue()
-	if err != nil {
-		jptm.LogUploadError(info.Source, info.Destination, "Remote service prologue failed-"+err.Error(), 0)
-		jptm.SetStatus(common.ETransferStatus.Failed())
-		jptm.ReportTransferDone()
-		return
-	}
-
-	// step 6: tell jptm what to expect, and how to clean up at the end
+	// step 5: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupUpload(jptm, ul) })
 
@@ -112,7 +103,7 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// TODO: for at least some destinations (e.g. BlockBlobs) you can do a single chunk PUT (of the whole file)
 	//    for sizes that are larger than the normal single-chunk limit.  Do we want to support that?  What would the advantages be?
 
-	// Step 7: Go through the file and schedule chunk messages to upload each chunk
+	// Step 5: Go through the file and schedule chunk messages to upload each chunk
 	// As we do this, we force preload of each chunk to memory, and we wait (block)
 	// here if the amount of preloaded data gets excessive. That's OK to do,
 	// because if we already have that much data preloaded (and scheduled for sending in
@@ -124,10 +115,10 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	slicePool := jptm.SlicePool()
 	cacheLimiter := jptm.CacheLimiter()
 	blockIdCount := int32(0)
-	for startIndex := int64(0); startIndex < fileSize || startIndex == 0 && ul.EmptyFileNeedsChunk(); startIndex += int64(chunkSize) {
+	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex); startIndex += int64(chunkSize) {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
-		adjustedChunkSize := chunkSize
+		adjustedChunkSize := int64(chunkSize)
 
 		// compute actual size of the chunk
 		if startIndex+int64(chunkSize) > fileSize {
@@ -144,6 +135,11 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 		chunkReader.TryBlockingPrefetch(srcFile)
 
+		// If this is the the very first chunk, capture the leading bytes of the file for mime-type detection
+		if startIndex == 0 {
+			ul.SetLeadingBytes(chunkReader.CaptureLeadingBytes())
+		}
+
 		// schedule the chunk job/msg
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 		isWholeFile := numChunks == 1
@@ -151,15 +147,15 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 		blockIdCount += 1
 	}
+
 	// sanity check to verify the number of chunks scheduled
 	if blockIdCount != int32(numChunks) {
 		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, blockIdCount, info.Source, fileSize))
 	}
 }
 
-// even for empty files, we must transfer one (empty) chunk. If we don't do that, the file won't get created at the destination
-func atStartOfEmptyFile(startIndex int64, fileSize int64) bool {
-	return startIndex == 0 && fileSize == 0
+func isDummyChunkInEmptyFile(startIndex int64) bool {
+	return startIndex == 0
 }
 
 // Complete epilogue. Handles both success and failure.

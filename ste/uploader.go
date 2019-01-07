@@ -29,20 +29,17 @@ import (
 type uploader interface {
 
 	// ChunkSize returns the chunk size that should be used
-	ChunkSize() int64
+	ChunkSize() uint32
 
 	// NumChunks returns the number of chunks that will be required for the target file
 	NumChunks() uint32
 
-	// EmptyFileNeedsChunk says whether empty files should be treated as if they have one (zero-length) chunk
-	EmptyFileNeedsChunk() bool
-
 	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
 	RemoteFileExists() (bool, error)
 
-	// Prologue should be called once before the first time that GenerateUploadFunc is called.
-	// Implementation should interact with the remote service to do any necessary pre-transfer setup
-	Prologue() error
+	// SetLeadingBytes is called before the first chunk is scheduled, and allows the uploader to remember the leading bytes, for use in
+	// MIME-type sniffing
+	SetLeadingBytes(leadingBytes []byte)
 
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of
@@ -63,3 +60,15 @@ const (
 	epilogueNeedUnknown = 0
 	epilogueNeeded      = 1
 )
+
+func getNumUploadChunks(fileSize int64, chunkSize uint32) uint32 {
+	numChunks := uint32(1) // for uploads, we always map zero-size files to ONE (empty) chunk
+	if fileSize > 0 {
+		chunkSizeI := int64(chunkSize)
+		numChunks = common.Iffuint32(
+			fileSize%chunkSizeI == 0,
+			uint32(fileSize/chunkSizeI),
+			uint32(fileSize/chunkSizeI)+1)
+	}
+	return numChunks
+}

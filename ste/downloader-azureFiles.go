@@ -65,7 +65,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
-		jptm.LogChunkStatus(id, common.EWaitReason.BodyResponse())
+		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		defer retryReader.Close()
 		retryForcer := func() {

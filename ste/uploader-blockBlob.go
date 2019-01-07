@@ -36,33 +36,26 @@ import (
 )
 
 type blockBlobUploader struct {
-	jptm      IJobPartTransferMgr
-	blobURL   azblob.BlobURL
-	chunkSize int64
-	numChunks uint32
-	pipeline  pipeline.Pipeline
-	pacer     *pacer
+	jptm         IJobPartTransferMgr
+	blobURL      azblob.BlobURL
+	chunkSize    uint32
+	numChunks    uint32
+	pipeline     pipeline.Pipeline
+	pacer        *pacer
+	leadingBytes []byte // no lock because is written before first chunk-func go routine is scheduled
 
 	needEpilogueIndicator int32       // accessed via sync.atomic
 	mu                    *sync.Mutex // protects the fields below
 	blockIds              []string
-	leadingBytes          []byte
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
 	// compute chunk count
 	info := jptm.Info()
-	fileSize := int64(info.SourceSize)
-	chunkSize := int64(info.BlockSize)
+	fileSize := info.SourceSize
+	chunkSize := info.BlockSize
 
-	numChunks := uint32(1) // We map zero size files to ONE chunk (not zero chunks)
-	if fileSize > 0 {
-		numChunks = common.Iffuint32(
-			fileSize%chunkSize == 0,
-			uint32(fileSize/chunkSize),
-			uint32(fileSize/chunkSize)+1)
-	}
-
+	numChunks := getNumUploadChunks(fileSize, chunkSize)
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
 		return nil, errors.New(
 			fmt.Sprintf("BlockSize %d for uploading source of size %d is not correct. Number of blocks will exceed the limit",
@@ -88,7 +81,7 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 	}, nil
 }
 
-func (bu *blockBlobUploader) ChunkSize() int64 {
+func (bu *blockBlobUploader) ChunkSize() uint32 {
 	return bu.chunkSize
 }
 
@@ -96,18 +89,13 @@ func (bu *blockBlobUploader) NumChunks() uint32 {
 	return bu.numChunks
 }
 
-func (bu *blockBlobUploader) EmptyFileNeedsChunk() bool {
-	return true // with this uploader type, we process empty files as having a single zero size chunk
+func (bu *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
+	bu.leadingBytes = leadingBytes
 }
 
 func (bu *blockBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := bu.blobURL.GetProperties(bu.jptm.Context(), azblob.BlobAccessConditions{})
 	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
-}
-
-func (bu *blockBlobUploader) Prologue() error {
-	// nothing to do for blockBlobUploader
-	return nil
 }
 
 // Returns a chunk-func for blob uploads
@@ -155,7 +143,7 @@ func (bu *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int3
 		bu.setBlockId(blockIndex, encodedBlockId)
 
 		// step 3: perform put block
-		bu.jptm.LogChunkStatus(id, common.EWaitReason.BodyResponse())
+		bu.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		blockBlobUrl := bu.blobURL.ToBlockBlobURL()
 		body := newLiteRequestBodyPacer(reader, bu.pacer)
 		_, err := blockBlobUrl.StageBlock(bu.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
@@ -164,7 +152,6 @@ func (bu *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int3
 			return
 		}
 
-		// step 5: update chunk status logging to done
 		jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
 	}
 }
@@ -190,6 +177,7 @@ func (bu *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex 
 		blobHttpHeader, metaData := jptm.BlobDstData(bu.leadingBytes)
 
 		// Upload the blob
+		bu.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
 		blockBlobUrl := bu.blobURL.ToBlockBlobURL()
 		if info.SourceSize == 0 {
@@ -199,10 +187,13 @@ func (bu *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex 
 			_, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 		}
 
-		// if the put blob is a failure, updating the transfer status to failed
+		// if the put blob is a failure, update the transfer status to failed
 		if err != nil {
 			jptm.FailActiveUpload(err)
+			return
 		}
+
+		jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
 	}
 }
 
