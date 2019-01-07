@@ -692,7 +692,7 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 				return nil, &fileURL, gResp, true
 			} else {
 				glcm.Info("Fail to parse " +
-					common.URLStringExtension(url.String()).RedactSecretQueryParamForLogging() +
+					common.URLExtension{url}.RedactSecretQueryParamForLogging() +
 					" as a file for error " + err.Error() + ", given URL: " + givenURL.String())
 			}
 		}
@@ -702,7 +702,7 @@ func (util copyHandlerUtil) getDeepestDirOrFileURLFromString(ctx context.Context
 		return &dirURL, nil, nil, true
 	} else {
 		glcm.Info("Fail to parse " +
-			common.URLStringExtension(url.String()).RedactSecretQueryParamForLogging() +
+			common.URLExtension{url}.RedactSecretQueryParamForLogging() +
 			" as a directory for error " + err.Error() + ", given URL: " + givenURL.String())
 	}
 

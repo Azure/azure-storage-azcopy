@@ -17,15 +17,7 @@ func (s URLStringExtension) RedactSecretQueryParamForLogging() string {
 	if err != nil {
 		return string(s)
 	}
-	ue := &URLExtension{URL: *u}
-
-	// redact sig= in Azure
-	ue = ue.RedactSigQueryParamForLogging()
-
-	// rediact x-amx-signature in S3
-	ue = ue.RedactAmzSignatureQueryParamForLogging()
-
-	return ue.String()
+	return URLExtension{*u}.RedactSecretQueryParamForLogging()
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -33,7 +25,26 @@ type URLExtension struct {
 	url.URL
 }
 
-func (u *URLExtension) RedactSigQueryParamForLogging() *URLExtension {
+// URLWithPlusDecodedInPath returns a URL with '+' in path decoded as ' '(space).
+// This is useful for the cases, e.g: S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
+func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
+	if u.Path != "" && strings.Contains(u.Path, "+") {
+		u.Path = strings.Replace(u.Path, "+", " ", -1)
+	}
+	return u.URL
+}
+
+func (u URLExtension) RedactSecretQueryParamForLogging() string {
+	// redact sig= in Azure
+	u = u.RedactSigQueryParamForLogging()
+
+	// rediact x-amx-signature in S3
+	u = u.RedactAmzSignatureQueryParamForLogging()
+
+	return u.String()
+}
+
+func (u URLExtension) RedactSigQueryParamForLogging() URLExtension {
 	if ok, rawQuery := redactSigQueryParam(u.RawQuery, "sig"); ok {
 		u.RawQuery = rawQuery
 	}
@@ -41,7 +52,7 @@ func (u *URLExtension) RedactSigQueryParamForLogging() *URLExtension {
 	return u
 }
 
-func (u *URLExtension) RedactAmzSignatureQueryParamForLogging() *URLExtension {
+func (u URLExtension) RedactAmzSignatureQueryParamForLogging() URLExtension {
 	if ok, rawQuery := redactSigQueryParam(u.RawQuery, "x-amz-signature"); ok {
 		u.RawQuery = rawQuery
 	}

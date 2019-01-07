@@ -49,8 +49,8 @@ type S3URLParts struct {
 	Version        string
 	Region         string // Ex: endpoint region, e.g. "eu-west-1"
 	UnparsedParams string
-	// TODO: Presigned request
-	// TODO: IP endpoint style
+	// TODO: Presigned request queries
+	// TODO: Other S3 compatible service which might be with IP endpoint style
 }
 
 const s3HostPattern = "^(?P<bucketname>.+\\.)?s3[.-](?P<regionorawsdomain>[a-z0-9-]+)\\."
