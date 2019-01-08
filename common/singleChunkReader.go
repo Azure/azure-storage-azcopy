@@ -37,7 +37,7 @@ import (
 type SingleChunkReader interface {
 	io.ReadSeeker
 	io.Closer
-	TryBlockingPrefetch(fileReader CloseableReaderAt) bool
+	TryBlockingPrefetch(fileReader io.ReaderAt) bool
 	CaptureLeadingBytes() []byte
 }
 
@@ -99,8 +99,8 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 // Prefetch, and ignore any errors (just leave in not-prefetch-yet state, if there was an error)
 // If we leave it in the not-prefetched state here, then when Read happens that will trigger another read attempt,
 // and that one WILL return any error that happens
-func (cr *singleChunkReader) TryBlockingPrefetch(fileReader CloseableReaderAt) bool {
-	err := cr.prefetchWithBlocking(fileReader, false)
+func (cr *singleChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
+	err := cr.blockingPrefetch(fileReader, false)
 	if err != nil {
 		cr.returnBuffer() // if there was an error, be sure to put us back into a valid "not-yet-prefetched" state
 		return false
@@ -112,7 +112,7 @@ func (cr *singleChunkReader) TryBlockingPrefetch(fileReader CloseableReaderAt) b
 // (Allowing the caller to provide the reader to us allows a sequential read approach, since caller can control the order sequentially (in the initial, non-retry, scenario)
 // We use io.ReaderAt, rather than io.Reader, just for maintainablity/ensuring correctness. (Since just using Reader requires the caller to
 // follow certain assumptions about positioning the file pointer at the right place before calling us, but using ReaderAt does not).
-func (cr *singleChunkReader) prefetchWithBlocking(fileReader CloseableReaderAt, isRetry bool) error {
+func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
 	if cr.buffer != nil {
 		return nil // already prefetched
 	}
@@ -157,7 +157,7 @@ func (cr *singleChunkReader) retryBlockingPrefetchIfNecessary() error {
 
 	// no need to seek first, because its a ReaderAt
 	const isRetry = true // retries are the only time we need to redo the prefetch
-	return cr.prefetchWithBlocking(sourceFile, isRetry)
+	return cr.blockingPrefetch(sourceFile, isRetry)
 }
 
 // Seeks within this chunk

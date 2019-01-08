@@ -29,7 +29,7 @@ import (
 type emptyChunkReader struct {
 }
 
-func (cr *emptyChunkReader) TryBlockingPrefetch(fileReader CloseableReaderAt) bool {
+func (cr *emptyChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
 	return true
 }
 
