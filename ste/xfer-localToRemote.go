@@ -63,14 +63,16 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// then check the file exists at the remote location
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
-		exists, err := ul.RemoteFileExists()
-		if exists || err != nil {
-			message := err.Error()
-			if exists {
-				message = "File already exists"
-			}
-			jptm.LogUploadError(info.Source, info.Destination, message, 0)    // TODO: Confirm if this is an error condition or not. Or should it just be a warning, to skip an existing file when not overwiting?
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
+		exists, existenceErr := ul.RemoteFileExists()
+		if existenceErr != nil {
+			jptm.LogUploadError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed()) // is a real failure, not just a FileAlreadyExists, in this case
+			jptm.ReportTransferDone()
+			return
+		}
+		if exists {
+			jptm.LogUploadError(info.Source, info.Destination, "File already exists", 0)
+			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to always use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
 			jptm.ReportTransferDone()
 			return
 		}
