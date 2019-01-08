@@ -106,6 +106,12 @@ func (u *blockBlobUploader) RemoteFileExists() (bool, error) {
 	//      Can't just look at the response object, because its null if error is non null (where does that null come from?  Wouldn't a non-null value be reasonable in the 404 case?)
 }
 
+func (u *blockBlobUploader) Prologue(leadingBytes []byte) {
+	// block blobs don't need any work done at this stage
+	// But we do need to remember the leading bytes because we'll need them later
+	u.leadingBytes = leadingBytes
+}
+
 // Returns a chunk-func for blob uploads
 func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 

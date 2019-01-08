@@ -29,19 +29,16 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 )
 
 type azureFilesUploader struct {
-	jptm         IJobPartTransferMgr
-	fileURL      azfile.FileURL
-	chunkSize    uint32
-	numChunks    uint32
-	pipeline     pipeline.Pipeline
-	pacer        *pacer
-	leadingBytes []byte
-	prologueOnce *sync.Once
+	jptm      IJobPartTransferMgr
+	fileURL   azfile.FileURL
+	chunkSize uint32
+	numChunks uint32
+	pipeline  pipeline.Pipeline
+	pacer     *pacer
 }
 
 func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -70,13 +67,12 @@ func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	return &azureFilesUploader{
-		jptm:         jptm,
-		fileURL:      azfile.NewFileURL(*destURL, p),
-		chunkSize:    chunkSize,
-		numChunks:    numChunks,
-		pipeline:     p,
-		pacer:        pacer,
-		prologueOnce: &sync.Once{},
+		jptm:      jptm,
+		fileURL:   azfile.NewFileURL(*destURL, p),
+		chunkSize: chunkSize,
+		numChunks: numChunks,
+		pipeline:  p,
+		pacer:     pacer,
 	}, nil
 }
 
@@ -88,58 +84,38 @@ func (u *azureFilesUploader) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *azureFilesUploader) SetLeadingBytes(leadingBytes []byte) {
-	u.leadingBytes = leadingBytes
-}
-
 func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 	_, err := u.fileURL.GetProperties(u.jptm.Context())
 	return err == nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
-// For AzureFiles, it's necessary to create the file before sending any data to it
-// We use a sync.Once to help us do this exactly once.
-// Why do we do this with a sync.Once, and call it from the chunkfunc?  Instead, couldn't we call it just once at the start, from localToRemote?
-// No... or at least, not easily. The reason is that this needs the first bytes of the file, for MIME-type detection. And we don't really get to those
-// bytes in localToRemote until we are in the chunkfunc scheduling loop.   Getting those bytes earlier, without the perf cost of reading that part of the
-// file twice, would be a messy refactoring.  So we do this here instead.
-// Also, moving it into the chunkfunc scheduling loop complicates error handing, since our current (Jan 2018) approach is that,
-// once that loop has started scheduling chunk funcs, it must schedule all of them, even if there's an error. So, if the prologue
-// was explicitly called there, it would need to check and act on the error, but then schedule all the rest of the chunks anyway.
-// That's effectively what happens by putting it here (in runPrologueOnce) but it is, hopefully, marginally less confusing here.
-func (u *azureFilesUploader) runPrologueOnce() {
-	u.prologueOnce.Do(func() {
+func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
+	jptm := u.jptm
+	info := jptm.Info()
 
-		jptm := u.jptm
-		info := jptm.Info()
+	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
+	err := createParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
+	if err != nil {
+		jptm.LogUploadError(info.Source, info.Destination, "Parent Directory Create Error "+err.Error(), 0)
+		jptm.FailActiveUpload(err)
+		return
+	}
 
-		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		err := createParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
-		if err != nil {
-			jptm.LogUploadError(info.Source, info.Destination, "Parent Directory Create Error "+err.Error(), 0)
-			jptm.FailActiveUpload(err)
-			return
-		}
-
-		// Create Azure file with the source size
-		fileHTTPHeaders, metaData := jptm.FileDstData(u.leadingBytes)
-		_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
-		if err != nil {
-			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogUploadError(info.Source, info.Destination, "File Create Error "+msg, status)
-			jptm.FailActiveUpload(err)
-			return
-		}
-	})
+	// Create Azure file with the source size
+	fileHTTPHeaders, metaData := jptm.FileDstData(leadingBytes)
+	_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
+	if err != nil {
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogUploadError(info.Source, info.Destination, "File Create Error "+msg, status)
+		jptm.FailActiveUpload(err)
+		return
+	}
 }
 
 func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
 	return createUploadChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
-
-		// Ensure prologue has been run exactly once, before we do anything else
-		u.runPrologueOnce()
 
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work

@@ -27,7 +27,6 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 	"net/url"
-	"sync"
 	"time"
 )
 
@@ -38,8 +37,6 @@ type appendBlobUploader struct {
 	numChunks              uint32
 	pipeline               pipeline.Pipeline
 	pacer                  *pacer
-	leadingBytes           []byte
-	prologueOnce           *sync.Once
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
 
@@ -65,13 +62,12 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	return &appendBlobUploader{
-		jptm:                   jptm,
-		appendBlobUrl:          azblob.NewBlobURL(*destURL, p).ToAppendBlobURL(),
-		chunkSize:              chunkSize,
-		numChunks:              numChunks,
-		pipeline:               p,
-		pacer:                  pacer,
-		prologueOnce:           &sync.Once{},
+		jptm:          jptm,
+		appendBlobUrl: azblob.NewBlobURL(*destURL, p).ToAppendBlobURL(),
+		chunkSize:     chunkSize,
+		numChunks:     numChunks,
+		pipeline:      p,
+		pacer:         pacer,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1),
 	}, nil
 }
@@ -84,30 +80,23 @@ func (u *appendBlobUploader) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *appendBlobUploader) SetLeadingBytes(leadingBytes []byte) {
-	u.leadingBytes = leadingBytes
-}
-
 func (u *appendBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := u.appendBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
 	return err == nil, nil
 }
 
-// see comments in uploader-azureFiles for rationale for this approach
-func (u *appendBlobUploader) runPrologueOnce() {
-	u.prologueOnce.Do(func() {
-		jptm := u.jptm
-		info := jptm.Info()
+func (u *appendBlobUploader) Prologue(leadingBytes []byte) {
+	jptm := u.jptm
+	info := jptm.Info()
 
-		blobHTTPHeaders, metaData := jptm.BlobDstData(u.leadingBytes)
-		_, err := u.appendBlobUrl.Create(jptm.Context(), blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
-		if err != nil {
-			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
-			jptm.FailActiveUpload(err)
-			return
-		}
-	})
+	blobHTTPHeaders, metaData := jptm.BlobDstData(leadingBytes)
+	_, err := u.appendBlobUrl.Create(jptm.Context(), blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
+	if err != nil {
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
+		jptm.FailActiveUpload(err)
+		return
+	}
 }
 
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -129,9 +118,6 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		defer u.soleChunkFuncSemaphore.Release(1)
 
 		jptm := u.jptm
-
-		// Ensure prologue has been run exactly once, before we do anything else
-		u.runPrologueOnce()
 
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work

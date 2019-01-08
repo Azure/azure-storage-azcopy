@@ -37,23 +37,27 @@ type uploader interface {
 	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
 	RemoteFileExists() (bool, error)
 
+	// Prologue is called automatically before the first chunkFunc is generated.
+	// Implementation should do any initialization that is necessary - e.g.
+	// creating the remote file for those destinations that require an explicit
+	// creation step. Implementations should call jptm.FailActiveUpload if anything
+	// goes wrong during the prologue.
+	// Leading bytes are the early bytes of the file, to be used
+	// for mime-type detection (or nil if file is empty or the bytes code
+	// not be read).
+	Prologue(leadingBytes []byte)
+
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of
 	// file IO out out the upload func, and lets that func concentrate only on the details of the remote endpoint
 	GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc
 
-	// Epilogue should be called once we know all the chunk funcs have been processed
-	// Implementation should interact with its IJobPartTransferMgr to do
+	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
+	// Implementation should interact with its jptm to do
 	// post-success processing if transfer has been successful so far,
-	// or post-failure processing otherwise.
+	// or post-failure processing otherwise.  Implementations should
+	// use jptm.FailActiveUpload if anything fails during the epilogue.
 	Epilogue()
-}
-
-type mimeTypeSniffer interface {
-	// SetLeadingBytes is called, if implemented on an uploader, before the first chunk is scheduled. It
-	// allows the uploader to remember the leading bytes, for use in
-	// MIME-type sniffing
-	SetLeadingBytes(leadingBytes []byte)
 }
 
 type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error)

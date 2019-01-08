@@ -28,18 +28,16 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
-	"sync"
 	"time"
 )
 
 type blobFSUploader struct {
-	jptm         IJobPartTransferMgr
-	fileURL      azbfs.FileURL
-	chunkSize    uint32
-	numChunks    uint32
-	pipeline     pipeline.Pipeline
-	pacer        *pacer
-	prologueOnce *sync.Once
+	jptm      IJobPartTransferMgr
+	fileURL   azbfs.FileURL
+	chunkSize uint32
+	numChunks uint32
+	pipeline  pipeline.Pipeline
+	pacer     *pacer
 }
 
 func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -107,13 +105,12 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 	numChunks := getNumUploadChunks(info.SourceSize, chunkSize)
 
 	return &blobFSUploader{
-		jptm:         jptm,
-		fileURL:      azbfs.NewFileURL(*destURL, p),
-		chunkSize:    chunkSize,
-		numChunks:    numChunks,
-		pipeline:     p,
-		pacer:        pacer,
-		prologueOnce: &sync.Once{},
+		jptm:      jptm,
+		fileURL:   azbfs.NewFileURL(*destURL, p),
+		chunkSize: chunkSize,
+		numChunks: numChunks,
+		pipeline:  p,
+		pacer:     pacer,
 	}, nil
 }
 
@@ -130,25 +127,19 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 	return err == nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
-// see comments in uploader-azureFiles for why this is done like this
-func (u *blobFSUploader) runPrologueOnce() {
-	u.prologueOnce.Do(func() {
-		// Create file with the source size
-		_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
-		if err != nil {
-			u.jptm.FailActiveUploadWithDetails(err, "File Create Error ", common.ETransferStatus.Failed())
-			return
-		}
-	})
+func (u *blobFSUploader) Prologue(leadingBytes []byte) {
+	// Create file with the source size
+	_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
+	if err != nil {
+		u.jptm.FailActiveUploadWithDetails(err, "File Create Error ", common.ETransferStatus.Failed())
+		return
+	}
 }
 
 func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
 	return createUploadChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
-
-		// Ensure prologue has been run exactly once, before we do anything else
-		u.runPrologueOnce()
 
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work

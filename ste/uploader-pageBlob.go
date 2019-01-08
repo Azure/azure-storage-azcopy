@@ -27,19 +27,16 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
-	"sync"
 	"time"
 )
 
 type pageBlobUploader struct {
-	jptm         IJobPartTransferMgr
-	pageBlobUrl  azblob.PageBlobURL
-	chunkSize    uint32
-	numChunks    uint32
-	pipeline     pipeline.Pipeline
-	pacer        *pacer
-	leadingBytes []byte
-	prologueOnce *sync.Once
+	jptm        IJobPartTransferMgr
+	pageBlobUrl azblob.PageBlobURL
+	chunkSize   uint32
+	numChunks   uint32
+	pipeline    pipeline.Pipeline
+	pacer       *pacer
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -62,13 +59,12 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 	}
 
 	return &pageBlobUploader{
-		jptm:         jptm,
-		pageBlobUrl:  azblob.NewBlobURL(*destURL, p).ToPageBlobURL(),
-		chunkSize:    chunkSize,
-		numChunks:    numChunks,
-		pipeline:     p,
-		pacer:        pacer,
-		prologueOnce: &sync.Once{},
+		jptm:        jptm,
+		pageBlobUrl: azblob.NewBlobURL(*destURL, p).ToPageBlobURL(),
+		chunkSize:   chunkSize,
+		numChunks:   numChunks,
+		pipeline:    p,
+		pacer:       pacer,
 	}, nil
 }
 
@@ -80,53 +76,43 @@ func (u *pageBlobUploader) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *pageBlobUploader) SetLeadingBytes(leadingBytes []byte) {
-	u.leadingBytes = leadingBytes
-}
-
 func (u *pageBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := u.pageBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
 	return err == nil, nil
 }
 
-// see comments in uploader-azureFiles for rationale for this approach
-func (u *pageBlobUploader) runPrologueOnce() {
-	u.prologueOnce.Do(func() {
-		jptm := u.jptm
-		info := jptm.Info()
+func (u *pageBlobUploader) Prologue(leadingBytes []byte) {
+	jptm := u.jptm
+	info := jptm.Info()
 
-		// create
-		blobHTTPHeaders, metaData := jptm.BlobDstData(u.leadingBytes)
-		_, err := u.pageBlobUrl.Create(jptm.Context(), info.SourceSize,
-			0, blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
+	// create
+	blobHTTPHeaders, metaData := jptm.BlobDstData(leadingBytes)
+	_, err := u.pageBlobUrl.Create(jptm.Context(), info.SourceSize,
+		0, blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
+	if err != nil {
+		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
+		jptm.FailActiveUpload(err)
+		return
+	}
+
+	// set tier
+	_, pageBlobTier := jptm.BlobTiers()
+	if pageBlobTier != common.EPageBlobTier.None() {
+		// for blob tier, set the latest service version from sdk as service version in the context.
+		ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		_, err = u.pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		if err != nil {
-			status, msg := ErrorEx{err}.ErrorCodeAndString()
-			jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
-			jptm.FailActiveUpload(err)
+			jptm.FailActiveUploadWithDetails(err, "PageBlob SetTier ", common.ETransferStatus.BlobTierFailure())
 			return
 		}
-
-		// set tier
-		_, pageBlobTier := jptm.BlobTiers()
-		if pageBlobTier != common.EPageBlobTier.None() {
-			// for blob tier, set the latest service version from sdk as service version in the context.
-			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			_, err = u.pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
-			if err != nil {
-				jptm.FailActiveUploadWithDetails(err, "PageBlob SetTier ", common.ETransferStatus.BlobTierFailure())
-				return
-			}
-		}
-	})
+	}
 }
 
 func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
 	return createUploadChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
-
-		// Ensure prologue has been run exactly once, before we do anything else
-		u.runPrologueOnce()
 
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
@@ -156,11 +142,6 @@ func (u *pageBlobUploader) Epilogue() {
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
-		// If the transfer status value < 0, then transfer failed with some failure
-		// there is a possibility that some uncommitted blocks will be there
-		// Delete the uncommitted blobs
-		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
-		//    situation. Deletion has very different semantics then, compared to not deleting.
 		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
 		_, err := u.pageBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {
