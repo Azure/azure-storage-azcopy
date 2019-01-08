@@ -203,7 +203,7 @@ func (bu *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex 
 	}
 }
 
-func (u *blockBlobUploader) Epilogue() {
+func (bu *blockBlobUploader) Epilogue() {
 	bu.mu.Lock()
 	shouldPutBlockList := bu.putListIndicator
 	blockIds := bu.blockIds
@@ -218,7 +218,7 @@ func (u *blockBlobUploader) Epilogue() {
 
 	// commit the blocks, if necessary
 	if jptm.TransferStatus() > 0 && shouldPutBlockList == plNeeded {
-		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", u.blockIds))
+		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", bu.blockIds))
 
 		// fetching the blob http headers with content-type, content-encoding attributes
 		// fetching the metadata passed with the JobPartOrder
