@@ -55,12 +55,6 @@ type uploader interface {
 
 type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error)
 
-const (
-	epilogueNotNeeded   = -1
-	epilogueNeedUnknown = 0
-	epilogueNeeded      = 1
-)
-
 func getNumUploadChunks(fileSize int64, chunkSize uint32) uint32 {
 	numChunks := uint32(1) // for uploads, we always map zero-size files to ONE (empty) chunk
 	if fileSize > 0 {

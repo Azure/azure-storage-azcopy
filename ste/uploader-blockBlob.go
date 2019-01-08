@@ -35,6 +35,12 @@ import (
 	"time"
 )
 
+const (
+	plNotNeeded   = -1
+	plNeedUnknown = 0
+	plNeeded      = 1
+)
+
 type blockBlobUploader struct {
 	jptm         IJobPartTransferMgr
 	blobURL      azblob.BlobURL
@@ -44,9 +50,9 @@ type blockBlobUploader struct {
 	pacer        *pacer
 	leadingBytes []byte // no lock because is written before first chunk-func go routine is scheduled
 
-	needEpilogueIndicator int32       // accessed via sync.atomic
-	mu                    *sync.Mutex // protects the fields below
-	blockIds              []string
+	putListIndicator int32       // accessed via sync.atomic
+	mu               *sync.Mutex // protects the fields below
+	blockIds         []string
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -111,10 +117,10 @@ func (bu *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		if blockIndex > 0 {
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
-		bu.setEpilogueNeed(epilogueNotNeeded)
+		bu.setPutListNeed(plNotNeeded)
 		return bu.generatePutWholeBlob(id, blockIndex, reader)
 	} else {
-		bu.setEpilogueNeed(epilogueNeeded)
+		bu.setPutListNeed(plNeeded)
 		return bu.generatePutBlock(id, blockIndex, reader)
 	}
 }
@@ -197,24 +203,22 @@ func (bu *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex 
 	}
 }
 
-func (bu *blockBlobUploader) Epilogue() {
+func (u *blockBlobUploader) Epilogue() {
 	bu.mu.Lock()
-	needed := bu.needEpilogueIndicator
+	shouldPutBlockList := bu.putListIndicator
 	blockIds := bu.blockIds
 	bu.mu.Unlock()
-	if needed == epilogueNotNeeded {
-		return // nothing to do
-	} else if needed == epilogueNeedUnknown {
-		panic("epilogue need flag was never set")
+	if shouldPutBlockList == plNeedUnknown {
+		panic("'put list' need flag was never set")
 	}
 
 	jptm := bu.jptm
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
-	// commit the blocks
-	if jptm.TransferStatus() > 0 {
-		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", bu.blockIds))
+	// commit the blocks, if necessary
+	if jptm.TransferStatus() > 0 && shouldPutBlockList == plNeeded {
+		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", u.blockIds))
 
 		// fetching the blob http headers with content-type, content-encoding attributes
 		// fetching the metadata passed with the JobPartOrder
@@ -261,11 +265,11 @@ func (bu *blockBlobUploader) Epilogue() {
 
 }
 
-func (bu *blockBlobUploader) setEpilogueNeed(value int32) {
+func (u *blockBlobUploader) setPutListNeed(value int32) {
 	// atomic because uploaders are used by multiple threads at the same time
-	previous := atomic.SwapInt32(&bu.needEpilogueIndicator, value)
-	if previous != epilogueNeedUnknown && previous != value {
-		panic("epilogue need cannot be set twice")
+	previous := atomic.SwapInt32(&u.putListIndicator, value)
+	if previous != plNeedUnknown && previous != value {
+		panic("'put list' need cannot be set twice")
 	}
 }
 
