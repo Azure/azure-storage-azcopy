@@ -43,7 +43,7 @@ const (
 
 type blockBlobUploader struct {
 	jptm         IJobPartTransferMgr
-	blobURL      azblob.BlobURL
+	blockBlobUrl azblob.BlockBlobURL
 	chunkSize    uint32
 	numChunks    uint32
 	pipeline     pipeline.Pipeline
@@ -76,14 +76,14 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 	}
 
 	return &blockBlobUploader{
-		jptm:      jptm,
-		blobURL:   azblob.NewBlobURL(*destURL, p),
-		chunkSize: chunkSize,
-		numChunks: numChunks,
-		pipeline:  p,
-		pacer:     pacer,
-		mu:        &sync.Mutex{},
-		blockIds:  make([]string, numChunks),
+		jptm:         jptm,
+		blockBlobUrl: azblob.NewBlobURL(*destURL, p).ToBlockBlobURL(),
+		chunkSize:    chunkSize,
+		numChunks:    numChunks,
+		pipeline:     p,
+		pacer:        pacer,
+		mu:           &sync.Mutex{},
+		blockIds:     make([]string, numChunks),
 	}, nil
 }
 
@@ -100,7 +100,7 @@ func (u *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
 }
 
 func (u *blockBlobUploader) RemoteFileExists() (bool, error) {
-	_, err := u.blobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+	_, err := u.blockBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
 	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
@@ -134,9 +134,8 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 
 		// step 3: perform put block
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		blockBlobUrl := u.blobURL.ToBlockBlobURL()
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := blockBlobUrl.StageBlock(u.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
+		_, err := u.blockBlobUrl.StageBlock(u.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload(err)
 			return
@@ -156,12 +155,11 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		// Upload the blob
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
-		blockBlobUrl := u.blobURL.ToBlockBlobURL()
 		if jptm.Info().SourceSize == 0 {
-			_, err = blockBlobUrl.Upload(jptm.Context(), bytes.NewReader(nil), blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+			_, err = u.blockBlobUrl.Upload(jptm.Context(), bytes.NewReader(nil), blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 		} else {
 			body := newLiteRequestBodyPacer(reader, u.pacer)
-			_, err = blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+			_, err = u.blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
@@ -193,7 +191,7 @@ func (u *blockBlobUploader) Epilogue() {
 		// fetching the metadata passed with the JobPartOrder
 		blobHttpHeader, metaData := jptm.BlobDstData(u.leadingBytes)
 
-		_, err := u.blobURL.ToBlockBlobURL().CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+		_, err := u.blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
 			jptm.FailActiveUploadWithDetails(err, "Commit block list failed ", common.ETransferStatus.Failed())
 		} else {
@@ -207,7 +205,7 @@ func (u *blockBlobUploader) Epilogue() {
 		if blockBlobTier != common.EBlockBlobTier.None() {
 			// for blob tier, set the latest service version from sdk as service version in the context.
 			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			_, err := u.blobURL.ToBlockBlobURL().SetTier(ctxWithValue, blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
+			_, err := u.blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			if err != nil {
 				jptm.FailActiveUploadWithDetails(err, "BlockBlob SetTier ", common.ETransferStatus.BlobTierFailure())
 			}
@@ -222,7 +220,7 @@ func (u *blockBlobUploader) Epilogue() {
 		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
 		//    situation. Deletion has very different semantics then, compared to not deleting.
 		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
-		_, _ = u.blobURL.ToBlockBlobURL().Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		_, _ = u.blockBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		// TODO: question, is it OK to remoe this logging of failures (since there's no adverse effect of failure)
 		//  if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 		// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
