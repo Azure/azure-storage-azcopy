@@ -76,8 +76,22 @@ func getNumUploadChunks(fileSize int64, chunkSize uint32) uint32 {
 	return numChunks
 }
 
+func createUploadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
+	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.
+	// But we don't do that for downloads, since for those the chunk is not "done" until its flushed out
+	// by the ChunkedFileWriter. (The ChunkedFileWriter will set the status to done at that time.)
+	return createChunkFunc(true, jptm, id, body)
+}
+
+func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
+	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.
+	// But we don't do that for downloads, since for those the chunk is not "done" until its flushed out
+	// by the ChunkedFileWriter. (The ChunkedFileWriter will set the status to done at that time.)
+	return createChunkFunc(false, jptm, id, body)
+}
+
 // createChunkFunc adds a standard prefix, which all chunkFuncs require, to the given body
-func createChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
+func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	return func(workerId int) {
 
 		// BEGIN standard prefix that all chunk funcs need
@@ -90,7 +104,9 @@ func createChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) c
 			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
 			return
 		} else {
-			defer jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
+			if setDoneStatusOnExit {
+				defer jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
+			}
 		}
 		// END standard prefix
 

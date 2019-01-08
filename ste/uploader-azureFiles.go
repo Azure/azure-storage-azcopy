@@ -131,7 +131,7 @@ func (u *azureFilesUploader) runPrologueOnce() {
 
 func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
-	return createChunkFunc(u.jptm, id, func() {
+	return createUploadChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
 		// Ensure prologue has been run exactly once, before we do anything else

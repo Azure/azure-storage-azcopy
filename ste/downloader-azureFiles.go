@@ -36,18 +36,7 @@ func newAzureFilesDownloader() downloader {
 // Returns a chunk-func for file downloads
 
 func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
-	return func(workerId int) {
-
-		defer jptm.ReportChunkDone() // whether successful or failed, it's always "done" and we must always tell the jptm
-
-		// TODO: added the two operations for debugging purpose. remove later
-		jptm.OccupyAConnection()        // Increment a number of goroutine performing the transfer / acting on chunks msg by 1
-		defer jptm.ReleaseAConnection() // defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
-
-		if jptm.WasCanceled() {
-			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
-			return
-		}
+	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
 		info := jptm.Info()
@@ -78,5 +67,5 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 			jptm.FailActiveDownload(err)
 			return
 		}
-	}
+	})
 }

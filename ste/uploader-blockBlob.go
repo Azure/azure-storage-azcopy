@@ -116,7 +116,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 // generatePutBlock generates a func to uploads the block of src data from given startIndex till the given chunkSize.
 func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
 
-	return createChunkFunc(u.jptm, id, func() {
+	return createUploadChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
 		// step 1: generate block ID
@@ -141,7 +141,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 // generates PUT Blob (for a blob that fits in a single put request)
 func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
 
-	return createChunkFunc(u.jptm, id, func() {
+	return createUploadChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
 		// Get blob http headers and metadata.
