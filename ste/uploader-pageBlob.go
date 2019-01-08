@@ -22,40 +22,37 @@ package ste
 
 import (
 	"context"
+	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"golang.org/x/sync/semaphore"
 	"net/url"
 	"sync"
 	"time"
 )
 
-type appendBlobUploader struct {
-	jptm                   IJobPartTransferMgr
-	appendBlobUrl          azblob.AppendBlobURL
-	chunkSize              uint32
-	numChunks              uint32
-	pipeline               pipeline.Pipeline
-	pacer                  *pacer
-	leadingBytes           []byte
-	prologueOnce           *sync.Once
-	soleChunkFuncSemaphore *semaphore.Weighted
+type pageBlobUploader struct {
+	jptm         IJobPartTransferMgr
+	pageBlobUrl  azblob.PageBlobURL
+	chunkSize    uint32
+	numChunks    uint32
+	pipeline     pipeline.Pipeline
+	pacer        *pacer
+	leadingBytes []byte
+	prologueOnce *sync.Once
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
 	// compute chunk count
 	info := jptm.Info()
 	fileSize := info.SourceSize
 	chunkSize := info.BlockSize
-
 	// If the given chunk Size for the Job is greater than maximum page size i.e 4 MB
 	// then set maximum pageSize will be 4 MB.
 	chunkSize = common.Iffuint32(
-		chunkSize > common.MaxAppendBlobBlockSize,
-		common.MaxAppendBlobBlockSize,
+		chunkSize > common.DefaultPageBlobChunkSize || (chunkSize%azblob.PageBlobPageBytes != 0),
+		common.DefaultPageBlobChunkSize,
 		chunkSize)
-
 	numChunks := getNumUploadChunks(fileSize, chunkSize)
 
 	// make sure URL is parsable
@@ -64,70 +61,68 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		return nil, err
 	}
 
-	return &appendBlobUploader{
-		jptm:                   jptm,
-		appendBlobUrl:          azblob.NewBlobURL(*destURL, p).ToAppendBlobURL(),
-		chunkSize:              chunkSize,
-		numChunks:              numChunks,
-		pipeline:               p,
-		pacer:                  pacer,
-		prologueOnce:           &sync.Once{},
-		soleChunkFuncSemaphore: semaphore.NewWeighted(1),
+	return &pageBlobUploader{
+		jptm:         jptm,
+		pageBlobUrl:  azblob.NewBlobURL(*destURL, p).ToPageBlobURL(),
+		chunkSize:    chunkSize,
+		numChunks:    numChunks,
+		pipeline:     p,
+		pacer:        pacer,
+		prologueOnce: &sync.Once{},
 	}, nil
 }
 
-func (u *appendBlobUploader) ChunkSize() uint32 {
+func (u *pageBlobUploader) ChunkSize() uint32 {
 	return u.chunkSize
 }
 
-func (u *appendBlobUploader) NumChunks() uint32 {
+func (u *pageBlobUploader) NumChunks() uint32 {
 	return u.numChunks
 }
 
-func (u *appendBlobUploader) SetLeadingBytes(leadingBytes []byte) {
+func (u *pageBlobUploader) SetLeadingBytes(leadingBytes []byte) {
 	u.leadingBytes = leadingBytes
 }
 
-func (u *appendBlobUploader) RemoteFileExists() (bool, error) {
-	_, err := u.appendBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+func (u *pageBlobUploader) RemoteFileExists() (bool, error) {
+	_, err := u.pageBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
 	return err == nil, nil
 }
 
 // see comments in uploader-azureFiles for rationale for this approach
-func (u *appendBlobUploader) runPrologueOnce() {
+func (u *pageBlobUploader) runPrologueOnce() {
 	u.prologueOnce.Do(func() {
 		jptm := u.jptm
 		info := jptm.Info()
 
+		// create
 		blobHTTPHeaders, metaData := jptm.BlobDstData(u.leadingBytes)
-		_, err := u.appendBlobUrl.Create(jptm.Context(), blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
+		_, err := u.pageBlobUrl.Create(jptm.Context(), info.SourceSize,
+			0, blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
 			jptm.FailActiveUpload(err)
 			return
 		}
+
+		// set tier
+		_, pageBlobTier := jptm.BlobTiers()
+		if pageBlobTier != common.EPageBlobTier.None() {
+			// for blob tier, set the latest service version from sdk as service version in the context.
+			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+			_, err = u.pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
+			if err != nil {
+				jptm.FailActiveUploadWithDetails(err, "PageBlob SetTier ", common.ETransferStatus.BlobTierFailure())
+				return
+			}
+		}
 	})
 }
 
-func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
-
-	// Uploads must be totally sequential for append blobs
-	// The way we enforce that is simple: we won't even CREATE
-	// a chunk func, until all previously-scheduled chunk funcs have completed
-	// Here we block until there are no other chunkfuncs in existence for this blob
-	err := u.soleChunkFuncSemaphore.Acquire(u.jptm.Context(), 1)
-	if err != nil {
-		// Must have been cancelled
-		// We must still return a chunk func, so return a no-op one
-		return createUploadChunkFunc(u.jptm, id, func() {})
-	}
+func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
 	return createUploadChunkFunc(u.jptm, id, func() {
-
-		// Here, INSIDE the chunkfunc, we release the semaphore when we have finished running
-		defer u.soleChunkFuncSemaphore.Release(1)
-
 		jptm := u.jptm
 
 		// Ensure prologue has been run exactly once, before we do anything else
@@ -138,9 +133,17 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 			return
 		}
 
+		if reader.HasPrefetchedEntirelyZeros() {
+			// for this destination type, there is no need to upload ranges than consist entirely of zeros
+			jptm.Log(pipeline.LogDebug,
+				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
+					id.OffsetInFile, id.OffsetInFile+reader.Length()))
+			return
+		}
+
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err = u.appendBlobUrl.AppendBlock(jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
+		_, err := u.pageBlobUrl.UploadPages(jptm.Context(), id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload(err)
 			return
@@ -148,8 +151,9 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	})
 }
 
-func (u *appendBlobUploader) Epilogue() {
+func (u *pageBlobUploader) Epilogue() {
 	jptm := u.jptm
+
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure
@@ -158,9 +162,9 @@ func (u *appendBlobUploader) Epilogue() {
 		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
 		//    situation. Deletion has very different semantics then, compared to not deleting.
 		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
-		_, err := u.appendBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		_, err := u.pageBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {
-			jptm.LogError(u.appendBlobUrl.String(), "Delete (incomplete) Append Blob ", err)
+			jptm.LogError(u.pageBlobUrl.String(), "Delete (incomplete) Page Blob ", err)
 		}
 	}
 }

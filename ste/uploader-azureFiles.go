@@ -103,6 +103,10 @@ func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 // No... or at least, not easily. The reason is that this needs the first bytes of the file, for MIME-type detection. And we don't really get to those
 // bytes in localToRemote until we are in the chunkfunc scheduling loop.   Getting those bytes earlier, without the perf cost of reading that part of the
 // file twice, would be a messy refactoring.  So we do this here instead.
+// Also, moving it into the chunkfunc scheduling loop complicates error handing, since our current (Jan 2018) approach is that,
+// once that loop has started scheduling chunk funcs, it must schedule all of them, even if there's an error. So, if the prologue
+// was explicitly called there, it would need to check and act on the error, but then schedule all the rest of the chunks anyway.
+// That's effectively what happens by putting it here (in runPrologueOnce) but it is, hopefully, marginally less confusing here.
 func (u *azureFilesUploader) runPrologueOnce() {
 	u.prologueOnce.Do(func() {
 
