@@ -101,7 +101,7 @@ func (bu *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
 
 func (bu *blockBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := bu.blobURL.GetProperties(bu.jptm.Context(), azblob.BlobAccessConditions{})
-	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+	return err == nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
 // Returns a chunk-func for blob uploads
