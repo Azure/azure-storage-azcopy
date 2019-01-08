@@ -94,7 +94,7 @@ func (u *azureFilesUploader) SetLeadingBytes(leadingBytes []byte) {
 
 func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 	_, err := u.fileURL.GetProperties(u.jptm.Context())
-	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+	return err == nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
 // For AzureFiles, it's necessary to create the file before sending any data to it

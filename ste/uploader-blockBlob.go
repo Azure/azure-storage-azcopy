@@ -101,7 +101,9 @@ func (u *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
 
 func (u *blockBlobUploader) RemoteFileExists() (bool, error) {
 	_, err := u.blockBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
-	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+	return err == nil, nil
+	// TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+	//      Can't just look at the response object, because its null if error is non null (where does that null come from?  Wouldn't a non-null value be reasonable in the 404 case?)
 }
 
 // Returns a chunk-func for blob uploads
