@@ -51,39 +51,37 @@ func LocalToBlobFS(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) 
 
 	// If the source is a directory
 	if fInfo.IsDir() {
-		panic("testing to see if we run the directory case")
-		/*
-			dirUrl := azbfs.NewDirectoryURL(*dUrl, p)
-			_, err := dirUrl.Create(jptm.Context())
-			if err != nil {
-				// Note: As description in document https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create,
-				// the default behavior of creating directory is overwrite, unless there is lease, or destination exists, and there is If-None-Match:"*".
-				// Check for overwrite flag correspondingly, if overwrite is true, and fail to recreate directory, report error.
-				// If overwrite is false, and fail to recreate directoroy, report directory already exists.
-				if !jptm.IsForceWriteTrue() {
-					if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.Response().StatusCode == http.StatusConflict {
-						jptm.LogUploadError(info.Source, info.Destination, "Directory already exists ", 0)
-						// Mark the transfer as failed with ADLSGen2PathAlreadyExistsFailure
-						jptm.SetStatus(common.ETransferStatus.ADLSGen2PathAlreadyExistsFailure())
-						jptm.ReportTransferDone()
-						return
-					}
+		dirUrl := azbfs.NewDirectoryURL(*dUrl, p)
+		_, err := dirUrl.Create(jptm.Context())
+		if err != nil {
+			// Note: As description in document https://docs.microsoft.com/en-us/rest/api/storageservices/datalakestoragegen2/path/create,
+			// the default behavior of creating directory is overwrite, unless there is lease, or destination exists, and there is If-None-Match:"*".
+			// Check for overwrite flag correspondingly, if overwrite is true, and fail to recreate directory, report error.
+			// If overwrite is false, and fail to recreate directoroy, report directory already exists.
+			if !jptm.IsForceWriteTrue() {
+				if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.Response().StatusCode == http.StatusConflict {
+					jptm.LogUploadError(info.Source, info.Destination, "Directory already exists ", 0)
+					// Mark the transfer as failed with ADLSGen2PathAlreadyExistsFailure
+					jptm.SetStatus(common.ETransferStatus.ADLSGen2PathAlreadyExistsFailure())
+					jptm.ReportTransferDone()
+					return
 				}
+			}
 
-				status, msg := ErrorEx{err}.ErrorCodeAndString()
-				jptm.LogUploadError(info.Source, info.Destination, "Directory creation error "+msg, status)
-				if jptm.WasCanceled() {
-					transferDone(jptm.TransferStatus())
-				} else {
-					transferDone(common.ETransferStatus.Failed())
-				}
-				return
+			status, msg := ErrorEx{err}.ErrorCodeAndString()
+			jptm.LogUploadError(info.Source, info.Destination, "Directory creation error "+msg, status)
+			if jptm.WasCanceled() {
+				transferDone(jptm.TransferStatus())
+			} else {
+				transferDone(common.ETransferStatus.Failed())
 			}
-			if jptm.ShouldLog(pipeline.LogInfo) {
-				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
-			}
-			transferDone(common.ETransferStatus.Success())
-			return*/
+			return
+		}
+		if jptm.ShouldLog(pipeline.LogInfo) {
+			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+		}
+		transferDone(common.ETransferStatus.Success())
+		return
 	}
 
 	// If the source is a file

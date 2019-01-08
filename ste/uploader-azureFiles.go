@@ -140,17 +140,17 @@ func (au *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex i
 		jptm.OccupyAConnection() // TODO: added the two operations for debugging purpose. remove later
 		defer jptm.ReleaseAConnection()
 
+		if jptm.WasCanceled() {
+			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
+			return
+		}
+
 		// Ensure prologue has been run exactly once, before we do anything else
 		au.runPrologueOnce()
 
 		if au.jptm.Info().SourceSize == 0 {
 			jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
 			// nothing more to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
-			return
-		}
-
-		if jptm.WasCanceled() {
-			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
 			return
 		}
 
@@ -179,9 +179,8 @@ func (au *azureFilesUploader) Epilogue() {
 		deletionContext, _ := context.WithTimeout(context.Background(), 2*time.Minute)
 		_, err := au.fileURL.Delete(deletionContext)
 		if err != nil {
-			if jptm.ShouldLog(pipeline.LogError) {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("error deleting the file %s. Failed with error %s", au.fileURL.String(), err.Error()))
-			}
+			// TODO: this was LogInfo, but inside a ShouldLog(LogError) if statement. Should I put it back that way?  It was not like that for blobFS
+			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", au.fileURL.String(), err.Error()))
 		}
 	}
 

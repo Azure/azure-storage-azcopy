@@ -135,9 +135,11 @@ func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 		chunkReader.TryBlockingPrefetch(srcFile)
 
-		// If this is the the very first chunk, capture the leading bytes of the file for mime-type detection
-		if startIndex == 0 {
-			ul.SetLeadingBytes(chunkReader.CaptureLeadingBytes())
+		// If this is the the very first chunk, optionally capture the leading bytes of the file for mime-type detection
+		// We do this here, to avoid needing any separate disk read elsewhere in the code (i.e. we just prefetched what we need for this, so use it)
+		sniffer, isSniffer := ul.(mimeTypeSniffer)
+		if startIndex == 0 && isSniffer {
+			sniffer.SetLeadingBytes(chunkReader.CaptureLeadingBytes())
 		}
 
 		// schedule the chunk job/msg

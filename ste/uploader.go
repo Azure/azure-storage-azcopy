@@ -37,10 +37,6 @@ type uploader interface {
 	// RemoteFileExists is called to see whether the file already exists at the remote location (so we know whether we'll be overwriting it)
 	RemoteFileExists() (bool, error)
 
-	// SetLeadingBytes is called before the first chunk is scheduled, and allows the uploader to remember the leading bytes, for use in
-	// MIME-type sniffing
-	SetLeadingBytes(leadingBytes []byte)
-
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of
 	// file IO out out the upload func, and lets that func concentrate only on the details of the remote endpoint
@@ -51,6 +47,13 @@ type uploader interface {
 	// post-success processing if transfer has been successful so far,
 	// or post-failure processing otherwise.
 	Epilogue()
+}
+
+type mimeTypeSniffer interface {
+	// SetLeadingBytes is called, if implemented on an uploader, before the first chunk is scheduled. It
+	// allows the uploader to remember the leading bytes, for use in
+	// MIME-type sniffing
+	SetLeadingBytes(leadingBytes []byte)
 }
 
 type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error)
