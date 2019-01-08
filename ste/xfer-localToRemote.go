@@ -102,9 +102,6 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// TODO: ...so that the last of them will trigger the epilogue.
 	// TODO: ...Question: is that OK? (Same question as we have for downloads)
 
-	// TODO: for at least some destinations (e.g. BlockBlobs) you can do a single chunk PUT (of the whole file)
-	//    for sizes that are larger than the normal single-chunk limit.  Do we want to support that?  What would the advantages be?
-
 	// Step 5: Go through the file and schedule chunk messages to upload each chunk
 	// As we do this, we force preload of each chunk to memory, and we wait (block)
 	// here if the amount of preloaded data gets excessive. That's OK to do,
