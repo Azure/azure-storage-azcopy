@@ -73,7 +73,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch blobType {
 		case common.EBlobType.None(),
 			common.EBlobType.BlockBlob():
-			return parameterizeUpload(LocalToRemote, newBlockBlobUploader)
+			return parameterizeUpload(localToRemote, newBlockBlobUploader)
 		case common.EBlobType.PageBlob():
 			return LocalToPageBlob // TODO: refactor
 		case common.EBlobType.AppendBlob():
@@ -84,11 +84,11 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
 		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-		return parameterizeUpload(LocalToRemote, newAzureFilesUploader)
+		return parameterizeUpload(localToRemote, newAzureFilesUploader)
 	case common.EFromTo.FileTrash():
 		return DeleteFilePrologue
 	case common.EFromTo.LocalBlobFS():
-		return LocalToBlobFS // TODO: refactor
+		return parameterizeUpload(localToRemote, newBlobFSUploader)
 	case common.EFromTo.BlobFSLocal():
 		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():

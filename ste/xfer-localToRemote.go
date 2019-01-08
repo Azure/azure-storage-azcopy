@@ -29,7 +29,7 @@ import (
 )
 
 // general-purpose local to "any remote persistence location"
-func LocalToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory) {
+func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, uf uploaderFactory) {
 
 	info := jptm.Info()
 	fileSize := info.SourceSize
