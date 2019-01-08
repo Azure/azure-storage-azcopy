@@ -80,20 +80,20 @@ func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}, nil
 }
 
-func (au *azureFilesUploader) ChunkSize() uint32 {
-	return au.chunkSize
+func (u *azureFilesUploader) ChunkSize() uint32 {
+	return u.chunkSize
 }
 
-func (au *azureFilesUploader) NumChunks() uint32 {
-	return au.numChunks
+func (u *azureFilesUploader) NumChunks() uint32 {
+	return u.numChunks
 }
 
-func (au *azureFilesUploader) SetLeadingBytes(leadingBytes []byte) {
-	au.leadingBytes = leadingBytes
+func (u *azureFilesUploader) SetLeadingBytes(leadingBytes []byte) {
+	u.leadingBytes = leadingBytes
 }
 
-func (au *azureFilesUploader) RemoteFileExists() (bool, error) {
-	_, err := au.fileURL.GetProperties(au.jptm.Context())
+func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
+	_, err := u.fileURL.GetProperties(u.jptm.Context())
 	return err != nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
 }
 
@@ -103,14 +103,14 @@ func (au *azureFilesUploader) RemoteFileExists() (bool, error) {
 // No... or at least, not easily. The reason is that this needs the first bytes of the file, for MIME-type detection. And we don't really get to those
 // bytes in localToRemote until we are in the chunkfunc scheduling loop.   Getting those bytes earlier, without the perf cost of reading that part of the
 // file twice, would be a messy refactoring.  So we do this here instead.
-func (au *azureFilesUploader) runPrologueOnce() {
-	au.prologueOnce.Do(func() {
+func (u *azureFilesUploader) runPrologueOnce() {
+	u.prologueOnce.Do(func() {
 
-		jptm := au.jptm
+		jptm := u.jptm
 		info := jptm.Info()
 
 		// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-		err := createParentDirToRoot(jptm.Context(), au.fileURL, au.pipeline)
+		err := createParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
 		if err != nil {
 			jptm.LogUploadError(info.Source, info.Destination, "Parent Directory Create Error "+err.Error(), 0)
 			jptm.FailActiveUpload(err)
@@ -118,8 +118,8 @@ func (au *azureFilesUploader) runPrologueOnce() {
 		}
 
 		// Create Azure file with the source size
-		fileHTTPHeaders, metaData := jptm.FileDstData(au.leadingBytes)
-		_, err = au.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
+		fileHTTPHeaders, metaData := jptm.FileDstData(u.leadingBytes)
+		_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
 		if err != nil {
 			status, msg := ErrorEx{err}.ErrorCodeAndString()
 			jptm.LogUploadError(info.Source, info.Destination, "File Create Error "+msg, status)
@@ -129,46 +129,32 @@ func (au *azureFilesUploader) runPrologueOnce() {
 	})
 }
 
-func (au *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
+func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
-	return func(workerId int) {
-
-		jptm := au.jptm
-
-		defer jptm.ReportChunkDone() // whether successful or failed, it's always "done" and we must always tell the jptm
-
-		jptm.OccupyAConnection() // TODO: added the two operations for debugging purpose. remove later
-		defer jptm.ReleaseAConnection()
-
-		if jptm.WasCanceled() {
-			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
-			return
-		}
+	return createChunkFunc(u.jptm, id, func() {
+		jptm := u.jptm
 
 		// Ensure prologue has been run exactly once, before we do anything else
-		au.runPrologueOnce()
+		u.runPrologueOnce()
 
-		if au.jptm.Info().SourceSize == 0 {
-			jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
-			// nothing more to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
+		if jptm.Info().SourceSize == 0 {
+			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
 			return
 		}
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, au.pacer)
-		_, err := au.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body)
+		body := newLiteRequestBodyPacer(reader, u.pacer)
+		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body)
 		if err != nil {
 			jptm.FailActiveUploadWithDetails(err, "Upload range error", common.ETransferStatus.Failed())
 			return
 		}
-
-		jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
-	}
+	})
 }
 
-func (au *azureFilesUploader) Epilogue() {
-	jptm := au.jptm
+func (u *azureFilesUploader) Epilogue() {
+	jptm := u.jptm
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 {
@@ -177,10 +163,10 @@ func (au *azureFilesUploader) Epilogue() {
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
 		deletionContext, _ := context.WithTimeout(context.Background(), 2*time.Minute)
-		_, err := au.fileURL.Delete(deletionContext)
+		_, err := u.fileURL.Delete(deletionContext)
 		if err != nil {
 			// TODO: this was LogInfo, but inside a ShouldLog(LogError) if statement. Should I put it back that way?  It was not like that for blobFS
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", au.fileURL.String(), err.Error()))
+			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", u.fileURL.String(), err.Error()))
 		}
 	}
 
