@@ -186,7 +186,7 @@ func (u *blobFSUploader) Epilogue() {
 		deletionContext, _ := context.WithTimeout(context.Background(), 2*time.Minute)
 		_, err := u.fileURL.Delete(deletionContext)
 		if err != nil {
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", u.fileURL.String(), err.Error()))
+			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL.String(), err.Error()))
 		}
 	}
 }

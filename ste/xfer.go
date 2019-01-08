@@ -77,7 +77,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		case common.EBlobType.PageBlob():
 			return LocalToPageBlob // TODO: refactor
 		case common.EBlobType.AppendBlob():
-			return LocalToAppendBlob // TODO: refactor
+			return parameterizeUpload(localToRemote, newAppendBlobUploader)
 		}
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue

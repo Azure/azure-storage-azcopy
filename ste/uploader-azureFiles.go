@@ -174,7 +174,7 @@ func (u *azureFilesUploader) Epilogue() {
 		_, err := u.fileURL.Delete(deletionContext)
 		if err != nil {
 			// TODO: this was LogInfo, but inside a ShouldLog(LogError) if statement. Should I put it back that way?  It was not like that for blobFS
-			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the file %s. Failed with error %s", u.fileURL.String(), err.Error()))
+			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL.String(), err.Error()))
 		}
 	}
 
