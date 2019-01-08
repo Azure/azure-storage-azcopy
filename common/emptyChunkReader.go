@@ -51,3 +51,11 @@ func (cr *emptyChunkReader) Close() error {
 func (cr *emptyChunkReader) CaptureLeadingBytes() []byte {
 	return nil // we can't sniff the mime type
 }
+
+func (cr *emptyChunkReader) HasPrefetchedEntirelyZeros() bool {
+	return false // we don't have any zeros (or anything else for that matter)
+}
+
+func (cr *emptyChunkReader) Length() int64 {
+	return 0
+}

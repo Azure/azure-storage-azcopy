@@ -142,6 +142,14 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 			return
 		}
 
+		if reader.HasPrefetchedEntirelyZeros() {
+			// for this destination type, there is no need to upload ranges than consist entirely of zeros
+			jptm.Log(pipeline.LogDebug,
+				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
+					id.OffsetInFile, id.OffsetInFile+reader.Length()))
+			return
+		}
+
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)

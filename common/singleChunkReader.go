@@ -39,6 +39,8 @@ type SingleChunkReader interface {
 	io.Closer
 	TryBlockingPrefetch(fileReader io.ReaderAt) bool
 	CaptureLeadingBytes() []byte
+	Length() int64
+	HasPrefetchedEntirelyZeros() bool
 }
 
 // Simple aggregation of existing io interfaces
@@ -106,6 +108,23 @@ func (cr *singleChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
 		return false
 	}
 	return true
+}
+
+func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
+	if cr.buffer == nil {
+		return false // not prefetched  (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
+	}
+
+	for _, b := range cr.buffer {
+		if b != 0 {
+			return false // it's not all zeroes
+		}
+	}
+	return true
+
+	// TODO: decide whether we want to change to scanning this: int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]
+	//       Is any speed gain worth it, in terms of introducing unsafe (more complex)?
+	//       And, can we double check: some sources seem to imply that the middle of it should be &rangeBytes[0] insetad of just &rangeBytes.
 }
 
 // Prefetch the data in this chunk, using a file reader that is provided to us.
@@ -232,6 +251,10 @@ func (cr *singleChunkReader) returnBuffer() {
 	cr.slicePool.ReturnSlice(cr.buffer)
 	cr.cacheLimiter.RemoveBytes(int64(len(cr.buffer)))
 	cr.buffer = nil
+}
+
+func (cr *singleChunkReader) Length() int64 {
+	return cr.length
 }
 
 // Some code paths can call this, when cleaning up. (Even though in the normal, non error, code path, we don't NEED this
