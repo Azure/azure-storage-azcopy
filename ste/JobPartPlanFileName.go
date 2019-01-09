@@ -132,6 +132,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
 		Version:             DataSchemaVersion,
+		StartTime:           time.Now().UnixNano(),
 		JobID:               order.JobID,
 		PartNum:             order.PartNum,
 		IsFinalPart:         order.IsFinalPart,

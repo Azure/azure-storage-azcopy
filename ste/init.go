@@ -669,7 +669,8 @@ func ListJobs() common.ListJobsResponse {
 		if !found {
 			continue
 		}
-		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails, common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString()})
+		listJobResponse.JobIDDetails = append(listJobResponse.JobIDDetails,
+			common.JobIDDetails{JobId: jobId, CommandString: jpm.Plan().CommandString(), StartTime: jpm.Plan().StartTime})
 	}
 	return listJobResponse
 }

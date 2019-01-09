@@ -15,5 +15,6 @@ require (
 	github.com/kr/text v0.1.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.2
+	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 )

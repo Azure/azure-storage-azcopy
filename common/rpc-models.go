@@ -122,6 +122,7 @@ type BlobTransferAttributes struct {
 type JobIDDetails struct {
 	JobId         JobID
 	CommandString string
+	StartTime     int64
 }
 
 // ListJobsResponse represent the Job with JobId and
