@@ -1,5 +1,8 @@
 package ste
 
+// TODO remove this file
+/* Replaced by downloader-blobFS.go
+
 import (
 	"fmt"
 	"io"
@@ -257,3 +260,4 @@ func (bffd *BlobFSFileDownload) generateDownloadFileFunc(blockIdCount int32, sta
 		}
 	}
 }
+*/

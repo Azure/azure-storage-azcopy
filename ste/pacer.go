@@ -151,11 +151,12 @@ func (rbp *bodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err
 
 // bytesOverTheWire supports Close but the underlying stream may not; if it does, Close will close it.
 func (rbp *bodyPacer) Close() error {
-	if c, ok := rbp.body.(io.ReadCloser); ok {
+	if c, ok := rbp.body.(io.ReadCloser); ok {  // TODO: why is this ReadCloser, not Closer????
 		return c.Close()
 	}
 	return nil
 }
+
 
 // returns the total bytes transferred over the wire
 func (rbp *bodyPacer) BytesTransferred() int64 {

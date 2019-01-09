@@ -68,6 +68,7 @@ type IJobMgr interface {
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
+	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 
 	common.ILoggerCloser
 }
@@ -76,8 +77,11 @@ type IJobMgr interface {
 
 func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
+	enableChunkLog := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		logger: common.NewJobLogger(jobID, level, appLogger, logFileFolder) /*Other fields remain zero-value until this job is scheduled */}
+		logger: common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		chunkStatusLogger: common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLog),
+		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
 }
@@ -100,6 +104,7 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 // jobMgr represents the runtime information for a Job
 type jobMgr struct {
 	logger common.ILoggerResetable
+	chunkStatusLogger common.ChunkStatusLoggerCloser
 	jobID  common.JobID // The Job's unique ID
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -164,7 +169,9 @@ func (jm *jobMgr) ActiveConnections() int64 {
 func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, sourceSAS string,
 	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
-		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer}
+		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer,
+		slicePool: JobsAdmin.(*jobsAdmin).slicePool,
+		cacheLimiter: JobsAdmin.(*jobsAdmin).cacheLimiter}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
@@ -273,7 +280,15 @@ func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
 	}
 }
 func (jm *jobMgr) Panic(err error) { jm.logger.Panic(err) }
-func (jm *jobMgr) CloseLog()       { jm.logger.CloseLog() }
+func (jm *jobMgr) CloseLog(){
+	jm.logger.CloseLog()
+	jm.chunkStatusLogger.CloseLog()
+}
+
+func (jm *jobMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason){
+	jm.chunkStatusLogger.LogChunkStatus(id, reason)
+}
+
 
 // PartsDone returns the number of the Job's parts that are either completed or failed
 //func (jm *jobMgr) PartsDone() uint32 { return atomic.LoadUint32(&jm.partsDone) }

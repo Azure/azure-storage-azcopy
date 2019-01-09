@@ -48,11 +48,21 @@ const PacerTimeToWaitInMs = 50
 // These types are define the STE Coordinator
 type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer)
 
+// same as newJobXfer, but with an extra parameter
+type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
+
+// Takes a multi-purpose downloader function, and makes it ready to use with a specific type of downloader
+func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer){
+		targetFunction(jptm, pipeline, pacer, df)
+	}
+}
+
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	switch fromTo {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
-		return BlobToLocal
+		return parameterizeDownload(remoteToLocal, newBlobDownloader)
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
 		switch blobType {
 		case common.EBlobType.None(),
@@ -66,7 +76,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
-		return FileToLocal
+		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
 		return LocalToFile
 	case common.EFromTo.FileTrash():
@@ -74,7 +84,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.LocalBlobFS():
 		return LocalToBlobFS
 	case common.EFromTo.BlobFSLocal():
-		return BlobFSToLocal
+		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():
 		fallthrough
 	case common.EFromTo.FileBlob():

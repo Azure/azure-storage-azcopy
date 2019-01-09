@@ -36,6 +36,9 @@ type IJobPartMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	SlicePool() common.ByteSlicePooler
+	CacheLimiter() common.CacheLimiter
+	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	common.ILogger
 }
 
@@ -200,6 +203,10 @@ type jobPartMgr struct {
 	priority common.JobPriority
 
 	pacer *pacer // Pacer used by chunks when uploading data
+
+	slicePool common.ByteSlicePooler
+
+	cacheLimiter common.CacheLimiter
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
@@ -419,6 +426,14 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 	}
 }
 
+func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler{
+	return jpm.slicePool
+}
+
+func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter{
+	return jpm.cacheLimiter
+}
+
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
@@ -506,6 +521,10 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
+func (jpm *jobPartMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason){
+	jpm.jobMgr.LogChunkStatus(id, reason)
+}
+
 
 // TODO: Can we delete this method?
 // numberOfTransfersDone returns the numberOfTransfersDone_doNotUse of JobPartPlanInfo
