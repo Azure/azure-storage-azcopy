@@ -131,7 +131,7 @@ func (u *blobFSUploader) Prologue(leadingBytes []byte) {
 	// Create file with the source size
 	_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
 	if err != nil {
-		u.jptm.FailActiveUploadWithDetails(err, "File Create Error ", common.ETransferStatus.Failed())
+		u.jptm.FailActiveUpload("Creating file", err)
 		return
 	}
 }
@@ -151,7 +151,7 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile, body) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
-			jptm.FailActiveUploadWithDetails(err, "Upload range error", common.ETransferStatus.Failed())
+			jptm.FailActiveUpload("Uploading range", err)
 			return
 		}
 	})
@@ -164,7 +164,8 @@ func (u *blobFSUploader) Epilogue() {
 	if jptm.TransferStatus() > 0 {
 		_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize)
 		if err != nil {
-			jptm.FailActiveUpload(err)
+			jptm.FailActiveUpload("Flushing data", err)
+			// don't return, since need cleanup below
 		}
 	}
 

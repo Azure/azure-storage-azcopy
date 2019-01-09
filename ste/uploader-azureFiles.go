@@ -96,8 +96,7 @@ func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
 	err := createParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
 	if err != nil {
-		jptm.LogUploadError(info.Source, info.Destination, "Parent Directory Create Error "+err.Error(), 0)
-		jptm.FailActiveUpload(err)
+		jptm.FailActiveUpload("Creating parent directory", err)
 		return
 	}
 
@@ -105,9 +104,7 @@ func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
 	fileHTTPHeaders, metaData := jptm.FileDstData(leadingBytes)
 	_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
 	if err != nil {
-		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogUploadError(info.Source, info.Destination, "File Create Error "+msg, status)
-		jptm.FailActiveUpload(err)
+		jptm.FailActiveUpload("Creating file", err)
 		return
 	}
 }
@@ -135,7 +132,7 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body)
 		if err != nil {
-			jptm.FailActiveUploadWithDetails(err, "Upload range error", common.ETransferStatus.Failed())
+			jptm.FailActiveUpload("Uploading range", err)
 			return
 		}
 	})

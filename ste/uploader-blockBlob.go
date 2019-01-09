@@ -145,7 +145,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err := u.blockBlobUrl.StageBlock(u.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
 		if err != nil {
-			jptm.FailActiveUpload(err)
+			jptm.FailActiveUpload("Staging block", err)
 			return
 		}
 	})
@@ -172,7 +172,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		// if the put blob is a failure, update the transfer status to failed
 		if err != nil {
-			jptm.FailActiveUpload(err)
+			jptm.FailActiveUpload("Uploading block", err)
 			return
 		}
 	})
@@ -201,7 +201,8 @@ func (u *blockBlobUploader) Epilogue() {
 
 		_, err := u.blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 		if err != nil {
-			jptm.FailActiveUploadWithDetails(err, "Commit block list failed ", common.ETransferStatus.Failed())
+			jptm.FailActiveUpload("Committing block list", err)
+			// don't return, since need cleanup below
 		} else {
 			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL ")
 		}
@@ -215,7 +216,8 @@ func (u *blockBlobUploader) Epilogue() {
 			ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 			_, err := u.blockBlobUrl.SetTier(ctxWithValue, blockBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 			if err != nil {
-				jptm.FailActiveUploadWithDetails(err, "BlockBlob SetTier ", common.ETransferStatus.BlobTierFailure())
+				jptm.FailActiveUploadWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
+				// don't return, because need cleanup below
 			}
 		}
 	}

@@ -87,14 +87,11 @@ func (u *appendBlobUploader) RemoteFileExists() (bool, error) {
 
 func (u *appendBlobUploader) Prologue(leadingBytes []byte) {
 	jptm := u.jptm
-	info := jptm.Info()
 
 	blobHTTPHeaders, metaData := jptm.BlobDstData(leadingBytes)
 	_, err := u.appendBlobUrl.Create(jptm.Context(), blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
 	if err != nil {
-		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
-		jptm.FailActiveUpload(err)
+		jptm.FailActiveUpload("Creating blob", err)
 		return
 	}
 }
@@ -128,7 +125,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err = u.appendBlobUrl.AppendBlock(jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
 		if err != nil {
-			jptm.FailActiveUpload(err)
+			jptm.FailActiveUpload("Appending block", err)
 			return
 		}
 	})

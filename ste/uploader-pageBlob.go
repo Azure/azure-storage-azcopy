@@ -90,9 +90,7 @@ func (u *pageBlobUploader) Prologue(leadingBytes []byte) {
 	_, err := u.pageBlobUrl.Create(jptm.Context(), info.SourceSize,
 		0, blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
 	if err != nil {
-		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogUploadError(info.Source, info.Destination, "Blob Create Error "+msg, status)
-		jptm.FailActiveUpload(err)
+		jptm.FailActiveUpload("Creating blob", err)
 		return
 	}
 
@@ -103,7 +101,7 @@ func (u *pageBlobUploader) Prologue(leadingBytes []byte) {
 		ctxWithValue := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		_, err = u.pageBlobUrl.SetTier(ctxWithValue, pageBlobTier.ToAccessTierType(), azblob.LeaseAccessConditions{})
 		if err != nil {
-			jptm.FailActiveUploadWithDetails(err, "PageBlob SetTier ", common.ETransferStatus.BlobTierFailure())
+			jptm.FailActiveUploadWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
 			return
 		}
 	}
@@ -131,7 +129,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err := u.pageBlobUrl.UploadPages(jptm.Context(), id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
-			jptm.FailActiveUpload(err)
+			jptm.FailActiveUpload("Uploading page", err)
 			return
 		}
 	})

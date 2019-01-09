@@ -44,10 +44,10 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
-	FailActiveUpload(err error)
-	FailActiveDownload(err error)
-	FailActiveUploadWithDetails(err error, prefix string, failureStatus common.TransferStatus)
-	FailActiveDownloadWithDetails(err error, prefix string, failureStatus common.TransferStatus)
+	FailActiveUpload(where string, err error)
+	FailActiveDownload(where string, err error)
+	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
+	FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus)
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -307,25 +307,25 @@ func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
 }
 
-func (jptm *jobPartTransferMgr) FailActiveUpload(err error) {
-	jptm.failActiveTransfer(err, "", common.ETransferStatus.Failed(), true)
+func (jptm *jobPartTransferMgr) FailActiveUpload(where string, err error) {
+	jptm.failActiveTransfer(where, err, common.ETransferStatus.Failed(), true)
 }
 
-func (jptm *jobPartTransferMgr) FailActiveDownload(err error) {
-	jptm.failActiveTransfer(err, "", common.ETransferStatus.Failed(), false)
+func (jptm *jobPartTransferMgr) FailActiveDownload(where string, err error) {
+	jptm.failActiveTransfer(where, err, common.ETransferStatus.Failed(), false)
 }
 
-func (jptm *jobPartTransferMgr) FailActiveUploadWithDetails(err error, prefix string, failureStatus common.TransferStatus) {
-	jptm.failActiveTransfer(err, prefix, failureStatus, true)
+func (jptm *jobPartTransferMgr) FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(where, err, failureStatus, true)
 }
 
-func (jptm *jobPartTransferMgr) FailActiveDownloadWithDetails(err error, prefix string, failureStatus common.TransferStatus) {
-	jptm.failActiveTransfer(err, prefix, failureStatus, false)
+func (jptm *jobPartTransferMgr) FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(where, err, failureStatus, false)
 }
 
 // Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
 // Unlike just setting the status to failed, this also handles cancellation correctly
-func (jptm *jobPartTransferMgr) failActiveTransfer(err error, prefix string, failureStatus common.TransferStatus, isUpload bool) {
+func (jptm *jobPartTransferMgr) failActiveTransfer(descriptionOfWhereErrorOccurred string, err error, failureStatus common.TransferStatus, isUpload bool) {
 	// TODO: question. Prior to refactoring some code did a debug level log when WasCancelled is true (e.g. blob upload did)
 	// TODO: .. do we really need that? It's ommitted, for now.
 
@@ -336,7 +336,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(err error, prefix string, fai
 		if isUpload {
 			typ = transferErrorCodeUploadFailed
 		}
-		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, prefix+msg, status)
+		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
