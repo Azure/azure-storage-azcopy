@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -126,12 +127,24 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 		common.PanicIfErr(err)
 	}
 
+	// TODO: make ram usage configurable, with the following as just the default
+	// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
+	// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
+	const gbToUsePerCpu = 0.6  // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
+	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
+	if gbToUse > 8 {
+		gbToUse = 8     // cap it. We don't need more than this. Even 6 is enough at 10 Gbps with standard chunk sizes, but allow a little extra here to help if larger blob block sizes are selected by user
+	}
+	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+
 	ja := &jobsAdmin{
 		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr: newJobIDToJobMgr(),
 		logDir:        azcopyLogPathFolder,
 		planDir:       planDir,
 		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
+		slicePool:     common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:  common.NewCacheLimiter(maxRamBytesToUse),
 		appCtx:        appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
@@ -155,9 +168,16 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
-	// Spin up the desired number of executionEngine workers to process transfers/chunks
+	// Spin up the desired number of executionEngine workers to process chunks
 	for cc := 0; cc < concurrentConnections; cc++ {
-		go ja.transferAndChunkProcessor(cc)
+		go ja.chunkProcessor(cc)
+	}
+	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
+	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
+	// anyway.)
+	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
+	for cc := 0; cc < 64; cc++ {
+		go ja.transferProcessor(cc)
 	}
 }
 
@@ -186,8 +206,37 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	}
 }
 
-// general purpose worker that reads in transfer jobs, schedules chunk jobs, and executes chunk jobs
-func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
+// general purpose worker that reads in schedules chunk jobs, and executes chunk jobs
+func (ja *jobsAdmin) chunkProcessor(workerID int) {
+	for {
+		// We check for suicides first to shrink goroutine pool
+		// Then, we check chunks: normal & low priority
+		select {
+		case <-ja.xferChannels.suicideCh:   // note: as at Dec 2018, this channel is not (yet) used
+			return
+		default:
+			select {
+			case chunkFunc := <-ja.xferChannels.normalChunckCh:
+				chunkFunc(workerID)
+			default:
+				select {
+				case chunkFunc := <-ja.xferChannels.lowChunkCh:
+					chunkFunc(workerID)
+				default:
+					time.Sleep(100 * time.Millisecond) // Sleep before looping around
+					                                   // TODO: Question: In order to safely support high goroutine counts,
+					                                   // do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
+					                                   // For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
+					                                   // the wake-ups.
+				}
+			}
+		}
+	}
+}
+
+// separate from the chunkProcessor, this dedicated worker that reads in and executes transfer initiation jobs
+// (which in turn schedule chunks that get picked up by chunkProcessor)
+func (ja *jobsAdmin) transferProcessor(workerID int) {
 	startTransfer := func(jptm IJobPartTransferMgr) {
 		if jptm.WasCanceled() {
 			if jptm.ShouldLog(pipeline.LogInfo) {
@@ -204,33 +253,16 @@ func (ja *jobsAdmin) transferAndChunkProcessor(workerID int) {
 	}
 
 	for {
-		// We check for suicides first to shrink goroutine pool
-		// Then, we check chunks: normal & low priority
-		// Then, we check transfers: normal & low priority
+		// No suicide check here, because this routine runs only in a small number of goroutines, so no need to kill them off
 		select {
-		case <-ja.xferChannels.suicideCh:
-			return
+		case jptm := <-ja.xferChannels.normalTransferCh:
+			startTransfer(jptm)
 		default:
 			select {
-			case chunkFunc := <-ja.xferChannels.normalChunckCh:
-				chunkFunc(workerID)
+			case jptm := <-ja.xferChannels.lowTransferCh:
+				startTransfer(jptm)
 			default:
-				select {
-				case chunkFunc := <-ja.xferChannels.lowChunkCh:
-					chunkFunc(workerID)
-				default:
-					select {
-					case jptm := <-ja.xferChannels.normalTransferCh:
-						startTransfer(jptm)
-					default:
-						select {
-						case jptm := <-ja.xferChannels.lowTransferCh:
-							startTransfer(jptm)
-						default:
-							time.Sleep(1 * time.Millisecond) // Sleep before looping around
-						}
-					}
-				}
+				time.Sleep(10 * time.Millisecond) // Sleep before looping around
 			}
 		}
 	}
@@ -250,6 +282,8 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
+	slicePool 			common.ByteSlicePooler
+	cacheLimiter        common.CacheLimiter
 }
 
 type CoordinatorChannels struct {

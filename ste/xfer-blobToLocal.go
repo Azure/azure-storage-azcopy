@@ -20,19 +20,8 @@
 
 package ste
 
-import (
-	"fmt"
-	"io"
-	"net/url"
-	"os"
-
-	"net/http"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-)
-
+// TODO: remove. Has been replaced by combo of RemoteToLocal and BlobDownloader
+/*
 type blobDownload struct {
 	jptm        IJobPartTransferMgr
 	destFile    *os.File
@@ -308,3 +297,4 @@ func createEmptyFile(destinationPath string) error {
 func deleteFile(destinationPath string) error {
 	return os.Remove(destinationPath)
 }
+*/

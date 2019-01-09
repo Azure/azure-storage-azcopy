@@ -20,19 +20,8 @@
 
 package ste
 
-import (
-	"fmt"
-	"io"
-	"io/ioutil"
-	"net/url"
-	"os"
+/* TODO: remove.  Now covered by downloader-AzureFiles.go
 
-	"net/http"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-)
 
 // TODO: Unify blobToLocal and fileToLocal after code review and logic is finalized.
 func FileToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
@@ -256,3 +245,4 @@ func generateDownloadFileFunc(jptm IJobPartTransferMgr, transferFileURL azfile.F
 		}
 	}
 }
+*/
