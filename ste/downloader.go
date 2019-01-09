@@ -25,7 +25,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-// Abstraction of the methods needed to download from a remote location
+// Abstraction of the methods needed to download from a remote location. Downloaders are simple because state is maintained in chunkedFileWriter,
+// so this interface is very simple. (Contrast with Uploaders, which have to be stateful because remote targets require such different, and potentially complex,
+// prologue and epilogue handling)
 type downloader interface {
 
 	// Returns a func() that will download the specified portion of the remote file into dstFile
