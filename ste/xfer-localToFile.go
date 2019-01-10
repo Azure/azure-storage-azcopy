@@ -28,7 +28,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"unsafe"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -165,14 +164,14 @@ func LocalToFile(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 	}
 }
 
-func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.FileURL, pacer *pacer, startRange int64, pageSize int64) chunkFunc {
+func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.FileURL, pacer *pacer, startRange int64, rangeSize int64) chunkFunc {
 	info := jptm.Info()
 	return func(workerId int) {
 		// rangeDone is the function called after success / failure of each range.
 		// If the calling range is the last range of transfer, then it updates the transfer status,
 		// mark transfer done, unmap the source memory map and close the source file descriptor.
 		rangeDone := func() {
-			if lastPage, _ := jptm.ReportChunkDone(); lastPage {
+			if lastRange, _ := jptm.ReportChunkDone(); lastRange {
 				if jptm.ShouldLog(pipeline.LogDebug) {
 					jptm.Log(pipeline.LogDebug, "Finalizing transfer")
 				}
@@ -196,13 +195,13 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.F
 			}
 		}
 
-		srcMMF, err := common.NewMMF(srcFile, false, startRange, pageSize)
+		srcMMF, err := common.NewMMF(srcFile, false, startRange, rangeSize)
 		if err != nil {
 			if err != nil {
 				if jptm.WasCanceled() {
 					if jptm.ShouldLog(pipeline.LogDebug) {
 						jptm.Log(pipeline.LogDebug,
-							fmt.Sprintf("Failed to UploadRange from %d to %d, transfer was cancelled", startRange, startRange+pageSize))
+							fmt.Sprintf("Failed to UploadRange from %d to %d, transfer was cancelled", startRange, startRange+rangeSize))
 					}
 				} else {
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
@@ -226,30 +225,24 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.F
 			}
 			rangeDone()
 		} else {
-			// rangeBytes is the byte slice of Page for the given range.
+			// rangeBytes is the byte slice of Range for the given range.
 			rangeBytes := srcMMF.Slice()
-			// converted the bytes slice to int64 array.
-			// converting each of 8 bytes of byteSlice to an integer.
-			int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]
 
 			allBytesZero := true
-			// Iterating though each integer of in64 array to check if any of the number is greater than 0 or not.
-			// If any no is greater than 0, it means that the 8 bytes slice represented by that integer has atleast one byte greater than 0
-			// If all integers are 0, it means that the 8 bytes slice represented by each integer has no byte greater than 0
-			for index := 0; index < len(int64Slice); index++ {
-				if int64Slice[index] != 0 {
-					// If one number is greater than 0, then we need to perform the PutPage update.
+			for index := 0; index < len(rangeBytes); index++ {
+				if rangeBytes[index] != 0 {
+					// If one byte is non 0, then we need to perform the PutRange.
 					allBytesZero = false
 					break
 				}
 			}
 
-			// If all the bytes in the rangeBytes is 0, then we do not need to perform the PutPage
+			// If all the bytes in the rangeBytes is 0, then we do not need to perform the PutRange.
 			// Updating number of chunks done.
 			if allBytesZero {
 				if jptm.ShouldLog(pipeline.LogDebug) {
 					jptm.Log(pipeline.LogDebug,
-						fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero", startRange, startRange+pageSize))
+						fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero", startRange, startRange+rangeSize))
 				}
 				rangeDone()
 				return
@@ -261,7 +254,7 @@ func fileUploadFunc(jptm IJobPartTransferMgr, srcFile *os.File, fileURL azfile.F
 				if jptm.WasCanceled() {
 					if jptm.ShouldLog(pipeline.LogDebug) {
 						jptm.Log(pipeline.LogDebug,
-							fmt.Sprintf("Failed to UploadRange from %d to %d, transfer was cancelled", startRange, startRange+pageSize))
+							fmt.Sprintf("Failed to UploadRange from %d to %d, transfer was cancelled", startRange, startRange+rangeSize))
 					}
 				} else {
 					status, msg := ErrorEx{err}.ErrorCodeAndString()
