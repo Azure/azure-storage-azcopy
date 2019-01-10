@@ -48,6 +48,7 @@ type serviceAPIVersionOverride struct{}
 var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
+//const DefaultServiceApiVersion = "2018-06-17" // TODO: for testing test tenant
 const DefaultServiceApiVersion = "2018-03-28"
 
 // NewVersionPolicy creates a factory that can override the service version

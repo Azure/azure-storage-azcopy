@@ -102,6 +102,13 @@ def clean_test_blob_account(account):
         return False
     return True
 
+def clean_test_file_account(account):
+    result = Command("clean").add_arguments(account).add_flags("serviceType", "File").add_flags("resourceType", "Account").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the file account. please check the account sas provided")
+        return False
+    return True
+
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_share(shareURLStr):
     # execute the clean command.
@@ -120,7 +127,7 @@ def clean_test_filesystem(fileSystemURLStr):
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, 
-                          s2s_src_blob_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -155,6 +162,8 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     global test_s2s_src_blob_account_url
 
     global test_s2s_dst_blob_account_url
+
+    global test_s2s_src_file_account_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -217,6 +226,9 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
 
     test_s2s_src_blob_account_url = s2s_src_blob_account_url
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
+
+    test_s2s_src_file_account_url = s2s_src_file_account_url
+    if not clean_test_file_account(test_s2s_src_file_account_url):
         return False
 
     test_s2s_dst_blob_account_url = s2s_dst_blob_account_url

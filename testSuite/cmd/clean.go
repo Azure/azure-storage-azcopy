@@ -144,7 +144,7 @@ func cleanContainer(container string) {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker, azblob.ListBlobsSegmentOptions{})
 		if err != nil {
-			fmt.Println("error listing blobs inside the container. Please check the container sas")
+			fmt.Println("error listing blobs inside the container. Please check the container sas", err)
 			os.Exit(1)
 		}
 
@@ -303,7 +303,7 @@ func cleanBlobAccount(resourceURL string) {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		lResp, err := accountURL.ListContainersSegment(context.Background(), marker, azblob.ListContainersSegmentOptions{})
 		if err != nil {
-			fmt.Println("error listing containers inside the container. Please check the container sas")
+			fmt.Println("error listing containers, please check the container sas, ", err)
 			os.Exit(1)
 		}
 
@@ -319,7 +319,34 @@ func cleanBlobAccount(resourceURL string) {
 }
 
 func cleanFileAccount(resourceURL string) {
-	panic("not implemented")
+	accountSAS, err := url.Parse(resourceURL)
+
+	if err != nil {
+		fmt.Println("error parsing the account sas ", err)
+		os.Exit(1)
+	}
+
+	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	accountURL := azfile.NewServiceURL(*accountSAS, p)
+
+	// perform a list account
+	for marker := (azfile.Marker{}); marker.NotDone(); {
+		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
+		lResp, err := accountURL.ListSharesSegment(context.Background(), marker, azfile.ListSharesOptions{})
+		if err != nil {
+			fmt.Println("error listing shares, please check the share sas, ", err)
+			os.Exit(1)
+		}
+
+		for _, shareItem := range lResp.ShareItems {
+			_, err := accountURL.NewShareURL(shareItem.Name).Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
+			if err != nil {
+				fmt.Println("error deleting the share from account, ", err)
+				os.Exit(1)
+			}
+		}
+		marker = lResp.NextMarker
+	}
 }
 
 func cleanBfsAccount(resourceURL string) {

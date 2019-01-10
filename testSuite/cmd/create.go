@@ -95,7 +95,18 @@ func init() {
 				case EResourceType.Bucket():
 					createShareOrDirectory(resourceURL)
 				case EResourceType.SingleFile():
-					createFile(resourceURL)
+					createFile(
+						resourceURL,
+						blobSize,
+						getFileMetadata(metaData),
+						azfile.FileHTTPHeaders{
+							ContentType:        contentType,
+							ContentDisposition: contentDisposition,
+							ContentEncoding:    contentEncoding,
+							ContentLanguage:    contentLanguage,
+							ContentMD5:         []byte(contentMD5),
+							CacheControl:       cacheControl,
+						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
@@ -126,6 +137,20 @@ func getBlobMetadata(metadataString string) azblob.Metadata {
 
 	if len(metadataString) > 0 {
 		metadata = azblob.Metadata{}
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadata[kv[0]] = kv[1]
+		}
+	}
+
+	return metadata
+}
+
+func getFileMetadata(metadataString string) azfile.Metadata {
+	var metadata azfile.Metadata
+
+	if len(metadataString) > 0 {
+		metadata = azfile.Metadata{}
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 			metadata[kv[0]] = kv[1]
@@ -211,6 +236,26 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 	}
 }
 
-func createFile(fileURLStr string) {
-	panic("todo")
+func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fileHTTPHeaders azfile.FileHTTPHeaders) {
+	url, err := url.Parse(fileURLStr)
+	if err != nil {
+		fmt.Println("error parsing the blob sas ", err)
+		os.Exit(1)
+	}
+	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	fileURL := azfile.NewFileURL(*url, p)
+
+	randomString := createStringWithRandomChars(int(fileSize))
+	if fileHTTPHeaders.ContentType == "" {
+		fileHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+	}
+
+	err = azfile.UploadBufferToAzureFile(context.Background(), []byte(randomString), fileURL, azfile.UploadToAzureFileOptions{
+		FileHTTPHeaders: fileHTTPHeaders,
+		Metadata:        metadata,
+	})
+	if err != nil {
+		fmt.Println(fmt.Sprintf("error uploading the file %v", err))
+		os.Exit(1)
+	}
 }

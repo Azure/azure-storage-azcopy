@@ -81,6 +81,9 @@ def parse_config_file_set_env():
     # set env var for service-2-service copy destination blob account
     os.environ['S2S_DST_BLOB_ACCOUNT_SAS_URL'] = config['CREDENTIALS']['S2S_DST_BLOB_ACCOUNT_SAS_URL']
 
+    # set env var for service-2-service copy source file account
+    os.environ['S2S_SRC_FILE_ACCOUNT_SAS_URL'] = config['CREDENTIALS']['S2S_SRC_FILE_ACCOUNT_SAS_URL']
+
 def check_env_not_exist(key):
     if os.environ.get(key, '-1') == '-1':
         #print('Environment variable: ' + key + ' not set.')
@@ -99,7 +102,8 @@ def init():
             check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
             check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
             check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
-            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL'):
+            check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') or \
+            check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL'):
         parse_config_file_set_env()
 
     # Get the environment variables value
@@ -139,11 +143,14 @@ def init():
     # get the s2s copy dest blob account url
     s2s_dst_blob_account_url = os.environ.get('S2S_DST_BLOB_ACCOUNT_SAS_URL')
 
+    # get the s2s copy src file account url
+    s2s_src_file_account_url = os.environ.get('S2S_SRC_FILE_ACCOUNT_SAS_URL')
+
     # deleting the log files.
     cleanup()
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
-                                      filesystem_url, s2s_src_blob_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                                      filesystem_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
