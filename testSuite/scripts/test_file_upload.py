@@ -5,11 +5,28 @@ import utility as util
 import unittest
 
 class FileShare_Upload_User_Scenario(unittest.TestCase):
-    # test_file_upload_1mb verifies the azcopy upload of 1mb file as an Azure file with full file name.
-    def test_file_upload_1mb_fullname(self):
+
+    def test_file_upload_empty(self):
+        self.util_test_file_upload_size_n_fullname(0) #emtpy file
+
+    def test_file_upload_1b_fullname(self):
+        self.util_test_file_upload_size_n_fullname(1) #1B
+    
+    def test_file_upload_4194303b_fullname(self):
+        self.util_test_file_upload_size_n_fullname(4*1024*1024-1) #4MB-1B
+
+    def test_file_upload_4mb_fullname(self):
+        self.util_test_file_upload_size_n_fullname(4*1024*1024) #4MB
+
+    def test_file_upload_4194305b_fullname(self):
+        self.util_test_file_upload_size_n_fullname(4*1024*1024+1) #4MB+1B
+
+
+    # util_test_file_upload_size_n_fullname verifies the azcopy upload of n*Bytes file as an Azure file with full file name.
+    def util_test_file_upload_size_n_fullname(self, sizeInBytes=1):
         # create the test file.
-        file_name = "test_file_upload_1mb_fullname.vhd"
-        file_path = util.create_test_file(file_name, 1024 * 1024)
+        file_name = "test_file_upload_%dB_fullname.vhd" % (sizeInBytes)
+        file_path = util.create_test_file(file_name, sizeInBytes)
 
         # execute azcopy upload.
         destination = util.get_resource_sas_from_share(file_name)
@@ -20,7 +37,6 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         # execute validator.
         result = util.Command("testFile").add_arguments(file_path).add_arguments(destination).execute_azcopy_verify()
         self.assertTrue(result)
-
 
     def test_file_upload_1mb_wildcard(self):
         # create the test file.
