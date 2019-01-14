@@ -13,11 +13,10 @@ import (
 	"github.com/minio/minio-go/pkg/s3utils"
 )
 
-// copyS3ToBlobEnumerator enumerates S3 source, and submit request for copy S3 to Blob.
+// copyS2SS3Enumerator enumerates S3 source, and submit request for copy S3 to Blob and etc.
 // The source could be point to S3 object or bucket or service.
-// This enumerator can be easily extend to copyS3ToNEnumerator.
-type copyS3ToBlobEnumerator struct {
-	copyS2SEnumerator
+type copyS2SS3Enumerator struct {
+	copyS2SEnumeratorBase
 
 	// source S3 resources
 	s3Client   *minio.Client
@@ -27,13 +26,9 @@ type copyS3ToBlobEnumerator struct {
 // By default presign expires after 7 days, which should be enough for millions of files transfer.
 const defaultPresignExpires = time.Hour * 24 * 7
 
-func (e *copyS3ToBlobEnumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
-	// attempt to parse the source and destination url
-	if e.sourceURL, err = url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source)); err != nil {
-		return errors.New("cannot parse source URL")
-	}
-	if e.destURL, err = url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination)); err != nil {
-		return errors.New("cannot parse destination URL")
+func (e *copyS2SS3Enumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
+	if err = e.initEnumeratorCommon(ctx, cca); err != nil {
+		return err
 	}
 
 	// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
@@ -63,7 +58,7 @@ func (e *copyS3ToBlobEnumerator) initEnumerator(ctx context.Context, cca *cooked
 	return
 }
 
-func (e *copyS3ToBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO() // This would better be singleton in cmd module, and passed from caller.
 
 	if err := e.initEnumerator(ctx, cca); err != nil {
@@ -169,7 +164,7 @@ func (e *copyS3ToBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 }
 
 // addTransferFromService enumerates buckets in service, and adds matched file into transfer.
-func (e *copyS3ToBlobEnumerator) addTransferFromService(ctx context.Context,
+func (e *copyS2SS3Enumerator) addTransferFromService(ctx context.Context,
 	s3Client *minio.Client, destBaseURL url.URL,
 	bucketPrefix, objectPrefix, objectPattern string, cca *cookedCopyCmdArgs) error {
 
@@ -231,7 +226,7 @@ func (e *copyS3ToBlobEnumerator) addTransferFromService(ctx context.Context,
 
 // addTransfersFromBucket enumerates objects in bucket,
 // and adds matched objects into transfer.
-func (e *copyS3ToBlobEnumerator) addTransfersFromBucket(ctx context.Context,
+func (e *copyS2SS3Enumerator) addTransfersFromBucket(ctx context.Context,
 	s3Client *minio.Client, destBaseURL url.URL,
 	bucketName, objectNamePrefix, objectNamePattern, parentSourcePath string,
 	includExcludeBucket, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
@@ -312,7 +307,7 @@ func (e *copyS3ToBlobEnumerator) addTransfersFromBucket(ctx context.Context,
 	return nil
 }
 
-func (e *copyS3ToBlobEnumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo,
+func (e *copyS2SS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo,
 	cca *cookedCopyCmdArgs) error {
 	oie := objectInfoExtension{*objectInfo}
 
@@ -334,14 +329,14 @@ func (e *copyS3ToBlobEnumerator) addObjectToNTransfer(srcURL, destURL url.URL, o
 	return e.addTransfer(copyTransfer, cca)
 }
 
-func (e *copyS3ToBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+func (e *copyS2SS3Enumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer(&(e.CopyJobPartOrderRequest), transfer, cca)
 }
 
-func (e *copyS3ToBlobEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SS3Enumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
 	return dispatchFinalPart(&(e.CopyJobPartOrderRequest), cca)
 }
 
-func (e *copyS3ToBlobEnumerator) partNum() common.PartNumber {
+func (e *copyS2SS3Enumerator) partNum() common.PartNumber {
 	return e.PartNum
 }

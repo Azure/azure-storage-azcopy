@@ -684,24 +684,24 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobBlob():
-		e := copyBlobToNEnumerator{
-			copyS2SEnumerator: copyS2SEnumerator{
+		e := copyS2SBlobEnumerator{
+			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileBlob():
-		e := copyFileToNEnumerator{
-			copyS2SEnumerator: copyS2SEnumerator{
+		e := copyS2SFileEnumerator{
+			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.S3Blob():
-		e := copyS3ToBlobEnumerator{
-			copyS2SEnumerator: copyS2SEnumerator{
+		e := copyS2SS3Enumerator{
+			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
