@@ -150,6 +150,9 @@ var downloadWaitReasons = []WaitReason{
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
+// extra status used only by S2S copy
+func (WaitReason) CopyOnWire() WaitReason { return WaitReason("CopyOnWire") } // waiting for the copy on wire get finished
+
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot
 }

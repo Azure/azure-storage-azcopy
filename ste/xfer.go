@@ -51,6 +51,7 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
 type newJobXferWithUploaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory)
+type newJobXferWithS2SCopierFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory)
 
 // Takes a multi-purpose up/downloader function, and makes it ready to use with a specific type of up/downloader
 func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory) newJobXfer {
@@ -61,6 +62,12 @@ func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploade
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
 		targetFunction(jptm, pipeline, pacer, df)
+	}
+}
+
+func parameterizeS2SCopy(targetFunction newJobXferWithS2SCopierFactory, cpf s2sCopierFactory) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
+		targetFunction(jptm, pipeline, pacer, cpf)
 	}
 }
 
@@ -99,11 +106,12 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch blobType {
 		case common.EBlobType.None(),
 			common.EBlobType.BlockBlob():
-			return URLToBlockBlob
+			//return URLToBlockBlob
+			return parameterizeS2SCopy(urlToRemote, newURLToBlockBlobCopier)
 		case common.EBlobType.PageBlob():
-			return URLToPageBlob
+			return parameterizeS2SCopy(urlToRemote, newURLToPageBlobCopier)
 		case common.EBlobType.AppendBlob():
-			return URLToAppendBlob
+			return parameterizeS2SCopy(urlToRemote, newURLToAppendBlobCopier)
 		}
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))

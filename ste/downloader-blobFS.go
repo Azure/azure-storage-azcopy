@@ -21,10 +21,11 @@
 package ste
 
 import (
+	"net/url"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"net/url"
 )
 
 type blobFSDownloader struct{}

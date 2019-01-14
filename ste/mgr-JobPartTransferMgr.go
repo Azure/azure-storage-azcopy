@@ -50,6 +50,8 @@ type IJobPartTransferMgr interface {
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
 	FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus)
+	FailActiveS2SCopy(where string, err error)
+	FailActiveS2SCopyWithStatus(where string, err error, failureStatus common.TransferStatus)
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -338,12 +340,20 @@ func (jptm *jobPartTransferMgr) FailActiveDownload(where string, err error) {
 	jptm.failActiveTransfer(transferErrorCodeDownloadFailed, where, err, common.ETransferStatus.Failed())
 }
 
+func (jptm *jobPartTransferMgr) FailActiveS2SCopy(where string, err error) {
+	jptm.failActiveTransfer(transferErrorCodeCopyFailed, where, err, common.ETransferStatus.Failed())
+}
+
 func (jptm *jobPartTransferMgr) FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	jptm.failActiveTransfer(transferErrorCodeUploadFailed, where, err, failureStatus)
 }
 
 func (jptm *jobPartTransferMgr) FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	jptm.failActiveTransfer(transferErrorCodeDownloadFailed, where, err, failureStatus)
+}
+
+func (jptm *jobPartTransferMgr) FailActiveS2SCopyWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(transferErrorCodeCopyFailed, where, err, failureStatus)
 }
 
 // Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
