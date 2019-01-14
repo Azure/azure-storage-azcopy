@@ -19,67 +19,67 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test from file to blob copy.
     ##################################
-    def test_copy_single_1kb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 1)
+    # def test_copy_single_1kb_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 1)
 
-    def test_copy_single_0kb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 0)
+    # def test_copy_single_0kb_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 0)
 
-    def test_copy_single_63mb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 63 * 1024 * 1024)
+    # def test_copy_single_63mb_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 63 * 1024 * 1024)
 
-    def test_copy_10_files_from_file_share_to_blob_container(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_share_url, "File", dst_container_url, "Blob")
+    # def test_copy_10_files_from_file_share_to_blob_container(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_share_url, "File", dst_container_url, "Blob")
 
-    def test_copy_file_from_file_share_to_blob_container_wildcard_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
+    # def test_copy_file_from_file_share_to_blob_container_wildcard_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
 
-    def test_copy_file_from_file_share_to_blob_container_wildcard_non_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
+    # def test_copy_file_from_file_share_to_blob_container_wildcard_non_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
     
-    def test_copy_n_files_from_file_dir_to_blob_dir(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir(src_share_url, "File", dst_container_url, "Blob")
+    # def test_copy_n_files_from_file_dir_to_blob_dir(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir(src_share_url, "File", dst_container_url, "Blob")
 
-    def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
+    # def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
 
-    def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_non_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
+    # def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_non_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
 
-    def test_copy_files_from_file_account_to_blob_account(self):
-        self.util_test_copy_files_from_x_account_to_x_account(
-            util.test_s2s_src_file_account_url, 
-            "File", 
-            util.test_s2s_dst_blob_account_url, 
-            "Blob",
-            self.bucket_name_file_blob)
+    # def test_copy_files_from_file_account_to_blob_account(self):
+    #     self.util_test_copy_files_from_x_account_to_x_account(
+    #         util.test_s2s_src_file_account_url, 
+    #         "File", 
+    #         util.test_s2s_dst_blob_account_url, 
+    #         "Blob",
+    #         self.bucket_name_file_blob)
 
-    def test_copy_single_file_from_file_to_blob_propertyandmetadata(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob")
+    # def test_copy_single_file_from_file_to_blob_propertyandmetadata(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
+    #         src_share_url, 
+    #         "File", 
+    #         dst_container_url, 
+    #         "Blob")
 
     # Test oauth support for service to service copy, where source is authenticated with SAS
     # and destination is authenticated with OAuth token.
@@ -92,75 +92,75 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test from blob to blob copy.
     ##################################
-    #test_copy_single_1kb_file_from_blob_to_blob verifies copy single 1kb blob to blob using azcopy.
-    # def test_copy_single_1kb_file_from_blob_to_blob(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1)
+    # test_copy_single_1kb_file_from_blob_to_blob verifies copy single 1kb blob to blob using azcopy.
+    def test_copy_single_1kb_file_from_blob_to_blob(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1)
 
-    # def test_copy_single_0kb_file_from_blob_to_blob(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 0)
+    def test_copy_single_0kb_file_from_blob_to_blob(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 0)
 
-    # def test_copy_single_63mb_file_from_blob_to_blob(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 63 * 1024 * 1024)
+    def test_copy_single_63mb_file_from_blob_to_blob(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 63 * 1024 * 1024)
 
-    # def test_copy_10_files_from_blob_container_to_blob_container(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_container_url, "Blob")
+    def test_copy_10_files_from_blob_container_to_blob_container(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_container_url, "Blob", dst_container_url, "Blob")
 
-    # def test_copy_file_from_blob_container_to_blob_container_wildcard_recursive(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
+    def test_copy_file_from_blob_container_to_blob_container_wildcard_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
 
-    # def test_copy_file_from_blob_container_to_blob_container_wildcard_non_recursive(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
+    def test_copy_file_from_blob_container_to_blob_container_wildcard_non_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
     
-    # def test_copy_n_files_from_blob_dir_to_blob_dir(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_n_files_from_x_dir_to_x_dir(src_container_url, "Blob", dst_container_url, "Blob")
+    def test_copy_n_files_from_blob_dir_to_blob_dir(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir(src_container_url, "Blob", dst_container_url, "Blob")
 
-    # def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_recursive(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
+    def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", True)
 
-    # def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_non_recursive(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
+    def test_copy_n_files_from_blob_dir_to_blob_dir_wildcard_non_recursive(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_container_url, "Blob", dst_container_url, "Blob", False)
 
-    # def test_copy_files_from_blob_account_to_blob_account(self):
-    #     self.util_test_copy_files_from_x_account_to_x_account(
-    #         util.test_s2s_src_blob_account_url, 
-    #         "Blob", 
-    #         util.test_s2s_dst_blob_account_url, 
-    #         "Blob",
-    #         self.bucket_name)
+    def test_copy_files_from_blob_account_to_blob_account(self):
+        self.util_test_copy_files_from_x_account_to_x_account(
+            util.test_s2s_src_blob_account_url, 
+            "Blob", 
+            util.test_s2s_dst_blob_account_url, 
+            "Blob",
+            self.bucket_name)
 
-    # def test_copy_single_file_from_blob_to_blob_propertyandmetadata(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-    #         src_container_url, 
-    #         "Blob", 
-    #         dst_container_url, 
-    #         "Blob")
+    def test_copy_single_file_from_blob_to_blob_propertyandmetadata(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
+            src_container_url, 
+            "Blob", 
+            dst_container_url, 
+            "Blob")
 
-    # # Test oauth support for service to service copy, where source is authenticated with SAS
-    # # and destination is authenticated with OAuth token.
-    # def test_copy_single_17mb_file_from_blob_to_blob_oauth(self):
-    #     src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-    #     dst_container_url = util.get_object_without_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-    #     self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 17 * 1024 * 1024, True)
+    # Test oauth support for service to service copy, where source is authenticated with SAS
+    # and destination is authenticated with OAuth token.
+    def test_copy_single_17mb_file_from_blob_to_blob_oauth(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_without_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 17 * 1024 * 1024, True)
 
     ##################################
     # Test utils and reusable functions.
