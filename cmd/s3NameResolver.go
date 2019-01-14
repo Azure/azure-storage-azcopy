@@ -182,6 +182,12 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) addSuffix(name string) s
 			break
 		}
 
+		if count > 999 {
+			// In case of infinite loop, considering S3's further extension. Currently, S3 has 100 for buckets' number per S3 account by default.
+			resolvedName = failToResolveMapValue
+			break
+		}
+
 		count++
 		resolvedName = fmt.Sprintf(suffixPattern, name, count)
 	}
