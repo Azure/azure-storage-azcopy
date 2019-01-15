@@ -226,6 +226,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
 
     test_s2s_src_blob_account_url = s2s_src_blob_account_url
     if not clean_test_blob_account(test_s2s_src_blob_account_url):
+        return False
 
     test_s2s_src_file_account_url = s2s_src_file_account_url
     if not clean_test_file_account(test_s2s_src_file_account_url):
