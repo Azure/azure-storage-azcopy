@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 // copyFileToNEnumerator enumerates file source, and submit request for copy file to N,
@@ -217,9 +217,6 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 
 func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
-	// TODO: This is temp work around for Azure file's content MD5, can be removed whe new File SDK get released.
-	contentMD5 := properties.ContentMD5()
-
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
 		Destination:        gCopyUtil.stripSASFromFileShareUrl(destURL).String(),
@@ -230,7 +227,7 @@ func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, prop
 		ContentDisposition: properties.ContentDisposition(),
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
-		ContentMD5:         contentMD5[:],
+		ContentMD5:         properties.ContentMD5(),
 		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata())},
 		cca)
 }

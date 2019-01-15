@@ -3,7 +3,7 @@ package ste
 import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type ErrorEx struct {

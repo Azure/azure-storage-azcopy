@@ -23,13 +23,14 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type azureFilesUploader struct {
@@ -129,7 +130,7 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body)
+		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return

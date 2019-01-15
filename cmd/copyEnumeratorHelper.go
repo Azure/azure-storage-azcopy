@@ -11,7 +11,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
