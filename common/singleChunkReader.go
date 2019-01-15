@@ -122,9 +122,11 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	}
 	return true
 
-	// TODO: decide whether we want to change to scanning this: int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]
-	//       Is any speed gain worth it, in terms of introducing unsafe (more complex)?
-	//       And, can we double check: some sources seem to imply that the middle of it should be &rangeBytes[0] insetad of just &rangeBytes.
+	// note: we are not using this optimization: int64Slice := (*(*[]int64)(unsafe.Pointer(&rangeBytes)))[:len(rangeBytes)/8]
+	//       Why?  Because (a) it only works when chunk size is divisible by 8, and that's not universally the case (e.g. last chunk in a file)
+	//       and (b) some sources seem to imply that the middle of it should be &rangeBytes[0] instead of just &rangeBytes, so we'd want to
+	//       check out the pros and cons of using the [0] before using it.
+	//       and (c) we would want to check whether it really did offer meaningful real-world performance gain, before introducing use of unsafe.
 }
 
 // Prefetch the data in this chunk, using a file reader that is provided to us.
