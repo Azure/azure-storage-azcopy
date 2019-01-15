@@ -21,10 +21,11 @@
 package ste
 
 import (
+	"net/url"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
-	"net/url"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type azureFilesDownloader struct{}
