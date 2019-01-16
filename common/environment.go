@@ -29,6 +29,8 @@ type EnvironmentVariable struct {
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.LogLocation(),
+	EEnvironmentVariable.AWSAccessKeyID(),
+	EEnvironmentVariable.AWSSecretAccessKey(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -71,15 +73,22 @@ func (EnvironmentVariable) ShowPerfStates() EnvironmentVariable {
 }
 
 func (EnvironmentVariable) AWSAccessKeyID() EnvironmentVariable {
-	return EnvironmentVariable{Name: "AWS_ACCESS_KEY_ID"}
+	return EnvironmentVariable{
+		Name:        "AWS_ACCESS_KEY_ID",
+		Description: "The AWS access key ID for S3 source used in service to service copy.",
+	}
 }
 
 func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
-	return EnvironmentVariable{Name: "AWS_SECRET_ACCESS_KEY"}
+	return EnvironmentVariable{
+		Name:        "AWS_SECRET_ACCESS_KEY",
+		Description: "The AWS secret access key for S3 source used in service to service copy.",
+	}
 }
 
-func (EnvironmentVariable) AWSRegion() EnvironmentVariable {
-	return EnvironmentVariable{Name: "AWS_REGION"}
+// AwsSessionToken is temporaily internally reserved, and not exposed to users.
+func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
 }
 
 // OAuthTokenInfo is only used for internal integration.

@@ -83,6 +83,22 @@
   version = "v3.2.0"
 
 [[projects]]
+  digest = "1:6f9339c912bbdda81302633ad7e99a28dfa5a639c864061f1929510a9a64aa74"
+  name = "github.com/dustin/go-humanize"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:8b4bb15de2e698d359eeec15c42453567c98972a70c8619946050360ec02ec32"
+  name = "github.com/go-ini/ini"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "6ed8d5f64cd79a498d1f3fab5880cc376ce41bbe"
+  version = "v1.41.0"
+
+[[projects]]
   digest = "1:8f0705fa33e8957018611cc81c65cb373b626c092d39931bb86882489fc4c3f4"
   name = "github.com/golang/protobuf"
   packages = [
@@ -122,6 +138,14 @@
   version = "0.1.0"
 
 [[projects]]
+  digest = "1:0a69a1c0db3591fcefb47f115b224592c8dfa4368b7ba9fae509d5e16cdc95c8"
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "5c8c8bd35d3832f5d134ae1e1e375b69a4d25242"
+  version = "v1.0.1"
+
+[[projects]]
   digest = "1:ca955a9cd5b50b0f43d2cc3aeb35c951473eeca41b34eb67507f1dbcc0542394"
   name = "github.com/kr/pretty"
   packages = ["."]
@@ -136,6 +160,37 @@
   pruneopts = "UT"
   revision = "e2ffdb16a802fe2bb95e2e35ff34f0e53aeef34f"
   version = "v0.1.0"
+
+[[projects]]
+  digest = "1:037939a41d1cbd3e9e0fa81372144cce899fc3895122ff7b52b7a1ea7ead1d10"
+  name = "github.com/minio/minio-go"
+  packages = [
+    ".",
+    "pkg/credentials",
+    "pkg/encrypt",
+    "pkg/s3signer",
+    "pkg/s3utils",
+    "pkg/set",
+  ]
+  pruneopts = "UT"
+  revision = "98eaf5eab6d7935d2bd904c9229596328c90539a"
+  version = "v6.0.12"
+
+[[projects]]
+  digest = "1:78bbb1ba5b7c3f2ed0ea1eab57bdd3859aec7e177811563edc41198a760b06af"
+  name = "github.com/mitchellh/go-homedir"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ae18d6b8b3205b561c79e8e5f69bff09736185f4"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:87c2e02fb01c27060ccc5ba7c5a407cc91147726f8f40b70cceeedbc52b1f3a8"
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "e1e72e9de974bd926e5c56f83753fba2df402ce5"
+  version = "v1.3.0"
 
 [[projects]]
   digest = "1:645cabccbb4fa8aab25a956cbcbdf6a6845ca736b2c64e197ca7cbb9d210b939"
@@ -179,7 +234,19 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:fc7b6b4384e1e849d99eab58eca4f8c0a76bad4699117d5077a9a5c3c83e289e"
+  digest = "1:6a643af165c810469368a61dacf18f6c12d7021e82f8dc65144b3a230ab6858a"
+  name = "golang.org/x/crypto"
+  packages = [
+    "argon2",
+    "blake2b",
+    "ssh/terminal",
+  ]
+  pruneopts = "UT"
+  revision = "ff983b9c42bc9fbf91556e191cc8efb585c16908"
+
+[[projects]]
+  branch = "master"
+  digest = "1:35d68717797810014f26d6a175b0e73bd7fba070c408d443b3fff87a61c8008e"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -188,10 +255,11 @@
     "http2/hpack",
     "idna",
     "internal/timeseries",
+    "publicsuffix",
     "trace",
   ]
   pruneopts = "UT"
-  revision = "ed066c81e75eba56dd9bd2139ade88125b855585"
+  revision = "915654e7eabcea33ae277abbecf52f0d8b7a9fdc"
 
 [[projects]]
   branch = "master"
@@ -203,14 +271,15 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:43cde116ff48f299eddb7e6515677e6d0a2c915854bb05a333877f07c3bb3033"
+  digest = "1:ea401bdef5ad0c76b72e731a1f564ae5260c146535ab1331a99d7116e3bcefc0"
   name = "golang.org/x/sys"
   packages = [
+    "cpu",
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "11f53e03133963fb11ae0588e08b5e0b85be8be5"
+  revision = "a457fd036447854c0c02e89ea439481bdcf941a2"
 
 [[projects]]
   digest = "1:a2ab62866c75542dd18d2b069fec854577a20211d7c0ea6ae746072a1dccdd18"
@@ -311,6 +380,9 @@
     "github.com/danieljoos/wincred",
     "github.com/jiacfan/keychain",
     "github.com/jiacfan/keyctl",
+    "github.com/minio/minio-go",
+    "github.com/minio/minio-go/pkg/credentials",
+    "github.com/minio/minio-go/pkg/s3utils",
     "github.com/spf13/cobra",
     "golang.org/x/sync/semaphore",
     "gopkg.in/check.v1",

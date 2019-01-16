@@ -108,7 +108,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 
-		c.jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
+		jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
 		// TODO: Using PutPageFromURL to fulfill the copy
 	})
 }

@@ -58,10 +58,8 @@ const failToResolveMapValue = "<resolving_failed>"
 var s3BucketNameResolveError = "fail to resolve s3 bucket name"
 
 // NewS3BucketNameToAzureResourcesResolver creates S3BucketNameToAzureResourcesResolver.
-// S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number.
-// Considering the REST API is not segmented, and return the bucket name list with one request.
 // S3BucketNameToAzureResourcesResolver works in such pattern:
-// 1. User provided all the bucket names returned in a certain time.
+// 1. User provided all the bucket names returned in a certain time. (S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number.)
 // 2. S3BucketNameToAzureResourcesResolver resolves the names with one logic pass during creating the resolver instance.
 // 3. User can get resolved name later with ResolveName.
 // As S3BucketNameToAzureResourcesResolver need to detect naming collision, the resolver doesn't accept adding new bucket name except the initial s3BucketNames,
@@ -107,7 +105,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 		return
 	}
 
-	// Init resolved name as failed to resolve
+	// Init resolved name as original bucket name
 	resolvedName := orgBucketName
 
 	// 1. Try to replace period with hyphen.
@@ -124,12 +122,14 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 		for i := 0; i < len(resolvedName); i++ {
 			charAtI := resolvedName[i] // ASCII is enough for bucket name which contains lower-case characters, numbers, periods, and dashes.
 			if charAtI == '-' {
+				// the char is hyphen, adding consecutiveHyphenCount and continue
 				consecutiveHyphenCount++
 				continue
 			}
 
 			// Found byte that doesn't indicate '-'
 			if consecutiveHyphenCount == 0 {
+				// current char is non '-', and no preceeding '-', directly write the char to buffer.
 				buffer.WriteByte(charAtI)
 			} else if consecutiveHyphenCount == 1 {
 				buffer.WriteString("-")
@@ -184,7 +184,8 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) addSuffix(name string) s
 		}
 
 		if count > 999 {
-			// In case of infinite loop, considering S3's further extension. Currently, S3 has 100 for buckets' number per S3 account by default.
+			// Currently, S3 has 100 for buckets' number per S3 account by default.
+			// Considering S3's further extension, adding this defensive logic,
 			resolvedName = failToResolveMapValue
 			break
 		}

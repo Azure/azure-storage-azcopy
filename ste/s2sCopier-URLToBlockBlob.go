@@ -151,7 +151,7 @@ func (c *urlToBlockBlobCopier) Epilogue() {
 		if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 			// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.
 			// Other errors report that uncommitted blocks are there
-			c.jptm.LogError(c.destBlockBlobURL.String(), "Delete uncommitted blocks ", err)
+			jptm.LogError(c.destBlockBlobURL.String(), "Delete uncommitted blocks ", err)
 		}
 	}
 }
@@ -183,7 +183,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockId(blockIndex, encodedBlockID)
-		c.jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
+		jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
 		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
 		if err != nil {
 			jptm.FailActiveS2SCopy("Staging block", err)

@@ -70,7 +70,7 @@ type CredentialInfo struct {
 	S3CredentialInfo S3CredentialInfo
 }
 
-// S3CredentialInfo contains essential credential info which need to build up S3 c
+// S3CredentialInfo contains essential credential info which need to build up S3 client.
 type S3CredentialInfo struct {
 	Endpoint string
 	Region   string

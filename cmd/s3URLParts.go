@@ -27,7 +27,7 @@ import (
 	"strings"
 )
 
-// S3URLParts represents the components that make up and AWS S3 Service/Bucket/Object URL.
+// S3URLParts represents the components that make up AWS S3 Service/Bucket/Object URL.
 // You parse an existing URL into its parts by calling NewS3URLParts().
 // According to http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingBucket.html#access-bucket-intro and
 // https://docs.aws.amazon.com/general/latest/gr/rande.html#s3_region,
@@ -66,8 +66,7 @@ func IsS3URL(u url.URL) bool {
 	return false
 }
 
-// NewS3URLParts parses a URL initializing S3URLParts' fields including any SAS-related & sharesnapshot query parameters. Any other
-// query parameters remain in the UnparsedParams field. This method overwrites all fields in the S3URLParts object.
+// NewS3URLParts parses a URL initializing S3URLParts' fields. This method overwrites all fields in the S3URLParts object.
 func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	// Check if it's S3URL, and get essential info from URL's host
 	r, err := regexp.Compile(s3HostPattern)

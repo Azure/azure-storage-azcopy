@@ -13,8 +13,8 @@ import (
 	"github.com/minio/minio-go/pkg/s3utils"
 )
 
-// copyS2SS3Enumerator enumerates S3 source, and submit request for copy S3 to Blob and etc.
-// The source could be point to S3 object or bucket or service.
+// copyS2SS3Enumerator enumerates S3 source, and submits request for copy S3 to Blob and etc.
+// The source could be point to S3 object, bucket or service.
 type copyS2SS3Enumerator struct {
 	copyS2SEnumeratorBase
 
@@ -23,7 +23,8 @@ type copyS2SS3Enumerator struct {
 	s3URLParts S3URLParts
 }
 
-// By default presign expires after 7 days, which should be enough for millions of files transfer.
+// By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
+// This value could be further tuned, or exposed to user for customization, according to user feedback.
 const defaultPresignExpires = time.Hour * 24 * 7
 
 func (e *copyS2SS3Enumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
@@ -66,10 +67,12 @@ func (e *copyS2SS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// Start enumerating.
-	// Case-1: Source is a single object
-	// Verify if source is a single object, note that s3URLParts only verifies resource type from URL syntax.
+
+	// Case-1: Source is a single object.
+	// Verify if source is a single object, note that s3URLParts only verifies resource type through parsing URL from syntax aspect.
 	if e.s3URLParts.IsObject() && !e.s3URLParts.IsDirectory() {
 		if objectInfo, err := e.s3Client.StatObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, minio.StatObjectOptions{}); err == nil {
+			// The source is a single object.
 			// Note: Currently only support single to single, and not support single to directory.
 			if endWithSlashOrBackSlash(e.destURL.Path) {
 				return errors.New("invalid source and destination combination for service to service copy: " +
@@ -88,14 +91,15 @@ func (e *copyS2SS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			if err := e.addObjectToNTransfer(*presignedURL, *e.destURL, &objectInfo, cca); err != nil {
 				return err
 			}
+
 			return e.dispatchFinalPart(cca)
 		}
 	}
 
-	// Case-2: Source is a service endpoint
+	// Case-2: Source is a service endpoint.
 	if isServiceLevel, bucketPrefix := e.s3URLParts.IsServiceLevelSearch(); isServiceLevel {
 		if !cca.recursive {
-			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
+			return fmt.Errorf("cannot copy the entire S3 service without recursive flag. Please use --recursive flag")
 		}
 
 		// Validate if destination is service level account.
@@ -109,7 +113,7 @@ func (e *copyS2SS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			bucketPrefix, objectPrefix, objectPattern, cca); err != nil {
 			return err
 		}
-	} else { // Case-3: Source is a bucket or virutal directory
+	} else { // Case-3: Source is a bucket or virutal directory.
 		// Ensure there is a valid bucket name in this case.
 		if err := s3utils.CheckValidBucketNameStrict(e.s3URLParts.BucketName); err != nil {
 			return err
@@ -186,12 +190,12 @@ func (e *copyS2SS3Enumerator) addTransferFromService(ctx context.Context,
 	}
 	r := NewS3BucketNameToAzureResourcesResolver(bucketNames)
 
-	// Validate name resolving, if there is any problem, fast fail.
-	// If there is any resolving happened, print to user.
+	// Validate name resolving, if there is any problem, do fast fail.
+	// At same time, if there is any resolving happened, print to user.
 	resolveErr := false
 	for _, bucketInfo := range bucketInfos {
 		if resolvedName, err := r.ResolveName(bucketInfo.Name); err != nil {
-			// For resolving failure, show it to customer.
+			// For resolving failure, print to user.
 			glcm.Error(err.Error())
 			resolveErr = true
 		} else {
@@ -207,6 +211,7 @@ func (e *copyS2SS3Enumerator) addTransferFromService(ctx context.Context,
 			"with customized destination name after the service to service copy finished")
 	}
 
+	// bucket filter selects buckets need to be involved into transfer.
 	bucketFilter := func(bucketInfo minio.BucketInfo) bool {
 		// Check if bucket name has given prefix.
 		if strings.HasPrefix(bucketInfo.Name, bucketPrefix) {
@@ -216,11 +221,12 @@ func (e *copyS2SS3Enumerator) addTransferFromService(ctx context.Context,
 		return false
 	}
 
+	// defines action need be fulfilled to enumerate bucket further
 	bucketAction := func(bucketInfo minio.BucketInfo) error {
-		// Whatever the destination type is, it should be equivalent to account level,
-		// so directly append bucket name to it.
 		// Note: Name resolving is only for destination, source's bucket name should be kept for include/exclude/wildcard.
 		resolvedBucketName, _ := r.ResolveName(bucketInfo.Name) // No error here, as already validated.
+		// Whatever the destination type is, it should be equivalent to account level,
+		// so directly append bucket name to it.
 		tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(resolvedBucketName)
 		// create bucket for destination, in case bucket doesn't exist.
 		if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
@@ -335,8 +341,6 @@ func (e *copyS2SS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, obje
 		CacheControl:       oie.CacheControl(),
 		ContentMD5:         oie.ContentMD5(),
 		Metadata:           oie.NewCommonMetadata()}
-
-	fmt.Println("Trying to schedule CopyTransfer: ", copyTransfer)
 
 	return e.addTransfer(copyTransfer, cca)
 }

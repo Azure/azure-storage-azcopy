@@ -96,7 +96,9 @@ type rawCopyCmdArgs struct {
 	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
-	// whether user wants to copy properties(including metadata) during service to service copy, True by default
+	// whether user wants to preserves full properties during service to service copy, the default value is true.
+	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
+	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	preserveProperties bool
 }
 
@@ -387,7 +389,9 @@ type cookedCopyCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
 
-	// whether user wants to copy properties(including metadata) during service to service copy, True by default
+	// whether user wants to preserves full properties during service to service copy, the default value is true.
+	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
+	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	preserveProperties bool
 }
 
@@ -700,7 +704,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.S3Blob():
-		e := copyS2SS3Enumerator{
+		e := copyS2SS3Enumerator{ // S3 enumerator for S2S copy.
 			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
@@ -975,7 +979,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveProperties, "preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
-		"For S3 and Azure file source, as list operation doesn't return full properties of objects/files, to preserve full properties azcopy need send one additional request per object/file.")
+		"For S3 and Azure File source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")

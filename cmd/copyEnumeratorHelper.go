@@ -257,11 +257,11 @@ func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.D
 //////////////////////////////////////////////////////////////////////////////////////////
 // S3 service enumerators.
 //////////////////////////////////////////////////////////////////////////////////////////
-// enumerateBucketsInService is the helper for enumerating buckets in S3 service.
+// enumerateBucketsInServiceWithMinio is the helper for enumerating buckets in S3 service.
 func enumerateBucketsInServiceWithMinio(bucketInfos []minio.BucketInfo,
 	filter func(bucketInfo minio.BucketInfo) bool,
 	callback func(bucketInfo minio.BucketInfo) error) error {
-	// Process the shares returned in this result segment (if the segment is empty, the loop body won't execute)
+
 	for _, bucketInfo := range bucketInfos {
 		if !filter(bucketInfo) {
 			continue
@@ -275,7 +275,7 @@ func enumerateBucketsInServiceWithMinio(bucketInfos []minio.BucketInfo,
 	return nil
 }
 
-// enumerateObjectsInBucket enumerates objects in bucket.
+// enumerateObjectsInBucketWithMinio enumerates objects in bucket.
 func enumerateObjectsInBucketWithMinio(ctx context.Context, s3Client *minio.Client, bucketName, objectNamePrefix string,
 	filter func(objectInfo minio.ObjectInfo) bool,
 	callback func(objectInfo minio.ObjectInfo) error) error {

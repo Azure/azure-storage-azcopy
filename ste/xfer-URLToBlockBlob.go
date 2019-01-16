@@ -33,6 +33,9 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
+// This is planned to be deprecated, and replaced by s2sCopier-URLToBlockBlob.go + xfer-urlToRemote.go.
+// Keep the source code for back up.
+
 type blockBlobCopy struct {
 	jptm           IJobPartTransferMgr
 	srcURL         url.URL

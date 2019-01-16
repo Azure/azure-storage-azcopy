@@ -24,6 +24,8 @@ Copies source data to a destination location. The supported pairs are:
   - local <-> Azure File (SAS authentication)
   - local <-> ADLS Gen 2 (OAuth or SharedKey authentication)
   - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
+  - Azure File (SAS) <-> Azure Block Blob (SAS or OAuth authentication)
+  - AWS S3 (Access Key) <-> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
 
@@ -74,18 +76,29 @@ Download a set of files with a SAS using wildcards:
 Download files and directories with a SAS using wildcards:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
 
-Copy a single file between two storage accounts with a SAS:
+Copy a single blob with SAS to blob with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy a single file between two storage accounts using OAuth authentication. Please use 'azcopy login' command first if you aren't logged in yet. Note that the same OAuth token is used to access the destination storage account:
-- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
+Copy a single blob with SAS to blob with OAuth token. Please use 'azcopy login' command first if you aren't logged in yet. Note that the OAuth token is used to access the destination storage account:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
 
-Copy an entire directory between two storage accounts with a SAS:
-- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+Copy an entire directory from blob virtual directory with SAS to blob virtual directory with SAS:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Copy an entire account data to another account with SAS:
-- azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+Copy an entire account data from blob account with SAS to blob account with SAS:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
+Copy a single object from S3 with access key to blob with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3.amazonaws.com/[bucket]/[object]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Copy an entire directory from S3 with access key to blob virtual directory with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3.amazonaws.com/[bucket]/[object-as-virtual-directory]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Copy all buckets in S3 service with access key to blob account with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3.amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 `
 
 // ===================================== ENV COMMAND ===================================== //

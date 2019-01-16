@@ -121,7 +121,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			return
 		}
 
-		c.jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
+		jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
 		// TODO: Using AppendBlobFromURL to fulfill the copy
 	})
 }

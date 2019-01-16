@@ -208,7 +208,7 @@ func (e *copyS2SFileEnumerator) addTransfersFromDirectory(ctx context.Context,
 				fileRelativePath = gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
 			}
 
-			// TODO: Remove get attribute, when file's list method can return directly property and metadata.
+			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
 			if cca.preserveProperties {
 				p, err := fileURL.GetProperties(ctx)
 				if err != nil {
