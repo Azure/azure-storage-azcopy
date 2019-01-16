@@ -21,9 +21,9 @@
 package common
 
 import (
+	"context"
 	"math/rand"
 	"sync/atomic"
-	"context"
 	"time"
 )
 
@@ -34,9 +34,9 @@ type Predicate func() bool
 // In either case, if the producer is faster than the consumer, this CacheLimiter is necessary
 // prevent unbounded RAM usage
 type CacheLimiter interface {
-	TryAddBytes(count int64, useRelaxedLimit bool ) (added bool)
+	TryAddBytes(count int64, useRelaxedLimit bool) (added bool)
 	WaitUntilAddBytes(ctx context.Context, count int64, useRelaxedLimit Predicate) error
-	RemoveBytes(count int64 )
+	RemoveBytes(count int64)
 }
 
 type cacheLimiter struct {
@@ -48,7 +48,7 @@ func NewCacheLimiter(limit int64) CacheLimiter {
 	return &cacheLimiter{limit: limit}
 }
 
-// TryAdd tries to add a memory allocation within the limit.  Returns true if it could be (and was) added
+// TryAddBytes tries to add a memory allocation within the limit.  Returns true if it could be (and was) added
 func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added bool) {
 	lim := c.limit
 
@@ -56,7 +56,7 @@ func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added boo
 	// for high-priority things (i.e. things we deem to be allowable under a relaxed (non-strict) limit)
 	strict := !useRelaxedLimit
 	if strict {
-		lim = int64(float32(lim)  * 0.75)
+		lim = int64(float32(lim) * 0.75)
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {
@@ -67,7 +67,7 @@ func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added boo
 	return false
 }
 
-/// WaitToAdd blocks until it completes a successful call to TryAdd
+/// WaitUntilAddBytes blocks until it completes a successful call to TryAddBytes
 func (c *cacheLimiter) WaitUntilAddBytes(ctx context.Context, count int64, useRelaxedLimit Predicate) error {
 	for {
 		// Proceed if there's room in the cache

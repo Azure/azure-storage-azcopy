@@ -26,7 +26,7 @@ import (
 	"io"
 )
 
-// Reader of ONE chunk of a file. Maybe be used to re-read multiple times (e.g. if
+// Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
 // we must retry the sending of the chunk).
 // A instance of this type cannot be used by multiple threads (since it's Read/Seek are inherently stateful)
 // The reader can throw away the data after each successful read, and then re-read it from disk if there
@@ -35,11 +35,31 @@ import (
 // Although there's a time (performance) cost in the re-read, that's fine in a retry situation because the retry
 // indicates we were going too fast for the service anyway.
 type SingleChunkReader interface {
+
+	// ReadSeeker is used to read the contents of the chunk, and because the sending pipeline seeks at various times
 	io.ReadSeeker
+
+	// Closer is needed to clean up resources
 	io.Closer
+
+	// TryBlockingPrefetch tries to read the full contents of the chunk into RAM. Returns true if succeeded for false if failed,
+	// although callers do not have to check the return value (and there is no error object returned). Why?
+	// Because its OK to keep using this object even if the prefetch fails, since in that case
+	// any subsequent Read will just retry the same read as we do here, and if it fails at that time then Read will return an error.
 	TryBlockingPrefetch(fileReader io.ReaderAt) bool
+
+	// CaptureLeadingBytes is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
+	// on the first chunk in each file (since there's no point in calling it on others)
 	CaptureLeadingBytes() []byte
+
+	// Length is the number of bytes in the chunk
 	Length() int64
+
+	// HasPrefectchedEntirelyZeros gives an indication of whether this chunk is entirely zeros.  If it returns true
+	// then the chunk content has been prefetched AND it was all zeroes. For some remote destinations, that support "sparse file"
+	// semantics, it is safe and correct to skip the upload of those chunks where this returns true.
+	// In the rare edge case where this returns false due to the prefetch having failed (rather than the contents being non-zero),
+	// we'll just treat it as a non-zero chunk. That's simpler (to code, to review and to test) than having this code force a prefetch.
 	HasPrefetchedEntirelyZeros() bool
 }
 

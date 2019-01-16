@@ -117,7 +117,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 	if chunkIsWholeFile {
 		if blockIndex > 0 {
-			panic("chunk cannot be whole file where there is more than one chunk")
+			u.jptm.Panic(errors.New("chunk cannot be whole file where there is more than one chunk"))
 		}
 		u.setPutListNeed(plNotNeeded)
 		return u.generatePutWholeBlob(id, blockIndex, reader)
@@ -127,7 +127,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 	}
 }
 
-// generatePutBlock generates a func to uploads the block of src data from given startIndex till the given chunkSize.
+// generatePutBlock generates a func to upload the block of src data from given startIndex till the given chunkSize.
 func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
 
 	return createUploadChunkFunc(u.jptm, id, func() {
@@ -141,9 +141,9 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 		u.setBlockId(blockIndex, encodedBlockId)
 
 		// step 3: perform put block
-		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
+		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.blockBlobUrl.StageBlock(u.jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
+		_, err := u.blockBlobUrl.StageBlock(jptm.Context(), encodedBlockId, body, azblob.LeaseAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Staging block", err)
 			return
@@ -161,7 +161,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		blobHttpHeader, metaData := jptm.BlobDstData(u.leadingBytes)
 
 		// Upload the blob
-		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
+		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
 		if jptm.Info().SourceSize == 0 {
 			_, err = u.blockBlobUrl.Upload(jptm.Context(), bytes.NewReader(nil), blobHttpHeader, metaData, azblob.BlobAccessConditions{})
@@ -172,28 +172,28 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 
 		// if the put blob is a failure, update the transfer status to failed
 		if err != nil {
-			jptm.FailActiveUpload("Uploading block", err)
+			jptm.FailActiveUpload("Uploading blob", err)
 			return
 		}
 	})
 }
 
 func (u *blockBlobUploader) Epilogue() {
+	jptm := u.jptm
+
 	u.mu.Lock()
 	shouldPutBlockList := u.putListIndicator
 	blockIds := u.blockIds
 	u.mu.Unlock()
 	if shouldPutBlockList == plNeedUnknown {
-		panic("'put list' need flag was never set")
+		jptm.Panic(errors.New("'put list' need flag was never set"))
 	}
-
-	jptm := u.jptm
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
 	// commit the blocks, if necessary
 	if jptm.TransferStatus() > 0 && shouldPutBlockList == plNeeded {
-		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", u.blockIds))
+		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIds))
 
 		// fetching the blob http headers with content-type, content-encoding attributes
 		// fetching the metadata passed with the JobPartOrder
@@ -203,8 +203,6 @@ func (u *blockBlobUploader) Epilogue() {
 		if err != nil {
 			jptm.FailActiveUpload("Committing block list", err)
 			// don't return, since need cleanup below
-		} else {
-			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL ")
 		}
 	}
 
@@ -246,7 +244,7 @@ func (u *blockBlobUploader) setPutListNeed(value int32) {
 	// atomic because uploaders are used by multiple threads at the same time
 	previous := atomic.SwapInt32(&u.putListIndicator, value)
 	if previous != plNeedUnknown && previous != value {
-		panic("'put list' need cannot be set twice")
+		u.jptm.Panic(errors.New("'put list' need cannot be set twice"))
 	}
 }
 
@@ -254,7 +252,7 @@ func (u *blockBlobUploader) setBlockId(index int32, value string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if len(u.blockIds[index]) > 0 {
-		panic("block id set twice for one block")
+		u.jptm.Panic(errors.New("block id set twice for one block"))
 	}
 	u.blockIds[index] = value
 }

@@ -46,8 +46,8 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	fileSize := info.SourceSize
 	chunkSize := info.BlockSize
 
-	// If the given chunk Size for the Job is greater than maximum page size i.e 4 MB
-	// then set maximum pageSize will be 4 MB.
+	// If the given chunk Size for the Job is greater than max append blob block size, then
+	// then set it to the max.
 	chunkSize = common.Iffuint32(
 		chunkSize > common.MaxAppendBlobBlockSize,
 		common.MaxAppendBlobBlockSize,
@@ -121,7 +121,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 			return
 		}
 
-		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
+		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err = u.appendBlobUrl.AppendBlock(jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
 		if err != nil {

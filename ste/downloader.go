@@ -37,3 +37,10 @@ type downloader interface {
 }
 
 type downloaderFactory func() downloader
+
+func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
+	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.
+	// But we don't do that for downloads, since for those the chunk is not "done" until its flushed out
+	// by the ChunkedFileWriter. (The ChunkedFileWriter will set the status to done at that time.)
+	return createChunkFunc(false, jptm, id, body)
+}

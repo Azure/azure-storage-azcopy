@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -106,10 +107,12 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupUpload(jptm, ul) })
 
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
-	// TODO: ...which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
-	// TODO: ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
-	// TODO: ...so that the last of them will trigger the epilogue.
-	// TODO: ...Question: is that OK? (Same question as we have for downloads)
+	//     which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
+	//     ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
+	//     ...so that the last of them will trigger the epilogue.
+	//     ...Question: is that OK? (Same question as we have for downloads)
+	// DECISION: 16 Jan, 2019: for now, we are leaving in place the above rule than number of of completed chunks must
+	// eventually reach numChunks, since we have no better short-term alternative.
 
 	// Step 5: Go through the file and schedule chunk messages to upload each chunk
 	// As we do this, we force preload of each chunk to memory, and we wait (block)
@@ -122,7 +125,7 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	context := jptm.Context()
 	slicePool := jptm.SlicePool()
 	cacheLimiter := jptm.CacheLimiter()
-	blockIdCount := int32(0)
+	chunkCount := int32(0)
 	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex); startIndex += int64(chunkSize) {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
@@ -134,10 +137,10 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		}
 
 		// Make reader for this chunk.
-		// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat it's part
+		// Each chunk reader also gets a factory to make a reader for the file, in case it needs to repeat its part
 		// of the file read later (when doing a retry)
 		// BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
-		// to use an object that encompasses the whole file, so that it can but the chunks back into order. We don't have that requirement here.)
+		// to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
 		chunkReader := common.NewSingleChunkReader(context, sourceFileFactory, id, adjustedChunkSize, jptm, slicePool, cacheLimiter)
 
 		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
@@ -157,14 +160,14 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		// schedule the chunk job/msg
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 		isWholeFile := numChunks == 1
-		jptm.ScheduleChunks(ul.GenerateUploadFunc(id, blockIdCount, chunkReader, isWholeFile))
+		jptm.ScheduleChunks(ul.GenerateUploadFunc(id, chunkCount, chunkReader, isWholeFile))
 
-		blockIdCount += 1
+		chunkCount += 1
 	}
 
 	// sanity check to verify the number of chunks scheduled
-	if blockIdCount != int32(numChunks) {
-		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, blockIdCount, info.Source, fileSize))
+	if chunkCount != int32(numChunks) {
+		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
 	}
 }
 
@@ -181,7 +184,7 @@ func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 	if jptm.TransferStatus() == 0 {
-		panic("think we're finished but status is notStarted")
+		jptm.Panic(errors.New("think we're finished but status is notStarted"))
 	}
 
 	if jptm.TransferStatus() > 0 {
@@ -192,14 +195,14 @@ func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
-			jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
+			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
 		}
 	} else {
 		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
+			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation")
 		}
 	}
 

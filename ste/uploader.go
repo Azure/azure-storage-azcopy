@@ -49,7 +49,7 @@ type uploader interface {
 
 	// GenerateUploadFunc returns a func() that will upload the specified portion of the local file to the remote location
 	// Instead of taking local file as a parameter, it takes a helper that will read from the file. That keeps details of
-	// file IO out out the upload func, and lets that func concentrate only on the details of the remote endpoint
+	// file IO out of the upload func, and lets that func concentrate only on the details of the remote endpoint
 	GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc
 
 	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
@@ -79,13 +79,6 @@ func createUploadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body fun
 	// But we don't do that for downloads, since for those the chunk is not "done" until its flushed out
 	// by the ChunkedFileWriter. (The ChunkedFileWriter will set the status to done at that time.)
 	return createChunkFunc(true, jptm, id, body)
-}
-
-func createDownloadChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
-	// If uploading, we set the chunk status to done as soon as the chunkFunc completes.
-	// But we don't do that for downloads, since for those the chunk is not "done" until its flushed out
-	// by the ChunkedFileWriter. (The ChunkedFileWriter will set the status to done at that time.)
-	return createChunkFunc(false, jptm, id, body)
 }
 
 // createChunkFunc adds a standard prefix, which all chunkFuncs require, to the given body

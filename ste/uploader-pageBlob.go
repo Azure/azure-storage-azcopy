@@ -125,7 +125,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			return
 		}
 
-		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
+		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err := u.pageBlobUrl.UploadPages(jptm.Context(), id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
