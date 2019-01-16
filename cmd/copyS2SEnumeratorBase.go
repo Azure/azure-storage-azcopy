@@ -90,7 +90,7 @@ func (e *copyS2SEnumeratorBase) validateDestIsService(ctx context.Context, destU
 		destServiceURL := azblob.NewServiceURL(destURL, e.destBlobPipeline)
 		if _, err := destServiceURL.GetProperties(ctx); err != nil {
 			return fmt.Errorf("invalid source and destination combination for service to service copy: "+
-				"destination must point to service account when source is a service account, %v", err)
+				"destination must point to service account in current scenario, %v", err)
 		}
 	}
 

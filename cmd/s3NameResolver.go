@@ -108,9 +108,10 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 	}
 
 	// Init resolved name as failed to resolve
-	resolvedName := failToResolveMapValue
+	resolvedName := orgBucketName
 
 	// 1. Try to replace period with hyphen.
+	// Note: there should be no '.' adjacent to '-'.
 	if hasPeriod {
 		resolvedName = strings.Replace(orgBucketName, ".", "-", -1)
 	}
@@ -120,8 +121,8 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 	if hasConsecutiveHyphen {
 		var buffer bytes.Buffer
 		consecutiveHyphenCount := 0
-		for i := 0; i < len(orgBucketName); i++ {
-			charAtI := orgBucketName[i] // ASCII is enough for bucket name which contains lower-case characters, numbers, periods, and dashes.
+		for i := 0; i < len(resolvedName); i++ {
+			charAtI := resolvedName[i] // ASCII is enough for bucket name which contains lower-case characters, numbers, periods, and dashes.
 			if charAtI == '-' {
 				consecutiveHyphenCount++
 				continue

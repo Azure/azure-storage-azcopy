@@ -163,7 +163,7 @@ func (p *S3URLParts) IsDirectory() bool {
 }
 
 // IsServiceLevelSearch check if it's an service level search for S3.
-// And returns search prefix(part before wildcard) for bucket and object pattern to match.
+// And returns search prefix(part before wildcard) for bucket to match, if it's service level search.
 func (p *S3URLParts) IsServiceLevelSearch() (IsServiceLevelSearch bool, bucketPrefix string) {
 	// If it's service level URL which need search bucket, there could be two cases:
 	// a. https://<service-endpoint>(/)
@@ -171,11 +171,12 @@ func (p *S3URLParts) IsServiceLevelSearch() (IsServiceLevelSearch bool, bucketPr
 	if p.IsServiceURL() ||
 		strings.Contains(p.BucketName, wildCard) {
 		IsServiceLevelSearch = true
-		// For case bucket name is empty, search for all buckets.
+		// Case p.IsServiceURL(), bucket name is empty, search for all buckets.
 		if p.BucketName == "" {
 			return
 		}
 
+		// Case bucketname contains wildcard.
 		wildCardIndex := gCopyUtil.firstIndexOfWildCard(p.BucketName)
 
 		// wild card exists prefix will be the content of bucket name till the wildcard index

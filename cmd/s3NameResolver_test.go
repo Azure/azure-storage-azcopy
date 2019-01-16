@@ -67,7 +67,7 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipl
 	r := NewS3BucketNameToAzureResourcesResolver(
 		[]string{"bucket.name", "bucket-name", "bucket-name-2", "bucket-name-3",
 			"bucket---name", "bucket-s--s---s", "abcdefghijklmnopqrstuvwxyz-s--s---s-s0123456789",
-			"bucket--name", "bucket-2-name", "bucket-2-name-3"})
+			"bucket--name", "bucket-2-name", "bucket-2-name-3", "bucket.compose----name.1---hello"})
 	// Need resolve
 	resolvedName, err := r.ResolveName("bucket---name")
 	c.Assert(err, chk.IsNil)
@@ -110,6 +110,10 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipl
 	resolvedName, err = r.ResolveName("bucket-2-name-3")
 	c.Assert(err, chk.IsNil)
 	c.Assert(resolvedName, chk.Equals, "bucket-2-name-3")
+
+	resolvedName, err = r.ResolveName("bucket.compose----name.1---hello")
+	c.Assert(err, chk.IsNil)
+	c.Assert(resolvedName, chk.Equals, "bucket-compose-4-name-1-3-hello")
 }
 
 func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegative(c *chk.C) {

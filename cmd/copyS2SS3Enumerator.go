@@ -69,20 +69,23 @@ func (e *copyS2SS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// Case-1: Source is a single object
 	// Verify if source is a single object, note that s3URLParts only verifies resource type from URL syntax.
 	if e.s3URLParts.IsObject() && !e.s3URLParts.IsDirectory() {
-		// TODO: Consider to add new method with context to minio and pass-in valid ctx.
 		if objectInfo, err := e.s3Client.StatObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, minio.StatObjectOptions{}); err == nil {
 			// Note: Currently only support single to single, and not support single to directory.
 			if endWithSlashOrBackSlash(e.destURL.Path) {
 				return errors.New("invalid source and destination combination for service to service copy: " +
 					"destination must point to a single file, when source is a single file.")
 			}
-			err := e.createDestBucket(ctx, *e.destURL, nil)
+			if err := e.createDestBucket(ctx, *e.destURL, nil); err != nil {
+				return err
+			}
+
+			// Presign the get URL for S2S copy
+			presignedURL, err := e.s3Client.PresignedGetObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, defaultPresignExpires, url.Values{})
 			if err != nil {
 				return err
 			}
 
-			// directly use destURL as destination
-			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, cca); err != nil {
+			if err := e.addObjectToNTransfer(*presignedURL, *e.destURL, &objectInfo, cca); err != nil {
 				return err
 			}
 			return e.dispatchFinalPart(cca)
@@ -128,11 +131,13 @@ func (e *copyS2SS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			resolvedBucketName, err := s3BucketNameResolver.ResolveName(e.s3URLParts.BucketName)
 			if err != nil {
 				glcm.Error(err.Error())
-				return errors.New("fail to add transfer, the source bucket has invalid name for Azure. \n" +
-					"please copy from bucket to Azure with customized container/share/filesystem name.")
+				return errors.New("fail to add transfer, the source bucket has invalid name for Azure. " +
+					"Please copy from bucket to Azure with customized container/share/filesystem name.")
 			}
 
 			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(resolvedBucketName)
+			glcm.Info(fmt.Sprintf("source is bucket and destination is an Azure service endpoint, "+
+				"bucket with name %q will be created in destination to store data", resolvedBucketName))
 		}
 
 		// create bucket for destination, in case bucket doesn't exist.
@@ -168,48 +173,55 @@ func (e *copyS2SS3Enumerator) addTransferFromService(ctx context.Context,
 	s3Client *minio.Client, destBaseURL url.URL,
 	bucketPrefix, objectPrefix, objectPattern string, cca *cookedCopyCmdArgs) error {
 
-	// Bucket name resolving, if there is any successful or failed naming resolution, print to customer.
-	bucketsResolveFunc := func(bucketInfos []minio.BucketInfo) ([]minio.BucketInfo, error) {
-		var bucketNames []string
-		for _, bucketInfo := range bucketInfos {
-			bucketNames = append(bucketNames, bucketInfo.Name)
-		}
-		r := NewS3BucketNameToAzureResourcesResolver(bucketNames)
+	// List buckets.
+	bucketInfos, err := s3Client.ListBuckets()
+	if err != nil {
+		return fmt.Errorf("cannot list buckets, %v", err)
+	}
 
-		resolveErr := false
-		for _, bucketInfo := range bucketInfos {
-			if resolvedName, err := r.ResolveName(bucketInfo.Name); err != nil {
-				// For resolving failure, show it to customer.
-				glcm.Error(err.Error())
-				resolveErr = true
-			} else {
-				if resolvedName != bucketInfo.Name {
-					glcm.Info(fmt.Sprintf("s3 bucket name %q is invalid for Azure container/share/filesystem, and has been renamed to %q", bucketInfo.Name, resolvedName))
-				}
-				bucketInfo.Name = resolvedName
+	// Create name resolver.
+	var bucketNames []string
+	for _, bucketInfo := range bucketInfos {
+		bucketNames = append(bucketNames, bucketInfo.Name)
+	}
+	r := NewS3BucketNameToAzureResourcesResolver(bucketNames)
+
+	// Validate name resolving, if there is any problem, fast fail.
+	// If there is any resolving happened, print to user.
+	resolveErr := false
+	for _, bucketInfo := range bucketInfos {
+		if resolvedName, err := r.ResolveName(bucketInfo.Name); err != nil {
+			// For resolving failure, show it to customer.
+			glcm.Error(err.Error())
+			resolveErr = true
+		} else {
+			if resolvedName != bucketInfo.Name {
+				glcm.Info(fmt.Sprintf("s3 bucket name %q is invalid for Azure container/share/filesystem, and has been renamed to %q", bucketInfo.Name, resolvedName))
 			}
 		}
+	}
 
-		if resolveErr {
-			return nil, errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. \n" +
-				"please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
-				"with customized destination name after the service to service copy finished")
-		}
-
-		return bucketInfos, nil
+	if resolveErr {
+		return errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. " +
+			"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
+			"with customized destination name after the service to service copy finished")
 	}
 
 	bucketFilter := func(bucketInfo minio.BucketInfo) bool {
+		// Check if bucket name has given prefix.
 		if strings.HasPrefix(bucketInfo.Name, bucketPrefix) {
 			return true
 		}
+
 		return false
 	}
 
 	bucketAction := func(bucketInfo minio.BucketInfo) error {
 		// Whatever the destination type is, it should be equivalent to account level,
 		// so directly append bucket name to it.
-		tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(bucketInfo.Name)
+		// Note: Name resolving is only for destination, source's bucket name should be kept for include/exclude/wildcard.
+		resolvedBucketName, _ := r.ResolveName(bucketInfo.Name) // No error here, as already validated.
+		tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(resolvedBucketName)
 		// create bucket for destination, in case bucket doesn't exist.
 		if err := e.createDestBucket(ctx, tmpDestURL, nil); err != nil {
 			return err
@@ -221,7 +233,7 @@ func (e *copyS2SS3Enumerator) addTransferFromService(ctx context.Context,
 		return e.addTransfersFromBucket(ctx, s3Client, tmpDestURL, bucketInfo.Name, objectPrefix, objectPattern, "", true, true, cca)
 	}
 
-	return enumerateBucketsInServiceWithMinio(ctx, s3Client, bucketsResolveFunc, bucketFilter, bucketAction)
+	return enumerateBucketsInServiceWithMinio(bucketInfos, bucketFilter, bucketAction)
 }
 
 // addTransfersFromBucket enumerates objects in bucket,
@@ -298,7 +310,7 @@ func (e *copyS2SS3Enumerator) addTransfersFromBucket(ctx context.Context,
 	if err != nil {
 		// Handle the error that fail to list objects in bucket due to Location mismatch, which is caused by source endpoint doesn't match S3 buckets' regions
 		if strings.Contains(err.Error(), "301 response missing Location header") {
-			glcm.Info(fmt.Sprintf("skip the bucket %q, as it's not in the region specified by source URL", bucketName))
+			glcm.Info(fmt.Sprintf("skip enumerating the bucket %q, as it's not in the region specified by source URL", bucketName))
 		} else {
 			return err
 		}

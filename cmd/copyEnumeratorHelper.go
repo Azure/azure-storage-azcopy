@@ -257,25 +257,10 @@ func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.D
 //////////////////////////////////////////////////////////////////////////////////////////
 // S3 service enumerators.
 //////////////////////////////////////////////////////////////////////////////////////////
-// enumerateBucketsInService enumerates buckets in S3 service with specified client(identity).
-// TODO: there is no WithContext version in minio client currently.
-func enumerateBucketsInServiceWithMinio(ctx context.Context, s3Client *minio.Client,
-	resolve func(bucketInfos []minio.BucketInfo) ([]minio.BucketInfo, error),
+// enumerateBucketsInService is the helper for enumerating buckets in S3 service.
+func enumerateBucketsInServiceWithMinio(bucketInfos []minio.BucketInfo,
 	filter func(bucketInfo minio.BucketInfo) bool,
 	callback func(bucketInfo minio.BucketInfo) error) error {
-
-	bucketInfos, err := s3Client.ListBuckets()
-	if err != nil {
-		return fmt.Errorf("cannot list buckets, %v", err)
-	}
-
-	if resolve != nil {
-		bucketInfos, err = resolve(bucketInfos)
-		if err != nil {
-			return fmt.Errorf("cannot resolve bucket infos, %v", err)
-		}
-	}
-
 	// Process the shares returned in this result segment (if the segment is empty, the loop body won't execute)
 	for _, bucketInfo := range bucketInfos {
 		if !filter(bucketInfo) {
