@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -63,10 +62,9 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 
 	numChunks := getNumUploadChunks(fileSize, chunkSize)
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
-		return nil, errors.New(
-			fmt.Sprintf("BlockSize %d for uploading source of size %d is not correct. Number of blocks will exceed the limit",
-				chunkSize,
-				fileSize))
+		return nil, fmt.Errorf("BlockSize %d for uploading source of size %d is not correct. Number of blocks will exceed the limit",
+			chunkSize,
+			fileSize)
 	}
 
 	// make sure URL is parsable
