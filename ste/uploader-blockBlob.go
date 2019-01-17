@@ -30,26 +30,18 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
-const (
-	plNotNeeded   = -1
-	plNeedUnknown = 0
-	plNeeded      = 1
-)
-
 type blockBlobUploader struct {
-	jptm         IJobPartTransferMgr
-	blockBlobUrl azblob.BlockBlobURL
-	chunkSize    uint32
-	numChunks    uint32
-	pipeline     pipeline.Pipeline
-	pacer        *pacer
-	leadingBytes []byte // no lock because is written before first chunk-func go routine is scheduled
-
-	putListIndicator int32       // accessed via sync.atomic
+	jptm             IJobPartTransferMgr
+	blockBlobUrl     azblob.BlockBlobURL
+	chunkSize        uint32
+	numChunks        uint32
+	pipeline         pipeline.Pipeline
+	pacer            *pacer
+	putListIndicator int32
+	leadingBytes     []byte      // no lock because is written before first chunk-func go routine is scheduled
 	mu               *sync.Mutex // protects the fields below
 	blockIds         []string
 }
@@ -114,10 +106,10 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		if blockIndex > 0 {
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
-		u.setPutListNeed(plNotNeeded)
+		setPutListNeed(&u.putListIndicator, putListNotNeeded)
 		return u.generatePutWholeBlob(id, blockIndex, reader)
 	} else {
-		u.setPutListNeed(plNeeded)
+		setPutListNeed(&u.putListIndicator, putListNeeded)
 		return u.generatePutBlock(id, blockIndex, reader)
 	}
 }
@@ -177,17 +169,17 @@ func (u *blockBlobUploader) Epilogue() {
 	jptm := u.jptm
 
 	u.mu.Lock()
-	shouldPutBlockList := u.putListIndicator
 	blockIds := u.blockIds
 	u.mu.Unlock()
-	if shouldPutBlockList == plNeedUnknown {
+	shouldPutBlockList := u.putListIndicator
+	if shouldPutBlockList == putListNeedUnknown {
 		panic("'put list' need flag was never set")
 	}
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
 	// commit the blocks, if necessary
-	if jptm.TransferStatus() > 0 && shouldPutBlockList == plNeeded {
+	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIds))
 
 		// fetching the blob http headers with content-type, content-encoding attributes
@@ -234,14 +226,6 @@ func (u *blockBlobUploader) Epilogue() {
 
 	}
 
-}
-
-func (u *blockBlobUploader) setPutListNeed(value int32) {
-	// atomic because uploaders are used by multiple threads at the same time
-	previous := atomic.SwapInt32(&u.putListIndicator, value)
-	if previous != plNeedUnknown && previous != value {
-		panic("'put list' need cannot be set twice")
-	}
 }
 
 func (u *blockBlobUploader) setBlockId(index int32, value string) {
