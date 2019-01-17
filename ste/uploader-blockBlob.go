@@ -224,7 +224,8 @@ func (u *blockBlobUploader) Epilogue() {
 		// Delete the uncommitted blobs
 		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
 		//    situation. Deletion has very different semantics then, compared to not deleting.
-		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
+		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelFn()
 		_, _ = u.blockBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		// TODO: question, is it OK to remoe this logging of failures (since there's no adverse effect of failure)
 		//  if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {

@@ -146,7 +146,8 @@ func (u *azureFilesUploader) Epilogue() {
 		// then transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's
 		// contents will be at an unknown stage of partial completeness
-		deletionContext, _ := context.WithTimeout(context.Background(), 2*time.Minute)
+		deletionContext, cancelFn := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancelFn()
 		_, err := u.fileURL.Delete(deletionContext)
 		if err != nil {
 			// TODO: this was LogInfo, but inside a ShouldLog(LogError) if statement. Should I put it back that way?  It was not like that for blobFS

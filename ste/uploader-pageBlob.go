@@ -139,7 +139,8 @@ func (u *pageBlobUploader) Epilogue() {
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
-		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
+		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelFn()
 		_, err := u.pageBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {
 			jptm.LogError(u.pageBlobUrl.String(), "Delete (incomplete) Page Blob ", err)

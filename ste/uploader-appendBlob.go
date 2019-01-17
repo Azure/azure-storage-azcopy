@@ -139,7 +139,8 @@ func (u *appendBlobUploader) Epilogue() {
 		// Delete the uncommitted blobs
 		// TODO: should we really do this deletion?  What if we are in an overwrite-existing-blob
 		//    situation. Deletion has very different semantics then, compared to not deleting.
-		deletionContext, _ := context.WithTimeout(context.Background(), 30*time.Second)
+		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelFn()
 		_, err := u.appendBlobUrl.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {
 			jptm.LogError(u.appendBlobUrl.String(), "Delete (incomplete) Append Blob ", err)
