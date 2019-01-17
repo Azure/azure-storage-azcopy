@@ -201,7 +201,7 @@ func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 		}
 	} else {
 		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation")
+			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation/Failure")
 		}
 	}
 

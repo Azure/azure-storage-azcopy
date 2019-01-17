@@ -211,7 +211,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 		// then transfer either failed or was cancelled
 		// TODO: question: is it right that 0 (not started) is _included_ here? It was included in the previous version of this code.
 		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
+			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
 		// the file created locally should be deleted
 		tryDeleteFile(info, jptm)
