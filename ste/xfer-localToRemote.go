@@ -125,7 +125,7 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	slicePool := jptm.SlicePool()
 	cacheLimiter := jptm.CacheLimiter()
 	chunkCount := int32(0)
-	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex); startIndex += int64(chunkSize) {
+	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex, fileSize); startIndex += int64(chunkSize) {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
 		adjustedChunkSize := int64(chunkSize)
@@ -170,8 +170,8 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 }
 
-func isDummyChunkInEmptyFile(startIndex int64) bool {
-	return startIndex == 0
+func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
+	return startIndex == 0 && fileSize == 0
 }
 
 // Complete epilogue. Handles both success and failure.
