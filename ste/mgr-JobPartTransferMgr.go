@@ -308,34 +308,30 @@ func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 }
 
 func (jptm *jobPartTransferMgr) FailActiveUpload(where string, err error) {
-	jptm.failActiveTransfer(where, err, common.ETransferStatus.Failed(), true)
+	jptm.failActiveTransfer(transferErrorCodeUploadFailed, where, err, common.ETransferStatus.Failed())
 }
 
 func (jptm *jobPartTransferMgr) FailActiveDownload(where string, err error) {
-	jptm.failActiveTransfer(where, err, common.ETransferStatus.Failed(), false)
+	jptm.failActiveTransfer(transferErrorCodeDownloadFailed, where, err, common.ETransferStatus.Failed())
 }
 
 func (jptm *jobPartTransferMgr) FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	jptm.failActiveTransfer(where, err, failureStatus, true)
+	jptm.failActiveTransfer(transferErrorCodeUploadFailed, where, err, failureStatus)
 }
 
 func (jptm *jobPartTransferMgr) FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	jptm.failActiveTransfer(where, err, failureStatus, false)
+	jptm.failActiveTransfer(transferErrorCodeDownloadFailed, where, err, failureStatus)
 }
 
 // Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
 // Unlike just setting the status to failed, this also handles cancellation correctly
-func (jptm *jobPartTransferMgr) failActiveTransfer(descriptionOfWhereErrorOccurred string, err error, failureStatus common.TransferStatus, isUpload bool) {
+func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descriptionOfWhereErrorOccurred string, err error, failureStatus common.TransferStatus) {
 	// TODO: question. Prior to refactoring some code did a debug level log when WasCancelled is true (e.g. blob upload did)
 	// TODO: .. do we really need that? It's ommitted, for now.
 
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		typ := transferErrorCodeDownloadFailed
-		if isUpload {
-			typ = transferErrorCodeUploadFailed
-		}
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
