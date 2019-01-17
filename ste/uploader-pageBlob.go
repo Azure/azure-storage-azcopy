@@ -77,8 +77,7 @@ func (u *pageBlobUploader) NumChunks() uint32 {
 }
 
 func (u *pageBlobUploader) RemoteFileExists() (bool, error) {
-	_, err := u.pageBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
-	return err == nil, nil
+	return remoteObjectExists(u.pageBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
 func (u *pageBlobUploader) Prologue(leadingBytes []byte) {

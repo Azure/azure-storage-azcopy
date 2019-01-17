@@ -85,8 +85,7 @@ func (u *azureFilesUploader) NumChunks() uint32 {
 }
 
 func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
-	_, err := u.fileURL.GetProperties(u.jptm.Context())
-	return err == nil, nil // TODO: is there a better, more robust way to do this check, rather than just taking ANY error as evidence of non-existence?
+	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
 func (u *azureFilesUploader) Prologue(leadingBytes []byte) {

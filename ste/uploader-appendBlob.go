@@ -81,8 +81,7 @@ func (u *appendBlobUploader) NumChunks() uint32 {
 }
 
 func (u *appendBlobUploader) RemoteFileExists() (bool, error) {
-	_, err := u.appendBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
-	return err == nil, nil
+	return remoteObjectExists(u.appendBlobUrl.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
 func (u *appendBlobUploader) Prologue(leadingBytes []byte) {
