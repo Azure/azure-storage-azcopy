@@ -161,7 +161,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// sanity check to verify the number of chunks scheduled
 	if chunkCount != numChunks {
-		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
+		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
 	}
 
 }

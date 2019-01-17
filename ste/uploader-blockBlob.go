@@ -117,7 +117,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 	if chunkIsWholeFile {
 		if blockIndex > 0 {
-			u.jptm.Panic(errors.New("chunk cannot be whole file where there is more than one chunk"))
+			panic("chunk cannot be whole file where there is more than one chunk")
 		}
 		u.setPutListNeed(plNotNeeded)
 		return u.generatePutWholeBlob(id, blockIndex, reader)
@@ -186,7 +186,7 @@ func (u *blockBlobUploader) Epilogue() {
 	blockIds := u.blockIds
 	u.mu.Unlock()
 	if shouldPutBlockList == plNeedUnknown {
-		jptm.Panic(errors.New("'put list' need flag was never set"))
+		panic("'put list' need flag was never set")
 	}
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
@@ -244,7 +244,7 @@ func (u *blockBlobUploader) setPutListNeed(value int32) {
 	// atomic because uploaders are used by multiple threads at the same time
 	previous := atomic.SwapInt32(&u.putListIndicator, value)
 	if previous != plNeedUnknown && previous != value {
-		u.jptm.Panic(errors.New("'put list' need cannot be set twice"))
+		panic("'put list' need cannot be set twice")
 	}
 }
 
@@ -252,7 +252,7 @@ func (u *blockBlobUploader) setBlockId(index int32, value string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if len(u.blockIds[index]) > 0 {
-		u.jptm.Panic(errors.New("block id set twice for one block"))
+		panic("block id set twice for one block")
 	}
 	u.blockIds[index] = value
 }

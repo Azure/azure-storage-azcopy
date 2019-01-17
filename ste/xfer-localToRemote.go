@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"errors"
 	"fmt"
 	"os"
 
@@ -167,7 +166,7 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// sanity check to verify the number of chunks scheduled
 	if chunkCount != int32(numChunks) {
-		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
+		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
 	}
 }
 
@@ -184,7 +183,7 @@ func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 	if jptm.TransferStatus() == 0 {
-		jptm.Panic(errors.New("think we're finished but status is notStarted"))
+		panic("think we're finished but status is notStarted")
 	}
 
 	if jptm.TransferStatus() > 0 {
