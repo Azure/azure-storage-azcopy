@@ -45,6 +45,7 @@ type ServiceType uint8
 func (ServiceType) Blob() ServiceType   { return ServiceType(0) }
 func (ServiceType) File() ServiceType   { return ServiceType(1) }
 func (ServiceType) BlobFS() ServiceType { return ServiceType(2) } // For SAS or public.
+func (ServiceType) S3() ServiceType     { return ServiceType(3) }
 
 func (ct ServiceType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -115,6 +116,15 @@ func init() {
 					cleanBfsFile(resourceURL)
 				case EResourceType.Account():
 					cleanBfsAccount(resourceURL)
+				}
+			case EServiceType.S3():
+				switch resourceType {
+				case EResourceType.Bucket():
+					cleanBucket(resourceURL)
+				case EResourceType.SingleFile():
+					cleanObject(resourceURL)
+				case EResourceType.Account():
+					cleanS3Account(resourceURL)
 				}
 			default:
 				panic(fmt.Errorf("illegal resourceType %q", resourceType))
@@ -351,4 +361,16 @@ func cleanFileAccount(resourceURL string) {
 
 func cleanBfsAccount(resourceURL string) {
 	panic("not implemented")
+}
+
+func cleanBucket(resourceURL string) {
+
+}
+
+func cleanObject(resourceURL string) {
+
+}
+
+func cleanS3Account(resourceURL string) {
+
 }

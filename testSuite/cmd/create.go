@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -13,8 +14,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	minio "github.com/minio/minio-go"
 	"github.com/spf13/cobra"
 )
 
@@ -46,6 +49,7 @@ func init() {
 	contentLanguage := ""
 	cacheControl := ""
 	contentMD5 := ""
+	location := ""
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -110,6 +114,26 @@ func init() {
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
+			case EServiceType.S3():
+				switch resourceType {
+				case EResourceType.Bucket():
+					createBucket(resourceURL)
+				case EResourceType.SingleFile():
+					createObject(
+						resourceURL,
+						blobSize,
+						minio.PutObjectOptions{
+							// TODO MD5, should be in customized metadata?
+							ContentType:        contentType,
+							ContentDisposition: contentDisposition,
+							ContentEncoding:    contentEncoding,
+							ContentLanguage:    contentLanguage,
+							CacheControl:       cacheControl,
+							UserMetadata:       getS3Metadata(metaData),
+						})
+				default:
+					panic(fmt.Errorf("not implemented %v", resourceType))
+				}
 			case EServiceType.BlobFS():
 				panic(fmt.Errorf("not implemented %v", serviceType))
 			default:
@@ -129,6 +153,7 @@ func init() {
 	createCmd.PersistentFlags().StringVar(&contentLanguage, "content-language", "", "content language for blob.")
 	createCmd.PersistentFlags().StringVar(&cacheControl, "cache-control", "", "cache control for blob.")
 	createCmd.PersistentFlags().StringVar(&contentMD5, "content-md5", "", "content MD5 for blob.")
+	createCmd.PersistentFlags().StringVar(&location, "location", "", "Location of the Azure account or S3 bucket to create")
 
 }
 
@@ -151,6 +176,19 @@ func getFileMetadata(metadataString string) azfile.Metadata {
 
 	if len(metadataString) > 0 {
 		metadata = azfile.Metadata{}
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadata[kv[0]] = kv[1]
+		}
+	}
+
+	return metadata
+}
+
+func getS3Metadata(metadataString string) map[string]string {
+	metadata := make(map[string]string)
+
+	if len(metadataString) > 0 {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 			metadata[kv[0]] = kv[1]
@@ -256,6 +294,60 @@ func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fi
 	})
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error uploading the file %v", err))
+		os.Exit(1)
+	}
+}
+
+func createBucket(bucketURLStr string) {
+	u, err := url.Parse(bucketURLStr)
+
+	if err != nil {
+		fmt.Println("fail to parse the bucket URL, ", err)
+		os.Exit(1)
+	}
+
+	s3URLParts, err := cmd.NewS3URLParts(*u)
+	if err != nil {
+		fmt.Println("new S3 URL parts, ", err)
+		os.Exit(1)
+	}
+
+	s3Client := createS3ClientWithMinio(createS3ResOptions{
+		Location: s3URLParts.Region,
+	})
+
+	if err := s3Client.MakeBucket(s3URLParts.BucketName, s3URLParts.Region); err != nil {
+		fmt.Println("fail to create bucket, ", err)
+		os.Exit(1)
+	}
+}
+
+func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptions) {
+	u, err := url.Parse(objectURLStr)
+	if err != nil {
+		fmt.Println("fail to parse the object URL, ", err)
+		os.Exit(1)
+	}
+
+	s3URLParts, err := cmd.NewS3URLParts(*u)
+	if err != nil {
+		fmt.Println("new S3 URL parts, ", err)
+		os.Exit(1)
+	}
+
+	s3Client := createS3ClientWithMinio(createS3ResOptions{
+		Location: s3URLParts.Region,
+	})
+
+	randomString := createStringWithRandomChars(int(objectSize))
+	if o.ContentType == "" {
+		o.ContentType = http.DetectContentType([]byte(randomString))
+	}
+
+	_, err = s3Client.PutObject(s3URLParts.BucketName, s3URLParts.ObjectKey, bytes.NewReader([]byte(randomString)), int64(objectSize), o)
+
+	if err != nil {
+		fmt.Println("fail to upload file to S3 object, ", err)
 		os.Exit(1)
 	}
 }
