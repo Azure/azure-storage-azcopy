@@ -228,6 +228,7 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAu
 			Token:                   *freshToken,
 			Tenant:                  tokenInfo.Tenant,
 			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
+			ClientID:                tokenInfo.ClientID,
 		}
 		if err := uotm.credCache.SaveToken(tokenInfoToPersist); err != nil {
 			return nil, err
@@ -306,6 +307,7 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (
 		Tenant:                  tokenInfo.Tenant,
 		ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
 		TokenRefreshSource:      tokenInfo.TokenRefreshSource,
+		ClientID:                tokenInfo.ClientID,
 	}, nil
 }
 
