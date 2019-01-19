@@ -57,6 +57,12 @@ func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added boo
 	strict := !useRelaxedLimit
 	if strict {
 		lim = int64(float32(lim) * 0.75)
+		// Rationale for the level of the strict limit: as at Jan 2018, we are using 0.75 of the total as the strict
+		// limit, leaving the other 0.25 of the total accessible under the "relaxed" limit.
+		// That last 25% gets use for two things: in downloads it is used for things where we KNOW there's
+		// no backlogging of new chunks behind slow ones (i.e. these "good" cases are allowed to proceed without
+		// interruption) and for uploads its used for re-doing the prefetches when we do retries (i.e. so these are
+		// not blocked by other chunks using up RAM).
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {
