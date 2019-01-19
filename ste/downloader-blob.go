@@ -35,18 +35,7 @@ func newBlobDownloader() downloader {
 
 // Returns a chunk-func for blob downloads
 func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
-	return func(workerId int) {
-
-		defer jptm.ReportChunkDone() // whether successful or failed, it's always "done" and we must always tell the jptm
-
-		// TODO: added the two operations for debugging purpose. remove later
-		jptm.OccupyAConnection()        // Increment a number of goroutine performing the transfer / acting on chunks msg by 1
-		defer jptm.ReleaseAConnection() // defer the decrement in the number of goroutine performing the transfer / acting on chunks msg by 1
-
-		if jptm.WasCanceled() {
-			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
-			return
-		}
+	return createDownloadChunkFunc(jptm, id, func() {
 
 		// Step 1: Download blob from start Index till startIndex + adjustedChunkSize
 		info := jptm.Info()
@@ -58,13 +47,13 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
 		get, err := srcBlobURL.Download(jptm.Context(), id.OffsetInFile, length, azblob.BlobAccessConditions{}, false)
 		if err != nil {
-			jptm.FailActiveDownload(err) // cancel entire transfer because this chunk has failed
+			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
 		}
 
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
-		jptm.LogChunkStatus(id, common.EWaitReason.BodyResponse())
+		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		//TODO: retryReader, retryForcer := get.BodyWithForceableRetry(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
 		retryReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: destWriter.MaxRetryPerDownloadBody()})
 		retryForcer := func() {}
@@ -73,8 +62,8 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		defer retryReader.Close()
 		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
 		if err != nil {
-			jptm.FailActiveDownload(err)
+			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return
 		}
-	}
+	})
 }

@@ -68,20 +68,20 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
-		epilogueWithCleanup(jptm, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		epilogueWithCleanupDownload(jptm, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
 
 	// step 4b: normal file creation when source has content
 	writeThrough := true // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
-	if fileSize <= 1 * 1024 * 1024 {
+	if fileSize <= 1*1024*1024 {
 		writeThrough = false // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
 	}
 	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
 	if err != nil {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		epilogueWithCleanup(jptm, nil, nil)
+		epilogueWithCleanupDownload(jptm, nil, nil)
 		return
 	}
 	// TODO: Question: do we need to Stat the file, to check its size, after explicitly making it with the desired size?
@@ -122,15 +122,18 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanup(jptm, dstFile, dstWriter) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dstFile, dstWriter) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
-	// TODO: ...which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
-	// TODO: ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
-	// TODO: ...so that the last of them will trigger the epilogue.
-	// TODO: ...Question: is that OK?
-	blockIdCount := uint32(0)
+	//     ...which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
+	//     ...must schedule the expected number of chunks, i.e. schedule all of them even if the transfer is already failed,
+	//     ...so that the last of them will trigger the epilogue.
+	//     ...Question: is that OK?
+	// DECISION: 16 Jan, 2019: for now, we are leaving in place the above rule than number of of completed chunks must
+	// eventually reach numChunks, since we have no better short-term alternative.
+
+	chunkCount := uint32(0)
 	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
 		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
 		adjustedChunkSize := downloadChunkSize
@@ -151,20 +154,20 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 		// schedule the download chunk job
 		jptm.ScheduleChunks(downloadFunc)
-		blockIdCount++
+		chunkCount++
 
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
 	}
 
 	// sanity check to verify the number of chunks scheduled
-	if blockIdCount != numChunks {
-		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, blockIdCount, info.Source, fileSize))
+	if chunkCount != numChunks {
+		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
 	}
 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	if activeDstFile != nil {
@@ -208,7 +211,7 @@ func epilogueWithCleanup(jptm IJobPartTransferMgr, activeDstFile *os.File, cw co
 		// then transfer either failed or was cancelled
 		// TODO: question: is it right that 0 (not started) is _included_ here? It was included in the previous version of this code.
 		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation")
+			jptm.Log(pipeline.LogDebug, " Finalizing Transfer Cancellation/Failure")
 		}
 		// the file created locally should be deleted
 		tryDeleteFile(info, jptm)

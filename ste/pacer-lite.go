@@ -30,7 +30,7 @@ type liteBodyPacer struct {
 	p    *pacer
 }
 
-// creates pacer that's not coupled to MMF
+// creates pacer that's not coupled to MMF (the obsolete non-lite one used memory mapped files)
 func newLiteRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
 	if p == nil {
 		panic("pr must not be nil")
@@ -38,7 +38,7 @@ func newLiteRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker 
 	return &liteBodyPacer{body: requestBody, p: p}
 }
 
-// creates pacer that's not coupled to MMF
+// creates pacer that's not coupled to MMF (the obsolete non-lite one used memory mapped files)
 func newLiteResponseBodyPacer(responseBody io.ReadCloser, p *pacer) io.ReadCloser {
 	if p == nil {
 		panic("pr must not be nil")
