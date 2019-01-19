@@ -21,16 +21,21 @@
 package common
 
 import (
+	"context"
+	"math/rand"
 	"sync/atomic"
+	"time"
 )
+
+type Predicate func() bool
 
 // Used to limit the amount of in-flight data in RAM, to keep it an an acceptable level.
 // For downloads, network is producer and disk is consumer, while for uploads the roles are reversed.
 // In either case, if the producer is faster than the consumer, this CacheLimiter is necessary
 // prevent unbounded RAM usage
 type CacheLimiter interface {
-	AddIfBelowStrictLimit(count int64) (added bool)
-	AddIfBelowRelaxedLimit(count int64) (added bool)
+	TryAddBytes(count int64, useRelaxedLimit bool) (added bool)
+	WaitUntilAddBytes(ctx context.Context, count int64, useRelaxedLimit Predicate) error
 	RemoveBytes(count int64)
 }
 
@@ -43,23 +48,21 @@ func NewCacheLimiter(limit int64) CacheLimiter {
 	return &cacheLimiter{limit: limit}
 }
 
-func (c *cacheLimiter) RemoveBytes(count int64) {
-	negativeDelta := -count
-	atomic.AddInt64(&c.value, negativeDelta)
-}
-
-func (c *cacheLimiter) AddIfBelowStrictLimit(count int64) (added bool) {
-	return c.tryAdd(count, true)
-}
-
-func (c *cacheLimiter) AddIfBelowRelaxedLimit(count int64) (added bool) {
-	return c.tryAdd(count, false)
-}
-
-func (c *cacheLimiter) tryAdd(count int64, strict bool) (added bool) {
+// TryAddBytes tries to add a memory allocation within the limit.  Returns true if it could be (and was) added
+func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added bool) {
 	lim := c.limit
+
+	// Above the "strict" limit, there's a bit of extra room, which we use
+	// for high-priority things (i.e. things we deem to be allowable under a relaxed (non-strict) limit)
+	strict := !useRelaxedLimit
 	if strict {
-		lim = lim / 2
+		lim = int64(float32(lim) * 0.75)
+		// Rationale for the level of the strict limit: as at Jan 2018, we are using 0.75 of the total as the strict
+		// limit, leaving the other 0.25 of the total accessible under the "relaxed" limit.
+		// That last 25% gets use for two things: in downloads it is used for things where we KNOW there's
+		// no backlogging of new chunks behind slow ones (i.e. these "good" cases are allowed to proceed without
+		// interruption) and for uploads its used for re-doing the prefetches when we do retries (i.e. so these are
+		// not blocked by other chunks using up RAM).
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {
@@ -68,4 +71,33 @@ func (c *cacheLimiter) tryAdd(count int64, strict bool) (added bool) {
 	// else, we are over the limit, so immediately subtract back what we've added, and return false
 	atomic.AddInt64(&c.value, -count)
 	return false
+}
+
+/// WaitUntilAddBytes blocks until it completes a successful call to TryAddBytes
+func (c *cacheLimiter) WaitUntilAddBytes(ctx context.Context, count int64, useRelaxedLimit Predicate) error {
+	for {
+		// Proceed if there's room in the cache
+		if c.TryAddBytes(count, useRelaxedLimit()) {
+			return nil
+		}
+
+		// else wait and repeat
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
+			// Duration of delay is somewhat arbitrary. Don't want to use anything very tiny (e.g. milliseconds) because that
+			// just adds CPU load for no real benefit.  Is this value too big?  Probably not, because even at 10 Gbps,
+			// it would take longer than this to fill or drain our full memory allocation.
+
+			// Nothing to do, just loop around again
+			// The wait is randomized to prevent the establishment of repetitive oscillations in cache size
+			// Average wait is quite long (2 seconds) since context where we're using this does not require any timing more fine-grained
+		}
+	}
+}
+
+func (c *cacheLimiter) RemoveBytes(count int64) {
+	negativeDelta := -count
+	atomic.AddInt64(&c.value, negativeDelta)
 }

@@ -22,13 +22,11 @@ package ste
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"runtime"
 	"sync/atomic"
 	"time"
 
-	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -105,60 +103,4 @@ func (p *pacer) updateTargetRate(increase bool) {
 	if atomic.CompareAndSwapInt64(&p.lastUpdatedTimestamp, lastCheckedTimestamp, time.Now().UnixNano()) {
 		atomic.StoreInt64(&p.availableBytesPerPeriod, int64(common.Iffloat64(increase, 1.1, 0.9)*float64(p.availableBytesPerPeriod)))
 	}
-}
-
-// this struct wraps the ReadSeeker which contains the data to be sent over the network
-type bodyPacer struct {
-	body io.Reader // Seeking is required to support retries
-	p    *pacer
-	mmf  *common.MMF
-}
-
-// newRequestBodyPacer wraps a response body to the given pacer to control the upload speed and
-// records the bytes transferred.
-func newRequestBodyPacer(requestBody io.ReadSeeker, p *pacer, srcMMF *common.MMF) io.ReadSeeker {
-	if p == nil {
-		panic("pr must not be nil")
-	}
-	return &bodyPacer{body: requestBody, p: p, mmf: srcMMF}
-}
-
-// newResponseBodyPacer wraps a response body to the given pacer to control the download speed and
-// records the bytes transferred.
-func newResponseBodyPacer(responseBody io.ReadCloser, p *pacer, srcMMF *common.MMF) io.ReadCloser {
-	if p == nil {
-		panic("pr must not be nil")
-	}
-	return &bodyPacer{body: responseBody, p: p, mmf: srcMMF}
-}
-
-// read blocks until tickets are obtained
-func (rbp *bodyPacer) Read(p []byte) (int, error) {
-	if !rbp.mmf.UseMMF() {
-		return 0, fmt.Errorf("src MMF Unmapped. Cannot read further")
-	}
-	//rbp.p.requestRightToSend(int64(len(p)))
-	n, err := rbp.body.Read(p)
-	atomic.AddInt64(&rbp.p.bytesTransferred, int64(n))
-	rbp.mmf.UnuseMMF()
-	return n, err
-}
-
-// Seeking is required to support retries
-func (rbp *bodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
-	return rbp.body.(io.ReadSeeker).Seek(offset, whence)
-}
-
-// bytesOverTheWire supports Close but the underlying stream may not; if it does, Close will close it.
-func (rbp *bodyPacer) Close() error {
-	if c, ok := rbp.body.(io.ReadCloser); ok {  // TODO: why is this ReadCloser, not Closer????
-		return c.Close()
-	}
-	return nil
-}
-
-
-// returns the total bytes transferred over the wire
-func (rbp *bodyPacer) BytesTransferred() int64 {
-	return atomic.LoadInt64(&rbp.p.bytesTransferred)
 }

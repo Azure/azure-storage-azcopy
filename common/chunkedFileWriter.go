@@ -25,7 +25,6 @@ import (
 	"errors"
 	"io"
 	"math"
-	"math/rand"
 	"sync/atomic"
 	"time"
 )
@@ -124,28 +123,13 @@ const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remov
 // at the time of scheduling the chunk (which is when this routine should be called).
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
-func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error {
+func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
-	for {
-		// Proceed if there's room in the cache
-		if w.tryAddMemoryAllocation(chunkSize) {
-			atomic.AddInt32(&w.activeChunkCount, 1)
-			return nil // the cache limiter has accepted our addition
-		}
-
-		// else wait and repeat
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Duration(2 * float32(time.Second) * rand.Float32())):
-			// Duration of delay is somewhat arbitrary. Don't want to use anything very tiny (e.g. milliseconds) because that
-			// just adds CPU load for no real benefit.  Is this value too big?  Probably not, because even at 10 Gbps,
-			// it would take longer than this to fill or drain our full memory allocation.
-
-			// Nothing to do, just loop around again
-			// The wait is randomized to prevent the establishment of repetitive oscillations in cache size
-		}
+	err := w.cacheLimiter.WaitUntilAddBytes(ctx, chunkSize, w.shouldUseRelaxedRamThreshold)
+	if err == nil {
+		atomic.AddInt32(&w.activeChunkCount, 1)
 	}
+	return err
 }
 
 // Threadsafe method to enqueue a new chunk for processing
@@ -276,20 +260,19 @@ func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 	return nil
 }
 
-// Tries to add the specified number of bytes to the count of in-use bytes.
 // We use a less strict cache limit
 // if we have relatively few chunks in progress for THIS file. Why? To try to spread
 // the work in progress across a larger number of files, instead of having it
 // get concentrated in one. I.e. when we have a lot of in-flight chunks for this file,
 // we'll tend to prefer allocating for other files, with fewer in-flight
-func (w *chunkedFileWriter) tryAddMemoryAllocation(chunkSize int64) bool {
-	return w.cacheLimiter.AddIfBelowStrictLimit(chunkSize) ||
-		(atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks && w.cacheLimiter.AddIfBelowRelaxedLimit(chunkSize))
+func (w *chunkedFileWriter) shouldUseRelaxedRamThreshold() bool {
+	return atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks
 }
+
 
 // Are we currently in a memory-constrained situation?
 func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {
-	didAdd := w.tryAddMemoryAllocation(chunkSize)
+	didAdd := w.cacheLimiter.TryAddBytes(chunkSize, w.shouldUseRelaxedRamThreshold())
 	if didAdd {
 		w.cacheLimiter.RemoveBytes(chunkSize) // remove immediately, since this was only a test
 	}
