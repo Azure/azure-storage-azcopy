@@ -171,7 +171,7 @@ func (u *blockBlobUploader) Epilogue() {
 	u.mu.Lock()
 	blockIds := u.blockIds
 	u.mu.Unlock()
-	shouldPutBlockList := u.putListIndicator
+	shouldPutBlockList := getPutListNeed(&u.putListIndicator)
 	if shouldPutBlockList == putListNeedUnknown {
 		panic("'put list' need flag was never set")
 	}

@@ -20,20 +20,24 @@
 
 package ste
 
+import "sync/atomic"
+
 const (
 	putListNotNeeded   = -1
 	putListNeedUnknown = 0
 	putListNeeded      = 1
 )
 
-// Note: this is not atomic or thread safe - because it is assumed that it will only be used from
-// the (single threaded) chunk func GENERATION routine, and that the only other use of the value will be
-// in the epilgue (not the chunk funcs).
+// TODO: do we want to keep using atomic, just to be sure this is safe no matter how or where its used?
+//    Or do we want to rely on the assumption, which is correct as at Jan 2018, that its only
+//    used in the single-threaded chunk creation loop and in the epilogue. For now, we are erring on the side of safety.
 func setPutListNeed(target *int32, value int32) {
-	previous := *target
+	previous := atomic.SwapInt32(target, value)
 	if previous != putListNeedUnknown && previous != value {
 		panic("'put list' need cannot be set twice")
-	} else {
-		*target = value
 	}
+}
+
+func getPutListNeed(storage *int32) int32 {
+	return atomic.LoadInt32(storage)
 }
