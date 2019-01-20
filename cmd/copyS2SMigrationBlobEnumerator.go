@@ -12,18 +12,18 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
-// copyS2SBlobEnumerator enumerates blob source, and submit request for copy blob to N,
+// copyS2SMigrationBlobEnumerator enumerates blob source, and submit request for copy blob to N,
 // where N stands for blob/file/blobFS (Currently only blob is supported).
 // The source could be a single blob/container/blob account
-type copyS2SBlobEnumerator struct {
-	copyS2SEnumeratorBase
+type copyS2SMigrationBlobEnumerator struct {
+	copyS2SMigrationEnumeratorBase
 
 	// source Azure Blob resources
 	srcBlobPipeline         pipeline.Pipeline
 	srcBlobURLPartExtension blobURLPartsExtension
 }
 
-func (e *copyS2SBlobEnumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
+func (e *copyS2SMigrationBlobEnumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
 	if err = e.initEnumeratorCommon(ctx, cca); err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func (e *copyS2SBlobEnumerator) initEnumerator(ctx context.Context, cca *cookedC
 	return nil
 }
 
-func (e *copyS2SBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
 	if err := e.initEnumerator(ctx, cca); err != nil {
@@ -134,7 +134,7 @@ func (e *copyS2SBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 }
 
 // addTransferFromAccount enumerates containers, and adds matched blob into transfer.
-func (e *copyS2SBlobEnumerator) addTransferFromAccount(ctx context.Context,
+func (e *copyS2SMigrationBlobEnumerator) addTransferFromAccount(ctx context.Context,
 	srcServiceURL azblob.ServiceURL, destBaseURL url.URL,
 	containerPrefix, blobPrefix, blobNamePattern string, cca *cookedCopyCmdArgs) error {
 	return enumerateContainersInAccount(
@@ -167,7 +167,7 @@ func (e *copyS2SBlobEnumerator) addTransferFromAccount(ctx context.Context,
 }
 
 // addTransfersFromContainer enumerates blobs in container, and adds matched blob into transfer.
-func (e *copyS2SBlobEnumerator) addTransfersFromContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
+func (e *copyS2SMigrationBlobEnumerator) addTransfersFromContainer(ctx context.Context, srcContainerURL azblob.ContainerURL, destBaseURL url.URL,
 	blobNamePrefix, blobNamePattern, parentSourcePath string, includExcludeContainer, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
 
 	blobFilter := func(blobItem azblob.BlobItem) bool {
@@ -221,7 +221,7 @@ func (e *copyS2SBlobEnumerator) addTransfersFromContainer(ctx context.Context, s
 		})
 }
 
-func (e *copyS2SBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
+func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -240,7 +240,7 @@ func (e *copyS2SBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, prop
 		cca)
 }
 
-func (e *copyS2SBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
+func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -270,14 +270,14 @@ func getBlobType(srcBlobType azblob.BlobType, specifiedBlobType common.BlobType)
 	return blobType
 }
 
-func (e *copyS2SBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer(&(e.CopyJobPartOrderRequest), transfer, cca)
 }
 
-func (e *copyS2SBlobEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationBlobEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
 	return dispatchFinalPart(&(e.CopyJobPartOrderRequest), cca)
 }
 
-func (e *copyS2SBlobEnumerator) partNum() common.PartNumber {
+func (e *copyS2SMigrationBlobEnumerator) partNum() common.PartNumber {
 	return e.PartNum
 }

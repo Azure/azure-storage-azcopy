@@ -12,9 +12,9 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
-// copyS2SEnumeratorBase is the base of other service to service copy enumerators,
+// copyS2SMigrationEnumeratorBase is the base of other service to service copy enumerators,
 // which contains common functions and properties.
-type copyS2SEnumeratorBase struct {
+type copyS2SMigrationEnumeratorBase struct {
 	common.CopyJobPartOrderRequest
 
 	// object used for destination pre-operations: e.g. create container/share/bucket and etc.
@@ -28,7 +28,7 @@ type copyS2SEnumeratorBase struct {
 }
 
 // initEnumeratorCommon inits common properties for enumerator.
-func (e *copyS2SEnumeratorBase) initEnumeratorCommon(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
+func (e *copyS2SMigrationEnumeratorBase) initEnumeratorCommon(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
 	// attempt to parse the source and destination url
 	if e.sourceURL, err = url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source)); err != nil {
 		return errors.New("cannot parse source URL")
@@ -41,7 +41,7 @@ func (e *copyS2SEnumeratorBase) initEnumeratorCommon(ctx context.Context, cca *c
 }
 
 // initDestPipeline inits destination pipelines shared for destination operations.
-func (e *copyS2SEnumeratorBase) initDestPipeline(ctx context.Context) error {
+func (e *copyS2SMigrationEnumeratorBase) initDestPipeline(ctx context.Context) error {
 	switch e.FromTo {
 	// Currently, e.CredentialInfo is always for the target needs to trigger copy API.
 	// In this case, blob destination will use it which needs to call StageBlockFromURL later.
@@ -57,7 +57,8 @@ func (e *copyS2SEnumeratorBase) initDestPipeline(ctx context.Context) error {
 
 // createDestBucket creates bucket level resource for destination, e.g. container for blob, share for file, and etc.
 // TODO: Ensure if metadata in bucket level need be copied, currently not copy metadata in bucket level as azcopy-v1.
-func (e *copyS2SEnumeratorBase) createDestBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
+func (e *copyS2SMigrationEnumeratorBase) createDestBucket(ctx context.Context, destURL url.URL, metadata common.Metadata) error {
+	// TODO: For dry run, createDestBucket should do nothing and directly return.
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		if e.destBlobPipeline == nil {
@@ -81,7 +82,7 @@ func (e *copyS2SEnumeratorBase) createDestBucket(ctx context.Context, destURL ur
 }
 
 // validateDestIsService check if destination is a service level URL.
-func (e *copyS2SEnumeratorBase) validateDestIsService(ctx context.Context, destURL url.URL) error {
+func (e *copyS2SMigrationEnumeratorBase) validateDestIsService(ctx context.Context, destURL url.URL) error {
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		if e.destBlobPipeline == nil {

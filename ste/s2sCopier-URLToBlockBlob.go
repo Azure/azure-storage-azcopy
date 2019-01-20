@@ -162,7 +162,7 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 	return createCopyChunkFunc(c.jptm, id, func() {
 		jptm := c.jptm
 
-		jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
+		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
 		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.srcHTTPHeaders, c.srcMetadata, azblob.BlobAccessConditions{}); err != nil {
 			jptm.FailActiveS2SCopy("Creating empty blob", err)
@@ -183,7 +183,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockId(blockIndex, encodedBlockID)
-		jptm.LogChunkStatus(id, common.EWaitReason.CopyOnWire())
+		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
 		if err != nil {
 			jptm.FailActiveS2SCopy("Staging block", err)

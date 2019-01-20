@@ -99,7 +99,7 @@ type rawCopyCmdArgs struct {
 	// whether user wants to preserves full properties during service to service copy, the default value is true.
 	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	preserveProperties bool
+	preserveS2SProperties bool
 }
 
 // validates and transform raw input into cooked input
@@ -258,13 +258,19 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
 		}
+		if cooked.preserveS2SProperties {
+			return cooked, fmt.Errorf("preserveS2SProperties is set to true while uploading")
+		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while downloading")
+			return cooked, fmt.Errorf("blob-tier is set while uploading to Azure File")
+		}
+		if cooked.preserveS2SProperties {
+			return cooked, fmt.Errorf("preserveS2SProperties is set to true while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -281,24 +287,27 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
 		}
+		if cooked.preserveS2SProperties {
+			return cooked, fmt.Errorf("preserveS2SProperties is set to true while downloading")
+		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
 		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from sevice to service")
+			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from service to service")
 		}
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from sevice to service")
+			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from service to service")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while copying from sevice to service")
+			return cooked, fmt.Errorf("blob-tier is set while copying from service to service")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from sevice to service")
+			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from service to service")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from sevice to service")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from service to service")
 		}
 	}
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
@@ -319,7 +328,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 	}
 
-	cooked.preserveProperties = raw.preserveProperties
+	cooked.preserveS2SProperties = raw.preserveS2SProperties
 
 	return cooked, nil
 }
@@ -392,7 +401,7 @@ type cookedCopyCmdArgs struct {
 	// whether user wants to preserves full properties during service to service copy, the default value is true.
 	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	preserveProperties bool
+	preserveS2SProperties bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -688,24 +697,24 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobBlob():
-		e := copyS2SBlobEnumerator{
-			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
+		e := copyS2SMigrationBlobEnumerator{
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileBlob():
-		e := copyS2SFileEnumerator{
-			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
+		e := copyS2SMigrationFileEnumerator{
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.S3Blob():
-		e := copyS2SS3Enumerator{ // S3 enumerator for S2S copy.
-			copyS2SEnumeratorBase: copyS2SEnumeratorBase{
+		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
@@ -978,7 +987,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveProperties, "preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveS2SProperties, "preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
 		"For S3 and Azure File source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 
 	// not implemented

@@ -151,7 +151,7 @@ var downloadWaitReasons = []WaitReason{
 }
 
 // extra status used only by S2S copy
-func (WaitReason) CopyOnWire() WaitReason { return WaitReason("CopyOnWire") } // waiting for the copy on wire get finished
+func (WaitReason) S2SCopyOnWire() WaitReason { return WaitReason("S2SCopyOnWire") } // waiting for S2S copy on wire get finished
 
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot

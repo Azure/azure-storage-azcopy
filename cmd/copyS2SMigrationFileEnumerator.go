@@ -12,18 +12,18 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-// copyS2SFileEnumerator enumerates file source, and submit request for copy file to N,
+// copyS2SMigrationFileEnumerator enumerates file source, and submit request for copy file to N,
 // where N stands for blob/file/blobFS (Currently only blob is supported).
 // The source could be single file/directory/share/file account
-type copyS2SFileEnumerator struct {
-	copyS2SEnumeratorBase
+type copyS2SMigrationFileEnumerator struct {
+	copyS2SMigrationEnumeratorBase
 
 	// source Azure File resources
 	srcFilePipeline         pipeline.Pipeline
 	srcFileURLPartExtension fileURLPartsExtension
 }
 
-func (e *copyS2SFileEnumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
+func (e *copyS2SMigrationFileEnumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
 	if err = e.initEnumeratorCommon(ctx, cca); err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (e *copyS2SFileEnumerator) initEnumerator(ctx context.Context, cca *cookedC
 	return nil
 }
 
-func (e *copyS2SFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	ctx := context.TODO()
 
 	if err := e.initEnumerator(ctx, cca); err != nil {
@@ -128,7 +128,7 @@ func (e *copyS2SFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 }
 
 // addTransferFromAccount enumerates shares in account, and adds matched file into transfer.
-func (e *copyS2SFileEnumerator) addTransferFromAccount(ctx context.Context,
+func (e *copyS2SMigrationFileEnumerator) addTransferFromAccount(ctx context.Context,
 	srcServiceURL azfile.ServiceURL, destBaseURL url.URL,
 	sharePrefix, fileOrDirectoryPrefix, fileNamePattern string, cca *cookedCopyCmdArgs) error {
 	return enumerateSharesInAccount(
@@ -162,7 +162,7 @@ func (e *copyS2SFileEnumerator) addTransferFromAccount(ctx context.Context,
 
 // addTransfersFromDirectory enumerates files in directory and sub directoreis,
 // and adds matched file into transfer.
-func (e *copyS2SFileEnumerator) addTransfersFromDirectory(ctx context.Context,
+func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.Context,
 	srcDirectoryURL azfile.DirectoryURL, destBaseURL url.URL,
 	fileOrDirNamePrefix, fileNamePattern, parentSourcePath string,
 	includExcludeShare, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
@@ -209,7 +209,7 @@ func (e *copyS2SFileEnumerator) addTransfersFromDirectory(ctx context.Context,
 			}
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
-			if cca.preserveProperties {
+			if cca.preserveS2SProperties {
 				p, err := fileURL.GetProperties(ctx)
 				if err != nil {
 					return err
@@ -230,7 +230,7 @@ func (e *copyS2SFileEnumerator) addTransfersFromDirectory(ctx context.Context,
 		})
 }
 
-func (e *copyS2SFileEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
+func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
@@ -247,7 +247,7 @@ func (e *copyS2SFileEnumerator) addFileToNTransfer(srcURL, destURL url.URL, prop
 		cca)
 }
 
-func (e *copyS2SFileEnumerator) addFileToNTransfer2(srcURL, destURL url.URL, properties *azfile.FileProperty,
+func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer2(srcURL, destURL url.URL, properties *azfile.FileProperty,
 	cca *cookedCopyCmdArgs) error {
 	return e.addTransfer(common.CopyTransfer{
 		Source:      gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
@@ -256,14 +256,14 @@ func (e *copyS2SFileEnumerator) addFileToNTransfer2(srcURL, destURL url.URL, pro
 		cca)
 }
 
-func (e *copyS2SFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer(&(e.CopyJobPartOrderRequest), transfer, cca)
 }
 
-func (e *copyS2SFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
 	return dispatchFinalPart(&(e.CopyJobPartOrderRequest), cca)
 }
 
-func (e *copyS2SFileEnumerator) partNum() common.PartNumber {
+func (e *copyS2SMigrationFileEnumerator) partNum() common.PartNumber {
 	return e.PartNum
 }
