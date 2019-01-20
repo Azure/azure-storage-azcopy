@@ -156,7 +156,7 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 		}
 	}
 
-	token, err := JSONToTokenInfo(tokenInfo)
+	token, err := jsonToTokenInfo(tokenInfo)
 	if err != nil {
 		return nil, err
 	}

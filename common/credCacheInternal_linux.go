@@ -113,7 +113,7 @@ func (c *CredCacheInternalIntegration) loadTokenInternal() (*OAuthTokenInfo, err
 		return nil, fmt.Errorf("failed to get token from gnome keyring, %v", err)
 	}
 
-	token, err := JSONToTokenInfo([]byte(data))
+	token, err := jsonToTokenInfo([]byte(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token during loading token, %v", err)
 	}
