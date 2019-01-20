@@ -153,7 +153,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	c.isPermSet = false
 	c.key = nil
 
-	b, err := token.ToJSON()
+	b, err := token.toJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal during saving token, %v", err)
 	}
@@ -197,7 +197,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load token, %v", err)
 	}
-	token, err := JSONToTokenInfo(data)
+	token, err := jsonToTokenInfo(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token during loading key, %v", err)
 	}

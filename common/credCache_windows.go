@@ -143,7 +143,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 		return nil, fmt.Errorf("failed to decrypt bytes during loading token: %v", err)
 	}
 
-	token, err := JSONToTokenInfo(decryptedB)
+	token, err := jsonToTokenInfo(decryptedB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token during loading token, %v", err)
 	}
@@ -169,7 +169,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	}
 	tempPath := newFile.Name()
 
-	json, err := token.ToJSON()
+	json, err := token.toJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal token, %v", err)
 	}

@@ -146,7 +146,7 @@ func (c *CredCache) removeCachedTokenInternal() error {
 
 // saveTokenInternal saves an oauth token in keychain(use user's default keychain, i.e. login keychain).
 func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
-	b, err := token.ToJSON()
+	b, err := token.toJSON()
 	if err != nil {
 		return fmt.Errorf("failed to marshal during saving token, %v", err)
 	}
@@ -199,7 +199,7 @@ func (c *CredCache) loadTokenInternal() (*OAuthTokenInfo, error) {
 		return nil, errors.New("failed to find cached token during loading token")
 	}
 	data := results[0].Data
-	token, err := JSONToTokenInfo(data)
+	token, err := jsonToTokenInfo(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal token during loading token, %v", err)
 	}
