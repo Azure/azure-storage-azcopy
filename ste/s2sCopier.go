@@ -73,27 +73,3 @@ func createCopyChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func(
 	// For s2s copy, we set the chunk status to done as soon as the chunkFunc completes.
 	return createChunkFunc(true, jptm, id, body)
 }
-
-// createChunkFunc adds a standard prefix, which all chunkFuncs require, to the given body
-func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
-	return func(workerId int) {
-
-		// BEGIN standard prefix that all chunk funcs need
-		defer jptm.ReportChunkDone() // whether successful or failed, it's always "done" and we must always tell the jptm
-
-		jptm.OccupyAConnection() // TODO: added the two operations for debugging purpose. remove later
-		defer jptm.ReleaseAConnection()
-
-		if jptm.WasCanceled() {
-			jptm.LogChunkStatus(id, common.EWaitReason.Cancelled())
-			return
-		} else {
-			if setDoneStatusOnExit {
-				defer jptm.LogChunkStatus(id, common.EWaitReason.ChunkDone())
-			}
-		}
-		// END standard prefix
-
-		body()
-	}
-}

@@ -9,18 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-)
-
-const (
-	plNotNeeded   = -1
-	plNeedUnknown = 0
-	plNeeded      = 1
 )
 
 type urlToBlockBlobCopier struct {
@@ -107,20 +100,20 @@ func (c *urlToBlockBlobCopier) Prologue() {
 func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 	// TODO: use sync version of copy blob from URL, when the blob size is small enough.
 	if blockIndex == 0 && adjustedChunkSize == 0 {
-		c.setPutListNeed(plNotNeeded)
+		setPutListNeed(&c.putListIndicator, putListNotNeeded)
 		return c.generateCreateEmptyBlob(id)
 	}
 
-	c.setPutListNeed(plNeeded)
+	setPutListNeed(&c.putListIndicator, putListNeeded)
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
 
 func (c *urlToBlockBlobCopier) Epilogue() {
 	c.mu.Lock()
-	shouldPutBlockList := c.putListIndicator
 	blockIDs := c.blockIDs
 	c.mu.Unlock()
-	if shouldPutBlockList == plNeedUnknown {
+	shouldPutBlockList := getPutListNeed(&c.putListIndicator)
+	if shouldPutBlockList == putListNeedUnknown {
 		c.jptm.Panic(errors.New("'put list' need flag was never set"))
 	}
 
@@ -128,7 +121,7 @@ func (c *urlToBlockBlobCopier) Epilogue() {
 	// TODO: keep align with upload, finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
 	// commit block list if necessary
-	if jptm.TransferStatus() > 0 && shouldPutBlockList == plNeeded {
+	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
@@ -190,13 +183,6 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			return
 		}
 	})
-}
-
-func (c *urlToBlockBlobCopier) setPutListNeed(value int32) {
-	previous := atomic.SwapInt32(&c.putListIndicator, value)
-	if previous != plNeedUnknown && previous != value {
-		c.jptm.Panic(errors.New("'put list' need cannot be set twice"))
-	}
 }
 
 func (c *urlToBlockBlobCopier) setBlockId(index int32, value string) {

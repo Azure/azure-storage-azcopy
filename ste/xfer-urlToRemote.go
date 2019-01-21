@@ -126,10 +126,6 @@ func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cp
 	}
 }
 
-func isDummyChunkInEmptyFile(srcSize, startIndex int64) bool {
-	return srcSize == 0 && startIndex == 0
-}
-
 // Complete epilogue. Handles both success and failure.
 // Most of the processing is delegated to the s2sCopier object, since details will
 // depend on the destination type
