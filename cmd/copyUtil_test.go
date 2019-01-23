@@ -21,14 +21,9 @@
 package cmd
 
 import (
-	"net/url"
-	"testing"
-
 	chk "gopkg.in/check.v1"
+	"net/url"
 )
-
-// Hookup to the testing framework
-func Test(t *testing.T) { chk.TestingT(t) }
 
 type copyUtilTestSuite struct{}
 
