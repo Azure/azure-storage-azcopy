@@ -53,6 +53,11 @@ func (i *interceptor) init() {
 	glcm = mockedLifecycleManager{}
 }
 
+func (i *interceptor) reset() {
+	i.transfers = make([]common.CopyTransfer, 0)
+	i.lastRequest = nil
+}
+
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct{}
 

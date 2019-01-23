@@ -119,9 +119,9 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 	}
 	s := strings.Builder{}
 	for _, arg := range args {
-		// If the argument starts with https, it is either the remote source or remote destination
+		// If the argument starts with http, it is either the remote source or remote destination
 		// If there exists a signature in the argument string it needs to be redacted
-		if startsWith(arg, "https") {
+		if startsWith(arg, "http") {
 			// parse the url
 			argUrl, err := url.Parse(arg)
 			// If there is an error parsing the url, then throw the error
@@ -414,10 +414,10 @@ func (util copyHandlerUtil) appendBlobNameToUrl(blobUrlParts azblob.BlobURLParts
 	return blobUrlParts.URL(), blobUrlParts.BlobName
 }
 
-// sourceRootPathWithoutWildCards returns the directory from path that does not have wildCards
+// getRootPathWithoutWildCards returns the directory from path that does not have wildCards
 // returns the patterns that defines pattern for relativePath of files to the above mentioned directory
 // For Example: source = C:\User\a*\a1*\*.txt rootDir = C:\User\ pattern = a*\a1*\*.txt
-func (util copyHandlerUtil) sourceRootPathWithoutWildCards(path string) (string, string) {
+func (util copyHandlerUtil) getRootPathWithoutWildCards(path string) (string, string) {
 	if len(path) == 0 {
 		return path, "*"
 	}

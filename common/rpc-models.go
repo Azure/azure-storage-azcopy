@@ -74,8 +74,8 @@ type SyncJobPartOrderRequest struct {
 	FromTo           FromTo
 	PartNumber       PartNumber
 	LogLevel         LogLevel
-	Include          map[string]int
-	Exclude          map[string]int
+	Include          []string
+	Exclude          []string
 	BlockSizeInBytes uint32
 	SourceSAS        string
 	DestinationSAS   string
@@ -89,7 +89,7 @@ type SyncJobPartOrderRequest struct {
 	CommandString  string
 	CredentialInfo CredentialInfo
 
-	SourceFiles map[string]time.Time
+	LocalFiles map[string]time.Time
 
 	SourceFilesToExclude map[string]time.Time
 }
