@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
 )
 
@@ -35,4 +37,16 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 		os.Exit(1)
 	}
 	return s3Client
+}
+
+func handleCreateRemoteAzureResource(err error) error {
+	if err != nil {
+		// Skip the error, when resource already exists.
+		if stgErr, ok := err.(azblob.StorageError); !ok ||
+			(stgErr.Response().StatusCode != http.StatusConflict) {
+			return err
+		}
+	}
+
+	return nil
 }

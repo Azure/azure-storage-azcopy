@@ -7,13 +7,15 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -359,18 +361,74 @@ func cleanFileAccount(resourceURL string) {
 	}
 }
 
+func cleanS3Account(resourceURL string) {
+	u, err := url.Parse(resourceURL)
+
+	if err != nil {
+		fmt.Println("fail to parse the S3 service URL, ", err)
+		os.Exit(1)
+	}
+
+	s3URLParts, err := cmd.NewS3URLParts(*u)
+	if err != nil {
+		fmt.Println("new S3 URL parts, ", err)
+		os.Exit(1)
+	}
+
+	s3Client := createS3ClientWithMinio(createS3ResOptions{
+		Location: s3URLParts.Region,
+	})
+
+	buckets, err := s3Client.ListBuckets()
+	if err != nil {
+		fmt.Println("error listing S3 service, ", err)
+		os.Exit(1)
+	}
+	for _, bucket := range buckets {
+		// Remove all the things in bucket with prefix
+		if !strings.HasPrefix(bucket.Name, "s2scopybucket") {
+			continue // skip buckets not created by s2s copy testings.
+		}
+
+		objectsCh := make(chan string)
+
+		go func() {
+			defer close(objectsCh)
+
+			// List all objects from a bucket-name with a matching prefix.
+			for object := range s3Client.ListObjectsV2(bucket.Name, "", true, context.Background().Done()) {
+				if object.Err != nil {
+					fmt.Printf("error listing the object from bucket %q, %v\n", bucket.Name, err)
+					os.Exit(1)
+				}
+				objectsCh <- object.Key
+			}
+		}()
+
+		// List bucket, and delete all the objects in the bucket
+		errChn := s3Client.RemoveObjects(bucket.Name, objectsCh)
+
+		for err := range errChn {
+			fmt.Println("error remove objects from bucket, ", err)
+			os.Exit(1)
+		}
+
+		// Remove the bucket.
+		if err := s3Client.RemoveBucket(bucket.Name); err != nil {
+			fmt.Printf("error deleting the bucket %q from account, %v\n", bucket.Name, err)
+			os.Exit(1)
+		}
+	}
+}
+
 func cleanBfsAccount(resourceURL string) {
-	panic("not implemented")
+	panic("not implemented: not used")
 }
 
 func cleanBucket(resourceURL string) {
-
+	panic("not implemented: not used")
 }
 
 func cleanObject(resourceURL string) {
-
-}
-
-func cleanS3Account(resourceURL string) {
-
+	panic("not implemented: not used")
 }

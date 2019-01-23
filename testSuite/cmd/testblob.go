@@ -15,7 +15,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -61,6 +61,7 @@ type TestBlobCommand struct {
 	ContentLanguage    string
 	CacheControl       string
 	CheckContentMD5    bool
+	CheckContentType   bool
 }
 
 // initializes the testblob command, its aliases and description.
@@ -104,12 +105,15 @@ func init() {
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobType, "blob-type", "BlockBlob", "Upload to Azure Storage using this blob type.")
 	testBlobCmd.PersistentFlags().StringVar(&cmdInput.BlobTier, "blob-tier", string(azblob.AccessTierNone), "access tier type for the block blob")
 	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.PreserveLastModifiedTime, "preserve-last-modified-time", false, "Only available when destination is file system.")
+	testBlobCmd.PersistentFlags().BoolVar(&cmdInput.CheckContentType, "check-content-type", false, "Validate content type.")
 }
 
 // verify the blob downloaded or uploaded.
 func verifyBlob(testBlobCmd TestBlobCommand) {
 	if testBlobCmd.BlobType == "PageBlob" {
 		verifySinglePageBlobUpload(testBlobCmd)
+	} else if testBlobCmd.BlobType == "AppendBlob" {
+		verifySingleAppendBlob(testBlobCmd)
 	} else {
 		if testBlobCmd.IsObjectDirectory {
 			verifyBlockBlobDirUpload(testBlobCmd)
@@ -320,37 +324,48 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		os.Exit(1)
 	}
 
-	// memory mapping the resource on local path.
-	mmap, err := NewMMF(file, false, 0, fileInfo.Size())
-	if err != nil {
-		fmt.Println("error mapping the destination blob file ", err.Error())
-		os.Exit(1)
+	expectedContentType := ""
+
+	if testBlobCmd.NoGuessMimeType {
+		expectedContentType = testBlobCmd.ContentType
 	}
 
-	// calculating and verify the md5 of the resource
-	// both locally and on the container.
-	actualMd5 := md5.Sum(mmap)
-	expectedMd5 := md5.Sum(blobBytesDownloaded)
-	if actualMd5 != expectedMd5 {
-		fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5 for blob ", testBlobCmd.Object)
+	if len(blobBytesDownloaded) != 0 {
+		// memory mapping the resource on local path.
+		mmap, err := NewMMF(file, false, 0, fileInfo.Size())
+		if err != nil {
+			fmt.Println("error mapping the destination blob file ", err.Error())
+			os.Exit(1)
+		}
+
+		// calculating and verify the md5 of the resource
+		// both locally and on the container.
+		actualMd5 := md5.Sum(mmap)
+		expectedMd5 := md5.Sum(blobBytesDownloaded)
+		if actualMd5 != expectedMd5 {
+			fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5 for blob ", testBlobCmd.Object)
+			os.Exit(1)
+		}
+
+		if !testBlobCmd.NoGuessMimeType {
+			expectedContentType = http.DetectContentType(mmap)
+		}
+
+		mmap.Unmap()
+	}
+
+	// verify the content-type
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
+		fmt.Printf(
+			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
+			expectedContentType,
+			get.ContentType())
 		os.Exit(1)
 	}
 
 	// verify the user given metadata supplied while uploading the blob against the metadata actually present in the blob
 	if !validateMetadata(testBlobCmd.MetaData, get.NewMetadata()) {
 		fmt.Println("meta data does not match between the actual and uploaded blob.")
-		os.Exit(1)
-	}
-
-	// verify the content-type
-	expectedContentType := ""
-	if testBlobCmd.NoGuessMimeType {
-		expectedContentType = testBlobCmd.ContentType
-	} else {
-		expectedContentType = http.DetectContentType(mmap)
-	}
-	if !validateString(expectedContentType, get.ContentType()) {
-		fmt.Println("mismatch content type between actual and user given blob")
 		os.Exit(1)
 	}
 
@@ -379,8 +394,6 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 		fmt.Println("ContentMD5 should not be empty")
 		os.Exit(1)
 	}
-
-	mmap.Unmap()
 	file.Close()
 
 	// verify the number of pageranges.
@@ -523,8 +536,11 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 	} else {
 		expectedContentType = http.DetectContentType(mmap)
 	}
-	if !validateString(expectedContentType, get.ContentType()) {
-		fmt.Println("mismatch content type between actual and user given blob content type")
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
+		fmt.Printf(
+			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
+			expectedContentType,
+			get.ContentType())
 		os.Exit(1)
 	}
 
@@ -564,4 +580,147 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			os.Exit(1)
 		}
 	}
+}
+
+func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
+
+	fileInfo, err := os.Stat(testBlobCmd.Object)
+	if err != nil {
+		fmt.Println("error opening the destination blob on local disk ")
+		os.Exit(1)
+	}
+	file, err := os.Open(testBlobCmd.Object)
+	if err != nil {
+		fmt.Println("error opening the file ", testBlobCmd.Object)
+	}
+
+	// getting the shared access signature of the resource.
+	sourceURL, err := url.Parse(testBlobCmd.Subject)
+	if err != nil {
+		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
+		os.Exit(1)
+	}
+
+	p := ste.NewBlobPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
+		Telemetry: azblob.TelemetryOptions{
+			Value: common.UserAgent,
+		},
+	},
+		ste.XferRetryOptions{
+			Policy:        0,
+			MaxTries:      ste.UploadMaxTries,
+			TryTimeout:    10 * time.Minute,
+			RetryDelay:    ste.UploadRetryDelay,
+			MaxRetryDelay: ste.UploadMaxRetryDelay},
+		nil)
+
+	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
+	appendBlobURL := azblob.NewAppendBlobURL(*sourceURL, p)
+
+	// get the blob properties and check the blob tier.
+	if azblob.AccessTierType(testBlobCmd.BlobTier) != azblob.AccessTierNone {
+		blobProperties, err := appendBlobURL.GetProperties(testCtx, azblob.BlobAccessConditions{})
+		if err != nil {
+			fmt.Println(fmt.Sprintf("error getting the properties of the blob. failed with error %s", err.Error()))
+			os.Exit(1)
+		}
+		// If the blob tier does not match the expected blob tier.
+		if !strings.EqualFold(blobProperties.AccessTier(), testBlobCmd.BlobTier) {
+			fmt.Println(fmt.Sprintf("Access blob tier type %s does not match the expected %s tier type", blobProperties.AccessTier(), testBlobCmd.BlobTier))
+			os.Exit(1)
+		}
+		// Closing the blobProperties response body.
+		if blobProperties.Response() != nil {
+			io.Copy(ioutil.Discard, blobProperties.Response().Body)
+			blobProperties.Response().Body.Close()
+		}
+	}
+
+	get, err := appendBlobURL.Download(testCtx, 0, fileInfo.Size(), azblob.BlobAccessConditions{}, false)
+	if err != nil {
+		fmt.Println("unable to get blob properties ", err.Error())
+		os.Exit(1)
+	}
+	// reading all the bytes downloaded.
+	blobBytesDownloaded, err := ioutil.ReadAll(get.Body(azblob.RetryReaderOptions{}))
+	if get.Response().Body != nil {
+		get.Response().Body.Close()
+	}
+	if err != nil {
+		fmt.Println("error reading the byes from response and failed with error ", err.Error())
+		os.Exit(1)
+	}
+
+	// verify the content-type
+	expectedContentType := ""
+
+	if testBlobCmd.NoGuessMimeType {
+		expectedContentType = testBlobCmd.ContentType
+	}
+
+	if len(blobBytesDownloaded) != 0 {
+		// memory mapping the resource on local path.
+		mmap, err := NewMMF(file, false, 0, fileInfo.Size())
+		if err != nil {
+			fmt.Println("error mapping the destination blob file ", err.Error())
+			os.Exit(1)
+		}
+
+		// calculating and verify the md5 of the resource
+		// both locally and on the container.
+		actualMd5 := md5.Sum(mmap)
+		expectedMd5 := md5.Sum(blobBytesDownloaded)
+		if actualMd5 != expectedMd5 {
+			fmt.Println("the uploaded blob's md5 doesn't matches the actual blob's md5 for blob ", testBlobCmd.Object)
+			os.Exit(1)
+		}
+
+		if !testBlobCmd.NoGuessMimeType {
+			expectedContentType = http.DetectContentType(mmap)
+		}
+
+		mmap.Unmap()
+	}
+
+	// verify the user given metadata supplied while uploading the blob against the metadata actually present in the blob
+	if !validateMetadata(testBlobCmd.MetaData, get.NewMetadata()) {
+		fmt.Println("meta data does not match between the actual and uploaded blob.")
+		os.Exit(1)
+	}
+
+	if testBlobCmd.CheckContentType && !validateString(expectedContentType, get.ContentType()) {
+		fmt.Printf(
+			"mismatch content type between actual and user given blob content type, expected %q, actually %q\n",
+			expectedContentType,
+			get.ContentType())
+		os.Exit(1)
+	}
+
+	//verify the content-encoding
+	if !validateString(testBlobCmd.ContentEncoding, get.ContentEncoding()) {
+		fmt.Println("mismatch ContentEncoding between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if !validateString(testBlobCmd.CacheControl, get.CacheControl()) {
+		fmt.Println("mismatch CacheControl between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if !validateString(testBlobCmd.ContentDisposition, get.ContentDisposition()) {
+		fmt.Println("mismatch ContentDisposition between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if !validateString(testBlobCmd.ContentLanguage, get.ContentLanguage()) {
+		fmt.Println("mismatch ContentLanguage between actual and user given blob")
+		os.Exit(1)
+	}
+
+	if testBlobCmd.CheckContentMD5 && (get.ContentMD5() == nil || len(get.ContentMD5()) == 0) {
+		fmt.Println("ContentMD5 should not be empty")
+		os.Exit(1)
+	}
+
+	file.Close()
 }

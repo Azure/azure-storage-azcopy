@@ -79,6 +79,10 @@ class Command(object):
     def execute_azcopy_info(self):
         return verify_operation_get_output(self.string())
 
+    # api executes the testSuite's upload command to upload(prepare) data to source URL.
+    def execute_testsuite_upload(self):
+        return verify_operation(self.string())
+
 # processes oauth command according to swtiches
 def process_oauth_command(
     cmd,
@@ -99,6 +103,13 @@ def clean_test_blob_account(account):
     result = Command("clean").add_arguments(account).add_flags("serviceType", "Blob").add_flags("resourceType", "Account").execute_azcopy_clean()
     if not result:
         print("error cleaning the blob account. please check the account sas provided")
+        return False
+    return True
+
+def clean_test_s3_account(account):
+    result = Command("clean").add_arguments(account).add_flags("serviceType", "S3").add_flags("resourceType", "Account").execute_azcopy_clean()
+    if not result:
+        print("error cleaning the S3 account.")
         return False
     return True
 
@@ -127,7 +138,7 @@ def clean_test_filesystem(fileSystemURLStr):
 
 # initialize_test_suite initializes the setup for executing test cases.
 def initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas, filesystem_url, 
-                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                          s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
     # test_directory_path is global variable holding the location of test directory to execute all the test cases.
     # contents are created, copied, uploaded and downloaded to and from this test directory only
     global test_directory_path
@@ -159,11 +170,11 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     # holds the filesystem url to perform the operations for blob fs service
     global test_bfs_account_url
 
+    # holds account for s2s copy tests
     global test_s2s_src_blob_account_url
-
     global test_s2s_dst_blob_account_url
-
     global test_s2s_src_file_account_url
+    global test_s2s_src_s3_service_url
 
     # creating a test_directory in the location given by user.
     # this directory will be used to created and download all the test files.
@@ -234,6 +245,10 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
 
     test_s2s_dst_blob_account_url = s2s_dst_blob_account_url
     if not clean_test_blob_account(test_s2s_dst_blob_account_url):
+        return False
+
+    test_s2s_src_s3_service_url = s2s_src_s3_service_url
+    if not clean_test_s3_account(test_s2s_src_s3_service_url):
         return False
 
     # cleaning the test share provided

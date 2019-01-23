@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/cmd"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
 	"github.com/spf13/cobra"
 )
@@ -212,8 +212,8 @@ func createContainer(container string) {
 	containerURL := azblob.NewContainerURL(*u, p)
 	_, err = containerURL.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
 
-	if err != nil {
-		fmt.Println("error createContainer, ", err)
+	if handleCreateRemoteAzureResource(err) != nil {
+		fmt.Println("fail to create container, ", err)
 		os.Exit(1)
 	}
 }
@@ -257,12 +257,28 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 
 	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 
-	// Suppose it's a directory or share, try create and doesn't care if error happened.
-	dirURL := azfile.NewDirectoryURL(*u, p)
-	_, _ = dirURL.Create(context.Background(), azfile.Metadata{})
+	fileURLPart := azfile.NewFileURLParts(*u)
 
-	shareURL := azfile.NewShareURL(*u, p)
-	_, _ = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+	isShare := false
+	if fileURLPart.ShareName != "" && fileURLPart.DirectoryOrFilePath == "" {
+		isShare = true
+		// This is a share
+		shareURL := azfile.NewShareURL(*u, p)
+		_, err := shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+		if handleCreateRemoteAzureResource(err) != nil {
+			fmt.Println("fail to create share, ", err)
+			os.Exit(1)
+		}
+	}
+
+	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
+	if !isShare {
+		_, err := dirURL.Create(context.Background(), azfile.Metadata{})
+		if handleCreateRemoteAzureResource(err) != nil {
+			fmt.Println("fail to create directory, ", err)
+			os.Exit(1)
+		}
+	}
 
 	// Finally valdiate if directory with specified URL exists, if doesn't exist, then report create failure.
 	time.Sleep(1 * time.Second)
@@ -317,8 +333,11 @@ func createBucket(bucketURLStr string) {
 	})
 
 	if err := s3Client.MakeBucket(s3URLParts.BucketName, s3URLParts.Region); err != nil {
-		fmt.Println("fail to create bucket, ", err)
-		os.Exit(1)
+		exists, err := s3Client.BucketExists(s3URLParts.BucketName)
+		if err != nil || !exists {
+			fmt.Println("fail to create bucket, ", err)
+			os.Exit(1)
+		}
 	}
 }
 

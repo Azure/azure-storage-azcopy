@@ -193,7 +193,7 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 	case ECredentialType.S3AccessKey():
 		accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 		secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-		sessionToken := os.Getenv("AWS_SESSION_TOKEN") // region is optional
+		sessionToken := os.Getenv("AWS_SESSION_TOKEN")
 
 		if accessKeyID == "" || secretAccessKey == "" {
 			options.panicError(errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment vars must be set before creating the S3 AccessKey credential"))
