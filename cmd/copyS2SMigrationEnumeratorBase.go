@@ -9,7 +9,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 // copyS2SMigrationEnumeratorBase is the base of other service to service copy enumerators,
@@ -35,6 +35,10 @@ func (e *copyS2SMigrationEnumeratorBase) initEnumeratorCommon(ctx context.Contex
 	}
 	if e.destURL, err = url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination)); err != nil {
 		return errors.New("cannot parse destination URL")
+	}
+
+	if err := e.initDestPipeline(ctx); err != nil {
+		return err
 	}
 
 	return nil

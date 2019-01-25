@@ -13,7 +13,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 type urlToBlockBlobCopier struct {
@@ -26,6 +26,7 @@ type urlToBlockBlobCopier struct {
 	blockIDs         []string
 	srcHTTPHeaders   azblob.BlobHTTPHeaders
 	srcMetadata      azblob.Metadata
+	destBlobTier     azblob.AccessTierType
 
 	putListIndicator int32       // accessed via sync.atomic
 	mu               *sync.Mutex // protects the fields below
@@ -58,6 +59,16 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, source string, destinatio
 		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()
 	}
 
+	// Get blob tier properly.
+	destBlobTier := azblob.AccessTierNone
+	if info.SrcBlobType == azblob.BlobBlockBlob {
+		destBlobTier = info.SrcBlobTier
+	}
+	blockBlobTierOverride, _ := jptm.BlobTiers()
+	if blockBlobTierOverride != common.EBlockBlobTier.None() {
+		destBlobTier = blockBlobTierOverride.ToAccessTierType()
+	}
+
 	return &urlToBlockBlobCopier{
 		jptm:             jptm,
 		srcURL:           *srcURL,
@@ -68,6 +79,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, source string, destinatio
 		blockIDs:         make([]string, numChunks),
 		srcHTTPHeaders:   info.SrcHTTPHeaders,
 		srcMetadata:      azblobMetadata,
+		destBlobTier:     destBlobTier,
 		mu:               &sync.Mutex{}}, nil
 }
 
@@ -80,16 +92,7 @@ func (c *urlToBlockBlobCopier) NumChunks() uint32 {
 }
 
 func (c *urlToBlockBlobCopier) RemoteFileExists() (bool, error) {
-	if _, err := c.destBlockBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}); err != nil {
-		if stgErr, ok := err.(azblob.StorageError); ok && stgErr.Response().StatusCode == http.StatusNotFound {
-			// If status code is not found, then the file doesn't exist
-			return false, nil
-		}
-		return false, err
-	} else {
-		// If err equals nil, the file exists
-		return true, nil
-	}
+	return remoteObjectExists(c.destBlockBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
 func (c *urlToBlockBlobCopier) Prologue() {
@@ -133,7 +136,15 @@ func (c *urlToBlockBlobCopier) Epilogue() {
 		}
 	}
 
-	// TODO: set blob tier
+	// Set tier
+	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
+	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	if jptm.TransferStatus() > 0 && c.destBlobTier != azblob.AccessTierNone {
+		_, err := c.destBlockBlobURL.SetTier(jptm.Context(), c.destBlobTier, azblob.LeaseAccessConditions{})
+		if err != nil {
+			jptm.FailActiveS2SCopyWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
+		}
+	}
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 {
@@ -179,7 +190,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
 		if err != nil {
-			jptm.FailActiveS2SCopy("Staging block", err)
+			jptm.FailActiveS2SCopy("Staging block from URL", err)
 			return
 		}
 	})

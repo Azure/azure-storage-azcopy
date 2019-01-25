@@ -103,16 +103,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.FileBlob():
 		fallthrough
 	case common.EFromTo.S3Blob():
-		switch blobType {
-		case common.EBlobType.None(),
-			common.EBlobType.BlockBlob():
-			//return URLToBlockBlob
-			return parameterizeS2SCopy(urlToRemote, newURLToBlockBlobCopier)
-		case common.EBlobType.PageBlob():
-			return parameterizeS2SCopy(urlToRemote, newURLToPageBlobCopier)
-		case common.EBlobType.AppendBlob():
-			return parameterizeS2SCopy(urlToRemote, newURLToAppendBlobCopier)
-		}
+		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier)
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 }

@@ -52,10 +52,6 @@ func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *
 		return err
 	}
 
-	if err = e.initDestPipeline(ctx); err != nil {
-		return err
-	}
-
 	return
 }
 

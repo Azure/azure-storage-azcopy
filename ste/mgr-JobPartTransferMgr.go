@@ -12,8 +12,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 type IJobPartTransferMgr interface {
@@ -23,6 +23,7 @@ type IJobPartTransferMgr interface {
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
 	MD5ValidationOption() common.HashValidationOption
+	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
@@ -56,6 +57,7 @@ type IJobPartTransferMgr interface {
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
+	LogTransferInfo(level pipeline.LogLevel, source, destination, msg string)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
@@ -68,11 +70,11 @@ type TransferInfo struct {
 	SourceSize  int64
 	Destination string
 
+	// Transfer info for S2S copy
 	SrcHTTPHeaders azblob.BlobHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
 	SrcMetadata    common.Metadata
-
-	// Transfer info for blob only
-	SrcBlobType azblob.BlobType
+	SrcBlobType    azblob.BlobType
+	SrcBlobTier    azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
@@ -130,7 +132,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
@@ -188,6 +190,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SrcHTTPHeaders: srcHTTPHeaders,
 		SrcMetadata:    srcMetadata,
 		SrcBlobType:    srcBlobType,
+		SrcBlobTier:    srcBlobTier,
 	}
 }
 
@@ -231,6 +234,10 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 
 func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {
 	return jptm.jobPartMgr.(*jobPartMgr).localDstData().MD5VerificationOption
+}
+
+func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
+	return jptm.jobPartMgr.BlobTypeOverride()
 }
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
@@ -455,6 +462,14 @@ func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, descriptio
 			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
 			common.URLStringExtension(destination).RedactSecretQueryParamForLogging(),
 			description))
+}
+
+func (jptm *jobPartTransferMgr) LogTransferInfo(level pipeline.LogLevel, source, destination, msg string) {
+	jptm.Log(level,
+		fmt.Sprintf("Transfer: Source %q Destination %q. %s",
+			common.URLStringExtension(source).RedactSecretQueryParamForLogging(),
+			common.URLStringExtension(destination).RedactSecretQueryParamForLogging(),
+			msg))
 }
 
 func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }

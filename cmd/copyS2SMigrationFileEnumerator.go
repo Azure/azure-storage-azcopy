@@ -40,9 +40,6 @@ func (e *copyS2SMigrationFileEnumerator) initEnumerator(ctx context.Context, cca
 	if err != nil {
 		return err
 	}
-	if err := e.initDestPipeline(ctx); err != nil {
-		return err
-	}
 
 	e.srcFileURLPartExtension = fileURLPartsExtension{azfile.NewFileURLParts(*e.sourceURL)}
 

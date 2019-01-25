@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
@@ -126,7 +126,7 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType) {
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
@@ -166,6 +166,11 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		tmpBlobTypeStr := []byte(jpph.getString(offset, t.SrcBlobTypeLength))
 		blobType = azblob.BlobType(tmpBlobTypeStr)
 		offset += int64(t.SrcBlobTypeLength)
+	}
+	if t.SrcBlobTierLength != 0 {
+		tmpBlobTierStr := []byte(jpph.getString(offset, t.SrcBlobTierLength))
+		blobTier = azblob.AccessTierType(tmpBlobTierStr)
+		offset += int64(t.SrcBlobTierLength)
 	}
 
 	return
@@ -248,7 +253,7 @@ type JobPartPlanTransfer struct {
 	SrcContentMD5Length         int16
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
-	//SrcBlobTierLength           int16
+	SrcBlobTierLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

@@ -2,13 +2,12 @@ package ste
 
 import (
 	"context"
-	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -56,14 +55,15 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, source string, destinati
 	}
 
 	return &urlToAppendBlobCopier{
-		jptm:              jptm,
-		srcURL:            *srcURL,
-		destAppendBlobURL: destAppendBlobURL,
-		chunkSize:         chunkSize,
-		numChunks:         numChunks,
-		pacer:             pacer,
-		srcHTTPHeaders:    info.SrcHTTPHeaders,
-		srcMetadata:       azblobMetadata}, nil
+		jptm:                   jptm,
+		srcURL:                 *srcURL,
+		destAppendBlobURL:      destAppendBlobURL,
+		chunkSize:              chunkSize,
+		numChunks:              numChunks,
+		pacer:                  pacer,
+		srcHTTPHeaders:         info.SrcHTTPHeaders,
+		srcMetadata:            azblobMetadata,
+		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
 func (c *urlToAppendBlobCopier) ChunkSize() uint32 {
@@ -75,16 +75,7 @@ func (c *urlToAppendBlobCopier) NumChunks() uint32 {
 }
 
 func (c *urlToAppendBlobCopier) RemoteFileExists() (bool, error) {
-	if _, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}); err != nil {
-		if stgErr, ok := err.(azblob.StorageError); ok && stgErr.Response().StatusCode == http.StatusNotFound {
-			// If status code is not found, then the file doesn't exist
-			return false, nil
-		}
-		return false, err
-	} else {
-		// If err equals nil, the file exists
-		return true, nil
-	}
+	return remoteObjectExists(c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
 func (c *urlToAppendBlobCopier) Prologue() {
@@ -122,7 +113,11 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		}
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		// TODO: Using AppendBlobFromURL to fulfill the copy
+		_, err = c.destAppendBlobURL.AppendBlockFromURL(jptm.Context(), c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.AppendBlobAccessConditions{}, nil)
+		if err != nil {
+			jptm.FailActiveS2SCopy("Appending block from URL", err)
+			return
+		}
 	})
 }
 

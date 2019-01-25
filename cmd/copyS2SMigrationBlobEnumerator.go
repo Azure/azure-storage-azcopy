@@ -9,7 +9,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 // copyS2SMigrationBlobEnumerator enumerates blob source, and submit request for copy blob to N,
@@ -40,9 +40,6 @@ func (e *copyS2SMigrationBlobEnumerator) initEnumerator(ctx context.Context, cca
 	e.srcBlobPipeline, err = createBlobPipeline(ctx,
 		common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
 	if err != nil {
-		return err
-	}
-	if err := e.initDestPipeline(ctx); err != nil {
 		return err
 	}
 
@@ -223,51 +220,48 @@ func (e *copyS2SMigrationBlobEnumerator) addTransfersFromContainer(ctx context.C
 
 func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
-	return e.addTransfer(common.CopyTransfer{
-		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
-		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
-		LastModifiedTime:   properties.LastModified,
-		SourceSize:         *properties.ContentLength,
-		ContentType:        *properties.ContentType,
-		ContentEncoding:    *properties.ContentEncoding,
-		ContentDisposition: *properties.ContentDisposition,
-		ContentLanguage:    *properties.ContentLanguage,
-		CacheControl:       *properties.CacheControl,
-		ContentMD5:         properties.ContentMD5,
-		Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata),
-		BlobType:           getBlobType(properties.BlobType, cca.blobType)},
-		//BlobTier:           string(properties.AccessTier)}, // TODO: blob tier setting correctly
+	return e.addTransfer(
+		common.CopyTransfer{
+			Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+			Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
+			LastModifiedTime:   properties.LastModified,
+			SourceSize:         *properties.ContentLength,
+			ContentType:        *properties.ContentType,
+			ContentEncoding:    *properties.ContentEncoding,
+			ContentDisposition: *properties.ContentDisposition,
+			ContentLanguage:    *properties.ContentLanguage,
+			CacheControl:       *properties.CacheControl,
+			ContentMD5:         properties.ContentMD5,
+			Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata),
+			BlobType:           properties.BlobType,
+			BlobTier:           e.getAccessTier(properties.AccessTier, cca.preserveS2SAccessTier),
+		},
 		cca)
 }
 
 func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
-	return e.addTransfer(common.CopyTransfer{
-		Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
-		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
-		LastModifiedTime:   properties.LastModified(),
-		SourceSize:         properties.ContentLength(),
-		ContentType:        properties.ContentType(),
-		ContentEncoding:    properties.ContentEncoding(),
-		ContentDisposition: properties.ContentDisposition(),
-		ContentLanguage:    properties.ContentLanguage(),
-		CacheControl:       properties.CacheControl(),
-		ContentMD5:         properties.ContentMD5(),
-		Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata()),
-		BlobType:           getBlobType(properties.BlobType(), cca.blobType)},
-		//BlobTier:           properties.AccessTier()}, // TODO: blob tier setting correctly
+	return e.addTransfer(
+		common.CopyTransfer{
+			Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
+			Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
+			LastModifiedTime:   properties.LastModified(),
+			SourceSize:         properties.ContentLength(),
+			ContentType:        properties.ContentType(),
+			ContentEncoding:    properties.ContentEncoding(),
+			ContentDisposition: properties.ContentDisposition(),
+			ContentLanguage:    properties.ContentLanguage(),
+			CacheControl:       properties.CacheControl(),
+			ContentMD5:         properties.ContentMD5(),
+			Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata()),
+			BlobType:           properties.BlobType(),
+			BlobTier:           e.getAccessTier(azblob.AccessTierType(properties.AccessTier()), cca.preserveS2SAccessTier),
+		},
 		cca)
 }
 
-func getBlobType(srcBlobType azblob.BlobType, specifiedBlobType common.BlobType) azblob.BlobType {
-	blobType := srcBlobType
-	if specifiedBlobType != common.EBlobType.None() {
-		blobType = azblob.BlobType(specifiedBlobType.String())
-
-		glcm.Info(fmt.Sprintf("Saving blob as %v.", blobType))
-	}
-
-	return blobType
+func (e *copyS2SMigrationBlobEnumerator) getAccessTier(accessTier azblob.AccessTierType, preserveS2SAccessTier bool) azblob.AccessTierType {
+	return azblob.AccessTierType(common.IffString(preserveS2SAccessTier, string(accessTier), string(azblob.AccessTierNone)))
 }
 
 func (e *copyS2SMigrationBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {

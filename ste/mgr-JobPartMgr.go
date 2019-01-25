@@ -14,8 +14,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -28,6 +28,7 @@ type IJobPartMgr interface {
 	IsForceWriteTrue() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
+	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	SAS() (string, string)
 	//CancelJob()
@@ -49,7 +50,7 @@ var ServiceAPIVersionOverride = serviceAPIVersionOverride{}
 
 // DefaultServiceApiVersion is the default value of service api version that is set as value to the ServiceAPIVersionOverride in every Job's context.
 //const DefaultServiceApiVersion = "2018-06-17" // TODO: for testing test tenant
-const DefaultServiceApiVersion = "2018-03-28"
+const DefaultServiceApiVersion = "2018-11-09"
 
 // NewVersionPolicy creates a factory that can override the service version
 // set in the request header.
@@ -197,6 +198,8 @@ type jobPartMgr struct {
 	blobMetadata azblob.Metadata
 	fileMetadata azfile.Metadata
 
+	blobTypeOverride common.BlobType // User specified blob type
+
 	preserveLastModifiedTime bool
 
 	newJobXfer newJobXfer // Method used to start the transfer
@@ -261,6 +264,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
+	jpm.blobTypeOverride = plan.DstBlobData.BlobType
 	jpm.newJobXfer = computeJobXfer(plan.FromTo, plan.DstBlobData.BlobType)
 
 	jpm.priority = plan.Priority
@@ -464,6 +468,10 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 	}
 
 	return http.DetectContentType(dataFileToXfer)
+}
+
+func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
+	return jpm.blobTypeOverride
 }
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {

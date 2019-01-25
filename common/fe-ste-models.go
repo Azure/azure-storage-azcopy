@@ -32,9 +32,9 @@ import (
 	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 const (
@@ -472,7 +472,7 @@ type BlockBlobTier uint8
 
 func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
-func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) }
+func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) } // TODO: not sure why cold is here.
 func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
 
@@ -513,6 +513,7 @@ type PageBlobTier uint8
 
 func (PageBlobTier) None() PageBlobTier { return PageBlobTier(0) }
 func (PageBlobTier) P10() PageBlobTier  { return PageBlobTier(10) }
+func (PageBlobTier) P15() PageBlobTier  { return PageBlobTier(15) }
 func (PageBlobTier) P20() PageBlobTier  { return PageBlobTier(20) }
 func (PageBlobTier) P30() PageBlobTier  { return PageBlobTier(30) }
 func (PageBlobTier) P4() PageBlobTier   { return PageBlobTier(4) }
@@ -648,9 +649,9 @@ type CopyTransfer struct {
 	ContentMD5         []byte
 	Metadata           Metadata
 
-	// Properties for blob copy only
+	// Properties for S2S blob copy
 	BlobType azblob.BlobType
-	//BlobTier           string //TODO
+	BlobTier azblob.AccessTierType
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

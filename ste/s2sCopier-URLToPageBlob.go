@@ -2,13 +2,12 @@ package ste
 
 import (
 	"context"
-	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 type urlToPageBlobCopier struct {
@@ -21,6 +20,7 @@ type urlToPageBlobCopier struct {
 	pacer           *pacer
 	srcHTTPHeaders  azblob.BlobHTTPHeaders
 	srcMetadata     azblob.Metadata
+	destBlobTier    azblob.AccessTierType
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, source string, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
@@ -54,6 +54,16 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, source string, destination
 		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()
 	}
 
+	// Get blob tier properly.
+	destBlobTier := azblob.AccessTierNone
+	if info.SrcBlobType == azblob.BlobPageBlob {
+		destBlobTier = info.SrcBlobTier
+	}
+	_, pageBlobTierOverride := jptm.BlobTiers()
+	if pageBlobTierOverride != common.EPageBlobTier.None() {
+		destBlobTier = pageBlobTierOverride.ToAccessTierType()
+	}
+
 	return &urlToPageBlobCopier{
 		jptm:            jptm,
 		srcURL:          *srcURL,
@@ -63,7 +73,8 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, source string, destination
 		numChunks:       numChunks,
 		pacer:           pacer,
 		srcHTTPHeaders:  info.SrcHTTPHeaders,
-		srcMetadata:     azblobMetadata}, nil
+		srcMetadata:     azblobMetadata,
+		destBlobTier:    destBlobTier}, nil
 }
 
 func (c *urlToPageBlobCopier) ChunkSize() uint32 {
@@ -75,16 +86,7 @@ func (c *urlToPageBlobCopier) NumChunks() uint32 {
 }
 
 func (c *urlToPageBlobCopier) RemoteFileExists() (bool, error) {
-	if _, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}); err != nil {
-		if stgErr, ok := err.(azblob.StorageError); ok && stgErr.Response().StatusCode == http.StatusNotFound {
-			// If status code is not found, then the file doesn't exist
-			return false, nil
-		}
-		return false, err
-	} else {
-		// If err equals nil, the file exists
-		return true, nil
-	}
+	return remoteObjectExists(c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
 func (c *urlToPageBlobCopier) Prologue() {
@@ -95,7 +97,17 @@ func (c *urlToPageBlobCopier) Prologue() {
 		return
 	}
 
-	// TODO: set blob tier
+	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	if c.destBlobTier != azblob.AccessTierNone {
+		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
+		var blockBlobTier common.BlockBlobTier
+		if err := blockBlobTier.Parse(string(c.destBlobTier)); err != nil {
+			if _, err := c.destPageBlobURL.SetTier(jptm.Context(), c.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
+				jptm.FailActiveS2SCopyWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+				return
+			}
+		}
+	}
 }
 
 // Returns a chunk-func for blob copies
@@ -109,7 +121,12 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		// TODO: Using PutPageFromURL to fulfill the copy
+		_, err := c.destPageBlobURL.UploadPagesFromURL(
+			jptm.Context(), c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
+		if err != nil {
+			jptm.FailActiveS2SCopy("Uploading page from URL", err)
+			return
+		}
 	})
 }
 

@@ -24,7 +24,7 @@ import (
 	"context"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
 	"net/url"
 	"time"

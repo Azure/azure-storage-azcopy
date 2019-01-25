@@ -36,8 +36,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -96,10 +96,15 @@ type rawCopyCmdArgs struct {
 	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
-	// whether user wants to preserves full properties during service to service copy, the default value is true.
+	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	preserveS2SProperties bool
+	// whether user wants to preserve access tier during service to service copy, the default value is true.
+	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
+	// In such cases, use preserveS2SAccessTier=false to bypass the access tier copy.
+	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	preserveS2SAccessTier bool
 }
 
 // validates and transform raw input into cooked input
@@ -261,6 +266,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.preserveS2SProperties {
 			return cooked, fmt.Errorf("preserveS2SProperties is set to true while uploading")
 		}
+		if cooked.preserveS2SAccessTier {
+			return cooked, fmt.Errorf("preserveS2SAccessTier is set to true while uploading")
+		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
@@ -271,6 +279,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		if cooked.preserveS2SProperties {
 			return cooked, fmt.Errorf("preserveS2SProperties is set to true while uploading")
+		}
+		if cooked.preserveS2SAccessTier {
+			return cooked, fmt.Errorf("preserveS2SAccessTier is set to true while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -290,6 +301,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.preserveS2SProperties {
 			return cooked, fmt.Errorf("preserveS2SProperties is set to true while downloading")
 		}
+		if cooked.preserveS2SAccessTier {
+			return cooked, fmt.Errorf("preserveS2SAccessTier is set to true while downloading")
+		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
 		common.EFromTo.S3Blob():
@@ -298,10 +312,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from service to service")
-		}
-		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
-			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while copying from service to service")
 		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from service to service")
@@ -329,6 +339,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	cooked.preserveS2SProperties = raw.preserveS2SProperties
+	cooked.preserveS2SAccessTier = raw.preserveS2SAccessTier
 
 	return cooked, nil
 }
@@ -402,6 +413,11 @@ type cookedCopyCmdArgs struct {
 	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	preserveS2SProperties bool
+	// whether user wants to preserve access tier during service to service copy, the default value is true.
+	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
+	// In such cases, use preserveS2SAccessTier=false to bypass the access tier copy.
+	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	preserveS2SAccessTier bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -987,8 +1003,11 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveS2SProperties, "preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveS2SProperties, "preserve-s2s-properties", true, "preserves full properties during service to service copy, the default value is true. "+
 		"For S3 and Azure File source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.preserveS2SAccessTier, "preserve-s2s-access-tier", true, "preserve access tier during service to service copy, the default value is true. "+
+		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
+		"In the cases that setting access tier is not supported, please use preserveS2SAccessTier=false to bypass copying access tier. ")
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
