@@ -33,7 +33,7 @@ import (
 type ChunkedFileWriter interface {
 
 	// WaitToScheduleChunk blocks until enough RAM is available to handle the given chunk, then it
-	// "reserves" that amount of RAM in the CacheLimiter and returns. 
+	// "reserves" that amount of RAM in the CacheLimiter and returns.
 	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
 
 	// EnqueueChunk hands the given chunkContents over to the ChunkedFileWriter, to be written to disk.
@@ -84,6 +84,10 @@ type chunkedFileWriter struct {
 
 	// controls body-read retries. Public so value can be shared with retryReader
 	maxRetryPerDownloadBody int
+
+	// are we running in a context where the overall file count is low (i.e. we are the only file, or one of just
+	// a few files)? Used for performance optimization
+	lowFileCount bool
 }
 
 type fileChunk struct {
@@ -91,7 +95,7 @@ type fileChunk struct {
 	data []byte
 }
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int, lowFileCount bool) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
 	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
 	// very large numbers of very small files.
@@ -107,6 +111,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		newUnorderedChunks:      make(chan fileChunk, chanBufferSize),
 		creationTime:            time.Now(),
 		maxRetryPerDownloadBody: maxBodyRetries,
+		lowFileCount:            lowFileCount,
 	}
 	go w.workerRoutine(ctx)
 	return w
@@ -123,7 +128,7 @@ const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remov
 // at the time of scheduling the chunk (which is when this routine should be called).
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
-func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
+func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error {
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
 	err := w.cacheLimiter.WaitUntilAddBytes(ctx, chunkSize, w.shouldUseRelaxedRamThreshold)
 	if err == nil {
@@ -217,34 +222,40 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk()) // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
-		err := w.saveAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave)
-		if err != nil {
-			w.failureError <- err
-			close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
-			return                // no point in processing any more after a failure
-		}
+		w.saveAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave)
 	}
 }
 
 // Saves available chunks that are sequential from nextOffsetToSave. Stops and returns as soon as it hits
 // a gap (i.e. the position of a chunk that hasn't arrived yet)
-func (w *chunkedFileWriter) saveAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64) error {
+func (w *chunkedFileWriter) saveAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave *int64) {
 	for {
 		nextChunkInSequence, exists := unsavedChunksByFileOffset[*nextOffsetToSave]
 		if !exists {
-			return nil //its not there yet. That's OK.
+			return //its not there yet. That's OK.
 		}
 		*nextOffsetToSave += int64(len(nextChunkInSequence.data))
 
-		err := w.saveOneChunk(nextChunkInSequence)
-		if err != nil {
-			return err
+		// we've seen it sequentially (for MD5 purposes, no we can save it asynchronously)
+		// TODO: only save asynchronsuly if lown file count (to avoid thezeroing -out iss)
+		// It's marginally faster to not sequentialize before we do the async save (since it avoids delays due to slow chunks)
+		// BUT it also will prevent us from computing MD5's  - so better to sequntialize, as we do above, for MD5 purposes
+		if w.lowFileCount {
+			// If low file count, we need to do this asynchronously so that disk write queue length can build up
+			// high enough to give good speed. This gains us more, much more, than we lose in
+			// zeroing out "skipped" sections of the file (see else, immediately below)
+			go w.saveOneChunk(nextChunkInSequence)
+		} else {
+			// But if moderate or high file count, we want to write sequentially to avoid the overhead of
+			// non-sequential writes having to zero-out "skipped" sections of the file.
+			// (Easier and safer to do this than some kind of SetValidFileData solution: https://docs.microsoft.com/en-us/windows/desktop/api/fileapi/nf-fileapi-setfilevaliddata)
+			w.saveOneChunk(nextChunkInSequence)
 		}
 	}
 }
 
 // Saves one chunk to its destination
-func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
+func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) {
 	defer func() {
 		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
@@ -253,11 +264,24 @@ func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 	}()
 
 	w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.Disk())
-	_, err := w.file.Write(chunk.data) // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
-	if err != nil {
-		return err
+
+	// Break the chunk up into a number of separate writes
+	// This helps performance in low-file-count situations. Tentative theory is that this writing approach,
+	// in conjunction with OS write caching (which we enable for small-file count scenarios),
+	// allows greater disk queue depth (parallelism) than if we
+	// write here in a single call (since the OS write cache effectively means that these separate writes end up happening in
+	// parallel, even though we have coded them sequentially here)
+	// TODO: check the theory/logic behind the above
+	writeSize := 64 * 1024 // TODO: is this really an optimal-ish size to use here? (64 K seemed slightly but usefully bettre than 256 K0
+	// TODO: check correctness of the following loop, and is there a better built-in way to do it?  E.g. io.copyBuffer or something?
+	for offset := 0; offset < len(chunk.data); offset += writeSize {
+		_, err := w.file.Write(chunk.data[offset:][:writeSize]) // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
+		if err != nil {
+			w.failureError <- err
+			close(w.failureError) // must close because many goroutines may be calling the public methods, and all need to be able to tell there's been an error, even tho only one will get the actual error
+			return
+		}
 	}
-	return nil
 }
 
 // We use a less strict cache limit
@@ -268,7 +292,6 @@ func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 func (w *chunkedFileWriter) shouldUseRelaxedRamThreshold() bool {
 	return atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks
 }
-
 
 // Are we currently in a memory-constrained situation?
 func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {

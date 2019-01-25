@@ -44,6 +44,7 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	JobHasLowFileCount() bool
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -305,6 +306,12 @@ func (jptm *jobPartTransferMgr) OccupyAConnection() {
 // TODO: added for debugging purpose. remove later
 func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
+}
+
+// JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
+// (An "estimate" because it actually only looks at the current job part)
+func (jptm *jobPartTransferMgr) JobHasLowFileCount() bool {
+	return jptm.jobPartMgr.Plan().NumTransfers < 16 // TODO: review this guestimated threshold
 }
 
 func (jptm *jobPartTransferMgr) FailActiveUpload(where string, err error) {

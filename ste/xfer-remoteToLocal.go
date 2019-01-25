@@ -74,8 +74,10 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 4b: normal file creation when source has content
 	writeThrough := true // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
-	if fileSize <= 1*1024*1024 {
-		writeThrough = false // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
+	if fileSize <= 1*1024*1024 || jptm.JobHasLowFileCount() {
+		// but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
+		// Also, if there are only very few files in the job, then also don't use writethrough. Again, that's so that the OS's write caching can build up sufficient queue depth
+		writeThrough = false
 	}
 	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
 	if err != nil {
@@ -118,7 +120,8 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		chunkLogger,
 		dstFile,
 		numChunks,
-		MaxRetryPerDownloadBody)
+		MaxRetryPerDownloadBody,
+		jptm.JobHasLowFileCount())
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
