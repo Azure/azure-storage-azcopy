@@ -22,7 +22,6 @@ package common
 
 import (
 	"math/bits"
-	"sync"
 )
 
 // A pool of byte slices
@@ -30,6 +29,45 @@ import (
 type ByteSlicePooler interface {
 	RentSlice(desiredLength uint32) []byte
 	ReturnSlice(slice []byte)
+}
+
+// Pools byte slices of a single size.
+// We are not using sync.Pool because it reserves the right
+// to ignore is contents and pretend to be empty. That's OK if
+// there are enough GCs to cause it to be flushed/emptied.
+// But it didn't seem to be getting emptied for us (presumably because
+// we didn't have many GCs... because we were pooling resources!)
+// And so we would get 150 or so objects just sitting there in the pool,
+// and if each of those is for a 100 MB "max size" storage block, that gets bad.
+// Discussion at the following URL confirms the problematic nature and that "roll your own"
+// can be better for low-contention cases - which is what we believe ours to be:
+// https://github.com/golang/go/issues/22950
+type simpleSlicePool struct {
+	c chan []byte
+}
+
+func newSimpleSlicePool(maxCapacity int) *simpleSlicePool {
+	return &simpleSlicePool{
+		c: make(chan []byte, maxCapacity),
+	}
+}
+
+func (p *simpleSlicePool) Get() []byte {
+	select {
+	case existingItem := <-p.c:
+		return existingItem
+	default:
+		return nil
+	}
+}
+
+func (p *simpleSlicePool) Put(b []byte) {
+	select {
+	case p.c <- b:
+		return
+	default:
+		// just throw b away and let it get GC'd if p.c is full
+	}
 }
 
 // A pool of byte slices, optimized so that it actually has a sub-pool for each
@@ -40,15 +78,15 @@ type ByteSlicePooler interface {
 type multiSizeSlicePool struct {
 	// It is safe for multiple readers to read this, once we have populated it
 	// See https://groups.google.com/forum/#!topic/golang-nuts/nL8z96SXcDs
-	poolsBySize []*sync.Pool
+	poolsBySize []*simpleSlicePool
 }
 
 // Create new slice pool capable of pooling slices up to maxSliceLength in size
 func NewMultiSizeSlicePool(maxSliceLength uint32) ByteSlicePooler {
 	maxSlotIndex, _ := getSlotInfo(maxSliceLength)
-	poolsBySize := make([]*sync.Pool, maxSlotIndex+1)
+	poolsBySize := make([]*simpleSlicePool, maxSlotIndex+1)
 	for i := 0; i <= maxSlotIndex; i++ {
-		poolsBySize[i] = &sync.Pool{}
+		poolsBySize[i] = newSimpleSlicePool(1000) // TODO: review capacity (setting too low doesn't break anything, since we don't block when full, so maybe only 100 or so is OK?)
 	}
 	return &multiSizeSlicePool{poolsBySize: poolsBySize}
 }
@@ -79,7 +117,7 @@ func (mp *multiSizeSlicePool) RentSlice(desiredSize uint32) []byte {
 	pool := mp.poolsBySize[slotIndex]
 
 	// try to get a pooled slice
-	if typedSlice, ok := pool.Get().([]byte); ok {
+	if typedSlice := pool.Get(); typedSlice != nil {
 		// Capacity will be equal to maxCapInSlot.
 		// Here we set len to the exact desired size that was requested
 		typedSlice = typedSlice[0:desiredSize]
