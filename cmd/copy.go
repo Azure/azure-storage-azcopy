@@ -479,8 +479,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
 	_, err = azblob.UploadStreamToBlockBlob(context.TODO(), os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		//BufferSize: pipingDefaultBlockSize,
-		BufferSize: pipingDefaultBlockSize,
+		BufferSize: int(blockSize),
 		MaxBuffers: pipingUploadParallelism,
 	})
 
