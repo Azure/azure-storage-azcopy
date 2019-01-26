@@ -96,14 +96,14 @@ func newAzcopyHTTPClient() *http.Client {
 func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	var tokenInfo *OAuthTokenInfo
 	var err error
-	if tokenInfo, err = uotm.GetTokenInfoFromEnvVar(ctx); err == nil || !IsErrorEnvVarOAuthTokenInfoNotSet(err) {
+	if tokenInfo, err = uotm.getTokenInfoFromEnvVar(ctx); err == nil || !IsErrorEnvVarOAuthTokenInfoNotSet(err) {
 		// Scenario-Test: unattended testing with oauthTokenInfo set through environment variable
 		// Note: Whenever environment variable is set in the context, it will overwrite the cached token info.
 		if err != nil { // this is the case when env var exists while get token info failed
 			return nil, err
 		}
 	} else { // Scenario: session mode which get token from cache
-		if tokenInfo, err = uotm.GetCachedTokenInfo(ctx); err != nil {
+		if tokenInfo, err = uotm.getCachedTokenInfo(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -112,9 +112,6 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
 
-	if tokenInfo.ClientID == "" {
-		tokenInfo.ClientID = ApplicationID
-	}
 	return tokenInfo, nil
 }
 
@@ -199,11 +196,11 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	return &oAuthTokenInfo, nil
 }
 
-// GetCachedTokenInfo get a fresh token from local disk cache.
+// getCachedTokenInfo get a fresh token from local disk cache.
 // If access token is expired, it will refresh the token.
 // If refresh token is expired, the method will fail and return failure reason.
 // Fresh token is persisted if acces token or refresh token is changed.
-func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
+func (uotm *UserOAuthTokenManager) getCachedTokenInfo(ctx context.Context) (*OAuthTokenInfo, error) {
 	hasToken, err := uotm.credCache.HasCachedToken()
 	if err != nil {
 		return nil, fmt.Errorf("no cached token found, please log in with azcopy's login command, %v", err)
@@ -224,15 +221,10 @@ func (uotm *UserOAuthTokenManager) GetCachedTokenInfo(ctx context.Context) (*OAu
 
 	// Update token cache, if token is updated.
 	if freshToken.AccessToken != tokenInfo.AccessToken || freshToken.RefreshToken != tokenInfo.RefreshToken {
-		tokenInfoToPersist := OAuthTokenInfo{
-			Token:                   *freshToken,
-			Tenant:                  tokenInfo.Tenant,
-			ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
-		}
-		if err := uotm.credCache.SaveToken(tokenInfoToPersist); err != nil {
+		tokenInfo.Token = *freshToken
+		if err := uotm.credCache.SaveToken(*tokenInfo); err != nil {
 			return nil, err
 		}
-		return &tokenInfoToPersist, nil
 	}
 
 	return tokenInfo, nil
@@ -259,7 +251,7 @@ const ErrorCodeEnvVarOAuthTokenInfoNotSet = "environment variable AZCOPY_OAUTH_T
 
 // EnvVarOAuthTokenInfoExists verifies if environment variable for OAuthTokenInfo is specified.
 // The method returns true if the environment variable is set.
-// Note: This is useful for only checking whether the env var exists, please use GetTokenInfoFromEnvVar
+// Note: This is useful for only checking whether the env var exists, please use getTokenInfoFromEnvVar
 // directly in the case getting token info is necessary.
 func EnvVarOAuthTokenInfoExists() bool {
 	if os.Getenv(EnvVarOAuthTokenInfo) == "" {
@@ -276,8 +268,8 @@ func IsErrorEnvVarOAuthTokenInfoNotSet(err error) bool {
 	return false
 }
 
-// GetTokenInfoFromEnvVar gets token info from environment variable.
-func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
+// getTokenInfoFromEnvVar gets token info from environment variable.
+func (uotm *UserOAuthTokenManager) getTokenInfoFromEnvVar(ctx context.Context) (*OAuthTokenInfo, error) {
 	rawToken := os.Getenv(EnvVarOAuthTokenInfo)
 	if rawToken == "" {
 		return nil, errors.New(ErrorCodeEnvVarOAuthTokenInfoNotSet)
@@ -287,26 +279,20 @@ func (uotm *UserOAuthTokenManager) GetTokenInfoFromEnvVar(ctx context.Context) (
 	// in case of env var is further spreading into child processes unexpectly.
 	os.Setenv(EnvVarOAuthTokenInfo, "")
 
-	tokenInfo, err := JSONToTokenInfo([]byte(rawToken))
+	tokenInfo, err := jsonToTokenInfo([]byte(rawToken))
 	if err != nil {
 		return nil, fmt.Errorf("get token from environment variable failed to unmarshal token, %v", err)
 	}
 
-	freshToken := tokenInfo.Token
 	if tokenInfo.TokenRefreshSource != TokenRefreshSourceTokenStore {
 		refreshedToken, err := tokenInfo.Refresh(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("get token from environment variable failed to ensure token fresh, %v", err)
 		}
-		freshToken = *refreshedToken
+		tokenInfo.Token = *refreshedToken
 	}
 
-	return &OAuthTokenInfo{
-		Token:                   freshToken,
-		Tenant:                  tokenInfo.Tenant,
-		ActiveDirectoryEndpoint: tokenInfo.ActiveDirectoryEndpoint,
-		TokenRefreshSource:      tokenInfo.TokenRefreshSource,
-	}, nil
+	return tokenInfo, nil
 }
 
 //====================================================================================
@@ -323,9 +309,11 @@ type OAuthTokenInfo struct {
 	TokenRefreshSource      string `json:"_token_refresh_source"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
-	//Note: ClientID should be only used for internal integrations. It indicates the Application ID assigned to your
-	//app when you registered it with Azure AD. For more details, please refer to
-	//https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
+	// Note: ClientID should be only used for internal integrations through env var with refresh token.
+	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
+	// In this case AzCopy refresh token on behalf of caller.
+	// For more details, please refer to
+	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
 	ClientID string `json:"_client_id"`
 }
 
@@ -458,9 +446,11 @@ func (credInfo *OAuthTokenInfo) RefreshTokenWithUserCredential(ctx context.Conte
 		return nil, err
 	}
 
+	// ClientID in credInfo is optional which is used for internal integration only.
+	// Use AzCopy's 1st party applicationID for refresh by default.
 	spt, err := adal.NewServicePrincipalTokenFromManualToken(
 		*oauthConfig,
-		credInfo.ClientID,
+		IffString(credInfo.ClientID != "", credInfo.ClientID, ApplicationID),
 		Resource,
 		credInfo.Token)
 	if err != nil {
@@ -484,19 +474,16 @@ func (credInfo OAuthTokenInfo) IsEmpty() bool {
 	return false
 }
 
-// ToJSON converts OAuthTokenInfo to json format.
-func (credInfo OAuthTokenInfo) ToJSON() ([]byte, error) {
+// toJSON converts OAuthTokenInfo to json format.
+func (credInfo OAuthTokenInfo) toJSON() ([]byte, error) {
 	return json.Marshal(credInfo)
 }
 
-// JSONToTokenInfo converts bytes to OAuthTokenInfo
-func JSONToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
+// jsonToTokenInfo converts bytes to OAuthTokenInfo
+func jsonToTokenInfo(b []byte) (*OAuthTokenInfo, error) {
 	var OAuthTokenInfo OAuthTokenInfo
 	if err := json.Unmarshal(b, &OAuthTokenInfo); err != nil {
 		return nil, err
-	}
-	if OAuthTokenInfo.ClientID == "" {
-		OAuthTokenInfo.ClientID = ApplicationID
 	}
 	return &OAuthTokenInfo, nil
 }

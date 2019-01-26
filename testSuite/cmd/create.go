@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 

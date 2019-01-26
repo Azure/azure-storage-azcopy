@@ -13,7 +13,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type IJobPartTransferMgr interface {
@@ -44,7 +44,10 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
-	FailActiveDownload(err error)
+	FailActiveUpload(where string, err error)
+	FailActiveDownload(where string, err error)
+	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
+	FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus)
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -184,11 +187,11 @@ func (jptm *jobPartTransferMgr) Context() context.Context {
 	return jptm.ctx
 }
 
-func (jptm * jobPartTransferMgr) SlicePool() common.ByteSlicePooler {
+func (jptm *jobPartTransferMgr) SlicePool() common.ByteSlicePooler {
 	return jptm.jobPartMgr.SlicePool()
 }
 
-func (jptm * jobPartTransferMgr) CacheLimiter() common.CacheLimiter {
+func (jptm *jobPartTransferMgr) CacheLimiter() common.CacheLimiter {
 	return jptm.jobPartMgr.CacheLimiter()
 }
 
@@ -245,7 +248,7 @@ func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone ui
 // of ReportChunkDone and then implement their own versions of the necessary transfer epilogue code.
 // But that led to unwanted duplication of epilogue code, in the various types of chunkfunc. This routine
 // makes it easier to create DRY epilogue code.)
-func (jptm *jobPartTransferMgr) runActionAfterLastChunk(){
+func (jptm *jobPartTransferMgr) runActionAfterLastChunk() {
 	if jptm.actionAfterLastChunk != nil {
 		jptm.actionAfterLastChunk()
 		jptm.actionAfterLastChunk = nil // make sure it can't be run again, since epilogue methods are not expected to be idempotent
@@ -288,10 +291,9 @@ func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 	return jptm.jobPartMgr.ShouldLog(level)
 }
 
-func (jptm *jobPartTransferMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason){
+func (jptm *jobPartTransferMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
 	jptm.jobPartMgr.LogChunkStatus(id, reason)
 }
-
 
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
 // TODO: added for debugging purpose. remove later
@@ -305,14 +307,33 @@ func (jptm *jobPartTransferMgr) ReleaseAConnection() {
 	jptm.jobPartMgr.ReleaseAConnection()
 }
 
-// Use this to mark active uploads (i.e. those where chunk funcs have been scheduled) as failed
+func (jptm *jobPartTransferMgr) FailActiveUpload(where string, err error) {
+	jptm.failActiveTransfer(transferErrorCodeUploadFailed, where, err, common.ETransferStatus.Failed())
+}
+
+func (jptm *jobPartTransferMgr) FailActiveDownload(where string, err error) {
+	jptm.failActiveTransfer(transferErrorCodeDownloadFailed, where, err, common.ETransferStatus.Failed())
+}
+
+func (jptm *jobPartTransferMgr) FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(transferErrorCodeUploadFailed, where, err, failureStatus)
+}
+
+func (jptm *jobPartTransferMgr) FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	jptm.failActiveTransfer(transferErrorCodeDownloadFailed, where, err, failureStatus)
+}
+
+// Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
 // Unlike just setting the status to failed, this also handles cancellation correctly
-func (jptm *jobPartTransferMgr) FailActiveDownload(err error){
+func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descriptionOfWhereErrorOccurred string, err error, failureStatus common.TransferStatus) {
+	// TODO: question. Prior to refactoring some code did a debug level log when WasCancelled is true (e.g. blob upload did)
+	// TODO: .. do we really need that? It's ommitted, for now.
+
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.LogDownloadError(jptm.Info().Source, jptm.Info().Destination, msg, status)
-		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred, status)
+		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
@@ -321,7 +342,6 @@ func (jptm *jobPartTransferMgr) FailActiveDownload(err error){
 			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
 		}
 	}
-
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
 	// TODO: ... call ReportChunkDone (with the latter being done for ALL the expnected chunks). Is that maintainable?
 	// TODO: ... Is that really ideal, having to call ReportChunkDone for all the chunks AFTER cancellation?
@@ -398,6 +418,7 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed
 // TODO: I feel like this should take the status & we kill SetStatus
+// TODO: also, it looks like if we accidentally call this twice, on the one jptm, it just treats that as TWO successful transfers, which is a bug
 func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	// In case of context leak in job part transfer manager.
 	jptm.Cancel()

@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 /////////////////////////////////////////////////////////////////////////////////////////////////

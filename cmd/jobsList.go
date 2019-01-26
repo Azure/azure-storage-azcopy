@@ -22,6 +22,8 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
@@ -74,10 +76,25 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 		return fmt.Errorf("request failed with following error message: %s", listJobResponse.ErrorMessage)
 	}
 
+	// before displaying the jobs, sort them accordingly so that they are displayed in a consistent way
+	sortJobs(listJobResponse.JobIDDetails)
+
 	glcm.Info("Existing Jobs ")
 	for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
 		jobDetail := listJobResponse.JobIDDetails[index]
-		glcm.Info(fmt.Sprintf("JobId: %s\nCommand: %s\n", jobDetail.JobId.String(), jobDetail.CommandString))
+		glcm.Info(fmt.Sprintf("JobId: %s\nStart Time: %s\nCommand: %s\n",
+			jobDetail.JobId.String(),
+			time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
+			jobDetail.CommandString))
 	}
 	return nil
+}
+
+func sortJobs(jobsDetails []common.JobIDDetails) {
+	// sort the jobs so that the latest one is shown first
+	sort.Slice(jobsDetails, func(i, j int) bool {
+		// this function essentially asks whether i should be placed before j
+		// we say yes if the job i is more recent
+		return jobsDetails[i].StartTime > jobsDetails[j].StartTime
+	})
 }

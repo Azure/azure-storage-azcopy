@@ -37,7 +37,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/2017-07-29/azfile"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -479,8 +479,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
 	_, err = azblob.UploadStreamToBlockBlob(context.TODO(), os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
-		//BufferSize: pipingDefaultBlockSize,
-		BufferSize: pipingDefaultBlockSize,
+		BufferSize: int(blockSize),
 		MaxBuffers: pipingUploadParallelism,
 	})
 

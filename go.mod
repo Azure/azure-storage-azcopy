@@ -3,7 +3,7 @@ module github.com/Azure/azure-storage-azcopy
 require (
 	github.com/Azure/azure-pipeline-go v0.1.8
 	github.com/Azure/azure-storage-blob-go v0.0.0-20181022225951-5152f14ace1c
-	github.com/Azure/azure-storage-file-go v0.0.0-20180929015327-d6c64f9676be
+	github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a
 	github.com/Azure/go-autorest v10.15.2+incompatible
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.0.1
@@ -15,5 +15,6 @@ require (
 	github.com/kr/text v0.1.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.2
+	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 )
