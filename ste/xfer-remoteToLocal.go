@@ -176,11 +176,13 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 
 		// Close file
 		fileCloseErr := activeDstFile.Close() // always try to close if, even if flush failed
-		if flushError != nil && fileCloseErr != nil && !jptm.TransferStatus().DidFail() {
-			// it WAS successful up to now, but the file flush/closing failed
-			message := "File Closure Error " + fileCloseErr.Error()
+		if (flushError != nil || fileCloseErr != nil) && !jptm.TransferStatus().DidFail() {
+			// it WAS successful up to now, but the file flush/closing failed.
+			message := ""
 			if flushError != nil {
 				message = "File Flush Error " + flushError.Error()
+			} else {
+				message = "File Closure Error " + fileCloseErr.Error()
 			}
 			jptm.LogDownloadError(info.Source, info.Destination, message, 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
