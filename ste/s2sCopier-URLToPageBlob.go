@@ -102,7 +102,9 @@ func (c *urlToPageBlobCopier) Prologue() {
 		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
 		var blockBlobTier common.BlockBlobTier
 		if err := blockBlobTier.Parse(string(c.destBlobTier)); err != nil {
-			if _, err := c.destPageBlobURL.SetTier(jptm.Context(), c.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
+			// Set the latest service version from sdk as service version in the context.
+			ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+			if _, err := c.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, c.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
 				jptm.FailActiveS2SCopyWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
 				return
 			}
@@ -121,8 +123,11 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+
+		// Set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
+		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			jptm.Context(), c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
+			ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return

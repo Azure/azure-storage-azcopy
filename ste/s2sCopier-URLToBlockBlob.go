@@ -140,7 +140,9 @@ func (c *urlToBlockBlobCopier) Epilogue() {
 	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
 	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
 	if jptm.TransferStatus() > 0 && c.destBlobTier != azblob.AccessTierNone {
-		_, err := c.destBlockBlobURL.SetTier(jptm.Context(), c.destBlobTier, azblob.LeaseAccessConditions{})
+		// Set the latest service version from sdk as service version in the context.
+		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		_, err := c.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, c.destBlobTier, azblob.LeaseAccessConditions{})
 		if err != nil {
 			jptm.FailActiveS2SCopyWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
 		}
@@ -188,7 +190,10 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockId(blockIndex, encodedBlockID)
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		_, err := c.destBlockBlobURL.StageBlockFromURL(c.jptm.Context(), encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
+
+		// Set the latest service version from sdk as service version in the context, to use StageBlockFromURL API
+		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
 		if err != nil {
 			jptm.FailActiveS2SCopy("Staging block from URL", err)
 			return

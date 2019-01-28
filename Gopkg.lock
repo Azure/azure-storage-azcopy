@@ -122,6 +122,14 @@
   version = "v1.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:c1600b962fa91e71025876fb838b8f94700b529d1c5f19f85d4c67ba13e2edf0"
+  name = "github.com/jiacfan/azure-storage-blob-go"
+  packages = ["azblob"]
+  pruneopts = "UT"
+  revision = "678a91f8a4a7508f2a7bd43b0489d83a1b2ed498"
+
+[[projects]]
   digest = "1:ea6f6666dafd73ffad2f95feb9bca34ab09bc6942e2766a30dd603ebdde2ad70"
   name = "github.com/jiacfan/keychain"
   packages = ["."]
@@ -373,11 +381,11 @@
   analyzer-version = 1
   input-imports = [
     "github.com/Azure/azure-pipeline-go/pipeline",
-    "github.com/Azure/azure-storage-blob-go/azblob",
     "github.com/Azure/azure-storage-file-go/azfile",
     "github.com/Azure/go-autorest/autorest/adal",
     "github.com/JeffreyRichter/enum/enum",
     "github.com/danieljoos/wincred",
+    "github.com/jiacfan/azure-storage-blob-go/azblob",
     "github.com/jiacfan/keychain",
     "github.com/jiacfan/keyctl",
     "github.com/minio/minio-go",
