@@ -45,7 +45,7 @@ func (u URLExtension) RedactSecretQueryParamForLogging() string {
 }
 
 func (u URLExtension) RedactSigQueryParamForLogging() URLExtension {
-	if ok, rawQuery := redactSigQueryParam(u.RawQuery, "sig"); ok {
+	if ok, rawQuery := RedactSigQueryParam(u.RawQuery, "sig"); ok {
 		u.RawQuery = rawQuery
 	}
 
@@ -53,14 +53,14 @@ func (u URLExtension) RedactSigQueryParamForLogging() URLExtension {
 }
 
 func (u URLExtension) RedactAmzSignatureQueryParamForLogging() URLExtension {
-	if ok, rawQuery := redactSigQueryParam(u.RawQuery, "x-amz-signature"); ok {
+	if ok, rawQuery := RedactSigQueryParam(u.RawQuery, "x-amz-signature"); ok {
 		u.RawQuery = rawQuery
 	}
 
 	return u
 }
 
-func redactSigQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
+func RedactSigQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?[queryKeyNeedRedact] and &[queryKeyNeedRedact]=
 	sigFound := strings.Contains(rawQuery, "?"+queryKeyNeedRedact+"=")
 	if !sigFound {

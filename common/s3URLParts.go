@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cmd
+package common
 
 import (
 	"errors"
@@ -38,7 +38,7 @@ import (
 // Ex,  path-style URL(the bucket name is not part of the domain (unless you use a Region-specific endpoint)):
 // a. http://s3.amazonaws.com/bucket (US East (N. Virginia) Region endpoint)
 // b. http://s3-aws-region.amazonaws.com/bucket (Region-specific endpoint)
-// By design, doesn't support the dual stack endpoint(IPv6&IPv4) (https://docs.aws.amazon.com/AmazonS3/latest/dev/dual-stack-endpoints.html#dual-stack-endpoints-description)
+// Dual stack endpoint(IPv6&IPv4) is also supported (https://docs.aws.amazon.com/AmazonS3/latest/dev/dual-stack-endpoints.html#dual-stack-endpoints-description)
 // i.e. the endpoint in http://bucketname.s3.dualstack.aws-region.amazonaws.com or http://s3.dualstack.aws-region.amazonaws.com/bucketname
 type S3URLParts struct {
 	Scheme         string // Ex: "https://", "s3://"
@@ -49,14 +49,17 @@ type S3URLParts struct {
 	Version        string
 	Region         string // Ex: endpoint region, e.g. "eu-west-1"
 	UnparsedParams string
-	// TODO: Presigned request queries
+
+	isPathStyle bool
+	isDualStack bool
 	// TODO: Other S3 compatible service which might be with IP endpoint style
 }
 
-const s3HostPattern = "^(?P<bucketname>.+\\.)?s3[.-](?P<regionorawsdomain>[a-z0-9-]+)\\."
+const s3HostPattern = "^(?P<bucketname>.+\\.)?s3[.-](?P<dualstackorregionorawsdomain>[a-z0-9-]+)\\.(?P<regionorawsdomain>[a-z0-9-]+)"
 const invalidS3URLErrorMessage = "Invalid S3 URL. Support standard virtual-hosted-style or path-style URL defined by AWS, E.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
 const versionQueryParamKey = "versionId"
 const s3AWSDomain = "amazonaws"
+const s3DualStack = "dualstack"
 
 // IsS3URL verfies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
@@ -103,6 +106,8 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		up.Endpoint = host[strings.Index(host, ".")+1:]
 	} else {
 		// In this case, it would be in path-style URL. Host prefix like s3[-.], and path contains the bucket name and object id.
+		up.isPathStyle = true
+
 		if bucketEndIndex := strings.Index(path, "/"); bucketEndIndex != -1 {
 			up.BucketName = path[:bucketEndIndex]
 			up.ObjectKey = path[bucketEndIndex+1:]
@@ -112,8 +117,13 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 
 		up.Endpoint = host
 	}
-	// Check if region is contained in host name
-	if matchSlices[2] != s3AWSDomain {
+	// Check if dualstack is contained in host name
+	if matchSlices[2] == s3DualStack {
+		up.isDualStack = true
+		if matchSlices[3] != s3AWSDomain {
+			up.Region = matchSlices[3]
+		}
+	} else if matchSlices[2] != s3AWSDomain {
 		up.Region = matchSlices[2]
 	}
 
@@ -129,6 +139,42 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 	up.UnparsedParams = paramsMap.Encode()
 
 	return up, nil
+}
+
+// URL returns a URL object whose fields are initialized from the S3URLParts fields.
+func (p *S3URLParts) URL() url.URL {
+	path := ""
+
+	// Concatenate container & blob names (if they exist)
+	if p.BucketName != "" {
+		if p.isPathStyle {
+			path += "/" + p.BucketName
+		}
+		if p.ObjectKey != "" {
+			path += "/" + p.ObjectKey
+		}
+	}
+
+	rawQuery := p.UnparsedParams
+
+	if p.Version != "" {
+		if len(rawQuery) > 0 {
+			rawQuery += "&"
+		}
+		rawQuery += versionQueryParamKey + "=" + p.Version
+	}
+	u := url.URL{
+		Scheme:   p.Scheme,
+		Host:     p.Host,
+		Path:     path,
+		RawQuery: rawQuery,
+	}
+	return u
+}
+
+func (p *S3URLParts) String() string {
+	u := p.URL()
+	return u.String()
 }
 
 func (p *S3URLParts) IsServiceURL() bool {
@@ -159,92 +205,6 @@ func (p *S3URLParts) IsDirectory() bool {
 		return true
 	}
 	return false
-}
-
-// IsServiceLevelSearch check if it's an service level search for S3.
-// And returns search prefix(part before wildcard) for bucket to match, if it's service level search.
-func (p *S3URLParts) IsServiceLevelSearch() (IsServiceLevelSearch bool, bucketPrefix string) {
-	// If it's service level URL which need search bucket, there could be two cases:
-	// a. https://<service-endpoint>(/)
-	// b. https://<service-endpoint>/bucketprefix*(/*)
-	if p.IsServiceURL() ||
-		strings.Contains(p.BucketName, wildCard) {
-		IsServiceLevelSearch = true
-		// Case p.IsServiceURL(), bucket name is empty, search for all buckets.
-		if p.BucketName == "" {
-			return
-		}
-
-		// Case bucketname contains wildcard.
-		wildCardIndex := gCopyUtil.firstIndexOfWildCard(p.BucketName)
-
-		// wild card exists prefix will be the content of bucket name till the wildcard index
-		// Example 1: for URL https://<service-endpoint>/b-2*, bucketPrefix = b-2
-		// Example 2: for URL https://<service-endpoint>/b-2*/vd/o*, bucketPrefix = b-2
-		bucketPrefix = p.BucketName[:wildCardIndex]
-		return
-	}
-	// Otherwise, it's not service level search.
-	return
-}
-
-// searchObjectPrefixAndPatternFromS3URL gets search prefix and pattern from S3 URL.
-// search prefix is used during listing objects in bucket, and pattern is used to support wildcard search by azcopy-v10.
-func (p *S3URLParts) searchObjectPrefixAndPatternFromS3URL() (prefix, pattern string, isWildcardSearch bool) {
-	// If the objectKey is empty, it means the url provided is of a bucket,
-	// then all object inside buckets needs to be included, so prefix is "" and pattern is set to *, isWildcardSearch false
-	if p.ObjectKey == "" {
-		pattern = "*"
-		return
-	}
-	// Check for wildcard
-	wildCardIndex := gCopyUtil.firstIndexOfWildCard(p.ObjectKey)
-	// If no wildcard exits and url represents a virtual directory or a object, search everything in the virtual directory
-	// or specifically the object.
-	if wildCardIndex < 0 {
-		// prefix is the path of virtual directory after the bucket, pattern is *, isWildcardSearch false
-		// Example 1: https://<bucket-name>/vd-1/, prefix = /vd-1/
-		// Example 2: https://<bucket-name>/vd-1/vd-2/, prefix = /vd-1/vd-2/
-		// Example 3: https://<bucket-name>/vd-1/abc, prefix = /vd1/abc
-		prefix = p.ObjectKey
-		pattern = "*"
-		return
-	}
-
-	// Is wildcard search
-	isWildcardSearch = true
-	// wildcard exists prefix will be the content of object key till the wildcard index
-	// Example: https://<bucket-name>/vd-1/vd-2/abc*
-	// prefix = /vd-1/vd-2/abc, pattern = /vd-1/vd-2/abc*, isWildcardSearch true
-	prefix = p.ObjectKey[:wildCardIndex]
-	pattern = p.ObjectKey
-
-	return
-}
-
-// Get the source path without the wildcards
-// This is defined since the files mentioned with exclude flag
-// & include flag are relative to the Source
-// If the source has wildcards, then files are relative to the
-// parent source path which is the path of last directory in the source
-// without wildcards
-// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
-// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
-// For Example: src = "/home/*" parentSourcePath = "/home"
-func (p *S3URLParts) getParentSourcePath() string {
-	parentSourcePath := p.ObjectKey
-	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
-	if wcIndex != -1 {
-		parentSourcePath = parentSourcePath[:wcIndex]
-		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
-		if pathSepIndex == -1 {
-			parentSourcePath = ""
-		} else {
-			parentSourcePath = parentSourcePath[:pathSepIndex]
-		}
-	}
-
-	return parentSourcePath
 }
 
 type caseInsensitiveValues url.Values // map[string][]string

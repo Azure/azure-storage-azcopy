@@ -34,9 +34,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	minio "github.com/minio/minio-go"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 var once sync.Once
@@ -318,17 +317,4 @@ func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 				Value: common.UserAgent,
 			},
 		}), nil
-}
-
-// ==============================================================================================
-// s3 credential related factory methods
-// ==============================================================================================
-func createS3Client(ctx context.Context, credInfo common.CredentialInfo) (*minio.Client, error) {
-	// Currently only support access key
-	credential := common.CreateS3Credential(ctx, credInfo, common.CredentialOpOptions{
-		//LogInfo:  glcm.Info, //Comment out for debugging
-		LogError: glcm.Info,
-	})
-
-	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
 }

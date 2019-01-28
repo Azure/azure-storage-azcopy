@@ -35,8 +35,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 const (
@@ -1054,4 +1054,95 @@ func (parts adlsGen2PathURLPartsExtension) getParentSourcePath() string {
 func (parts adlsGen2PathURLPartsExtension) createADLSGen2PathURLFromFileSystem(directoryOrFilePath string) url.URL {
 	parts.DirectoryOrFilePath = directoryOrFilePath
 	return parts.URL()
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type s3URLPartsExtension struct {
+	common.S3URLParts
+}
+
+// isServiceLevelSearch check if it's an service level search for S3.
+// And returns search prefix(part before wildcard) for bucket to match, if it's service level search.
+func (p *s3URLPartsExtension) isServiceLevelSearch() (IsServiceLevelSearch bool, bucketPrefix string) {
+	// If it's service level URL which need search bucket, there could be two cases:
+	// a. https://<service-endpoint>(/)
+	// b. https://<service-endpoint>/bucketprefix*(/*)
+	if p.IsServiceURL() ||
+		strings.Contains(p.BucketName, wildCard) {
+		IsServiceLevelSearch = true
+		// Case p.IsServiceURL(), bucket name is empty, search for all buckets.
+		if p.BucketName == "" {
+			return
+		}
+
+		// Case bucketname contains wildcard.
+		wildCardIndex := gCopyUtil.firstIndexOfWildCard(p.BucketName)
+
+		// wild card exists prefix will be the content of bucket name till the wildcard index
+		// Example 1: for URL https://<service-endpoint>/b-2*, bucketPrefix = b-2
+		// Example 2: for URL https://<service-endpoint>/b-2*/vd/o*, bucketPrefix = b-2
+		bucketPrefix = p.BucketName[:wildCardIndex]
+		return
+	}
+	// Otherwise, it's not service level search.
+	return
+}
+
+// searchObjectPrefixAndPatternFromS3URL gets search prefix and pattern from S3 URL.
+// search prefix is used during listing objects in bucket, and pattern is used to support wildcard search by azcopy-v10.
+func (p *s3URLPartsExtension) searchObjectPrefixAndPatternFromS3URL() (prefix, pattern string, isWildcardSearch bool) {
+	// If the objectKey is empty, it means the url provided is of a bucket,
+	// then all object inside buckets needs to be included, so prefix is "" and pattern is set to *, isWildcardSearch false
+	if p.ObjectKey == "" {
+		pattern = "*"
+		return
+	}
+	// Check for wildcard
+	wildCardIndex := gCopyUtil.firstIndexOfWildCard(p.ObjectKey)
+	// If no wildcard exits and url represents a virtual directory or a object, search everything in the virtual directory
+	// or specifically the object.
+	if wildCardIndex < 0 {
+		// prefix is the path of virtual directory after the bucket, pattern is *, isWildcardSearch false
+		// Example 1: https://<bucket-name>/vd-1/, prefix = /vd-1/
+		// Example 2: https://<bucket-name>/vd-1/vd-2/, prefix = /vd-1/vd-2/
+		// Example 3: https://<bucket-name>/vd-1/abc, prefix = /vd1/abc
+		prefix = p.ObjectKey
+		pattern = "*"
+		return
+	}
+
+	// Is wildcard search
+	isWildcardSearch = true
+	// wildcard exists prefix will be the content of object key till the wildcard index
+	// Example: https://<bucket-name>/vd-1/vd-2/abc*
+	// prefix = /vd-1/vd-2/abc, pattern = /vd-1/vd-2/abc*, isWildcardSearch true
+	prefix = p.ObjectKey[:wildCardIndex]
+	pattern = p.ObjectKey
+
+	return
+}
+
+// Get the source path without the wildcards
+// This is defined since the files mentioned with exclude flag
+// & include flag are relative to the Source
+// If the source has wildcards, then files are relative to the
+// parent source path which is the path of last directory in the source
+// without wildcards
+// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
+// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
+// For Example: src = "/home/*" parentSourcePath = "/home"
+func (p *s3URLPartsExtension) getParentSourcePath() string {
+	parentSourcePath := p.ObjectKey
+	wcIndex := gCopyUtil.firstIndexOfWildCard(parentSourcePath)
+	if wcIndex != -1 {
+		parentSourcePath = parentSourcePath[:wcIndex]
+		pathSepIndex := strings.LastIndex(parentSourcePath, "/")
+		if pathSepIndex == -1 {
+			parentSourcePath = ""
+		} else {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		}
+	}
+
+	return parentSourcePath
 }

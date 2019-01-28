@@ -120,7 +120,7 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.BlobFS()
 			}
 
-			if IsS3URL(*u) {
+			if common.IsS3URL(*u) {
 				return common.ELocation.S3()
 			}
 		}

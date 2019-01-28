@@ -21,6 +21,9 @@
 package ste
 
 import (
+	"net/url"
+	"time"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -72,4 +75,48 @@ func getNumCopyChunks(fileSize int64, chunkSize uint32) uint32 {
 func createCopyChunkFunc(jptm IJobPartTransferMgr, id common.ChunkID, body func()) chunkFunc {
 	// For s2s copy, we set the chunk status to done as soon as the chunkFunc completes.
 	return createChunkFunc(true, jptm, id, body)
+}
+
+// By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
+// This value could be further tuned, or exposed to user for customization, according to user feedback.
+const defaultPresignExpires = time.Hour * 7 * 24
+
+var s3ClientFactory = common.NewS3ClientFactory()
+
+func prepareSourceURL(jptm IJobPartTransferMgr, source string) (*url.URL, error) {
+	u, err := url.Parse(source)
+	if err != nil {
+		return nil, err
+	}
+
+	fromTo := jptm.FromTo()
+	// If it's S3 source, presign the source.
+	if fromTo == common.EFromTo.S3Blob() {
+		s3URLPart, err := common.NewS3URLParts(*u)
+		if err != nil {
+			return nil, err
+		}
+
+		s3Client, err := s3ClientFactory.GetS3Client(
+			jptm.Context(),
+			common.CredentialInfo{
+				CredentialType: common.ECredentialType.S3AccessKey(),
+				S3CredentialInfo: common.S3CredentialInfo{
+					Endpoint: s3URLPart.Endpoint,
+					Region:   s3URLPart.Region,
+				},
+			},
+			common.CredentialOpOptions{
+				LogInfo:  func(str string) { jptm.Log(pipeline.LogInfo, str) },
+				LogError: func(str string) { jptm.Log(pipeline.LogError, str) },
+				Panic:    jptm.Panic,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		return s3Client.PresignedGetObject(s3URLPart.BucketName, s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
+	}
+
+	return u, err
 }

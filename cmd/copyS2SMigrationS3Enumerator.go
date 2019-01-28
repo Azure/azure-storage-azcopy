@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/minio/minio-go"
@@ -20,12 +19,8 @@ type copyS2SMigrationS3Enumerator struct {
 
 	// source S3 resources
 	s3Client   *minio.Client
-	s3URLParts S3URLParts
+	s3URLParts s3URLPartsExtension
 }
-
-// By default presign expires after 7 days, which is considered enough for large amounts of files transfer.
-// This value could be further tuned, or exposed to user for customization, according to user feedback.
-const defaultPresignExpires = time.Hour * 24 * 7
 
 func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
 	if err = e.initEnumeratorCommon(ctx, cca); err != nil {
@@ -38,17 +33,26 @@ func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *
 	e.destURL = gCopyUtil.appendQueryParamToUrl(e.destURL, cca.destinationSAS)
 
 	// Check whether the source URL is a valid S3 URL, and parse URL parts.
-	if e.s3URLParts, err = NewS3URLParts(*e.sourceURL); err != nil {
+	if s3URLParts, err := common.NewS3URLParts(*e.sourceURL); err != nil {
 		return err
+	} else {
+		e.s3URLParts = s3URLPartsExtension{s3URLParts}
 	}
 
-	if e.s3Client, err = createS3Client(ctx, common.CredentialInfo{
-		CredentialType: common.ECredentialType.S3AccessKey(), // Currently only support access key
-		S3CredentialInfo: common.S3CredentialInfo{
-			Endpoint: e.s3URLParts.Endpoint,
-			Region:   e.s3URLParts.Region,
+	if e.s3Client, err = common.CreateS3Client(
+		ctx,
+		common.CredentialInfo{
+			CredentialType: common.ECredentialType.S3AccessKey(), // Currently only support access key
+			S3CredentialInfo: common.S3CredentialInfo{
+				Endpoint: e.s3URLParts.Endpoint,
+				Region:   e.s3URLParts.Region,
+			},
 		},
-	}); err != nil {
+		common.CredentialOpOptions{
+			LogError: glcm.Error,
+			// LogInfo: glcm.Info, // Uncomment for debugging purpose
+		},
+	); err != nil {
 		return err
 	}
 
@@ -78,13 +82,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				return err
 			}
 
-			// Presign the get URL for S2S copy
-			presignedURL, err := e.s3Client.PresignedGetObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, defaultPresignExpires, url.Values{})
-			if err != nil {
-				return err
-			}
-
-			if err := e.addObjectToNTransfer(*presignedURL, *e.destURL, &objectInfo, cca); err != nil {
+			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, cca); err != nil {
 				return err
 			}
 
@@ -93,7 +91,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	// Case-2: Source is a service endpoint.
-	if isServiceLevel, bucketPrefix := e.s3URLParts.IsServiceLevelSearch(); isServiceLevel {
+	if isServiceLevel, bucketPrefix := e.s3URLParts.isServiceLevelSearch(); isServiceLevel {
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire S3 service without recursive flag. Please use --recursive flag")
 		}
@@ -294,14 +292,13 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 			}
 		}
 
-		// Presign the get URL for S2S copy
-		presignedURL, err := s3Client.PresignedGetObject(bucketName, objectInfo.Key, defaultPresignExpires, url.Values{})
-		if err != nil {
-			return err
-		}
+		// Compose the source S3 object URL.
+		tmpS3URLPart := e.s3URLParts
+		tmpS3URLPart.BucketName = bucketName
+		tmpS3URLPart.ObjectKey = objectInfo.Key
 
 		return e.addObjectToNTransfer(
-			*presignedURL,
+			tmpS3URLPart.URL(),
 			urlExtension{URL: destBaseURL}.generateObjectPath(objectRelativePath),
 			&objectInfo,
 			cca)

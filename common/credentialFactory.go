@@ -27,11 +27,13 @@ import (
 	"math"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	minio "github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
 )
 
@@ -175,7 +177,7 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 		key := os.Getenv("ACCOUNT_KEY")
 		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
 		if name == "" || key == "" {
-			options.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before creating the blobfs SharedKey credential"))
+			options.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blobfs SharedKey credential"))
 		}
 		// create the shared key credentials
 		return azbfs.NewSharedKeyCredential(name, key)
@@ -188,7 +190,7 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 }
 
 // CreateS3Credential creates AWS S3 credential according to credential info.
-func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) *credentials.Credentials {
+func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) (*credentials.Credentials, error) {
 	switch credInfo.CredentialType {
 	case ECredentialType.S3AccessKey():
 		accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
@@ -196,11 +198,11 @@ func CreateS3Credential(ctx context.Context, credInfo CredentialInfo, options Cr
 		sessionToken := os.Getenv("AWS_SESSION_TOKEN")
 
 		if accessKeyID == "" || secretAccessKey == "" {
-			options.panicError(errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment vars must be set before creating the S3 AccessKey credential"))
+			return nil, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
 		}
 
 		// create and return s3 credential
-		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken) // S3 uses V4 signature
+		return credentials.NewStaticV4(accessKeyID, secretAccessKey, sessionToken), nil // S3 uses V4 signature
 	default:
 		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
@@ -226,4 +228,54 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 
 	// Calculate wait duration, and schedule next refresh.
 	return refreshPolicyHalfOfExpiryWithin(newToken, options)
+}
+
+// ==============================================================================================
+// S3 credential related factory methods
+// ==============================================================================================
+func CreateS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*minio.Client, error) {
+	// Currently only support access key
+	credential, err := CreateS3Credential(ctx, credInfo, option)
+	if err != nil {
+		return nil, err
+	}
+
+	return minio.NewWithCredentials(credInfo.S3CredentialInfo.Endpoint, credential, true, credInfo.S3CredentialInfo.Region)
+}
+
+type S3ClientFactory struct {
+	s3Clients map[CredentialInfo]*minio.Client
+	lock      sync.RWMutex
+}
+
+// NewS3ClientFactory creates new S3 client factory.
+func NewS3ClientFactory() S3ClientFactory {
+	return S3ClientFactory{
+		s3Clients: make(map[CredentialInfo]*minio.Client),
+	}
+}
+
+// GetS3Client gets S3 client from pool, or create a new S3 client if no client created for specific credInfo.
+func (f *S3ClientFactory) GetS3Client(ctx context.Context, credInfo CredentialInfo, option CredentialOpOptions) (*minio.Client, error) {
+	f.lock.RLock()
+	s3Client, ok := f.s3Clients[credInfo]
+	f.lock.RUnlock()
+
+	if ok {
+		return s3Client, nil
+	}
+
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	if s3Client, ok := f.s3Clients[credInfo]; !ok {
+		newS3Client, err := CreateS3Client(ctx, credInfo, option)
+		if err != nil {
+			return nil, err
+		}
+
+		f.s3Clients[credInfo] = newS3Client
+		return newS3Client, nil
+	} else {
+		return s3Client, nil
+	}
 }
