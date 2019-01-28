@@ -55,14 +55,12 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		retryReader := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		retryReader := get.Body(azbfs.RetryReaderOptions{
+			MaxRetryRequests: MaxRetryPerDownloadBody,
+			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+		})
 		defer retryReader.Close()
-		retryForcer := func() {
-			// TODO: implement this, or implement GetBodyWithForceableRetry above
-			// for now, this "retry forcer" does nothing
-			//fmt.Printf("\nForcing retry\n")
-		}
-		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newLiteResponseBodyPacer(retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return
