@@ -152,6 +152,12 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		chunkDataError := chunkReader.BlockingPrefetch(srcFile, false)
 
 		// Add the bytes to the hash
+		// NOTE: if there is a retry on this chunk later (a 503 from Service) our current implementation of singleChunkReader
+		// (as at Jan 2019) will re-read from the disk.  If that part of the file has been updated by another process,
+		// that means it will not longer match the hash we set here. That would be bad. So we rely on logic
+		// elsewhere in our upload code to avoid/fail or retry such transfers.
+		// TODO: move the above note to the place where we implement the avoid/fail/retry and refer to that in a comment
+		//      on the retry file-re-read logic
 		if chunkDataError == nil {
 			chunkReader.WriteBufferTo(md5Hasher)
 		} else {
