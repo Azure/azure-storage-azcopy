@@ -31,12 +31,14 @@ import (
 )
 
 type pageBlobUploader struct {
-	jptm        IJobPartTransferMgr
-	pageBlobUrl azblob.PageBlobURL
-	chunkSize   uint32
-	numChunks   uint32
-	pipeline    pipeline.Pipeline
-	pacer       *pacer
+	jptm                IJobPartTransferMgr
+	pageBlobUrl         azblob.PageBlobURL
+	chunkSize           uint32
+	numChunks           uint32
+	pipeline            pipeline.Pipeline
+	pacer               *pacer
+	md5Channel          chan []byte
+	creationTimeHeaders *azblob.BlobHTTPHeaders
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -65,6 +67,7 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 		numChunks:   numChunks,
 		pipeline:    p,
 		pacer:       pacer,
+		md5Channel:  newMd5Channel(),
 	}, nil
 }
 
@@ -74,6 +77,10 @@ func (u *pageBlobUploader) ChunkSize() uint32 {
 
 func (u *pageBlobUploader) NumChunks() uint32 {
 	return u.numChunks
+}
+
+func (u *pageBlobUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 func (u *pageBlobUploader) RemoteFileExists() (bool, error) {
@@ -92,6 +99,8 @@ func (u *pageBlobUploader) Prologue(leadingBytes []byte) {
 		jptm.FailActiveUpload("Creating blob", err)
 		return
 	}
+	// Save headers to re-use, with same values, in epilogue
+	u.creationTimeHeaders = &blobHTTPHeaders
 
 	// set tier
 	_, pageBlobTier := jptm.BlobTiers()
@@ -136,6 +145,16 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 func (u *pageBlobUploader) Epilogue() {
 	jptm := u.jptm
+
+	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
+	if jptm.TransferStatus() > 0 {
+		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
+			epilogueHeaders := *u.creationTimeHeaders
+			epilogueHeaders.ContentMD5 = md5Hash
+			_, err := u.pageBlobUrl.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			return err
+		})
+	}
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?

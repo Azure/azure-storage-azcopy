@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -58,9 +59,34 @@ type uploader interface {
 	// or post-failure processing otherwise.  Implementations should
 	// use jptm.FailActiveUpload if anything fails during the epilogue.
 	Epilogue()
+
+	// Md5Channel returns the channel on which localToRemote should send the MD5 hash to the uploader
+	Md5Channel() chan<- []byte
 }
 
 type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error)
+
+func newMd5Channel() chan []byte {
+	return make(chan []byte, 1) // must be buffered, so as not to hold up the goroutine running localToRemote (which needs to start on the NEXT file after finishing its current one)
+}
+
+// Tries to set the MD5 hash using the given function
+// Fails the upload if any error happens.
+// This should be used only by those uploads that require a separate operation to PUT the hash at the end.
+// Others, such as the block blob uploader piggyback their MD5 setting on other calls, and so won't use this.
+func tryPutMd5Hash(jptm IJobPartTransferMgr, md5Channel <-chan []byte, worker func(hash []byte) error) {
+	md5Hash, ok := <-md5Channel
+	if ok {
+		err := worker(md5Hash)
+		if err != nil {
+			jptm.FailActiveUpload("Setting hash", err)
+		}
+	} else {
+		jptm.FailActiveUpload("Setting hash", errNoHash)
+	}
+}
+
+var errNoHash = errors.New("no hash computed")
 
 func getNumUploadChunks(fileSize int64, chunkSize uint32) uint32 {
 	numChunks := uint32(1) // for uploads, we always map zero-size files to ONE (empty) chunk

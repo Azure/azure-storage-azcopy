@@ -32,12 +32,13 @@ import (
 )
 
 type blobFSUploader struct {
-	jptm      IJobPartTransferMgr
-	fileURL   azbfs.FileURL
-	chunkSize uint32
-	numChunks uint32
-	pipeline  pipeline.Pipeline
-	pacer     *pacer
+	jptm       IJobPartTransferMgr
+	fileURL    azbfs.FileURL
+	chunkSize  uint32
+	numChunks  uint32
+	pipeline   pipeline.Pipeline
+	pacer      *pacer
+	md5Channel chan []byte
 }
 
 func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -105,12 +106,13 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 	numChunks := getNumUploadChunks(info.SourceSize, chunkSize)
 
 	return &blobFSUploader{
-		jptm:      jptm,
-		fileURL:   azbfs.NewFileURL(*destURL, p),
-		chunkSize: chunkSize,
-		numChunks: numChunks,
-		pipeline:  p,
-		pacer:     pacer,
+		jptm:       jptm,
+		fileURL:    azbfs.NewFileURL(*destURL, p),
+		chunkSize:  chunkSize,
+		numChunks:  numChunks,
+		pipeline:   p,
+		pacer:      pacer,
+		md5Channel: newMd5Channel(),
 	}, nil
 }
 
@@ -120,6 +122,11 @@ func (u *blobFSUploader) ChunkSize() uint32 {
 
 func (u *blobFSUploader) NumChunks() uint32 {
 	return u.numChunks
+}
+
+func (u *blobFSUploader) Md5Channel() chan<- []byte {
+	// TODO: can we support this? And when? Right now, we are returning it, but never using it ourselves
+	return u.md5Channel
 }
 
 func (u *blobFSUploader) RemoteFileExists() (bool, error) {

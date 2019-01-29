@@ -22,6 +22,7 @@ package common
 
 import (
 	"errors"
+	"hash"
 	"io"
 )
 
@@ -58,4 +59,8 @@ func (cr *emptyChunkReader) HasPrefetchedEntirelyZeros() bool {
 
 func (cr *emptyChunkReader) Length() int64 {
 	return 0
+}
+
+func (cr *emptyChunkReader) WriteBufferTo(h hash.Hash) {
+	return // no content to write
 }

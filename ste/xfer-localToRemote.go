@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"crypto/md5"
 	"fmt"
 	"os"
 
@@ -48,6 +49,9 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		jptm.ReportTransferDone()
 		return
 	}
+	md5Channel := ul.Md5Channel()
+	defer close(md5Channel) // never leave receiver hanging, waiting for a result, even if we fail here
+
 	// step 2b. Read chunk size and count from the uploader (since it may have applied its own defaults and/or calculations to produce these values
 	chunkSize := ul.ChunkSize()
 	numChunks := ul.NumChunks()
@@ -120,11 +124,13 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// chunks) then we don't need to schedule any more chunks right now, so the blocking
 	// is harmless (and a good thing, to avoid excessive RAM usage).
 	// To take advantage of the good sequential read performance provided by many file systems,
-	// we work sequentially through the file here.
+	// and to be able to compute an MD5 hash for the file, we work sequentially through the file here.
 	context := jptm.Context()
 	slicePool := jptm.SlicePool()
 	cacheLimiter := jptm.CacheLimiter()
 	chunkCount := int32(0)
+	md5Hasher := md5.New()
+	safeToUseHash := true
 	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex, fileSize); startIndex += int64(chunkSize) {
 
 		id := common.ChunkID{Name: info.Source, OffsetInFile: startIndex}
@@ -145,11 +151,11 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 		chunkDataError := chunkReader.BlockingPrefetch(srcFile, false)
 
-		// TODO add the bytes to the hash
+		// Add the bytes to the hash
 		if chunkDataError == nil {
-			//chunkDataError = add to has
+			chunkReader.WriteBufferTo(md5Hasher)
 		} else {
-			// hashvalid = false
+			safeToUseHash = false // because we've missed a chunk
 		}
 
 		// If this is the the very first chunk, do special init steps
@@ -183,6 +189,11 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// sanity check to verify the number of chunks scheduled
 	if chunkCount != int32(numChunks) {
 		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
+	}
+
+	// provide the hash that we computed
+	if safeToUseHash {
+		md5Channel <- md5Hasher.Sum(nil)
 	}
 }
 

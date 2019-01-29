@@ -23,6 +23,7 @@ package common
 import (
 	"context"
 	"errors"
+	"hash"
 	"io"
 )
 
@@ -58,6 +59,10 @@ type SingleChunkReader interface {
 	// In the rare edge case where this returns false due to the prefetch having failed (rather than the contents being non-zero),
 	// we'll just treat it as a non-zero chunk. That's simpler (to code, to review and to test) than having this code force a prefetch.
 	HasPrefetchedEntirelyZeros() bool
+
+	// WriteBufferTo writes the entire contents of the prefetched buffer to h
+	// Panics if the internal buffer has not been prefetched (or if its been discarded after a complete Read)
+	WriteBufferTo(h hash.Hash)
 }
 
 // Simple aggregation of existing io interfaces
@@ -291,4 +296,14 @@ func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
 	// MUST re-wind, so that the bytes we read will get transferred too!
 	cr.Seek(0, io.SeekStart)
 	return leadingBytes
+}
+
+func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
+	if cr.buffer == nil {
+		panic("invalid state. No prefetch buffer is present")
+	}
+	_, err := h.Write(cr.buffer)
+	if err != nil {
+		panic("documentation of hash.Hash.Write says it will never return an error")
+	}
 }
