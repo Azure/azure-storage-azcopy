@@ -29,8 +29,8 @@ import (
 type emptyChunkReader struct {
 }
 
-func (cr *emptyChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
-	return true
+func (cr *emptyChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+	return nil
 }
 
 func (cr *emptyChunkReader) Seek(offset int64, whence int) (int64, error) {

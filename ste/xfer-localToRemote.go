@@ -143,7 +143,14 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		chunkReader := common.NewSingleChunkReader(context, sourceFileFactory, id, adjustedChunkSize, jptm, slicePool, cacheLimiter)
 
 		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-		chunkReader.TryBlockingPrefetch(srcFile)
+		chunkDataError := chunkReader.BlockingPrefetch(srcFile, false)
+
+		// TODO add the bytes to the hash
+		if chunkDataError == nil {
+			//chunkDataError = add to has
+		} else {
+			// hashvalid = false
+		}
 
 		// If this is the the very first chunk, do special init steps
 		if startIndex == 0 {
@@ -158,8 +165,17 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 		// schedule the chunk job/msg
 		jptm.LogChunkStatus(id, common.EWaitReason.WorkerGR())
-		isWholeFile := numChunks == 1
-		jptm.ScheduleChunks(ul.GenerateUploadFunc(id, chunkCount, chunkReader, isWholeFile))
+		var cf chunkFunc
+		if chunkDataError == nil {
+			isWholeFile := numChunks == 1
+			cf = ul.GenerateUploadFunc(id, chunkCount, chunkReader, isWholeFile)
+		} else {
+			_ = chunkReader.Close()
+			// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
+			// so we schedule a func that will just fail with the given error
+			cf = createUploadChunkFunc(jptm, id, func() { jptm.FailActiveUpload("chunk data read", chunkDataError) })
+		}
+		jptm.ScheduleChunks(cf)
 
 		chunkCount += 1
 	}
