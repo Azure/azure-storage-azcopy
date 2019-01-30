@@ -241,7 +241,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		common.PanicIfErr(err)
 		eof += int64(bytesWritten)
 
-		// For S2S copy, write the src properties
+		// For S2S copy (and, in the case of Content-MD5, always), write the src properties
+		// TODO: *** reviewers: is it OK to use this in a non S2S scenario, for the MD5s?? ***
 		if len(order.Transfers[t].ContentType) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)
 			common.PanicIfErr(err)
@@ -267,7 +268,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
-		if order.Transfers[t].ContentMD5 != nil {
+		if order.Transfers[t].ContentMD5 != nil { // if non-nil but 0 len, will simply not be read by the consumer (since length is zero)
 			bytesWritten, err = file.WriteString(string(order.Transfers[t].ContentMD5))
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)

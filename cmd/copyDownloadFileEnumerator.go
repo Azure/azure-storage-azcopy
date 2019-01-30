@@ -155,7 +155,8 @@ func (e *copyDownloadFileEnumerator) addDownloadFileTransfer(srcURL url.URL, des
 		Source:           gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
 		Destination:      destPath,
 		LastModifiedTime: properties.LastModified(),
-		SourceSize:       properties.ContentLength()},
+		SourceSize:       properties.ContentLength(),
+		ContentMD5:       properties.ContentMD5()},
 		cca)
 }
 
