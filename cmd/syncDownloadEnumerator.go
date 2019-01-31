@@ -215,6 +215,7 @@ func (e *syncDownloadEnumerator) listSourceAndCompare(cca *cookedSyncCmdArgs, p 
 				Destination:      blobLocalPath,
 				SourceSize:       *blobInfo.Properties.ContentLength,
 				LastModifiedTime: blobInfo.Properties.LastModified,
+				ContentMD5:       blobInfo.Properties.ContentMD5,
 			}, cca)
 
 			delete(e.SourceFiles, blobLocalPath)
@@ -295,6 +296,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 			Destination:      cca.source,
 			SourceSize:       bProperties.ContentLength(),
 			LastModifiedTime: bProperties.LastModified(),
+			ContentMD5:       bProperties.ContentMD5(),
 		}, cca)
 	}
 
