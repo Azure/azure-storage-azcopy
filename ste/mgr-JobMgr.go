@@ -176,11 +176,15 @@ func (jm *jobMgr) IsDiskConstrained() bool {
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
 func (jm *jobMgr) GetPerfStrings() []string {
+	const format = "%c: %2d"
 	chunkStateCounts := jm.chunkStatusLogger.GetCounts()
-	result := make([]string, len(chunkStateCounts))
+	result := make([]string, len(chunkStateCounts)+1)
+	total := int64(0)
 	for i, c := range chunkStateCounts {
-		result[i] = fmt.Sprintf("%c: %d", c.WaitReason.Name[0], c.Count)
+		result[i] = fmt.Sprintf(format, c.WaitReason.Name[0], c.Count)
+		total += c.Count
 	}
+	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
 	return result
 }
 
