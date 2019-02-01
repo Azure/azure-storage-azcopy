@@ -458,6 +458,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
+	js.IsDiskConstrained = jm.IsDiskConstrained()
+	js.PerfDiagnostics = jm.GetPerfStrings()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
@@ -583,6 +585,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
+	js.IsDiskConstrained = jm.IsDiskConstrained()
+	js.PerfDiagnostics = jm.GetPerfStrings()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that

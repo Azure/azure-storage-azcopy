@@ -25,61 +25,111 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync/atomic"
 	"time"
 )
 
+// Identifies a chunk. Always create with NewChunkID
 type ChunkID struct {
 	Name         string
 	OffsetInFile int64
+
+	// What is this chunk's progress currently waiting on?
+	// Must be a pointer, because the ChunkID itself is a struct.
+	// When chunkID is passed around, copies are made,
+	// but because this is a pointer, all will point to the same
+	// value for waitReasonIndex (so when we change it, all will see the change)
+	waitReasonIndex *int32
 }
 
-var EWaitReason = WaitReason(0)
+func NewChunkID(name string, offsetInFile int64) ChunkID {
+	dummyWaitReasonIndex := int32(0)
+	return ChunkID{
+		Name:            name,
+		OffsetInFile:    offsetInFile,
+		waitReasonIndex: &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
+	}
+}
 
-type WaitReason string
+var EWaitReason = WaitReason{0, ""}
 
-// statuses used by both upload and download
-func (WaitReason) RAMToSchedule() WaitReason { return WaitReason("RAM") }       // waiting for enough RAM to schedule the chunk
-func (WaitReason) WorkerGR() WaitReason      { return WaitReason("GR") }        // waiting for a goroutine to start running our chunkfunc
-func (WaitReason) Body() WaitReason          { return WaitReason("Body") }      // waiting to finish sending/receiving the BODY
-func (WaitReason) Disk() WaitReason          { return WaitReason("Disk") }      // waiting on disk write to complete
-func (WaitReason) ChunkDone() WaitReason     { return WaitReason("Done") }      // not waiting on anything. Chunk is done.
-func (WaitReason) Cancelled() WaitReason     { return WaitReason("Cancelled") } // transfer was cancelled.  All chunks end with either Done or Cancelled.
+type WaitReason struct {
+	index int32
+	Name  string
+}
 
-// extra statuses used only by download
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason("Head") }               // waiting to finish downloading the HEAD
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason("BodyReRead-LowRam") }  //waiting to re-read the body after a forced-retry due to low RAM
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason("BodyReRead-TooSlow") } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) WriterChannel() WaitReason        { return WaitReason("Writer") }             // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason("Prior") }              // waiting on a prior chunk to arrive (before this one can be saved)
+// Upload chunks go through these states:
+// RAM
+// GR
+// Body
+// Disk
+// Done/Cancelled
+
+// Download chunks go through a superset, as follows
+// RAM
+// GR
+// Head (can easily separate out head/body for uploads)
+// Body
+// (possibly) BodyReRead-*
+// Writer
+// Prior
+// Disk
+// Done/Cancelled
+
+// Head (below) has index between GB and Body, just so the ordering is numerical ascending during typical chunk lifetime for both upload and download
+func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
+func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
+func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "GR"} }                 // waiting for a goroutine to start running our chunkfunc
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{3, "Head"} }               // waiting to finish downloading the HEAD
+func (WaitReason) Body() WaitReason                 { return WaitReason{4, "Body"} }               // waiting to finish sending/receiving the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{5, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{6, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) WriterChannel() WaitReason        { return WaitReason{7, "Writer"} }             // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason{8, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) Disk() WaitReason                 { return WaitReason{9, "Disk"} }               // waiting on disk read/write to complete
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{10, "Done"} }              // not waiting on anything. Chunk is done.
+func (WaitReason) Cancelled() WaitReason            { return WaitReason{11, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 func (wr WaitReason) String() string {
-	return string(wr) // avoiding reflection here, for speed, since will be called a lot
+	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot
 }
 
 type ChunkStatusLogger interface {
 	LogChunkStatus(id ChunkID, reason WaitReason)
 }
 
+type chunkStatusCount struct {
+	WaitReason WaitReason
+	Count      int64
+}
+
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
+	GetCounts() []chunkStatusCount
 	CloseLog()
 }
 
 type chunkStatusLogger struct {
-	enabled        bool
+	counts         []int64
+	outputEnabled  bool
 	unsavedEntries chan chunkWaitState
 }
 
-func NewChunkStatusLogger(jobID JobID, logFileFolder string, enable bool) ChunkStatusLoggerCloser {
+func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
-		enabled:        enable,
+		counts:         make([]int64, numWaitReasons()),
+		outputEnabled:  enableOutput,
 		unsavedEntries: make(chan chunkWaitState, 1000000),
 	}
-	if enable {
+	if enableOutput {
 		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
 		go logger.main(chunkLogPath)
 	}
 	return logger
+}
+
+func numWaitReasons() int32 {
+	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
 }
 
 type chunkWaitState struct {
@@ -88,8 +138,57 @@ type chunkWaitState struct {
 	waitStart time.Time
 }
 
+// We maintain running totals of how many chunks are in each state.
+// To do so, we must determine the new state (which is simply a parameter) and the old state.
+// We obtain and track the old state within the chunkID itself. The alternative, of having a threadsafe
+// map in the chunkStatusLogger, to track and look up the states, is considered a risk for performance.
+func (csl *chunkStatusLogger) countStateTransition(id ChunkID, newReason WaitReason) {
+
+	// Flip the chunk's state to indicate the new thing that it's waiting for now
+	oldReasonIndex := atomic.SwapInt32(id.waitReasonIndex, newReason.index)
+
+	// Update the counts
+	// There's no need to lock the array itself. Instead just do atomic operations on the contents.
+	// (See https://groups.google.com/forum/#!topic/Golang-nuts/Ud4Dqin2Shc)
+	if oldReasonIndex > 0 && oldReasonIndex < int32(len(csl.counts)) {
+		atomic.AddInt64(&csl.counts[oldReasonIndex], -1)
+	}
+	if newReason.index < int32(len(csl.counts)) {
+		atomic.AddInt64(&csl.counts[newReason.index], 1)
+	}
+}
+
+// Gets the current counts of chunks in each wait state
+// Intended for performance diagnostics and reporting
+func (csl *chunkStatusLogger) GetCounts() []chunkStatusCount {
+	// get list of all the reasons we want to output
+	// Rare and not-useful ones are excluded
+	allReasons := []WaitReason{
+		//EWaitReason.Nothing(),
+		EWaitReason.RAMToSchedule(),
+		EWaitReason.WorkerGR(),
+		EWaitReason.HeaderResponse(),
+		EWaitReason.Body(),
+		//EWaitReason.BodyReReadDueToMem(),
+		//EWaitReason.BodyReReadDueToSpeed(),
+		EWaitReason.WriterChannel(),
+		EWaitReason.PriorChunk(),
+		EWaitReason.Disk(),
+		EWaitReason.ChunkDone(),
+		//EWaitReason.Cancelled(),
+	}
+	result := make([]chunkStatusCount, len(allReasons))
+	for i, reason := range allReasons {
+		result[i] = chunkStatusCount{reason, atomic.LoadInt64(&csl.counts[reason.index])}
+	}
+	return result
+}
+
 func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
-	if !csl.enabled {
+	// always update the in-memory stats, even if output is disabled
+	csl.countStateTransition(id, reason)
+
+	if !csl.outputEnabled {
 		return
 	}
 	defer func() {
@@ -103,7 +202,7 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 }
 
 func (csl *chunkStatusLogger) CloseLog() {
-	if !csl.enabled {
+	if !csl.outputEnabled {
 		return
 	}
 	close(csl.unsavedEntries)

@@ -274,6 +274,7 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	var summary common.ListSyncJobSummaryResponse
 	var throughput float64
+	var timeElapsed float64
 	var jobDone bool
 
 	// fetch a job status and compute throughput if the first part was dispatched
@@ -283,7 +284,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
-		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+		timeElapsed = time.Since(cca.intervalStartTime).Seconds()
 		throughput = common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
 		// reset the interval timer and byte count
@@ -348,11 +349,14 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.JobStatus), exitCode)
 	}
 
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total, 2-sec Throughput (Mb/s): %v",
+	// indicate whether constrained by disk or not
+	perfString := getPerformanceString(summary.IsDiskConstrained, summary.PerfDiagnostics, timeElapsed)
+
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total, 2-sec Throughput (Mb/s): %v%s",
 		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
 		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
 		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, ste.ToFixed(throughput, 4)))
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, ste.ToFixed(throughput, 4), perfString))
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
