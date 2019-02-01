@@ -60,35 +60,38 @@ type WaitReason struct {
 
 // Upload chunks go through these states:
 // RAM
-// GR
+// DiskIO
+// Worker
 // Body
 // Disk
 // Done/Cancelled
 
 // Download chunks go through a superset, as follows
 // RAM
-// GR
+// Worker
 // Head (can easily separate out head/body for uploads)
 // Body
 // (possibly) BodyReRead-*
-// Writer
+// Sorting
 // Prior
-// Disk
+// Queue
+// DiskIO
 // Done/Cancelled
 
 // Head (below) has index between GB and Body, just so the ordering is numerical ascending during typical chunk lifetime for both upload and download
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
 func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
-func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "GR"} }                 // waiting for a goroutine to start running our chunkfunc
+func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
 func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{3, "Head"} }               // waiting to finish downloading the HEAD
 func (WaitReason) Body() WaitReason                 { return WaitReason{4, "Body"} }               // waiting to finish sending/receiving the BODY
 func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{5, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
 func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{6, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) WriterChannel() WaitReason        { return WaitReason{7, "Writer"} }             // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk
+func (WaitReason) Sorting() WaitReason              { return WaitReason{7, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
 func (WaitReason) PriorChunk() WaitReason           { return WaitReason{8, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
-func (WaitReason) Disk() WaitReason                 { return WaitReason{9, "Disk"} }               // waiting on disk read/write to complete
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{10, "Done"} }              // not waiting on anything. Chunk is done.
-func (WaitReason) Cancelled() WaitReason            { return WaitReason{11, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
+func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{9, "Queue"} }              // prior chunk has arrived, but is not yet written out to disk
+func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "DiskIO"} }            // waiting on disk read/write to complete
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
+func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot
@@ -171,10 +174,11 @@ func (csl *chunkStatusLogger) GetCounts() []chunkStatusCount {
 		EWaitReason.Body(),
 		//EWaitReason.BodyReReadDueToMem(),
 		//EWaitReason.BodyReReadDueToSpeed(),
-		EWaitReason.WriterChannel(),
+		EWaitReason.Sorting(),
 		EWaitReason.PriorChunk(),
-		EWaitReason.Disk(),
-		EWaitReason.ChunkDone(),
+		EWaitReason.QueueToWrite(),
+		EWaitReason.DiskIO(),
+		//EWaitReason.ChunkDone(),
 		//EWaitReason.Cancelled(),
 	}
 	result := make([]chunkStatusCount, len(allReasons))

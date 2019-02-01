@@ -200,7 +200,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	cr.buffer = cr.slicePool.RentSlice(uint32Checked(cr.length))
 
 	// read bytes into the buffer
-	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.Disk())
+	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
 	totalBytesRead, err := fileReader.ReadAt(cr.buffer, cr.chunkId.OffsetInFile)
 	if err != nil && err != io.EOF {
 		return err
