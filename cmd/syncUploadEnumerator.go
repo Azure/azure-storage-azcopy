@@ -100,7 +100,9 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 		var resp common.CopyJobPartOrderResponse
 		e.CopyJobRequest.PartNum = e.PartNumber
 		answer := ""
-		if cca.force {
+		if cca.nodelete {
+			answer = "n"
+		} else if cca.force {
 			answer = "y"
 		} else {
 			answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
@@ -139,7 +141,9 @@ func (e *syncUploadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error {
 	}
 	answer := ""
 	// If the user set the force flag to true, then prompt is not required and file will be deleted.
-	if cca.force {
+	if cca.nodelete {
+		answer = "n"
+	} else if cca.force {
 		answer = "y"
 	} else {
 		answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete from destination. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))

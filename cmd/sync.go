@@ -56,6 +56,8 @@ type rawSyncCmdArgs struct {
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
+	// this flag disables deletion
+	nodelete bool
 }
 
 // validates and transform raw input into cooked input
@@ -120,6 +122,7 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.output.Parse(raw.output)
 	cooked.jobID = common.NewJobID()
 	cooked.force = raw.force
+	cooked.nodelete = raw.nodelete
 	return cooked, nil
 }
 
@@ -171,6 +174,8 @@ type cookedSyncCmdArgs struct {
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
 	force bool
+	// this flag disables deletion
+	nodelete bool
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
@@ -489,6 +494,8 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete extra files at the destination that are not present at the source. "+
+		"If false, user will be prompted with a question while scheduling files/blobs for deletion.")
+	syncCmd.PersistentFlags().BoolVar(&raw.nodelete, "nodelete", false, "defines user's decision to NOT delete extra files at the destination that are not present at the source. "+
 		"If false, user will be prompted with a question while scheduling files/blobs for deletion.")
 
 	// TODO sync does not support any BlobAttributes, this functionality should be added

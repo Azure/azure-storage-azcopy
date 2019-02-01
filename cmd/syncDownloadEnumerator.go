@@ -76,7 +76,9 @@ func (e *syncDownloadEnumerator) dispatchFinalPart(cca *cookedSyncCmdArgs) error
 	}
 	if numberOfDeleteTransfers > 0 {
 		answer := ""
-		if cca.force {
+		if cca.nodelete {
+			answer = "n"
+		} else if cca.force {
 			answer = "y"
 		} else {
 			answer = glcm.Prompt(fmt.Sprintf("Sync has enumerated %v files to delete locally. Do you want to delete these files ? Please confirm with y/n: ", numberOfDeleteTransfers))
