@@ -26,7 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
-type md5Comparsion struct {
+type md5Comparer struct {
 	expected      []byte
 	actualAsSaved []byte
 	logger        common.ILogger
@@ -44,7 +44,7 @@ var errActualMd5NotComputed = errors.New("no MDB was computed within this applic
 // Check compares the two MD5s, and returns any error if applicable
 // Any informational logging will be done within Check, so all the caller needs to do
 // is respond to non-nil errors
-func (c *md5Comparsion) Check() error {
+func (c *md5Comparer) Check() error {
 
 	if c.actualAsSaved == nil || len(c.actualAsSaved) == 0 {
 		return errActualMd5NotComputed // Should never happen
