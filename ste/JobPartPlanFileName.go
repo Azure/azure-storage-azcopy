@@ -242,7 +242,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		eof += int64(bytesWritten)
 
 		// For S2S copy (and, in the case of Content-MD5, always), write the src properties
-		// TODO: *** reviewers: is it OK to use this in a non S2S scenario, for the MD5s?? ***
 		if len(order.Transfers[t].ContentType) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)
 			common.PanicIfErr(err)
