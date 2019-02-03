@@ -33,7 +33,7 @@ import (
 type ChunkedFileWriter interface {
 
 	// WaitToScheduleChunk blocks until enough RAM is available to handle the given chunk, then it
-	// "reserves" that amount of RAM in the CacheLimiter and returns. 
+	// "reserves" that amount of RAM in the CacheLimiter and returns.
 	WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error
 
 	// EnqueueChunk hands the given chunkContents over to the ChunkedFileWriter, to be written to disk.
@@ -42,7 +42,7 @@ type ChunkedFileWriter interface {
 	// While any error may be returned immediately, errors are more likely to be returned later, on either a subsequent
 	// call to this routine or on the final return to Flush.
 	// After the chunk is written to disk, its reserved memory byte allocation is automatically subtracted from the CacheLimiter.
-	EnqueueChunk(ctx context.Context, retryForcer func(), id ChunkID, chunkSize int64, chunkContents io.Reader) error
+	EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader, retryable bool) error
 
 	// Flush will block until all the chunks have been written to disk.  err will be non-nil if and only in any chunk failed to write.
 	// Flush must be called exactly once, after all chunks have been enqueued with EnqueueChunk.
@@ -123,7 +123,7 @@ const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remov
 // at the time of scheduling the chunk (which is when this routine should be called).
 // Is here, as method of this struct, for symmetry with the point where we remove it's count
 // from the cache limiter, which is also in this struct.
-func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error{
+func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error {
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
 	err := w.cacheLimiter.WaitUntilAddBytes(ctx, chunkSize, w.shouldUseRelaxedRamThreshold)
 	if err == nil {
@@ -133,9 +133,18 @@ func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID,
 }
 
 // Threadsafe method to enqueue a new chunk for processing
-func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, retryForcer func(), id ChunkID, chunkSize int64, chunkContents io.Reader) error {
+func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkSize int64, chunkContents io.Reader, retryable bool) error {
+
 	readDone := make(chan struct{})
-	w.setupProgressMonitoring(readDone, id, chunkSize, retryForcer)
+	if retryable {
+		// if retryable == true, that tells us that closing the reader
+		// is a safe way to force this particular reader to retry.
+		// (Typically this means it forces the reader to make one iteration around its internal retry loop.
+		// Going around that loop is hidden to the normal Read code (unless it exceeds the retry count threshold))
+		closer := chunkContents.(io.Closer).Close // do the type assertion now, so get panic if it's not compatible.  If we left it to the last minute, then the type would only be verified on the rare occasions when retries are required
+		retryForcer := func() { _ = closer() }
+		w.setupProgressMonitoring(readDone, id, chunkSize, retryForcer)
+	}
 
 	// read into a buffer
 	buffer := w.slicePool.RentSlice(uint32(chunkSize))
@@ -269,7 +278,6 @@ func (w *chunkedFileWriter) shouldUseRelaxedRamThreshold() bool {
 	return atomic.LoadInt32(&w.activeChunkCount) <= maxDesirableActiveChunks
 }
 
-
 // Are we currently in a memory-constrained situation?
 func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {
 	didAdd := w.cacheLimiter.TryAddBytes(chunkSize, w.shouldUseRelaxedRamThreshold())
@@ -285,7 +293,7 @@ func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {
 // By retrying the slow chunk, we usually get a fast read.
 func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id ChunkID, chunkSize int64, retryForcer func()) {
 	if retryForcer == nil {
-		panic("retryForcer is nil. This probably means that the request pipeline is not producing cancelable requests. I.e. it is not producing response bodies that implement RequestCanceller")
+		panic("retryForcer is nil")
 	}
 	start := time.Now()
 	initialReceivedCount := atomic.LoadInt32(&w.totalReceivedChunkCount)

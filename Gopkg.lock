@@ -18,12 +18,12 @@
   version = "v0.1.8"
 
 [[projects]]
-  digest = "1:b8ac7e4464ce21f7487c663aa69b1b3437740bb10ab12d4dc7aa9b02422571a1"
+  digest = "1:435043934aa0a8221e2c660e88dffe588783e9497facf6b517a465a37c58c97b"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = "UT"
-  revision = "45d0c5e3638e2b539942f93c48e419f4f2fc62e4"
-  version = "0.4.0"
+  revision = "457680cc0804810f6d02958481e0ffdda51d5c60"
+  version = "0.5.0"
 
 [[projects]]
   digest = "1:0376b54cf965bdae03b9c2a2734cad87fc3bbaa4066c0374ec86f10f77f03d45"

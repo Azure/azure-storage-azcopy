@@ -34,7 +34,7 @@ func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
-// Returns a chunk-func for file downloads
+// GenerateDownloadFunc returns a chunk-func for file downloads
 
 func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
@@ -56,14 +56,12 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		retryReader := get.Body(azfile.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		retryReader := get.Body(azfile.RetryReaderOptions{
+			MaxRetryRequests: MaxRetryPerDownloadBody,
+			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+		})
 		defer retryReader.Close()
-		retryForcer := func() {
-			// TODO: implement this, or implement GetBodyWithForceableRetry above
-			// for now, this "retry forcer" does nothing
-			//fmt.Printf("\nForcing retry\n")
-		}
-		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newLiteResponseBodyPacer(retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return
