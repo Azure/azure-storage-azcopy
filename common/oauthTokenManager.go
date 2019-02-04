@@ -312,17 +312,9 @@ type OAuthTokenInfo struct {
 	TokenRefreshSource      string `json:"_token_refresh_source"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
-<<<<<<< HEAD
-	// Note: ClientID should be only used for internal integrations through env var with refresh token.
-	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
-	// In this case AzCopy refresh token on behalf of caller.
-	// For more details, please refer to
-	// https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
-=======
 	//Note: ClientID should be only used for internal integrations. It indicates the Application ID assigned to your
 	//app when you registered it with Azure AD. For more details, please refer to
 	//https://docs.microsoft.com/en-us/azure/active-directory/develop/v1-protocols-oauth-code#refreshing-the-access-tokens
->>>>>>> oauth: accept external client id
 	ClientID string `json:"_client_id"`
 }
 
