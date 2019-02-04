@@ -199,9 +199,8 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 			err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 			if err != nil {
 				jptm.LogError(info.Destination, "Changing Modified Time ", err)
-				return
-			}
-			if jptm.ShouldLog(pipeline.LogInfo) {
+				// do NOT return, since final status and cleanup logging still to come
+			} else {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Preserved Modified Time for %s", info.Destination))
 			}
 		}
