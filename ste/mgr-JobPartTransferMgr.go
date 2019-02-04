@@ -332,7 +332,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred, status)
+		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred+"\n", status) // terminate with \n to more clearly separate it from following, potentially UN-related lines in the log
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
