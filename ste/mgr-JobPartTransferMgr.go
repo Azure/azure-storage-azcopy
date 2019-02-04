@@ -332,7 +332,9 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred+"\n", status) // terminate with \n to more clearly separate it from following, potentially UN-related lines in the log
+		requestID := ErrorEx{err}.MSRequestID()
+		fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, descriptionOfWhereErrorOccurred, requestID) // trailing \n to separate it better from any later, unrelated, log lines
+		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
@@ -402,8 +404,9 @@ func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg st
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	status, msg := ErrorEx{err}.ErrorCodeAndString()
+	MSRequestID := ErrorEx{err}.MSRequestID()
 	jptm.Log(pipeline.LogError,
-		fmt.Sprintf("%s: %d: %s-%s", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg))
+		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg, MSRequestID))
 }
 
 func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
