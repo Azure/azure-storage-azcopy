@@ -82,7 +82,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
-	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+	jobDone := summary.JobStatus.IsJobDone()
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	if jobDone {

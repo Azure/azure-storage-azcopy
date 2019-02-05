@@ -218,11 +218,37 @@ func (j *JobStatus) AtomicStore(newJobStatus JobStatus) {
 	atomic.StoreUint32((*uint32)(j), uint32(newJobStatus))
 }
 
-func (JobStatus) InProgress() JobStatus { return JobStatus(0) }
-func (JobStatus) Paused() JobStatus     { return JobStatus(1) }
-func (JobStatus) Cancelling() JobStatus { return JobStatus(2) }
-func (JobStatus) Cancelled() JobStatus  { return JobStatus(3) }
-func (JobStatus) Completed() JobStatus  { return JobStatus(4) }
+func (j *JobStatus) EnhanceJobStatusInfo(skippedTransfers, failedTransfers, successfulTransfers bool) JobStatus {
+	if failedTransfers && skippedTransfers {
+		return EJobStatus.CompletedWithErrorsAndSkipped()
+	} else if failedTransfers {
+		if successfulTransfers {
+			return EJobStatus.CompletedWithErrors()
+		} else {
+			return EJobStatus.Failed()
+		}
+	} else if skippedTransfers {
+		return EJobStatus.CompletedWithSkipped()
+	} else {
+		return EJobStatus.Completed()
+	}
+}
+
+func (j *JobStatus) IsJobDone() bool {
+	return *j == EJobStatus.Completed() || *j == EJobStatus.Cancelled() || *j == EJobStatus.CompletedWithSkipped() ||
+		*j == EJobStatus.CompletedWithErrors() || *j == EJobStatus.CompletedWithErrorsAndSkipped() ||
+		*j == EJobStatus.Failed()
+}
+
+func (JobStatus) InProgress() JobStatus                    { return JobStatus(0) }
+func (JobStatus) Paused() JobStatus                        { return JobStatus(1) }
+func (JobStatus) Cancelling() JobStatus                    { return JobStatus(2) }
+func (JobStatus) Cancelled() JobStatus                     { return JobStatus(3) }
+func (JobStatus) Completed() JobStatus                     { return JobStatus(4) }
+func (JobStatus) CompletedWithErrors() JobStatus           { return JobStatus(5) }
+func (JobStatus) CompletedWithSkipped() JobStatus          { return JobStatus(6) }
+func (JobStatus) CompletedWithErrorsAndSkipped() JobStatus { return JobStatus(7) }
+func (JobStatus) Failed() JobStatus                        { return JobStatus(8) }
 func (js JobStatus) String() string {
 	return enum.StringInt(js, reflect.TypeOf(js))
 }
