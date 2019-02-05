@@ -472,6 +472,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
 		js.JobStatus = part0PlanStatus
 	}
+
+	if js.JobStatus == common.EJobStatus.Completed() {
+		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
+			js.TransfersCompleted > 0)
+	}
+
 	return js
 }
 
@@ -591,6 +597,13 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 	if (js.CompleteJobOrdered) && (part0PlanStatus == common.EJobStatus.Completed()) {
 		js.JobStatus = part0PlanStatus
 	}
+
+	if js.JobStatus == common.EJobStatus.Completed() {
+		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(false,
+			js.CopyTransfersFailed + js.DeleteTransfersFailed > 0,
+			js.CopyTransfersCompleted + js.DeleteTransfersCompleted > 0)
+	}
+
 	return js
 }
 
