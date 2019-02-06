@@ -335,13 +335,23 @@ func (cr *singleChunkReader) Close() error {
 	// first, check and log early closes (before we do use(), since the situation we are trying
 	// to log is suspected to be one when use() will panic)
 	if cr.positionInChunk < cr.length {
-		b := &bytes.Buffer{}
-		b.Write(stack())
-		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader: "+b.String())
+		// this is an "early close". Adjust logging verbosity depending on whether context is still active
+		var extraMessage string
+		if cr.ctx.Err() == nil {
+			b := &bytes.Buffer{}
+			b.Write(stack())
+			extraMessage = "context active so logging full callstack, as follows: " + b.String()
+		} else {
+			extraMessage = "context cancelled so no callstack logged"
+		}
+		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader: "+extraMessage)
 	}
+
+	// after logging callstack, do normal use()
 	cr.use()
 	defer cr.unuse()
 
+	// do the real work
 	cr.returnBuffer()
 	return nil
 }
