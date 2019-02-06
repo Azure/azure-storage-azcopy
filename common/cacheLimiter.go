@@ -63,6 +63,7 @@ func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added boo
 		// no backlogging of new chunks behind slow ones (i.e. these "good" cases are allowed to proceed without
 		// interruption) and for uploads its used for re-doing the prefetches when we do retries (i.e. so these are
 		// not blocked by other chunks using up RAM).
+		// TODO: consider using only the upper (100% limit) for uploads
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {

@@ -134,7 +134,7 @@ type ListJobSummaryResponse struct {
 	FailedTransfers      []TransferDetail
 	SkippedTransfers     []TransferDetail
 	IsDiskConstrained    bool
-	PerfDiagnostics      []string
+	PerfStrings          []string
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
@@ -156,7 +156,7 @@ type ListSyncJobSummaryResponse struct {
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
 	IsDiskConstrained        bool
-	PerfDiagnostics          []string
+	PerfStrings              []string
 }
 
 type ListJobTransfersRequest struct {

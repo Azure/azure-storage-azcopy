@@ -53,30 +53,12 @@ func NewChunkID(name string, offsetInFile int64) ChunkID {
 
 var EWaitReason = WaitReason{0, ""}
 
+// WaitReason identifies the one thing that a given chunk is waiting on, at a given moment.
+// Basically = state, phrased in terms of "the thing I'm waiting for"
 type WaitReason struct {
 	index int32
 	Name  string
 }
-
-// Upload chunks go through these states:
-// RAM
-// DiskIO
-// Worker
-// Body
-// Disk
-// Done/Cancelled
-
-// Download chunks go through a superset, as follows
-// RAM
-// Worker
-// Head (can easily separate out head/body for uploads)
-// Body
-// (possibly) BodyReRead-*
-// Sorting
-// Prior
-// Queue
-// DiskIO
-// Done/Cancelled
 
 // Head (below) has index between GB and Body, just so the ordering is numerical ascending during typical chunk lifetime for both upload and download
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
@@ -93,6 +75,56 @@ func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "Dis
 func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
 func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
+// TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
+//     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
+//     the String method below, on the assumption that it will be called a lot.  Is that a premature optimization?
+
+//Upload chunks go through these states, in this order
+var uploadWaitReasons = []WaitReason{
+	// These first two happen in the transfer initiation function (i.e. the chunkfunc creation loop)
+	// So their total is constrained to the size of the goroutine pool that runs those functions.
+	// (e.g. 64, given the GR pool sizing as at Feb 2019)
+	EWaitReason.RAMToSchedule(),
+	EWaitReason.DiskIO(),
+
+	// This next one is used when waiting for a worker Go routine to pick up the scheduled chunk func.
+	// Chunks in this state are effectively a queue of work waiting to be sent over the network
+	EWaitReason.WorkerGR(),
+
+	// This is the actual network activity
+	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
+	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
+}
+
+// Download chunks go through a larger set of states, due to needing to be re-assembled into sequential order
+var downloadWaitReasons = []WaitReason{
+	// Done by the transfer initiation function (i.e. chunkfunc creation loop)
+	EWaitReason.RAMToSchedule(),
+
+	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.
+	// Chunks in this state are effectively a queue of work, waiting for their network downloads to be initiated
+	EWaitReason.WorkerGR(),
+
+	// These next ones are the actual network activity
+	EWaitReason.HeaderResponse(),
+	EWaitReason.Body(),
+	// next two exist, but are not reported on separately in GetCounts, so are commented out
+	//EWaitReason.BodyReReadDueToMem(),
+	//EWaitReason.BodyReReadDueToSpeed(),
+
+	// Sorting and QueueToWrite together comprise a queue of work waiting to be written to disk.
+	// The former are unsorted, and the latter have been sorted into sequential order.
+	// PriorChunk is unusual, because chunks in that wait state are not (yet) waiting for their turn to be written to disk,
+	// instead they are waiting on some prior chunk to finish arriving over the network
+	EWaitReason.Sorting(),
+	EWaitReason.PriorChunk(),
+	EWaitReason.QueueToWrite(),
+
+	// The actual disk write
+	EWaitReason.DiskIO(),
+	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
+}
+
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot
 }
@@ -101,17 +133,15 @@ type ChunkStatusLogger interface {
 	LogChunkStatus(id ChunkID, reason WaitReason)
 }
 
-type chunkStatusCount struct {
-	WaitReason WaitReason
-	Count      int64
-}
-
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
-	GetCounts() []chunkStatusCount
+	GetCounts(isDownload bool) []chunkStatusCount
+	IsDiskConstrained(isUpload, isDownload bool) bool
 	CloseLog()
 }
 
+// chunkStatusLogger records all chunk state transitions, and makes aggregate data immediately available
+// for performance diagnostics. Also optionally logs every individual transition to a file.
 type chunkStatusLogger struct {
 	counts         []int64
 	outputEnabled  bool
@@ -135,58 +165,18 @@ func numWaitReasons() int32 {
 	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
 }
 
+type chunkStatusCount struct {
+	WaitReason WaitReason
+	Count      int64
+}
+
 type chunkWaitState struct {
 	ChunkID
 	reason    WaitReason
 	waitStart time.Time
 }
 
-// We maintain running totals of how many chunks are in each state.
-// To do so, we must determine the new state (which is simply a parameter) and the old state.
-// We obtain and track the old state within the chunkID itself. The alternative, of having a threadsafe
-// map in the chunkStatusLogger, to track and look up the states, is considered a risk for performance.
-func (csl *chunkStatusLogger) countStateTransition(id ChunkID, newReason WaitReason) {
-
-	// Flip the chunk's state to indicate the new thing that it's waiting for now
-	oldReasonIndex := atomic.SwapInt32(id.waitReasonIndex, newReason.index)
-
-	// Update the counts
-	// There's no need to lock the array itself. Instead just do atomic operations on the contents.
-	// (See https://groups.google.com/forum/#!topic/Golang-nuts/Ud4Dqin2Shc)
-	if oldReasonIndex > 0 && oldReasonIndex < int32(len(csl.counts)) {
-		atomic.AddInt64(&csl.counts[oldReasonIndex], -1)
-	}
-	if newReason.index < int32(len(csl.counts)) {
-		atomic.AddInt64(&csl.counts[newReason.index], 1)
-	}
-}
-
-// Gets the current counts of chunks in each wait state
-// Intended for performance diagnostics and reporting
-func (csl *chunkStatusLogger) GetCounts() []chunkStatusCount {
-	// get list of all the reasons we want to output
-	// Rare and not-useful ones are excluded
-	allReasons := []WaitReason{
-		//EWaitReason.Nothing(),
-		EWaitReason.RAMToSchedule(),
-		EWaitReason.WorkerGR(),
-		EWaitReason.HeaderResponse(),
-		EWaitReason.Body(),
-		//EWaitReason.BodyReReadDueToMem(),
-		//EWaitReason.BodyReReadDueToSpeed(),
-		EWaitReason.Sorting(),
-		EWaitReason.PriorChunk(),
-		EWaitReason.QueueToWrite(),
-		EWaitReason.DiskIO(),
-		//EWaitReason.ChunkDone(),
-		//EWaitReason.Cancelled(),
-	}
-	result := make([]chunkStatusCount, len(allReasons))
-	for i, reason := range allReasons {
-		result[i] = chunkStatusCount{reason, atomic.LoadInt64(&csl.counts[reason.index])}
-	}
-	return result
-}
+////////////////////////////////////  basic functionality //////////////////////////////////
 
 func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 	// always update the in-memory stats, even if output is disabled
@@ -231,6 +221,104 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
 	}
 }
+
+////////////////////////////// aggregate count and analysis support //////////////////////
+
+// We maintain running totals of how many chunks are in each state.
+// To do so, we must determine the new state (which is simply a parameter) and the old state.
+// We obtain and track the old state within the chunkID itself. The alternative, of having a threadsafe
+// map in the chunkStatusLogger, to track and look up the states, is considered a risk for performance.
+func (csl *chunkStatusLogger) countStateTransition(id ChunkID, newReason WaitReason) {
+
+	// Flip the chunk's state to indicate the new thing that it's waiting for now
+	oldReasonIndex := atomic.SwapInt32(id.waitReasonIndex, newReason.index)
+
+	// Update the counts
+	// There's no need to lock the array itself. Instead just do atomic operations on the contents.
+	// (See https://groups.google.com/forum/#!topic/Golang-nuts/Ud4Dqin2Shc)
+	if oldReasonIndex > 0 && oldReasonIndex < int32(len(csl.counts)) {
+		atomic.AddInt64(&csl.counts[oldReasonIndex], -1)
+	}
+	if newReason.index < int32(len(csl.counts)) {
+		atomic.AddInt64(&csl.counts[newReason.index], 1)
+	}
+}
+
+func (csl *chunkStatusLogger) getCount(reason WaitReason) int64 {
+	return atomic.LoadInt64(&csl.counts[reason.index])
+}
+
+// Gets the current counts of chunks in each wait state
+// Intended for performance diagnostics and reporting
+func (csl *chunkStatusLogger) GetCounts(isDownload bool) []chunkStatusCount {
+
+	var allReasons []WaitReason
+	if isDownload {
+		allReasons = downloadWaitReasons
+	} else {
+		allReasons = uploadWaitReasons
+	}
+
+	result := make([]chunkStatusCount, len(allReasons))
+	for i, reason := range allReasons {
+		count := csl.getCount(reason)
+
+		// for simplicity in consuming the results, all the body read states are rolled into one here
+		if reason == EWaitReason.BodyReReadDueToSpeed() || reason == EWaitReason.BodyReReadDueToMem() {
+			panic("body re-reads should not be requested in counts. They get rolled into the main Body one")
+		}
+		if reason == EWaitReason.Body() {
+			count += csl.getCount(EWaitReason.BodyReReadDueToSpeed())
+			count += csl.getCount(EWaitReason.BodyReReadDueToMem())
+		}
+
+		result[i] = chunkStatusCount{reason, count}
+	}
+	return result
+}
+
+func (csl *chunkStatusLogger) IsDiskConstrained(isUpload, isDownload bool) bool {
+	if isUpload {
+		return csl.isUploadDiskConstrained()
+	} else if isDownload {
+		return csl.isDownloadDiskConstrained()
+	} else {
+		return false // it's neither upload nor download (e.g. S2S)
+	}
+}
+
+// is disk the bottleneck in an upload?
+func (csl *chunkStatusLogger) isUploadDiskConstrained() bool {
+	// If we are uploading, and there's almost nothing waiting to go out over the network, then
+	// probably the reason there's not much queued is that the disk is slow.
+	// BTW, we can't usefully look at any of the _earlier_ states, because they happen in the _generation_ of the chunk funcs
+	// (not the _execution_ and so their counts will just tend to equal that of the small goroutine pool that runs them).
+	// It might be convenient if we could compare TWO queue sizes here, as we do in isDownloadDiskConstrained, but unfortunately our
+	// Jan 2019 architecture only gives us ONE useful queue-like state when uploading, so we can't compare two.
+	queueForNetworkIsSmall := csl.getCount(EWaitReason.WorkerGR()) < 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
+
+	beforeGRWaitQueue := csl.getCount(EWaitReason.RAMToSchedule()) + csl.getCount(EWaitReason.DiskIO())
+	areStillReadingDisk := beforeGRWaitQueue > 0 // size of queue for network is irrelevant if we are no longer actually reading disk files, and therefore no longer putting anything into the queue for network
+
+	return areStillReadingDisk && queueForNetworkIsSmall
+}
+
+// is disk the bottleneck in a download?
+func (csl *chunkStatusLogger) isDownloadDiskConstrained() bool {
+	// See how many chunks are waiting on the disk. I.e. are queued before the actual disk state.
+	// Don't include the "PriorChunk" state, because that's not actually waiting on disk at all, it
+	// can mean waiting on network and/or waiting-on-Storage-Service. We don't know which. So we just exclude it from consideration.
+	chunksWaitingOnDisk := csl.getCount(EWaitReason.Sorting()) + csl.getCount(EWaitReason.QueueToWrite())
+
+	// i.e. are queued before the actual network states
+	chunksWaitingOnNetwork := csl.getCount(EWaitReason.WorkerGR())
+
+	// if we have way more stuff waiting on disk than on network, we can assume disk is the bottleneck
+	return chunksWaitingOnDisk > 10 && // this test is in case both are near zero, as they would be near the end of the job
+		chunksWaitingOnDisk > 5*chunksWaitingOnNetwork // TODO: review/tune the arbitrary constant here
+}
+
+///////////////////////////////////// Sample LinqPad query for manual analysis of chunklog /////////////////////////////////////
 
 /* LinqPad query used to analyze/visualize the CSV as is follows:
    Needs CSV driver for LinqPad to open the CSV - e.g. https://github.com/dobrou/CsvLINQPadDriver

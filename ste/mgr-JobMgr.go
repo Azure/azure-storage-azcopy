@@ -65,8 +65,7 @@ type IJobMgr interface {
 	ReleaseAConnection()
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
-	IsDiskConstrained() bool
-	GetPerfStrings() []string
+	GetPerfInfo() (displayStrings []string, isDiskConstrained bool)
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
@@ -169,15 +168,17 @@ func (jm *jobMgr) ActiveConnections() int64 {
 	return atomic.LoadInt64(&jm.atomicCurrentConcurrentConnections)
 }
 
-func (jm *jobMgr) IsDiskConstrained() bool {
-	return false // TODO - umse chunk status logrre, and direction?
-}
-
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
-func (jm *jobMgr) GetPerfStrings() []string {
+func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool) {
+
+	// get data appropriate to our current transfer direction
+	isUpload := atomic.LoadInt32(&jm.atomicIsUploadIndicator) == 1
+	isDownload := atomic.LoadInt32(&jm.atomicIsDownloadIndicator) == 1
+	chunkStateCounts := jm.chunkStatusLogger.GetCounts(isDownload)
+
+	// convert the counts to simple strings for consumption by callers
 	const format = "%c: %2d"
-	chunkStateCounts := jm.chunkStatusLogger.GetCounts()
 	result := make([]string, len(chunkStateCounts)+1)
 	total := int64(0)
 	for i, c := range chunkStateCounts {
@@ -185,7 +186,8 @@ func (jm *jobMgr) GetPerfStrings() []string {
 		total += c.Count
 	}
 	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
-	return result
+
+	return result, jm.chunkStatusLogger.IsDiskConstrained(isUpload, isDownload)
 }
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
