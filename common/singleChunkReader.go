@@ -337,7 +337,7 @@ func (cr *singleChunkReader) Close() error {
 	if cr.positionInChunk < cr.length {
 		b := &bytes.Buffer{}
 		b.Write(stack())
-		cr.generalLogger.Log(pipeline.LogDebug, "Early close of chunk: "+b.String())
+		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader: "+b.String())
 	}
 	cr.use()
 	defer cr.unuse()
