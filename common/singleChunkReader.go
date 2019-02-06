@@ -29,6 +29,7 @@ import (
 	"io"
 	"math"
 	"runtime"
+	"sync/atomic"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -79,6 +80,9 @@ type CloseableReaderAt interface {
 type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
 
 type singleChunkReader struct {
+	// for diagnostics for issue https://github.com/Azure/azure-storage-azcopy/issues/191
+	atomicUseIndicator int32
+
 	// context used to allow cancellation of blocking operations
 	// (Yes, ideally contexts are not stored in structs, but we need it inside Read, and there's no way for it to be passed in there)
 	ctx context.Context
@@ -128,7 +132,26 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 	}
 }
 
+// Use and un-use are temporary, for identifying the root cause of
+// https://github.com/Azure/azure-storage-azcopy/issues/191
+// They may be removed after that.
+// For now, they are used to wrap every Public method
+func (cr *singleChunkReader) use() {
+	if atomic.SwapInt32(&cr.atomicUseIndicator, 1) != 0 {
+		panic("trying to use chunk reader when already in use")
+	}
+}
+
+func (cr *singleChunkReader) unuse() {
+	if atomic.SwapInt32(&cr.atomicUseIndicator, 0) != 1 {
+		panic("ending use when chunk reader was not actually IN use")
+	}
+}
+
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
+	cr.use()
+	defer cr.unuse()
+
 	if cr.buffer == nil {
 		return false // not prefetched  (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
 	}
@@ -147,11 +170,18 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	//       and (c) we would want to check whether it really did offer meaningful real-world performance gain, before introducing use of unsafe.
 }
 
+func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+	cr.use()
+	defer cr.unuse()
+
+	return cr.blockingPrefetch(fileReader, isRetry)
+}
+
 // Prefetch the data in this chunk, using a file reader that is provided to us.
 // (Allowing the caller to provide the reader to us allows a sequential read approach, since caller can control the order sequentially (in the initial, non-retry, scenario)
 // We use io.ReaderAt, rather than io.Reader, just for maintainablity/ensuring correctness. (Since just using Reader requires the caller to
 // follow certain assumptions about positioning the file pointer at the right place before calling us, but using ReaderAt does not).
-func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
 	if cr.buffer != nil {
 		return nil // already prefetched
 	}
@@ -196,12 +226,14 @@ func (cr *singleChunkReader) retryBlockingPrefetchIfNecessary() error {
 
 	// no need to seek first, because its a ReaderAt
 	const isRetry = true // retries are the only time we need to redo the prefetch
-	return cr.BlockingPrefetch(sourceFile, isRetry)
+	return cr.blockingPrefetch(sourceFile, isRetry)
 }
 
 // Seeks within this chunk
 // Seeking is used for retries, and also by some code to get length (by seeking to end)
 func (cr *singleChunkReader) Seek(offset int64, whence int) (int64, error) {
+	cr.use()
+	defer cr.unuse()
 
 	newPosition := cr.positionInChunk
 
@@ -227,6 +259,9 @@ func (cr *singleChunkReader) Seek(offset int64, whence int) (int64, error) {
 
 // Reads from within this chunk
 func (cr *singleChunkReader) Read(p []byte) (n int, err error) {
+	cr.use()
+	defer cr.unuse()
+
 	// This is a normal read, so free the prefetch buffer when hit EOF (i.e. end of this chunk).
 	// We do so on the assumption that if we've read to the end we don't need the prefetched data any longer.
 	// (If later, there's a retry that forces seek back to start and re-read, we'll automatically trigger a re-fetch at that time)
@@ -285,6 +320,9 @@ func (cr *singleChunkReader) returnBuffer() {
 }
 
 func (cr *singleChunkReader) Length() int64 {
+	cr.use()
+	defer cr.unuse()
+
 	return cr.length
 }
 
@@ -294,11 +332,16 @@ func (cr *singleChunkReader) Length() int64 {
 // Without this close, if something failed part way through, we would keep counting this object's bytes in cacheLimiter
 // "for ever", even after the object is gone.
 func (cr *singleChunkReader) Close() error {
+	// first, check and log early closes (before we do use(), since the situation we are trying
+	// to log is suspected to be one when use() will panic)
 	if cr.positionInChunk < cr.length {
 		b := &bytes.Buffer{}
 		b.Write(stack())
 		cr.generalLogger.Log(pipeline.LogDebug, "Early close of chunk: "+b.String())
 	}
+	cr.use()
+	defer cr.unuse()
+
 	cr.returnBuffer()
 	return nil
 }
@@ -307,22 +350,31 @@ func (cr *singleChunkReader) Close() error {
 // (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
 // reads as much as possible)
 func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
+	cr.use()
+	// can't defer unuse here. See explict calls (plural) below
+
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)
 	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
 	if err != nil && err != io.EOF {
+		cr.unuse()
 		return nil // we just can't sniff the mime type
 	}
 	if n < len(leadingBytes) {
 		// truncate if we read less than expected (very small file, so err was EOF above)
 		leadingBytes = leadingBytes[:n]
 	}
+	// unuse before Seek, since Seek is public
+	cr.unuse()
 	// MUST re-wind, so that the bytes we read will get transferred too!
 	cr.Seek(0, io.SeekStart)
 	return leadingBytes
 }
 
 func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
+	cr.use()
+	defer cr.unuse()
+
 	if cr.buffer == nil {
 		panic("invalid state. No prefetch buffer is present")
 	}
