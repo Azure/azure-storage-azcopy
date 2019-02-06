@@ -21,10 +21,13 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"hash"
 	"io"
+	"runtime"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -88,6 +91,9 @@ type singleChunkReader struct {
 	// for logging chunk state transitions
 	chunkLogger ChunkStatusLogger
 
+	// general-purpose logger
+	generalLogger ILogger
+
 	// A factory to get hold of the file, in case we need to re-read any of it
 	sourceFactory ChunkReaderSourceFactory
 
@@ -105,13 +111,14 @@ type singleChunkReader struct {
 	// TODO: pooling of buffers to reduce pressure on GC?
 }
 
-func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
+func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
 	if length <= 0 {
 		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
 		ctx:           ctx,
 		chunkLogger:   chunkLogger,
+		generalLogger: generalLogger,
 		slicePool:     slicePool,
 		cacheLimiter:  cacheLimiter,
 		sourceFactory: sourceFactory,
@@ -240,6 +247,17 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 		return 0, err
 	}
 
+	// extra checks until we find root cause of https://github.com/Azure/azure-storage-azcopy/issues/191
+	if cr.buffer == nil {
+		panic("unexpected nil buffer")
+	}
+	if cr.positionInChunk >= cr.length {
+		panic("unexpected EOF")
+	}
+	if cr.length != int64(len(cr.buffer)) {
+		panic("unexpected buffer length discrepancy")
+	}
+
 	// Copy the data across
 	bytesCopied := copy(p, cr.buffer[cr.positionInChunk:])
 	cr.positionInChunk += int64(bytesCopied)
@@ -275,6 +293,11 @@ func (cr *singleChunkReader) Length() int64 {
 // Without this close, if something failed part way through, we would keep counting this object's bytes in cacheLimiter
 // "for ever", even after the object is gone.
 func (cr *singleChunkReader) Close() error {
+	if cr.positionInChunk < cr.length {
+		b := &bytes.Buffer{}
+		b.Write(stack())
+		cr.generalLogger.Log(pipeline.LogDebug, "Early close of chunk: "+b.String())
+	}
 	cr.returnBuffer()
 	return nil
 }
@@ -305,5 +328,16 @@ func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
 	_, err := h.Write(cr.buffer)
 	if err != nil {
 		panic("documentation of hash.Hash.Write says it will never return an error")
+	}
+}
+
+func stack() []byte {
+	buf := make([]byte, 2048)
+	for {
+		n := runtime.Stack(buf, false)
+		if n < len(buf) {
+			return buf[:n]
+		}
+		buf = make([]byte, 2*len(buf))
 	}
 }
