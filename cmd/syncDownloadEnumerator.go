@@ -419,6 +419,9 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 	// Set the preserve-last-modified-time to true in CopyJobRequest
 	e.CopyJobRequest.BlobAttributes.PreserveLastModifiedTime = true
 
+	// set MD5 validation behaviour
+	e.CopyJobRequest.BlobAttributes.MD5ValidationOption = cca.md5ValidationOption
+
 	// Copying the JobId of sync job to individual deleteJobRequest.
 	e.DeleteJobRequest.JobID = e.JobID
 	// FromTo of DeleteJobRequest will be BlobTrash.

@@ -23,13 +23,19 @@ package ste
 import (
 	"bytes"
 	"errors"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+type transferSpecificLogger interface {
+	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
+}
+
 type md5Comparer struct {
-	expected      []byte
-	actualAsSaved []byte
-	logger        common.ILogger
+	expected         []byte
+	actualAsSaved    []byte
+	validationOption common.HashValidationOption
+	logger           transferSpecificLogger
 }
 
 // TODO: let's add an aka.ms link to the message, that gives more info
@@ -37,7 +43,9 @@ var errMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, di
 	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date")
 
 // TODO: let's add an aka.ms link to the message, that gives more info
-var errExpectedMd5Missing = errors.New("no MD5 was stored in the Blob/File service against this file. This application is currently configured to treat missing MD5 hashes as errors")
+const noMD5Stored = "no MD5 was stored in the Blob/File service against this file. So the downloaded data cannot be MD5-validated."
+
+var errExpectedMd5Missing = errors.New(noMD5Stored + " This application is currently configured to treat missing MD5 hashes as errors")
 
 var errActualMd5NotComputed = errors.New("no MDB was computed within this application. This indicates a logic error in this application")
 
@@ -47,19 +55,45 @@ var errActualMd5NotComputed = errors.New("no MDB was computed within this applic
 func (c *md5Comparer) Check() error {
 
 	if c.actualAsSaved == nil || len(c.actualAsSaved) == 0 {
-		return errActualMd5NotComputed // Should never happen
+		return errActualMd5NotComputed // Should never happen, so there's no way to opt out of this error being returned if it DOES happen
 	}
 
+	// missing
 	if c.expected == nil || len(c.expected) == 0 {
-		return errExpectedMd5Missing
+		switch c.validationOption {
+		case common.EHashValidationOption.FailIfDifferentOrMissing():
+			return errExpectedMd5Missing
+		case common.EHashValidationOption.FailIfDifferent(),
+			common.EHashValidationOption.LogOnly():
+			c.logAsMissing()
+			return nil
+		default:
+			panic("unexpected hash validation type")
+		}
 	}
 
+	// different
 	match := bytes.Equal(c.expected, c.actualAsSaved)
 	if !match {
-		return errMd5Mismatch
+		switch c.validationOption {
+		case common.EHashValidationOption.FailIfDifferentOrMissing(),
+			common.EHashValidationOption.FailIfDifferent():
+			return errMd5Mismatch
+		case common.EHashValidationOption.LogOnly():
+			c.logAsDifferent()
+			return nil
+		default:
+			panic("unexpected hash validation type")
+		}
 	}
 
 	return nil
+}
 
-	// TODO: add logging-only options. E.g. 3-levels of processing: FailIfDifferentOrMissing, FailIfDifferent, LogOnly
+func (c *md5Comparer) logAsMissing() {
+	c.logger.LogAtLevelForCurrentTransfer(pipeline.LogWarning, noMD5Stored)
+}
+
+func (c *md5Comparer) logAsDifferent() {
+	c.logger.LogAtLevelForCurrentTransfer(pipeline.LogWarning, errMd5Mismatch.Error())
 }

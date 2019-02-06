@@ -46,12 +46,13 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize      uint32
-	logVerbosity   string
-	include        string
-	exclude        string
-	followSymlinks bool
-	output         string
+	blockSize           uint32
+	logVerbosity        string
+	include             string
+	exclude             string
+	followSymlinks      bool
+	output              string
+	md5ValidationOption string
 	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
 	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
 	// deleting the flag.
@@ -81,6 +82,14 @@ func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	err := cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
+		return cooked, err
+	}
+
+	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
+	if err != nil {
+		return cooked, err
+	}
+	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
 		return cooked, err
 	}
 
@@ -132,11 +141,12 @@ type cookedSyncCmdArgs struct {
 	recursive      bool
 	followSymlinks bool
 	// options from flags
-	include      map[string]int
-	exclude      map[string]int
-	blockSize    uint32
-	logVerbosity common.LogLevel
-	output       common.OutputFormat
+	include             map[string]int
+	exclude             map[string]int
+	blockSize           uint32
+	logVerbosity        common.LogLevel
+	output              common.OutputFormat
+	md5ValidationOption common.HashValidationOption
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -490,6 +500,8 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete extra files at the destination that are not present at the source. "+
 		"If false, user will be prompted with a question while scheduling files/blobs for deletion.")
+	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading.")
+	// TODO: should the previous line list the allowable values?
 
 	// TODO sync does not support any BlobAttributes, this functionality should be added
 }

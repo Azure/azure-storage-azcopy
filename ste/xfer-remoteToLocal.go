@@ -186,9 +186,10 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
 		if !jptm.TransferStatus().DidFail() {
 			comparison := md5Comparer{
-				expected:      info.SrcHTTPHeaders.ContentMD5, // the MD5 that came back from Service when we enumerated the source
-				actualAsSaved: md5OfFileAsWritten,
-				logger:        jptm}
+				expected:         info.SrcHTTPHeaders.ContentMD5, // the MD5 that came back from Service when we enumerated the source
+				actualAsSaved:    md5OfFileAsWritten,
+				validationOption: jptm.MD5ValidationOption(),
+				logger:           jptm}
 			err := comparison.Check()
 			if err != nil {
 				jptm.FailActiveDownload("Checking MD5 hash", err)

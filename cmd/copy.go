@@ -84,6 +84,7 @@ type rawCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	md5ValidationOption      string
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
 	blockBlobTier   string
@@ -225,6 +226,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.contentEncoding = raw.contentEncoding
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
+
+	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
+	if err != nil {
+		return cooked, err
+	}
+
 	cooked.background = raw.background
 	cooked.acl = raw.acl
 	cooked.cancelFromStdin = raw.cancelFromStdin
@@ -289,6 +296,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from sevice to service")
 		}
 	}
+	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
+		return cooked, err
+	}
 
 	// If the user has provided some input with excludeBlobType flag, parse the input.
 	if len(raw.excludeBlobType) > 0 {
@@ -305,6 +315,15 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	return cooked, nil
+}
+
+func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
+	hasMd5Validation := option != common.DefaultHashValidationOption
+	isDownload := fromTo.To() == common.ELocation.Local()
+	if hasMd5Validation && !isDownload {
+		return fmt.Errorf("md5-validation is set but the job is not a download")
+	}
+	return nil
 }
 
 // represents the processed copy command input from the user
@@ -337,6 +356,7 @@ type cookedCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	md5ValidationOption      common.HashValidationOption
 	background               bool
 	output                   common.OutputFormat
 	acl                      string
@@ -509,6 +529,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
+			MD5ValidationOption:      cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -906,6 +927,9 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
+	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading.")
+	// TODO: should the previous line list the allowable values?
+
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")

@@ -155,6 +155,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
+			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption,
 		},
 		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
 	}
