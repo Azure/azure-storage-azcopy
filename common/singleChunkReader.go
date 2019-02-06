@@ -27,6 +27,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"hash"
 	"io"
+	"math"
 	"runtime"
 )
 
@@ -166,7 +167,7 @@ func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	}
 
 	// get buffer from pool
-	cr.buffer = cr.slicePool.RentSlice(uint32(cr.length))
+	cr.buffer = cr.slicePool.RentSlice(uint32Checked(cr.length))
 
 	// read bytes into the buffer
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.Disk())
@@ -340,4 +341,12 @@ func stack() []byte {
 		}
 		buf = make([]byte, 2*len(buf))
 	}
+}
+
+// while we never expect any out of range errors, due to chunk sizes fitting easily into uint32, here we make sure
+func uint32Checked(i int64) uint32 {
+	if i > math.MaxUint32 {
+		panic("int64 out of range for cast to uint32")
+	}
+	return uint32(i)
 }
