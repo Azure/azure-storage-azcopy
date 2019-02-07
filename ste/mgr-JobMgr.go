@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -187,7 +188,25 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool
 	}
 	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
 
-	return result, jm.chunkStatusLogger.IsDiskConstrained(isUpload, isDownload)
+	diskCon := jm.chunkStatusLogger.IsDiskConstrained(isUpload, isDownload)
+
+	// logging from here is a bit of a hack
+	// TODO: can we find a better way to get this info into the log?  The caller is at app level,
+	//    not job level, so can't log it directly AFAICT.
+	jm.logPerfInfo(result, diskCon)
+
+	return result, diskCon
+}
+
+func (jm *jobMgr) logPerfInfo(displayStrings []string, isDiskConstrained bool) {
+	var diskString string
+	if isDiskConstrained {
+		diskString = "disk MAY BE limiting throughput"
+	} else {
+		diskString = "disk IS NOT limiting throughput"
+	}
+	msg := fmt.Sprintf("PERF: disk %s. States: %s", diskString, strings.Join(displayStrings, ", "))
+	jm.Log(pipeline.LogInfo, msg)
 }
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder
