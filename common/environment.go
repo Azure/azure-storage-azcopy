@@ -62,3 +62,10 @@ func (EnvironmentVariable) ProfileCPU() EnvironmentVariable {
 func (EnvironmentVariable) ProfileMemory() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM"}
 }
+
+func (EnvironmentVariable) ShowPerfStates() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SHOW_PERF_STATES",
+		Description: "If set, to anything, on-screen output will include counts of chunks by state",
+	}
+}

@@ -842,13 +842,22 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 // Is disk speed looking like a constraint on throughput?  Ignore the first minute,
 // to give an (arbitrary) amount of time for things to reach steady-state.
 func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, durationOfJob time.Duration) (perfString string, diskString string) {
-	perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
-	if isDiskConstrained && durationOfJob.Seconds() > 30 {
+	perfString = ""
+	if shouldDisplayPerfStates(glcm) {
+		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
+	}
+
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
+	if isDiskConstrained && haveBeenRunningLongEnoughToStabilize {
 		diskString = " (disk may be limiting speed)"
 	} else {
 		diskString = ""
 	}
 	return
+}
+
+func shouldDisplayPerfStates(lcm common.LifecycleMgr) bool {
+	return lcm.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {
