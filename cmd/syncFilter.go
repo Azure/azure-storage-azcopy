@@ -1,71 +1,73 @@
 package cmd
 
-import "path"
+// with the help of an objectIndexer containing the source objects
+// filter out the destination objects that should be transferred
+type syncDestinationFilter struct {
+	// the rejected objects would be passed to the recyclers
+	recyclers objectProcessor
 
-type excludeFilter struct {
-	pattern string
+	// storing the source objects
+	i *objectIndexer
 }
 
-func (f *excludeFilter) pass(entity genericEntity) bool {
-	matched, err := path.Match(f.pattern, entity.name)
+func newSyncDestinationFilter(i *objectIndexer, recyclers objectProcessor) objectFilter {
+	return &syncDestinationFilter{i: i, recyclers: recyclers}
+}
 
-	// if the pattern failed to match with an error, then we assume the pattern is invalid
-	// and let it pass
-	if err != nil {
-		return true
+// it will only pass destination objects that are present in the indexer but stale compared to the entry in the map
+// if the destinationObject is not present at all, it will be passed to the recyclers
+// ex: we already know what the source contains, now we are looking at objects at the destination
+// if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
+// if file x does not exist at the source, then it is considered extra, and will be deleted
+func (f *syncDestinationFilter) doesPass(destinationObject storedObject) bool {
+	storedObjectInMap, present := f.i.indexMap[destinationObject.relativePath]
+
+	// if the destinationObject is present and stale, we let it pass
+	if present {
+		defer delete(f.i.indexMap, destinationObject.relativePath)
+
+		if storedObjectInMap.isMoreRecentThan(destinationObject) {
+			return true
+		}
+
+		return false
 	}
 
-	if matched {
+	// purposefully ignore the error from recyclers
+	// it's a tolerable error, since it just means some extra destination object might hang around a bit longer
+	_ = f.recyclers(destinationObject)
+	return false
+}
+
+// with the help of an objectIndexer containing the destination objects
+// filter out the source objects that should be transferred
+type syncSourceFilter struct {
+
+	// storing the destination objects
+	i *objectIndexer
+}
+
+func newSyncSourceFilter(i *objectIndexer) objectFilter {
+	return &syncSourceFilter{i: i}
+}
+
+// it will only pass items that are:
+//	1. not present in the map
+//  2. present but is more recent than the entry in the map
+// note: we remove the storedObject if it is present
+func (f *syncSourceFilter) doesPass(sourceObject storedObject) bool {
+	storedObjectInMap, present := f.i.indexMap[sourceObject.relativePath]
+
+	// if the sourceObject is more recent, we let it pass
+	if present {
+		defer delete(f.i.indexMap, sourceObject.relativePath)
+
+		if sourceObject.isMoreRecentThan(storedObjectInMap) {
+			return true
+		}
+
 		return false
 	}
 
 	return true
-}
-
-func buildExcludeFilters(patterns []string) []entityFilter {
-	filters := make([]entityFilter, 0)
-	for _, pattern := range patterns {
-		filters = append(filters, &excludeFilter{pattern: pattern})
-	}
-
-	return filters
-}
-
-// design explanation:
-// include filters are different from the exclude ones, which work together in the "AND" manner
-// meaning and if an entity is rejected by any of the exclude filters, then it is rejected by all of them
-// as a result, the exclude filters can be in their own struct, and work correctly
-// on the other hand, include filters work in the "OR" manner
-// meaning that if an entity is accepted by any of the include filters, then it is accepted by all of them
-// consequently, all the include patterns must be stored together
-type includeFilter struct {
-	patterns []string
-}
-
-func (f *includeFilter) pass(entity genericEntity) bool {
-	if len(f.patterns) == 0 {
-		return true
-	}
-
-	for _, pattern := range f.patterns {
-		matched, err := path.Match(pattern, entity.name)
-
-		// if the pattern failed to match with an error, then we assume the pattern is invalid
-		// and ignore it
-		if err != nil {
-			continue
-		}
-
-		// if an entity is accepted by any of the include filters
-		// it is accepted
-		if matched {
-			return true
-		}
-	}
-
-	return false
-}
-
-func buildIncludeFilters(patterns []string) []entityFilter {
-	return []entityFilter{&includeFilter{patterns: patterns}}
 }

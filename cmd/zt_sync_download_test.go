@@ -101,7 +101,6 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
 	mockedRPC.reset()
 
-	// the file was created after the blob, so no sync should happen
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
@@ -388,7 +387,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 }
 
 // there is a type mismatch between the source and destination
-func (s *cmdIntegrationSuite) TestSyncDownloadWithContainerToFile(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with numerous blobs
@@ -419,10 +418,21 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithContainerToFile(c *chk.C) {
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
+
+	// reverse the source and destination
+	raw = getDefaultRawInput(filepath.Join(dstDirName, dstFileName), rawContainerURLWithSAS.String())
+
+	// type mismatch, we should get an error
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
 }
 
 // there is a type mismatch between the source and destination
-func (s *cmdIntegrationSuite) TestSyncDownloadWithBlobToDirectory(c *chk.C) {
+func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 	bsu := getBSU()
 
 	// set up the container with a single blob
@@ -444,6 +454,17 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithBlobToDirectory(c *chk.C) {
 	// construct the raw input to simulate user input
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
 	raw := getDefaultRawInput(rawBlobURLWithSAS.String(), dstDirName)
+
+	// type mismatch, we should get an error
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+
+	// reverse the source and destination
+	raw = getDefaultRawInput(dstDirName, rawBlobURLWithSAS.String())
 
 	// type mismatch, we should get an error
 	runSyncAndVerify(c, raw, func(err error) {

@@ -1,26 +1,21 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
-	"strings"
 )
 
-type syncTransferProcessor struct {
-	numOfTransfersPerPart int
-	copyJobTemplate       *common.CopyJobPartOrderRequest
-	source                string
-	destination           string
-
-	// keep a handle to initiate progress tracking
-	cca *cookedSyncCmdArgs
-}
-
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int) *syncTransferProcessor {
-	processor := syncTransferProcessor{}
-	processor.copyJobTemplate = &common.CopyJobPartOrderRequest{
+// extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
+func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
+	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
 		FromTo:        cca.fromTo,
@@ -32,150 +27,135 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
-			PreserveLastModifiedTime: true,
+			PreserveLastModifiedTime: true, // must be true for sync so that future syncs have this information available
 			MD5ValidationOption:      cca.md5ValidationOption,
-		},
-		ForceWrite: true,
+			BlockSizeInBytes:         cca.blockSize},
+		ForceWrite: true, // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		LogLevel:   cca.logVerbosity,
 	}
 
-	// useful for building transfers later
-	processor.source = cca.source
-	processor.destination = cca.destination
+	reportFirstPart := func() { cca.setFirstPartOrdered() }
+	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
-	processor.cca = cca
-	processor.numOfTransfersPerPart = numOfTransfersPerPart
-	return &processor
+	// note that the source and destination, along with the template are given to the generic processor's constructor
+	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination, reportFirstPart, reportFinalPart)
 }
 
-func (s *syncTransferProcessor) process(entity genericEntity) (err error) {
-	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
-		err = s.sendPartToSte()
-		if err != nil {
-			return err
-		}
+// base for delete processors targeting different resources
+type interactiveDeleteProcessor struct {
+	// the plugged-in deleter that performs the actual deletion
+	deleter objectProcessor
 
-		// reset the transfers buffer
-		s.copyJobTemplate.Transfers = []common.CopyTransfer{}
-		s.copyJobTemplate.PartNum++
-	}
-
-	// only append the transfer after we've checked and dispatched a part
-	// so that there is at least one transfer for the final part
-	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.appendEntityPathToResourcePath(entity.relativePath, s.source),
-		Destination:      s.appendEntityPathToResourcePath(entity.relativePath, s.destination),
-		SourceSize:       entity.size,
-		LastModifiedTime: entity.lastModifiedTime,
-	})
-	return nil
-}
-
-func (s *syncTransferProcessor) appendEntityPathToResourcePath(entityPath, parentPath string) string {
-	if entityPath == "" {
-		return parentPath
-	}
-
-	return strings.Join([]string{parentPath, entityPath}, common.AZCOPY_PATH_SEPARATOR_STRING)
-}
-
-func (s *syncTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
-	numberOfCopyTransfers := len(s.copyJobTemplate.Transfers)
-
-	// if the number of transfer to copy is
-	// and no part was dispatched, then it means there is no work to do
-	if s.copyJobTemplate.PartNum == 0 && numberOfCopyTransfers == 0 {
-		return false, nil
-	}
-
-	if numberOfCopyTransfers > 0 {
-		s.copyJobTemplate.IsFinalPart = true
-		err = s.sendPartToSte()
-		if err != nil {
-			return false, err
-		}
-	}
-
-	s.cca.isEnumerationComplete = true
-	return true, nil
-}
-
-func (s *syncTransferProcessor) sendPartToSte() error {
-	var resp common.CopyJobPartOrderResponse
-	Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(s.copyJobTemplate), &resp)
-	if !resp.JobStarted {
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed to dispatch because %s",
-			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
-	}
-
-	// if the current part order sent to ste is 0, then alert the progress reporting routine
-	if s.copyJobTemplate.PartNum == 0 {
-		s.cca.setFirstPartOrdered()
-	}
-
-	return nil
-}
-
-type syncLocalDeleteProcessor struct {
-	rootPath string
+	// whether force delete is on
+	force bool
 
 	// ask the user for permission the first time we delete a file
 	hasPromptedUser bool
 
+	// used for prompt message
+	// examples: "blobs", "local files", etc.
+	objectType string
+
 	// note down whether any delete should happen
 	shouldDelete bool
-
-	// keep a handle for progress tracking
-	cca *cookedSyncCmdArgs
 }
 
-func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs, isSource bool) *syncLocalDeleteProcessor {
-	rootPath := cca.source
-	if !isSource {
-		rootPath = cca.destination
+func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err error) {
+	if !d.hasPromptedUser {
+		d.shouldDelete = d.promptForConfirmation()
+		d.hasPromptedUser = true
 	}
 
-	return &syncLocalDeleteProcessor{rootPath: rootPath, cca: cca, hasPromptedUser: false}
-}
-
-func (s *syncLocalDeleteProcessor) process(entity genericEntity) (err error) {
-	if !s.hasPromptedUser {
-		s.shouldDelete = s.promptForConfirmation()
-	}
-
-	if !s.shouldDelete {
+	if !d.shouldDelete {
 		return nil
 	}
 
-	err = os.Remove(filepath.Join(s.rootPath, entity.relativePath))
+	err = d.deleter(object)
 	if err != nil {
-		glcm.Info(fmt.Sprintf("error %s deleting the file %s", err.Error(), entity.relativePath))
+		glcm.Info(fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath))
 	}
 
 	return
 }
 
-func (s *syncLocalDeleteProcessor) promptForConfirmation() (shouldDelete bool) {
+func (d *interactiveDeleteProcessor) promptForConfirmation() (shouldDelete bool) {
 	shouldDelete = false
 
 	// omit asking if the user has already specified
-	if s.cca.force {
+	if d.force {
 		shouldDelete = true
 	} else {
-		answer := glcm.Prompt(fmt.Sprintf("Sync has discovered local files that are not present at the source, would you like to delete them? Please confirm with y/n: "))
+		answer := glcm.Prompt(fmt.Sprintf("Sync has discovered %s that are not present at the source, would you like to delete them? Please confirm with y/n: ", d.objectType))
 		if answer == "y" || answer == "yes" {
 			shouldDelete = true
-			glcm.Info("Confirmed. The extra local files will be deleted.")
+			glcm.Info(fmt.Sprintf("Confirmed. The extra %s will be deleted:", d.objectType))
 		} else {
 			glcm.Info("No deletions will happen.")
 		}
 	}
-
-	s.hasPromptedUser = true
 	return
 }
 
-func (s *syncLocalDeleteProcessor) wasAnyFileDeleted() bool {
-	// we'd have prompted the user if any entity was passed in
-	return s.hasPromptedUser
+func (d *interactiveDeleteProcessor) wasAnyFileDeleted() bool {
+	// we'd have prompted the user if any stored object was passed in
+	return d.hasPromptedUser
+}
+
+func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
+	localDeleter := localFileDeleter{rootPath: cca.destination}
+	return &interactiveDeleteProcessor{deleter: localDeleter.deleteFile, force: cca.force, objectType: "local files"}
+}
+
+type localFileDeleter struct {
+	rootPath string
+}
+
+func (l *localFileDeleter) deleteFile(object storedObject) error {
+	glcm.Info("Deleting file: " + object.relativePath)
+	return os.Remove(filepath.Join(l.rootPath, object.relativePath))
+}
+
+func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
+	rawURL, err := url.Parse(cca.destination)
+	if err != nil {
+		return nil, err
+	} else if err == nil && cca.destinationSAS != "" {
+		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.destinationSAS)
+	}
+
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	p, err := createBlobPipeline(ctx, cca.credentialInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	return &interactiveDeleteProcessor{deleter: newBlobDeleter(rawURL, p, ctx).deleteBlob, force: cca.force, objectType: "blobs"}, nil
+}
+
+type blobDeleter struct {
+	rootURL *url.URL
+	p       pipeline.Pipeline
+	ctx     context.Context
+}
+
+func newBlobDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context) *blobDeleter {
+	return &blobDeleter{
+		rootURL: rawRootURL,
+		p:       p,
+		ctx:     ctx,
+	}
+}
+
+func (b *blobDeleter) deleteBlob(object storedObject) error {
+	glcm.Info("Deleting: " + object.relativePath)
+
+	// construct the blob URL using its relative path
+	// the rootURL could be pointing to a container, or a virtual directory
+	blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+	blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
+
+	blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
+	_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+	return err
 }

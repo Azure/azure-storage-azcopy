@@ -69,3 +69,12 @@ func (mockedLifecycleManager) Error(string)                                     
 func (mockedLifecycleManager) SurrenderControl()                                        {}
 func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController, bool)    {}
 func (mockedLifecycleManager) GetEnvironmentVariable(common.EnvironmentVariable) string { return "" }
+
+type dummyProcessor struct {
+	record []storedObject
+}
+
+func (d *dummyProcessor) process(storedObject storedObject) (err error) {
+	d.record = append(d.record, storedObject)
+	return
+}

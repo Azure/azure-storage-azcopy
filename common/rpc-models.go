@@ -69,31 +69,6 @@ type CredentialInfo struct {
 	OAuthTokenInfo OAuthTokenInfo
 }
 
-type SyncJobPartOrderRequest struct {
-	JobID            JobID
-	FromTo           FromTo
-	PartNumber       PartNumber
-	LogLevel         LogLevel
-	Include          []string
-	Exclude          []string
-	BlockSizeInBytes uint32
-	SourceSAS        string
-	DestinationSAS   string
-	CopyJobRequest   CopyJobPartOrderRequest
-	DeleteJobRequest CopyJobPartOrderRequest
-	// FilesDeletedLocally is used to keep track of the file that are deleted locally
-	// Since local files to delete are not sent as transfer to STE
-	// the count of the local files deletion is tracked using it.
-	FilesToDeleteLocally []string
-	// commandString hold the user given command which is logged to the Job log file
-	CommandString  string
-	CredentialInfo CredentialInfo
-
-	LocalFiles map[string]time.Time
-
-	SourceFilesToExclude map[string]time.Time
-}
-
 type CopyJobPartOrderResponse struct {
 	ErrorMsg   string
 	JobStarted bool

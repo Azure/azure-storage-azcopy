@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 	"io/ioutil"
@@ -36,12 +37,24 @@ func (scenarioHelper) generateFile(filePath string, fileSize int) ([]byte, error
 	return bigBuff, err
 }
 
-func (s scenarioHelper) generateRandomLocalFiles(c *chk.C, dirPath string, numOfFiles int) (fileList []string) {
-	for i := 0; i < numOfFiles; i++ {
-		fileName := filepath.Join(dirPath, generateName("random"))
-		fileList = append(fileList, fileName)
+func (s scenarioHelper) generateRandomLocalFiles(c *chk.C, dirPath string, prefix string) (fileList []string) {
+	fileList = make([]string, 30)
+	for i := 0; i < 10; i++ {
+		fileName1 := generateName(prefix + "top")
+		fileName2 := generateName(prefix + "sub1/")
+		fileName3 := generateName(prefix + "sub2/")
 
-		_, err := s.generateFile(fileName, defaultFileSize)
+		fileList[3*i] = fileName1
+		fileList[3*i+1] = fileName2
+		fileList[3*i+2] = fileName3
+
+		_, err := s.generateFile(filepath.Join(dirPath, fileName1), defaultFileSize)
+		c.Assert(err, chk.IsNil)
+
+		_, err = s.generateFile(filepath.Join(dirPath, fileName2), defaultFileSize)
+		c.Assert(err, chk.IsNil)
+
+		_, err = s.generateFile(filepath.Join(dirPath, fileName3), defaultFileSize)
 		c.Assert(err, chk.IsNil)
 	}
 	return
@@ -107,4 +120,12 @@ func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobN
 	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlockBlobURL(blobName)
 	return blobURLWithSAS.URL()
+}
+
+func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
+	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
+	if err == nil {
+		return true
+	}
+	return false
 }

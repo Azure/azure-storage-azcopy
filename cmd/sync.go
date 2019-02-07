@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -39,7 +38,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TODO
+// TODO plug this in
 // a max is set because we cannot buffer infinite amount of destination file info in memory
 const MaxNumberOfFilesAllowedInSync = 10000000
 
@@ -192,6 +191,7 @@ type cookedSyncCmdArgs struct {
 
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
+	// this is set to true once the final part has been dispatched
 	isEnumerationComplete bool
 
 	// defines the scanning status of the sync operation.
@@ -273,19 +273,42 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
-	if !cca.scanningComplete() {
-		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
-			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
-		return
-	}
-	// If the first part isn't ordered yet, no need to fetch the progress summary.
-	if !cca.firstPartOrdered() {
-		return
-	}
-	// fetch a job status
 	var summary common.ListSyncJobSummaryResponse
-	Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
-	jobDone := summary.JobStatus.IsJobDone()
+	var throughput float64
+	var jobDone bool
+
+	// fetch a job status and compute throughput if the first part was dispatched
+	if cca.firstPartOrdered() {
+		Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
+		jobDone = summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+
+		// compute the average throughput for the last time interval
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
+		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+		throughput = common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
+
+		// reset the interval timer and byte count
+		cca.intervalStartTime = time.Now()
+		cca.intervalBytesTransferred = summary.BytesOverWire
+	}
+
+	// first part not dispatched, and we are still scanning
+	// so a special message is outputted to notice the user that we are not stalling
+	if !jobDone && !cca.scanningComplete() {
+		// skip the interactive message if we were triggered by another tool
+		if cca.output == common.EOutputFormat.Json() {
+			return
+		}
+
+		var throughputString string
+		if cca.firstPartOrdered() {
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+		}
+
+		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination%s",
+			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned), throughputString))
+		return
+	}
 
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
@@ -326,27 +349,11 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.JobStatus), exitCode)
 	}
 
-	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
-	// display a scanning keyword if the job is not completely ordered
-	var scanningString = ""
-	if !summary.CompleteJobOrdered {
-		scanningString = "(scanning...)"
-	}
-
-	// compute the average throughput for the last time interval
-	bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
-	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
-
-	// reset the interval timer and byte count
-	cca.intervalStartTime = time.Now()
-	cca.intervalBytesTransferred = summary.BytesOverWire
-
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v",
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total, 2-sec Throughput (Mb/s): %v",
 		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
 		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
 		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, ste.ToFixed(throughput, 4)))
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
@@ -386,7 +393,10 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
-		return errors.New("work in progress")
+		enumerator, err = newSyncUploadEnumerator(cca)
+		if err != nil {
+			return err
+		}
 	case common.EFromTo.BlobLocal():
 		enumerator, err = newSyncDownloadEnumerator(cca)
 		if err != nil {
@@ -396,9 +406,13 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		return fmt.Errorf("the given source/destination pair is currently not supported")
 	}
 
+	// trigger the progress reporting
+	cca.waitUntilJobCompletion(false)
+
+	// trigger the enumeration
 	err = enumerator.enumerate()
 	if err != nil {
-		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.source, cca.destination, err.Error())
+		return err
 	}
 	return nil
 }
@@ -411,6 +425,7 @@ func init() {
 		Aliases: []string{"sc", "s"},
 		Short:   syncCmdShortDescription,
 		Long:    syncCmdLongDescription,
+		Example: syncCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))
@@ -427,7 +442,7 @@ func init() {
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Exit("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Exit("Cannot perform sync due to error: "+err.Error(), common.EExitCode.Error())
 			}
 
 			glcm.SurrenderControl()
@@ -435,17 +450,19 @@ func init() {
 	}
 
 	rootCmd.AddCommand(syncCmd)
-	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when syncing between directories.")
+	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete extra files at the destination that are not present at the source. "+
 		"If false, user will be prompted with a question while scheduling files/blobs for deletion.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading.")
 	// TODO: should the previous line list the allowable values?
+
+	// TODO follow sym link is not implemented, clarify behavior first
+	//syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
 	// TODO sync does not support any BlobAttributes, this functionality should be added
 }
