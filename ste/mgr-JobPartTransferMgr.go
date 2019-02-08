@@ -101,6 +101,9 @@ type jobPartTransferMgr struct {
 	// NumberOfChunksDone determines the final cancellation or completion of a transfer
 	atomicChunksDone uint32
 
+	// used defensively to protect against accidental double counting
+	atomicCompletionIndicator uint32
+
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
 		// transfer chunks are put into this channel and execution engine takes chunk out of this channel.
@@ -437,10 +440,20 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed
 // TODO: I feel like this should take the status & we kill SetStatus
-// TODO: also, it looks like if we accidentally call this twice, on the one jptm, it just treats that as TWO successful transfers, which is a bug
 func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	// In case of context leak in job part transfer manager.
 	jptm.Cancel()
+
+	// defensive programming check, to make sure this method is not called twice for the same transfer
+	// (since if it was, job would count us as TWO completions, and maybe miss another transfer that
+	// should have been counted but wasn't)
+	// TODO: it would be nice if this protection was actually in jobPartMgr.ReportTransferDone,
+	//    but that's harder to implement (would imply need for a threadsafe map there, to track
+	//    status by transfer). So for now we are going with the check here. This is the only call
+	//    to the jobPartManager anyway (as it Feb 2019)
+	if atomic.SwapUint32(&jptm.atomicCompletionIndicator, 1) != 0 {
+		panic("cannot report the same transfer done twice")
+	}
 
 	return jptm.jobPartMgr.ReportTransferDone()
 }
