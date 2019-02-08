@@ -215,6 +215,7 @@ func (e *syncDownloadEnumerator) listSourceAndCompare(cca *cookedSyncCmdArgs, p 
 				Destination:      blobLocalPath,
 				SourceSize:       *blobInfo.Properties.ContentLength,
 				LastModifiedTime: blobInfo.Properties.LastModified,
+				ContentMD5:       blobInfo.Properties.ContentMD5,
 			}, cca)
 
 			delete(e.SourceFiles, blobLocalPath)
@@ -295,6 +296,7 @@ func (e *syncDownloadEnumerator) listTheDestinationIfRequired(cca *cookedSyncCmd
 			Destination:      cca.source,
 			SourceSize:       bProperties.ContentLength(),
 			LastModifiedTime: bProperties.LastModified(),
+			ContentMD5:       bProperties.ContentMD5(),
 		}, cca)
 	}
 
@@ -416,6 +418,9 @@ func (e *syncDownloadEnumerator) enumerate(cca *cookedSyncCmdArgs) error {
 
 	// Set the preserve-last-modified-time to true in CopyJobRequest
 	e.CopyJobRequest.BlobAttributes.PreserveLastModifiedTime = true
+
+	// set MD5 validation behaviour
+	e.CopyJobRequest.BlobAttributes.MD5ValidationOption = cca.md5ValidationOption
 
 	// Copying the JobId of sync job to individual deleteJobRequest.
 	e.DeleteJobRequest.JobID = e.JobID

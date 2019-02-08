@@ -525,6 +525,52 @@ func (ct *CredentialType) Parse(s string) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EHashValidationOption = HashValidationOption(0)
+
+var DefaultHashValidationOption = EHashValidationOption.FailIfDifferent()
+
+type HashValidationOption uint8
+
+// LogOnly is the least strict option
+func (HashValidationOption) LogOnly() HashValidationOption { return HashValidationOption(0) }
+
+// FailIfDifferent says fail if hashes different, but NOT fail if saved hash is
+// totally missing. This is a balance of convenience (for cases where no hash is saved) vs strictness
+// (to validate strictly when one is present)
+func (HashValidationOption) FailIfDifferent() HashValidationOption { return HashValidationOption(1) }
+
+// FailIfDifferentOrMissing is the strictest option, and useful for testing or validation in cases when
+// we _know_ there should be a hash
+func (HashValidationOption) FailIfDifferentOrMissing() HashValidationOption {
+	return HashValidationOption(2)
+}
+
+func (hvo HashValidationOption) String() string {
+	return enum.StringInt(hvo, reflect.TypeOf(hvo))
+}
+
+func (hvo *HashValidationOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(hvo), s, true, true)
+	if err == nil {
+		*hvo = val.(HashValidationOption)
+	}
+	return err
+}
+
+func (hvo HashValidationOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(hvo.String())
+}
+
+func (hvo *HashValidationOption) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return hvo.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize     = 100 * 1024 * 1024

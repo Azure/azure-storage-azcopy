@@ -22,6 +22,7 @@ type IJobPartTransferMgr interface {
 	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	PreserveLastModifiedTime() (time.Time, bool)
+	MD5ValidationOption() common.HashValidationOption
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
@@ -54,6 +55,7 @@ type IJobPartTransferMgr interface {
 	LogError(resource, context string, err error)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	common.ILogger
 }
 
@@ -214,11 +216,15 @@ func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfi
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
 // If PreserveLastModifiedTime is set to true, it returns the lastModifiedTime of the source.
 func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
-	if preserveLastModifiedTime := jptm.jobPartMgr.(*jobPartMgr).localDstData(); preserveLastModifiedTime {
+	if preserveLastModifiedTime := jptm.jobPartMgr.(*jobPartMgr).localDstData().PreserveLastModifiedTime; preserveLastModifiedTime {
 		lastModifiedTime := jptm.jobPartPlanTransfer.ModifiedTime
 		return time.Unix(0, lastModifiedTime), true
 	}
 	return time.Time{}, false
+}
+
+func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {
+	return jptm.jobPartMgr.(*jobPartMgr).localDstData().MD5VerificationOption
 }
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
@@ -381,7 +387,17 @@ const (
 	transferErrorCodeCopyFailed     transferErrorCode = "COPYFAILED"
 )
 
+func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string) {
+	// order of log elements here is mirrored, with some more added, in logTransferError
+	fullMsg := common.URLStringExtension(jptm.Info().Source).RedactSigQueryParamForLogging() + " " +
+		msg +
+		" Dst: " + common.URLStringExtension(jptm.Info().Destination).RedactSigQueryParamForLogging()
+
+	jptm.Log(level, fullMsg)
+}
+
 func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
+	// order of log elements here is mirrored, in subset, in LogForCurrentTransfer
 	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSigQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSigQueryParamForLogging()
 	jptm.Log(pipeline.LogError, msg)

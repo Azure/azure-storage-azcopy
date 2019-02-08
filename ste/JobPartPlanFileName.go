@@ -155,6 +155,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
+			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption,
 		},
 		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
 	}
@@ -241,7 +242,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		common.PanicIfErr(err)
 		eof += int64(bytesWritten)
 
-		// For S2S copy, write the src properties
+		// For S2S copy (and, in the case of Content-MD5, always), write the src properties
 		if len(order.Transfers[t].ContentType) != 0 {
 			bytesWritten, err = file.WriteString(order.Transfers[t].ContentType)
 			common.PanicIfErr(err)
@@ -267,7 +268,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
-		if order.Transfers[t].ContentMD5 != nil {
+		if order.Transfers[t].ContentMD5 != nil { // if non-nil but 0 len, will simply not be read by the consumer (since length is zero)
 			bytesWritten, err = file.WriteString(string(order.Transfers[t].ContentMD5))
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)

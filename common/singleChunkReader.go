@@ -23,6 +23,7 @@ package common
 import (
 	"context"
 	"errors"
+	"hash"
 	"io"
 )
 
@@ -42,11 +43,8 @@ type SingleChunkReader interface {
 	// Closer is needed to clean up resources
 	io.Closer
 
-	// TryBlockingPrefetch tries to read the full contents of the chunk into RAM. Returns true if succeeded for false if failed,
-	// although callers do not have to check the return value (and there is no error object returned). Why?
-	// Because its OK to keep using this object even if the prefetch fails, since in that case
-	// any subsequent Read will just retry the same read as we do here, and if it fails at that time then Read will return an error.
-	TryBlockingPrefetch(fileReader io.ReaderAt) bool
+	// BlockingPrefetch tries to read the full contents of the chunk into RAM.
+	BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error
 
 	// CaptureLeadingBytes is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
 	// on the first chunk in each file (since there's no point in calling it on others)
@@ -61,6 +59,10 @@ type SingleChunkReader interface {
 	// In the rare edge case where this returns false due to the prefetch having failed (rather than the contents being non-zero),
 	// we'll just treat it as a non-zero chunk. That's simpler (to code, to review and to test) than having this code force a prefetch.
 	HasPrefetchedEntirelyZeros() bool
+
+	// WriteBufferTo writes the entire contents of the prefetched buffer to h
+	// Panics if the internal buffer has not been prefetched (or if its been discarded after a complete Read)
+	WriteBufferTo(h hash.Hash)
 }
 
 // Simple aggregation of existing io interfaces
@@ -118,18 +120,6 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 	}
 }
 
-// Prefetch, and ignore any errors (just leave in not-prefetch-yet state, if there was an error)
-// If we leave it in the not-prefetched state here, then when Read happens that will trigger another read attempt,
-// and that one WILL return any error that happens
-func (cr *singleChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
-	err := cr.blockingPrefetch(fileReader, false)
-	if err != nil {
-		cr.returnBuffer() // if there was an error, be sure to put us back into a valid "not-yet-prefetched" state
-		return false
-	}
-	return true
-}
-
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	if cr.buffer == nil {
 		return false // not prefetched  (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
@@ -153,7 +143,7 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 // (Allowing the caller to provide the reader to us allows a sequential read approach, since caller can control the order sequentially (in the initial, non-retry, scenario)
 // We use io.ReaderAt, rather than io.Reader, just for maintainablity/ensuring correctness. (Since just using Reader requires the caller to
 // follow certain assumptions about positioning the file pointer at the right place before calling us, but using ReaderAt does not).
-func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
 	if cr.buffer != nil {
 		return nil // already prefetched
 	}
@@ -198,7 +188,7 @@ func (cr *singleChunkReader) retryBlockingPrefetchIfNecessary() error {
 
 	// no need to seek first, because its a ReaderAt
 	const isRetry = true // retries are the only time we need to redo the prefetch
-	return cr.blockingPrefetch(sourceFile, isRetry)
+	return cr.BlockingPrefetch(sourceFile, isRetry)
 }
 
 // Seeks within this chunk
@@ -306,4 +296,14 @@ func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
 	// MUST re-wind, so that the bytes we read will get transferred too!
 	cr.Seek(0, io.SeekStart)
 	return leadingBytes
+}
+
+func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
+	if cr.buffer == nil {
+		panic("invalid state. No prefetch buffer is present")
+	}
+	_, err := h.Write(cr.buffer)
+	if err != nil {
+		panic("documentation of hash.Hash.Write says it will never return an error")
+	}
 }

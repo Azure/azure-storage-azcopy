@@ -34,12 +34,14 @@ import (
 )
 
 type azureFilesUploader struct {
-	jptm      IJobPartTransferMgr
-	fileURL   azfile.FileURL
-	chunkSize uint32
-	numChunks uint32
-	pipeline  pipeline.Pipeline
-	pacer     *pacer
+	jptm                IJobPartTransferMgr
+	fileURL             azfile.FileURL
+	chunkSize           uint32
+	numChunks           uint32
+	pipeline            pipeline.Pipeline
+	pacer               *pacer
+	md5Channel          chan []byte
+	creationTimeHeaders *azfile.FileHTTPHeaders // pointer so default value, nil, is clearly "wrong" and can't be used by accident
 }
 
 func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -68,12 +70,13 @@ func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	return &azureFilesUploader{
-		jptm:      jptm,
-		fileURL:   azfile.NewFileURL(*destURL, p),
-		chunkSize: chunkSize,
-		numChunks: numChunks,
-		pipeline:  p,
-		pacer:     pacer,
+		jptm:       jptm,
+		fileURL:    azfile.NewFileURL(*destURL, p),
+		chunkSize:  chunkSize,
+		numChunks:  numChunks,
+		pipeline:   p,
+		pacer:      pacer,
+		md5Channel: newMd5Channel(),
 	}, nil
 }
 
@@ -83,6 +86,10 @@ func (u *azureFilesUploader) ChunkSize() uint32 {
 
 func (u *azureFilesUploader) NumChunks() uint32 {
 	return u.numChunks
+}
+
+func (u *azureFilesUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
@@ -107,6 +114,9 @@ func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
 		jptm.FailActiveUpload("Creating file", err)
 		return
 	}
+
+	// Save headers to re-use, with same values, in epilogue
+	u.creationTimeHeaders = &fileHTTPHeaders
 }
 
 func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -140,6 +150,16 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 
 func (u *azureFilesUploader) Epilogue() {
 	jptm := u.jptm
+
+	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
+	if jptm.TransferStatus() > 0 {
+		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
+			epilogueHeaders := *u.creationTimeHeaders
+			epilogueHeaders.ContentMD5 = md5Hash
+			_, err := u.fileURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders)
+			return err
+		})
+	}
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 {
