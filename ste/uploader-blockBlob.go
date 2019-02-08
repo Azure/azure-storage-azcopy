@@ -172,7 +172,7 @@ func (u *blockBlobUploader) Epilogue() {
 	blockIds := u.blockIds
 	u.mu.Unlock()
 	shouldPutBlockList := getPutListNeed(&u.putListIndicator)
-	if shouldPutBlockList == putListNeedUnknown {
+	if shouldPutBlockList == putListNeedUnknown && !jptm.WasCanceled() {
 		panic("'put list' need flag was never set")
 	}
 
