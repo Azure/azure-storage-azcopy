@@ -40,14 +40,33 @@ type ChunkID struct {
 	// but because this is a pointer, all will point to the same
 	// value for waitReasonIndex (so when we change it, all will see the change)
 	waitReasonIndex *int32
+
+	// Like waitReasonIndex, but is effectively just a boolean to track whether we are done.
+	// Must be a pointer, for same reason that waitReasonIndex is.
+	// Can't be done just off waitReasonIndex because for downloads we actually
+	// tell the jptm we are done before the chunk has been flushed out to disk, so
+	// waitReasonIndex isn't yet ready to go to "Done" at that time.
+	completionNotifiedToJptm *int32
+
+	// TODO: it's a bit odd having two pointers in a struct like this.  Review, maybe we should always work
+	//   with pointers to chunk ids, with nocopy?  If we do that, the two fields that are currently pointers
+	//   can become non-pointers
 }
 
 func NewChunkID(name string, offsetInFile int64) ChunkID {
 	dummyWaitReasonIndex := int32(0)
+	zeroNotificationState := int32(0)
 	return ChunkID{
-		Name:            name,
-		OffsetInFile:    offsetInFile,
-		waitReasonIndex: &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
+		Name:                     name,
+		OffsetInFile:             offsetInFile,
+		waitReasonIndex:          &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
+		completionNotifiedToJptm: &zeroNotificationState,
+	}
+}
+
+func (id ChunkID) SetCompletionNotificationSent() {
+	if atomic.SwapInt32(id.completionNotifiedToJptm, 1) != 0 {
+		panic("cannot complete the same chunk twice")
 	}
 }
 

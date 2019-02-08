@@ -30,7 +30,8 @@ type IJobPartTransferMgr interface {
 	CacheLimiter() common.CacheLimiter
 	StartJobXfer()
 	IsForceWriteTrue() bool
-	ReportChunkDone() (lastChunk bool, chunksDone uint32)
+	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
+	UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32)
 	TransferStatus() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
@@ -243,13 +244,26 @@ func (jptm *jobPartTransferMgr) SetActionAfterLastChunk(f func()) {
 }
 
 // Call Done when a chunk has completed its transfer; this method returns the number of chunks completed so far
-func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone uint32) {
+func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32) {
+
+	// Tell the id to remember that we (the jptm) have been told about its completion
+	// Will panic if we've already been told about its completion before.
+	// Why? As defensive programming, since if we accidentally counted one chunk twice, we'd complete
+	// before another was finish. Which would be bad
+	id.SetCompletionNotificationSent()
+
+	// Do our actual processing
 	chunksDone = atomic.AddUint32(&jptm.atomicChunksDone, 1)
 	lastChunk = chunksDone == jptm.numChunks
 	if lastChunk {
 		jptm.runActionAfterLastChunk()
 	}
 	return lastChunk, chunksDone
+}
+
+// TODO: phase this method out.  It's just here to support parts of the codebase that don't yet have chunk IDs
+func (jptm *jobPartTransferMgr) UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32) {
+	return jptm.ReportChunkDone(common.NewChunkID("", 0))
 }
 
 // If an automatic action has been specified for after the last chunk, run it now
