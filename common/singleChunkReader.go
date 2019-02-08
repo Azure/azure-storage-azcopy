@@ -153,7 +153,7 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	defer cr.unuse()
 
 	if cr.buffer == nil {
-		return false // not prefetched  (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
+		return false // not prefetched (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
 	}
 
 	for _, b := range cr.buffer {
