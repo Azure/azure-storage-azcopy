@@ -38,7 +38,7 @@ type md5Comparer struct {
 	logger           transferSpecificLogger
 }
 
-// TODO: let's add an aka.ms link to the message, that gives more info
+// TODO: let's add an aka.ms link to the message,  that gives more info
 var errMd5Mismatch = errors.New("the MD5 hash of the data, as we received it, did not match the expected value, as found in the Blob/File Service. " +
 	"This means that either there is a data integrity error OR another tool has failed to keep the stored hash up to date")
 
