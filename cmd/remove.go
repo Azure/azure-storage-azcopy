@@ -51,9 +51,10 @@ func init() {
 			} else {
 				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
 			}
-			// Since remove uses the copy command arguments cook, set the blobType to None
+			// Since remove uses the copy command arguments cook, set the blobType to None and validation option
 			// else parsing the arguments will fail.
 			raw.blobType = common.EBlobType.None().String()
+			raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
