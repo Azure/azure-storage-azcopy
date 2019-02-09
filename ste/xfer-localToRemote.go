@@ -152,7 +152,7 @@ func scheduleUploadChunks(jptm IJobPartTransferMgr, srcName string, srcFile comm
 		// of the file read later (when doing a retry)
 		// BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
 		// to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
-		chunkReader := common.NewSingleChunkReader(context, sourceFileFactory, id, adjustedChunkSize, jptm, slicePool, cacheLimiter)
+		chunkReader := common.NewSingleChunkReader(context, sourceFileFactory, id, adjustedChunkSize, jptm, jptm, slicePool, cacheLimiter)
 
 		// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 		chunkDataError := chunkReader.BlockingPrefetch(srcFile, false)
