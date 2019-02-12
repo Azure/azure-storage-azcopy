@@ -4,29 +4,26 @@ package azbfs
 // Changes may cause incorrect behavior and will be lost if the code is regenerated.
 
 import (
-        "net/url"
-    "github.com/Azure/azure-pipeline-go/pipeline"
-        "net/url"
-    "net/http"
-        "net/url"
-    "context"
-        "net/url"
-    "strconv"
-        "net/url"
-    "encoding/json"
-        "net/url"
-    "io/ioutil"
-        "net/url"
-    "io"
+	// begin manual edit to generated code
+	"context"
+	"encoding/json"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strconv"
+	// end manual edit
 )
 
 // filesystemClient is the azure Data Lake Storage provides storage for Hadoop and other big data workloads.
 type filesystemClient struct {
-    managementClient
+	managementClient
 }
+
 // newFilesystemClient creates an instance of the filesystemClient client.
 func newFilesystemClient(url url.URL, p pipeline.Pipeline) filesystemClient {
-    return filesystemClient{newManagementClient(url, p)}
+	return filesystemClient{newManagementClient(url, p)}
 }
 
 // Create create a filesystem rooted at the specified location. If the filesystem already exists, the operation fails.
@@ -42,29 +39,27 @@ func newFilesystemClient(url url.URL, p pipeline.Pipeline) filesystemClient {
 // timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
 // Universal Time (UTC) for the request.  This is required when using shared key authorization.
 func (client filesystemClient) Create(ctx context.Context, filesystem string, xMsProperties *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*FilesystemCreateResponse, error) {
-    if err := validate([]validation{
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.createPreparer(filesystem, xMsProperties, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.createResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*FilesystemCreateResponse), err
 }
 
@@ -74,34 +69,34 @@ func (client filesystemClient) createPreparer(filesystem string, xMsProperties *
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    params.Set("resource", "filesystem")
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsProperties != nil {
-        req.Header.Set("x-ms-properties", *xMsProperties)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	params.Set("resource", "filesystem")
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsProperties != nil {
+		req.Header.Set("x-ms-properties", *xMsProperties)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
 // createResponder handles the response to the Create request.
 func (client filesystemClient) createResponder(resp pipeline.Response) (pipeline.Response, error) {
-	err := validateResponse(resp, http.StatusOK,http.StatusCreated)
+	err := validateResponse(resp, http.StatusOK, http.StatusCreated)
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &FilesystemCreateResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &FilesystemCreateResponse{rawResponse: resp.Response()}, err
 }
 
 // Delete marks the filesystem for deletion.  When a filesystem is deleted, a filesystem with the same identifier
@@ -124,29 +119,27 @@ func (client filesystemClient) createResponder(resp pipeline.Response) (pipeline
 // completes, the operation fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is
 // required when using shared key authorization.
 func (client filesystemClient) Delete(ctx context.Context, filesystem string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*FilesystemDeleteResponse, error) {
-    if err := validate([]validation{
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.deletePreparer(filesystem, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.deleteResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*FilesystemDeleteResponse), err
 }
 
@@ -156,37 +149,37 @@ func (client filesystemClient) deletePreparer(filesystem string, ifModifiedSince
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    params.Set("resource", "filesystem")
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	params.Set("resource", "filesystem")
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
 // deleteResponder handles the response to the Delete request.
 func (client filesystemClient) deleteResponder(resp pipeline.Response) (pipeline.Response, error) {
-	err := validateResponse(resp, http.StatusOK,http.StatusAccepted)
+	err := validateResponse(resp, http.StatusOK, http.StatusAccepted)
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &FilesystemDeleteResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &FilesystemDeleteResponse{rawResponse: resp.Response()}, err
 }
 
 // GetProperties all system and user-defined filesystem properties are specified in the response headers.
@@ -199,29 +192,27 @@ func (client filesystemClient) deleteResponder(resp pipeline.Response) (pipeline
 // fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is required when using
 // shared key authorization.
 func (client filesystemClient) GetProperties(ctx context.Context, filesystem string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*FilesystemGetPropertiesResponse, error) {
-    if err := validate([]validation{
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.getPropertiesPreparer(filesystem, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.getPropertiesResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*FilesystemGetPropertiesResponse), err
 }
 
@@ -231,19 +222,19 @@ func (client filesystemClient) getPropertiesPreparer(filesystem string, xMsClien
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    params.Set("resource", "filesystem")
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	params.Set("resource", "filesystem")
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -253,9 +244,9 @@ func (client filesystemClient) getPropertiesResponder(resp pipeline.Response) (p
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &FilesystemGetPropertiesResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &FilesystemGetPropertiesResponse{rawResponse: resp.Response()}, err
 }
 
 // List list filesystems and their properties in given account.
@@ -271,29 +262,26 @@ func (client filesystemClient) getPropertiesResponder(resp pipeline.Response) (p
 // completes, the operation fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is
 // required when using shared key authorization.
 func (client filesystemClient) List(ctx context.Context, prefix *string, continuation *string, maxResults *int32, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*FilesystemList, error) {
-    if err := validate([]validation{
-    { targetValue: maxResults,
-     constraints: []constraint{	{target: "maxResults", name: null, rule: false ,
-    chain: []constraint{	{target: "maxResults", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: maxResults,
+			constraints: []constraint{{target: "maxResults", name: null, rule: false,
+				chain: []constraint{{target: "maxResults", name: inclusiveMinimum, rule: 1, chain: nil}}}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.listPreparer(prefix, continuation, maxResults, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.listResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*FilesystemList), err
 }
 
@@ -303,28 +291,28 @@ func (client filesystemClient) listPreparer(prefix *string, continuation *string
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    params.Set("resource", "account")
-    if prefix != nil && len(*prefix) > 0 {
-        params.Set("prefix", *prefix)
-    }
-    if continuation != nil && len(*continuation) > 0 {
-        params.Set("continuation", *continuation)
-    }
-    if maxResults != nil {
-        params.Set("maxResults", strconv.FormatInt(int64(*maxResults), 10))
-    }
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	params.Set("resource", "account")
+	if prefix != nil && len(*prefix) > 0 {
+		params.Set("prefix", *prefix)
+	}
+	if continuation != nil && len(*continuation) > 0 {
+		params.Set("continuation", *continuation)
+	}
+	if maxResults != nil {
+		params.Set("maxResults", strconv.FormatInt(int64(*maxResults), 10))
+	}
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -334,23 +322,23 @@ func (client filesystemClient) listResponder(resp pipeline.Response) (pipeline.R
 	if resp == nil {
 		return nil, err
 	}
-    result:= &FilesystemList{rawResponse: resp.Response()}
-    if err != nil {
-        return result, err
-    }
-    defer resp.Response().Body.Close()
-    b, err:= ioutil.ReadAll(resp.Response().Body)
-    if err != nil {
-        return result, err
-    }
-    if len(b) > 0 {
-        b = removeBOM(b)
-        err = json.Unmarshal(b, result)
-        if err != nil {
-            return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
-        }
-    }
-    return result, nil
+	result := &FilesystemList{rawResponse: resp.Response()}
+	if err != nil {
+		return result, err
+	}
+	defer resp.Response().Body.Close()
+	b, err := ioutil.ReadAll(resp.Response().Body)
+	if err != nil {
+		return result, err
+	}
+	if len(b) > 0 {
+		b = removeBOM(b)
+		err = json.Unmarshal(b, result)
+		if err != nil {
+			return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
+		}
+	}
+	return result, nil
 }
 
 // SetProperties set properties for the filesystem.  This operation supports conditional HTTP requests.  For more
@@ -373,29 +361,27 @@ func (client filesystemClient) listResponder(resp pipeline.Response) (pipeline.R
 // timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
 // Universal Time (UTC) for the request.  This is required when using shared key authorization.
 func (client filesystemClient) SetProperties(ctx context.Context, filesystem string, xMsProperties *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*FilesystemSetPropertiesResponse, error) {
-    if err := validate([]validation{
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.setPropertiesPreparer(filesystem, xMsProperties, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.setPropertiesResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*FilesystemSetPropertiesResponse), err
 }
 
@@ -405,28 +391,28 @@ func (client filesystemClient) setPropertiesPreparer(filesystem string, xMsPrope
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    params.Set("resource", "filesystem")
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsProperties != nil {
-        req.Header.Set("x-ms-properties", *xMsProperties)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	params.Set("resource", "filesystem")
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsProperties != nil {
+		req.Header.Set("x-ms-properties", *xMsProperties)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -436,8 +422,7 @@ func (client filesystemClient) setPropertiesResponder(resp pipeline.Response) (p
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &FilesystemSetPropertiesResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &FilesystemSetPropertiesResponse{rawResponse: resp.Response()}, err
 }
-

@@ -4,29 +4,26 @@ package azbfs
 // Changes may cause incorrect behavior and will be lost if the code is regenerated.
 
 import (
-        "net/url"
-    "github.com/Azure/azure-pipeline-go/pipeline"
-        "net/url"
-    "net/http"
-        "net/url"
-    "context"
-        "net/url"
-    "strconv"
-        "net/url"
-    "io"
-        "net/url"
-    "encoding/json"
-        "net/url"
-    "io/ioutil"
+	// begin manual edit to generated code
+	"context"
+	"encoding/json"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strconv"
+	// end manual edit
 )
 
 // pathClient is the azure Data Lake Storage provides storage for Hadoop and other big data workloads.
 type pathClient struct {
-    managementClient
+	managementClient
 }
+
 // newPathClient creates an instance of the pathClient client.
 func newPathClient(url url.URL, p pipeline.Pipeline) pathClient {
-    return pathClient{newManagementClient(url, p)}
+	return pathClient{newManagementClient(url, p)}
 }
 
 // Create create or rename a file or directory.    By default, the destination is overwritten and if the destination
@@ -90,37 +87,33 @@ func newPathClient(url url.URL, p pipeline.Pipeline) pathClient {
 // operation completes, the operation fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.
 // This is required when using shared key authorization.
 func (client pathClient) Create(ctx context.Context, filesystem string, pathParameter string, resource PathResourceType, continuation *string, mode PathRenameModeType, cacheControl *string, contentEncoding *string, contentLanguage *string, contentDisposition *string, xMsCacheControl *string, xMsContentType *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsContentDisposition *string, xMsRenameSource *string, xMsLeaseID *string, xMsSourceLeaseID *string, xMsProperties *string, xMsPermissions *string, xMsUmask *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsSourceIfMatch *string, xMsSourceIfNoneMatch *string, xMsSourceIfModifiedSince *string, xMsSourceIfUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathCreateResponse, error) {
-    if err := validate([]validation{
-    { targetValue: xMsLeaseID,
-     constraints: []constraint{	{target: "xMsLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: xMsSourceLeaseID,
-     constraints: []constraint{	{target: "xMsSourceLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsSourceLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: xMsLeaseID,
+			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: xMsSourceLeaseID,
+			constraints: []constraint{{target: "xMsSourceLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsSourceLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.createPreparer(filesystem, pathParameter, resource, continuation, mode, cacheControl, contentEncoding, contentLanguage, contentDisposition, xMsCacheControl, xMsContentType, xMsContentEncoding, xMsContentLanguage, xMsContentDisposition, xMsRenameSource, xMsLeaseID, xMsSourceLeaseID, xMsProperties, xMsPermissions, xMsUmask, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsSourceIfMatch, xMsSourceIfNoneMatch, xMsSourceIfModifiedSince, xMsSourceIfUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.createResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*PathCreateResponse), err
 }
 
@@ -130,108 +123,108 @@ func (client pathClient) createPreparer(filesystem string, pathParameter string,
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    if resource != PathResourceNone {
-        params.Set("resource", string(resource))
-    }
-    if continuation != nil && len(*continuation) > 0 {
-        params.Set("continuation", *continuation)
-    }
-    if mode != PathRenameModeNone {
-        params.Set("mode", string(mode))
-    }
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if cacheControl != nil {
-        req.Header.Set("Cache-Control", *cacheControl)
-    }
-    if contentEncoding != nil {
-        req.Header.Set("Content-Encoding", *contentEncoding)
-    }
-    if contentLanguage != nil {
-        req.Header.Set("Content-Language", *contentLanguage)
-    }
-    if contentDisposition != nil {
-        req.Header.Set("Content-Disposition", *contentDisposition)
-    }
-    if xMsCacheControl != nil {
-        req.Header.Set("x-ms-cache-control", *xMsCacheControl)
-    }
-    if xMsContentType != nil {
-        req.Header.Set("x-ms-content-type", *xMsContentType)
-    }
-    if xMsContentEncoding != nil {
-        req.Header.Set("x-ms-content-encoding", *xMsContentEncoding)
-    }
-    if xMsContentLanguage != nil {
-        req.Header.Set("x-ms-content-language", *xMsContentLanguage)
-    }
-    if xMsContentDisposition != nil {
-        req.Header.Set("x-ms-content-disposition", *xMsContentDisposition)
-    }
-    if xMsRenameSource != nil {
-        req.Header.Set("x-ms-rename-source", *xMsRenameSource)
-    }
-    if xMsLeaseID != nil {
-        req.Header.Set("x-ms-lease-id", *xMsLeaseID)
-    }
-    if xMsSourceLeaseID != nil {
-        req.Header.Set("x-ms-source-lease-id", *xMsSourceLeaseID)
-    }
-    if xMsProperties != nil {
-        req.Header.Set("x-ms-properties", *xMsProperties)
-    }
-    if xMsPermissions != nil {
-        req.Header.Set("x-ms-permissions", *xMsPermissions)
-    }
-    if xMsUmask != nil {
-        req.Header.Set("x-ms-umask", *xMsUmask)
-    }
-    if ifMatch != nil {
-        req.Header.Set("If-Match", *ifMatch)
-    }
-    if ifNoneMatch != nil {
-        req.Header.Set("If-None-Match", *ifNoneMatch)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsSourceIfMatch != nil {
-        req.Header.Set("x-ms-source-if-match", *xMsSourceIfMatch)
-    }
-    if xMsSourceIfNoneMatch != nil {
-        req.Header.Set("x-ms-source-if-none-match", *xMsSourceIfNoneMatch)
-    }
-    if xMsSourceIfModifiedSince != nil {
-        req.Header.Set("x-ms-source-if-modified-since", *xMsSourceIfModifiedSince)
-    }
-    if xMsSourceIfUnmodifiedSince != nil {
-        req.Header.Set("x-ms-source-if-unmodified-since", *xMsSourceIfUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	if resource != PathResourceNone {
+		params.Set("resource", string(resource))
+	}
+	if continuation != nil && len(*continuation) > 0 {
+		params.Set("continuation", *continuation)
+	}
+	if mode != PathRenameModeNone {
+		params.Set("mode", string(mode))
+	}
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if cacheControl != nil {
+		req.Header.Set("Cache-Control", *cacheControl)
+	}
+	if contentEncoding != nil {
+		req.Header.Set("Content-Encoding", *contentEncoding)
+	}
+	if contentLanguage != nil {
+		req.Header.Set("Content-Language", *contentLanguage)
+	}
+	if contentDisposition != nil {
+		req.Header.Set("Content-Disposition", *contentDisposition)
+	}
+	if xMsCacheControl != nil {
+		req.Header.Set("x-ms-cache-control", *xMsCacheControl)
+	}
+	if xMsContentType != nil {
+		req.Header.Set("x-ms-content-type", *xMsContentType)
+	}
+	if xMsContentEncoding != nil {
+		req.Header.Set("x-ms-content-encoding", *xMsContentEncoding)
+	}
+	if xMsContentLanguage != nil {
+		req.Header.Set("x-ms-content-language", *xMsContentLanguage)
+	}
+	if xMsContentDisposition != nil {
+		req.Header.Set("x-ms-content-disposition", *xMsContentDisposition)
+	}
+	if xMsRenameSource != nil {
+		req.Header.Set("x-ms-rename-source", *xMsRenameSource)
+	}
+	if xMsLeaseID != nil {
+		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
+	}
+	if xMsSourceLeaseID != nil {
+		req.Header.Set("x-ms-source-lease-id", *xMsSourceLeaseID)
+	}
+	if xMsProperties != nil {
+		req.Header.Set("x-ms-properties", *xMsProperties)
+	}
+	if xMsPermissions != nil {
+		req.Header.Set("x-ms-permissions", *xMsPermissions)
+	}
+	if xMsUmask != nil {
+		req.Header.Set("x-ms-umask", *xMsUmask)
+	}
+	if ifMatch != nil {
+		req.Header.Set("If-Match", *ifMatch)
+	}
+	if ifNoneMatch != nil {
+		req.Header.Set("If-None-Match", *ifNoneMatch)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsSourceIfMatch != nil {
+		req.Header.Set("x-ms-source-if-match", *xMsSourceIfMatch)
+	}
+	if xMsSourceIfNoneMatch != nil {
+		req.Header.Set("x-ms-source-if-none-match", *xMsSourceIfNoneMatch)
+	}
+	if xMsSourceIfModifiedSince != nil {
+		req.Header.Set("x-ms-source-if-modified-since", *xMsSourceIfModifiedSince)
+	}
+	if xMsSourceIfUnmodifiedSince != nil {
+		req.Header.Set("x-ms-source-if-unmodified-since", *xMsSourceIfUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
 // createResponder handles the response to the Create request.
 func (client pathClient) createResponder(resp pipeline.Response) (pipeline.Response, error) {
-	err := validateResponse(resp, http.StatusOK,http.StatusCreated)
+	err := validateResponse(resp, http.StatusOK, http.StatusCreated)
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &PathCreateResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &PathCreateResponse{rawResponse: resp.Response()}, err
 }
 
 // Delete delete the file or directory. This operation supports conditional HTTP requests.  For more information, see
@@ -256,33 +249,30 @@ func (client pathClient) createResponder(resp pipeline.Response) (pipeline.Respo
 // timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
 // Universal Time (UTC) for the request.  This is required when using shared key authorization.
 func (client pathClient) Delete(ctx context.Context, filesystem string, pathParameter string, recursive *bool, continuation *string, xMsLeaseID *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathDeleteResponse, error) {
-    if err := validate([]validation{
-    { targetValue: xMsLeaseID,
-     constraints: []constraint{	{target: "xMsLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: xMsLeaseID,
+			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.deletePreparer(filesystem, pathParameter, recursive, continuation, xMsLeaseID, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.deleteResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*PathDeleteResponse), err
 }
 
@@ -292,39 +282,39 @@ func (client pathClient) deletePreparer(filesystem string, pathParameter string,
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    if recursive != nil {
-        params.Set("recursive", strconv.FormatBool(*recursive))
-    }
-    if continuation != nil && len(*continuation) > 0 {
-        params.Set("continuation", *continuation)
-    }
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsLeaseID != nil {
-        req.Header.Set("x-ms-lease-id", *xMsLeaseID)
-    }
-    if ifMatch != nil {
-        req.Header.Set("If-Match", *ifMatch)
-    }
-    if ifNoneMatch != nil {
-        req.Header.Set("If-None-Match", *ifNoneMatch)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	if recursive != nil {
+		params.Set("recursive", strconv.FormatBool(*recursive))
+	}
+	if continuation != nil && len(*continuation) > 0 {
+		params.Set("continuation", *continuation)
+	}
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsLeaseID != nil {
+		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
+	}
+	if ifMatch != nil {
+		req.Header.Set("If-Match", *ifMatch)
+	}
+	if ifNoneMatch != nil {
+		req.Header.Set("If-None-Match", *ifNoneMatch)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -334,9 +324,9 @@ func (client pathClient) deleteResponder(resp pipeline.Response) (pipeline.Respo
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &PathDeleteResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &PathDeleteResponse{rawResponse: resp.Response()}, err
 }
 
 // GetProperties get Properties returns all system and user defined properties for a path. Get Status returns all
@@ -367,33 +357,30 @@ func (client pathClient) deleteResponder(resp pipeline.Response) (pipeline.Respo
 // completes, the operation fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is
 // required when using shared key authorization.
 func (client pathClient) GetProperties(ctx context.Context, filesystem string, pathParameter string, action PathGetPropertiesActionType, upn *bool, xMsLeaseID *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathGetPropertiesResponse, error) {
-    if err := validate([]validation{
-    { targetValue: xMsLeaseID,
-     constraints: []constraint{	{target: "xMsLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: xMsLeaseID,
+			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.getPropertiesPreparer(filesystem, pathParameter, action, upn, xMsLeaseID, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.getPropertiesResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*PathGetPropertiesResponse), err
 }
 
@@ -403,39 +390,39 @@ func (client pathClient) getPropertiesPreparer(filesystem string, pathParameter 
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    if action != PathGetPropertiesActionNone {
-        params.Set("action", string(action))
-    }
-    if upn != nil {
-        params.Set("upn", strconv.FormatBool(*upn))
-    }
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsLeaseID != nil {
-        req.Header.Set("x-ms-lease-id", *xMsLeaseID)
-    }
-    if ifMatch != nil {
-        req.Header.Set("If-Match", *ifMatch)
-    }
-    if ifNoneMatch != nil {
-        req.Header.Set("If-None-Match", *ifNoneMatch)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	if action != PathGetPropertiesActionNone {
+		params.Set("action", string(action))
+	}
+	if upn != nil {
+		params.Set("upn", strconv.FormatBool(*upn))
+	}
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsLeaseID != nil {
+		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
+	}
+	if ifMatch != nil {
+		req.Header.Set("If-Match", *ifMatch)
+	}
+	if ifNoneMatch != nil {
+		req.Header.Set("If-None-Match", *ifNoneMatch)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -445,9 +432,9 @@ func (client pathClient) getPropertiesResponder(resp pipeline.Response) (pipelin
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &PathGetPropertiesResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &PathGetPropertiesResponse{rawResponse: resp.Response()}, err
 }
 
 // Lease create and manage a lease to restrict write and delete access to the path. This operation supports conditional
@@ -480,37 +467,33 @@ func (client pathClient) getPropertiesResponder(resp pipeline.Response) (pipelin
 // timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
 // Universal Time (UTC) for the request.  This is required when using shared key authorization.
 func (client pathClient) Lease(ctx context.Context, xMsLeaseAction PathLeaseActionType, filesystem string, pathParameter string, xMsLeaseDuration *int32, xMsLeaseBreakPeriod *int32, xMsLeaseID *string, xMsProposedLeaseID *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathLeaseResponse, error) {
-    if err := validate([]validation{
-    { targetValue: xMsLeaseID,
-     constraints: []constraint{	{target: "xMsLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: xMsProposedLeaseID,
-     constraints: []constraint{	{target: "xMsProposedLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsProposedLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: xMsLeaseID,
+			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: xMsProposedLeaseID,
+			constraints: []constraint{{target: "xMsProposedLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsProposedLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.leasePreparer(xMsLeaseAction, filesystem, pathParameter, xMsLeaseDuration, xMsLeaseBreakPeriod, xMsLeaseID, xMsProposedLeaseID, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.leaseResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*PathLeaseResponse), err
 }
 
@@ -520,55 +503,55 @@ func (client pathClient) leasePreparer(xMsLeaseAction PathLeaseActionType, files
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    req.Header.Set("x-ms-lease-action", string(xMsLeaseAction))
-    if xMsLeaseDuration != nil {
-        req.Header.Set("x-ms-lease-duration", strconv.FormatInt(int64(*xMsLeaseDuration), 10))
-    }
-    if xMsLeaseBreakPeriod != nil {
-        req.Header.Set("x-ms-lease-break-period", strconv.FormatInt(int64(*xMsLeaseBreakPeriod), 10))
-    }
-    if xMsLeaseID != nil {
-        req.Header.Set("x-ms-lease-id", *xMsLeaseID)
-    }
-    if xMsProposedLeaseID != nil {
-        req.Header.Set("x-ms-proposed-lease-id", *xMsProposedLeaseID)
-    }
-    if ifMatch != nil {
-        req.Header.Set("If-Match", *ifMatch)
-    }
-    if ifNoneMatch != nil {
-        req.Header.Set("If-None-Match", *ifNoneMatch)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	req.Header.Set("x-ms-lease-action", string(xMsLeaseAction))
+	if xMsLeaseDuration != nil {
+		req.Header.Set("x-ms-lease-duration", strconv.FormatInt(int64(*xMsLeaseDuration), 10))
+	}
+	if xMsLeaseBreakPeriod != nil {
+		req.Header.Set("x-ms-lease-break-period", strconv.FormatInt(int64(*xMsLeaseBreakPeriod), 10))
+	}
+	if xMsLeaseID != nil {
+		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
+	}
+	if xMsProposedLeaseID != nil {
+		req.Header.Set("x-ms-proposed-lease-id", *xMsProposedLeaseID)
+	}
+	if ifMatch != nil {
+		req.Header.Set("If-Match", *ifMatch)
+	}
+	if ifNoneMatch != nil {
+		req.Header.Set("If-None-Match", *ifNoneMatch)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
 // leaseResponder handles the response to the Lease request.
 func (client pathClient) leaseResponder(resp pipeline.Response) (pipeline.Response, error) {
-	err := validateResponse(resp, http.StatusOK,http.StatusCreated,http.StatusAccepted)
+	err := validateResponse(resp, http.StatusOK, http.StatusCreated, http.StatusAccepted)
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &PathLeaseResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &PathLeaseResponse{rawResponse: resp.Response()}, err
 }
 
 // List list filesystem paths and their properties.
@@ -593,33 +576,30 @@ func (client pathClient) leaseResponder(resp pipeline.Response) (pipeline.Respon
 // is specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key
 // authorization.
 func (client pathClient) List(ctx context.Context, recursive bool, filesystem string, directory *string, continuation *string, maxResults *int32, upn *bool, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathList, error) {
-    if err := validate([]validation{
-    { targetValue: maxResults,
-     constraints: []constraint{	{target: "maxResults", name: null, rule: false ,
-    chain: []constraint{	{target: "maxResults", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: maxResults,
+			constraints: []constraint{{target: "maxResults", name: null, rule: false,
+				chain: []constraint{{target: "maxResults", name: inclusiveMinimum, rule: 1, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.listPreparer(recursive, filesystem, directory, continuation, maxResults, upn, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.listResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*PathList), err
 }
 
@@ -629,32 +609,32 @@ func (client pathClient) listPreparer(recursive bool, filesystem string, directo
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    if directory != nil && len(*directory) > 0 {
-        params.Set("directory", *directory)
-    }
-        params.Set("recursive", strconv.FormatBool(recursive))
-    if continuation != nil && len(*continuation) > 0 {
-        params.Set("continuation", *continuation)
-    }
-    if maxResults != nil {
-        params.Set("maxResults", strconv.FormatInt(int64(*maxResults), 10))
-    }
-    if upn != nil {
-        params.Set("upn", strconv.FormatBool(*upn))
-    }
-        params.Set("resource", "filesystem")
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	if directory != nil && len(*directory) > 0 {
+		params.Set("directory", *directory)
+	}
+	params.Set("recursive", strconv.FormatBool(recursive))
+	if continuation != nil && len(*continuation) > 0 {
+		params.Set("continuation", *continuation)
+	}
+	if maxResults != nil {
+		params.Set("maxResults", strconv.FormatInt(int64(*maxResults), 10))
+	}
+	if upn != nil {
+		params.Set("upn", strconv.FormatBool(*upn))
+	}
+	params.Set("resource", "filesystem")
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -664,23 +644,23 @@ func (client pathClient) listResponder(resp pipeline.Response) (pipeline.Respons
 	if resp == nil {
 		return nil, err
 	}
-    result:= &PathList{rawResponse: resp.Response()}
-    if err != nil {
-        return result, err
-    }
-    defer resp.Response().Body.Close()
-    b, err:= ioutil.ReadAll(resp.Response().Body)
-    if err != nil {
-        return result, err
-    }
-    if len(b) > 0 {
-        b = removeBOM(b)
-        err = json.Unmarshal(b, result)
-        if err != nil {
-            return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
-        }
-    }
-    return result, nil
+	result := &PathList{rawResponse: resp.Response()}
+	if err != nil {
+		return result, err
+	}
+	defer resp.Response().Body.Close()
+	b, err := ioutil.ReadAll(resp.Response().Body)
+	if err != nil {
+		return result, err
+	}
+	if len(b) > 0 {
+		b = removeBOM(b)
+		err = json.Unmarshal(b, result)
+		if err != nil {
+			return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
+		}
+	}
+	return result, nil
 }
 
 // Read read the contents of a file.  For read operations, range requests are supported. This operation supports
@@ -703,33 +683,30 @@ func (client pathClient) listResponder(resp pipeline.Response) (pipeline.Respons
 // completes, the operation fails. xMsDate is specifies the Coordinated Universal Time (UTC) for the request.  This is
 // required when using shared key authorization.
 func (client pathClient) Read(ctx context.Context, filesystem string, pathParameter string, rangeParameter *string, xMsLeaseID *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*ReadResponse, error) {
-    if err := validate([]validation{
-    { targetValue: xMsLeaseID,
-     constraints: []constraint{	{target: "xMsLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: xMsLeaseID,
+			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.readPreparer(filesystem, pathParameter, rangeParameter, xMsLeaseID, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.readResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*ReadResponse), err
 }
 
@@ -739,46 +716,46 @@ func (client pathClient) readPreparer(filesystem string, pathParameter string, r
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if rangeParameter != nil {
-        req.Header.Set("Range", *rangeParameter)
-    }
-    if xMsLeaseID != nil {
-        req.Header.Set("x-ms-lease-id", *xMsLeaseID)
-    }
-    if ifMatch != nil {
-        req.Header.Set("If-Match", *ifMatch)
-    }
-    if ifNoneMatch != nil {
-        req.Header.Set("If-None-Match", *ifNoneMatch)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if rangeParameter != nil {
+		req.Header.Set("Range", *rangeParameter)
+	}
+	if xMsLeaseID != nil {
+		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
+	}
+	if ifMatch != nil {
+		req.Header.Set("If-Match", *ifMatch)
+	}
+	if ifNoneMatch != nil {
+		req.Header.Set("If-None-Match", *ifNoneMatch)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
 // readResponder handles the response to the Read request.
 func (client pathClient) readResponder(resp pipeline.Response) (pipeline.Response, error) {
-	err := validateResponse(resp, http.StatusOK,http.StatusPartialContent)
+	err := validateResponse(resp, http.StatusOK, http.StatusPartialContent)
 	if resp == nil {
 		return nil, err
 	}
-    return &ReadResponse{rawResponse: resp.Response()}, err
+	return &ReadResponse{rawResponse: resp.Response()}, err
 }
 
 // Update uploads data to be appended to a file, flushes (writes) previously uploaded data to a file, sets properties
@@ -867,37 +844,33 @@ func (client pathClient) readResponder(resp pipeline.Response) (pipeline.Respons
 // timeout value elapses before the operation completes, the operation fails. xMsDate is specifies the Coordinated
 // Universal Time (UTC) for the request.  This is required when using shared key authorization.
 func (client pathClient) Update(ctx context.Context, action PathUpdateActionType, filesystem string, pathParameter string, position *int64, retainUncommittedData *bool, closeParameter *bool, contentLength *int64, xMsLeaseID *string, xMsCacheControl *string, xMsContentType *string, xMsContentDisposition *string, xMsContentEncoding *string, xMsContentLanguage *string, xMsContentMd5 *string, xMsProperties *string, xMsOwner *string, xMsGroup *string, xMsPermissions *string, xMsACL *string, ifMatch *string, ifNoneMatch *string, ifModifiedSince *string, ifUnmodifiedSince *string, xHTTPMethodOverride *string, body io.ReadSeeker, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathUpdateResponse, error) {
-    if err := validate([]validation{
-    { targetValue: contentLength,
-     constraints: []constraint{	{target: "contentLength", name: null, rule: false ,
-    chain: []constraint{	{target: "contentLength", name: inclusiveMinimum, rule: 0, chain: nil },
-    }}}},
-    { targetValue: xMsLeaseID,
-     constraints: []constraint{	{target: "xMsLeaseID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: filesystem,
-     constraints: []constraint{	{target: "filesystem", name: maxLength, rule: 63, chain: nil },
-    	{target: "filesystem", name: minLength, rule: 3, chain: nil },
-    	{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil }}},
-    { targetValue: xMsClientRequestID,
-     constraints: []constraint{	{target: "xMsClientRequestID", name: null, rule: false ,
-    chain: []constraint{	{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil },
-    }}}},
-    { targetValue: timeout,
-     constraints: []constraint{	{target: "timeout", name: null, rule: false ,
-    chain: []constraint{	{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil },
-    }}}}}); err != nil {
-        return nil, err
-    }
+	if err := validate([]validation{
+		{targetValue: contentLength,
+			constraints: []constraint{{target: "contentLength", name: null, rule: false,
+				chain: []constraint{{target: "contentLength", name: inclusiveMinimum, rule: 0, chain: nil}}}}},
+		{targetValue: xMsLeaseID,
+			constraints: []constraint{{target: "xMsLeaseID", name: null, rule: false,
+				chain: []constraint{{target: "xMsLeaseID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
 	req, err := client.updatePreparer(action, filesystem, pathParameter, position, retainUncommittedData, closeParameter, contentLength, xMsLeaseID, xMsCacheControl, xMsContentType, xMsContentDisposition, xMsContentEncoding, xMsContentLanguage, xMsContentMd5, xMsProperties, xMsOwner, xMsGroup, xMsPermissions, xMsACL, ifMatch, ifNoneMatch, ifModifiedSince, ifUnmodifiedSince, xHTTPMethodOverride, body, xMsClientRequestID, timeout, xMsDate)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.updateResponder}, req)
-    if err != nil {
-        return nil, err
-    }
+	if err != nil {
+		return nil, err
+	}
 	return resp.(*PathUpdateResponse), err
 }
 
@@ -914,93 +887,92 @@ func (client pathClient) updatePreparer(action PathUpdateActionType, filesystem 
 	if err != nil {
 		return req, pipeline.NewError(err, "failed to create request")
 	}
-    params := req.URL.Query()
-    params.Set("action", string(action))
-    if position != nil {
-        params.Set("position", strconv.FormatInt(*position, 10))
-    }
-    if retainUncommittedData != nil {
-        params.Set("retainUncommittedData", strconv.FormatBool(*retainUncommittedData))
-    }
-    if closeParameter != nil {
-        params.Set("close", strconv.FormatBool(*closeParameter))
-    }
-    if timeout != nil {
-        params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
-    }
-        req.URL.RawQuery = params.Encode()
-    if contentLength != nil {
-        req.Header.Set("Content-Length", strconv.FormatInt(*contentLength, 10))
-    }
-    if xMsLeaseID != nil {
-        req.Header.Set("x-ms-lease-id", *xMsLeaseID)
-    }
-    if xMsCacheControl != nil {
-        req.Header.Set("x-ms-cache-control", *xMsCacheControl)
-    }
-    if xMsContentType != nil {
-        req.Header.Set("x-ms-content-type", *xMsContentType)
-    }
-    if xMsContentDisposition != nil {
-        req.Header.Set("x-ms-content-disposition", *xMsContentDisposition)
-    }
-    if xMsContentEncoding != nil {
-        req.Header.Set("x-ms-content-encoding", *xMsContentEncoding)
-    }
-    if xMsContentLanguage != nil {
-        req.Header.Set("x-ms-content-language", *xMsContentLanguage)
-    }
-    if xMsContentMd5 != nil {
-        req.Header.Set("x-ms-content-md5", *xMsContentMd5)
-    }
-    if xMsProperties != nil {
-        req.Header.Set("x-ms-properties", *xMsProperties)
-    }
-    if xMsOwner != nil {
-        req.Header.Set("x-ms-owner", *xMsOwner)
-    }
-    if xMsGroup != nil {
-        req.Header.Set("x-ms-group", *xMsGroup)
-    }
-    if xMsPermissions != nil {
-        req.Header.Set("x-ms-permissions", *xMsPermissions)
-    }
-    if xMsACL != nil {
-        req.Header.Set("x-ms-acl", *xMsACL)
-    }
-    if ifMatch != nil {
-        req.Header.Set("If-Match", *ifMatch)
-    }
-    if ifNoneMatch != nil {
-        req.Header.Set("If-None-Match", *ifNoneMatch)
-    }
-    if ifModifiedSince != nil {
-        req.Header.Set("If-Modified-Since", *ifModifiedSince)
-    }
-    if ifUnmodifiedSince != nil {
-        req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
-    }
-    if xHTTPMethodOverride != nil {
-        req.Header.Set("x-http-method-override", *xHTTPMethodOverride)
-    }
-    if xMsClientRequestID != nil {
-        req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
-    }
-    if xMsDate != nil {
-        req.Header.Set("x-ms-date", *xMsDate)
-    }
-    req.Header.Set("x-ms-version", ServiceVersion)
+	params := req.URL.Query()
+	params.Set("action", string(action))
+	if position != nil {
+		params.Set("position", strconv.FormatInt(*position, 10))
+	}
+	if retainUncommittedData != nil {
+		params.Set("retainUncommittedData", strconv.FormatBool(*retainUncommittedData))
+	}
+	if closeParameter != nil {
+		params.Set("close", strconv.FormatBool(*closeParameter))
+	}
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if contentLength != nil {
+		req.Header.Set("Content-Length", strconv.FormatInt(*contentLength, 10))
+	}
+	if xMsLeaseID != nil {
+		req.Header.Set("x-ms-lease-id", *xMsLeaseID)
+	}
+	if xMsCacheControl != nil {
+		req.Header.Set("x-ms-cache-control", *xMsCacheControl)
+	}
+	if xMsContentType != nil {
+		req.Header.Set("x-ms-content-type", *xMsContentType)
+	}
+	if xMsContentDisposition != nil {
+		req.Header.Set("x-ms-content-disposition", *xMsContentDisposition)
+	}
+	if xMsContentEncoding != nil {
+		req.Header.Set("x-ms-content-encoding", *xMsContentEncoding)
+	}
+	if xMsContentLanguage != nil {
+		req.Header.Set("x-ms-content-language", *xMsContentLanguage)
+	}
+	if xMsContentMd5 != nil {
+		req.Header.Set("x-ms-content-md5", *xMsContentMd5)
+	}
+	if xMsProperties != nil {
+		req.Header.Set("x-ms-properties", *xMsProperties)
+	}
+	if xMsOwner != nil {
+		req.Header.Set("x-ms-owner", *xMsOwner)
+	}
+	if xMsGroup != nil {
+		req.Header.Set("x-ms-group", *xMsGroup)
+	}
+	if xMsPermissions != nil {
+		req.Header.Set("x-ms-permissions", *xMsPermissions)
+	}
+	if xMsACL != nil {
+		req.Header.Set("x-ms-acl", *xMsACL)
+	}
+	if ifMatch != nil {
+		req.Header.Set("If-Match", *ifMatch)
+	}
+	if ifNoneMatch != nil {
+		req.Header.Set("If-None-Match", *ifNoneMatch)
+	}
+	if ifModifiedSince != nil {
+		req.Header.Set("If-Modified-Since", *ifModifiedSince)
+	}
+	if ifUnmodifiedSince != nil {
+		req.Header.Set("If-Unmodified-Since", *ifUnmodifiedSince)
+	}
+	if xHTTPMethodOverride != nil {
+		req.Header.Set("x-http-method-override", *xHTTPMethodOverride)
+	}
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
 // updateResponder handles the response to the Update request.
 func (client pathClient) updateResponder(resp pipeline.Response) (pipeline.Response, error) {
-	err := validateResponse(resp, http.StatusOK,http.StatusAccepted)
+	err := validateResponse(resp, http.StatusOK, http.StatusAccepted)
 	if resp == nil {
 		return nil, err
 	}
-    io.Copy(ioutil.Discard, resp.Response().Body)
-    resp.Response().Body.Close()
-        return &PathUpdateResponse{rawResponse: resp.Response()}, err
+	io.Copy(ioutil.Discard, resp.Response().Body)
+	resp.Response().Body.Close()
+	return &PathUpdateResponse{rawResponse: resp.Response()}, err
 }
-
