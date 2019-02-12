@@ -3,7 +3,11 @@
   "info": {
     "description": "Azure Data Lake Storage provides storage for Hadoop and other big data workloads.",
     "title": "Azure Data Lake Storage REST API",
-    "version": "2018-06-17"
+    "version": "2018-11-09",
+    "x-ms-code-generation-settings": {
+      "internalConstructors": true,
+      "name": "DataLakeStorageClient"
+    }
   },
   "x-ms-parameterized-host": {
     "hostTemplate": "{accountName}.{dnsSuffix}",
@@ -39,8 +43,9 @@
       "description": "Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.",
       "in": "header",
       "name": "x-ms-version",
-      "required": true,
-      "type": "string"
+      "required": false,
+      "type": "string",
+      "x-ms-parameter-location": "client"
     },
     "accountName": {
       "description": "The Azure Storage account name.",
@@ -48,7 +53,8 @@
       "name": "accountName",
       "required": true,
       "type": "string",
-      "x-ms-skip-url-encoding": true
+      "x-ms-skip-url-encoding": true,
+      "x-ms-parameter-location": "client"
     },
     "dnsSuffix": {
       "default": "dfs.core.windows.net",
@@ -57,11 +63,12 @@
       "name": "dnsSuffix",
       "required": true,
       "type": "string",
-      "x-ms-skip-url-encoding": true
+      "x-ms-skip-url-encoding": true,
+      "x-ms-parameter-location": "client"
     }
   },
   "definitions": {
-    "ErrorSchema": {
+    "DataLakeStorageError": {
       "properties": {
         "error": {
           "description": "The service error response object.",
@@ -78,7 +85,7 @@
         }
       }
     },
-    "ListEntrySchema": {
+    "Path": {
       "properties": {
         "name": {
           "type": "string"
@@ -108,17 +115,17 @@
         }
       }
     },
-    "ListSchema": {
+    "PathList": {
       "properties": {
         "paths": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/ListEntrySchema"
+            "$ref": "#/definitions/Path"
           }
         }
       }
     },
-    "ListFilesystemEntry": {
+    "Filesystem": {
       "properties": {
         "name": {
           "type": "string"
@@ -131,12 +138,12 @@
         }
       }
     },
-    "ListFilesystemSchema": {
+    "FilesystemList": {
       "properties": {
         "filesystems": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/ListFilesystemEntry"
+            "$ref": "#/definitions/Filesystem"
           }
         }
       }
@@ -144,7 +151,7 @@
   },
   "responses": {
     "ErrorResponse": {
-      "description": "An error occurred. The possible HTTP status, code, and message strings are listed below:\n* 400 Bad Request, ContentLengthMustBeZero, \"The Content-Length request header must be zero.\"\n* 400 Bad Request, InvalidAuthenticationInfo, \"Authentication information is not given in the correct format. Check the value of Authorization header.\"\n* 400 Bad Request, InvalidFlushPosition, \"The uploaded data is not contiguous or the position query parameter value is not equal to the length of the file after appending the uploaded data.\"\n* 400 Bad Request, InvalidHeaderValue, \"The value for one of the HTTP headers is not in the correct format.\"\n* 400 Bad Request, InvalidHttpVerb, \"The HTTP verb specified is invalid - it is not recognized by the server.\"\n* 400 Bad Request, InvalidInput, \"One of the request inputs is not valid.\"\n* 400 Bad Request, InvalidPropertyName, \"A property name cannot be empty.\"\n* 400 Bad Request, InvalidPropertyName, \"The property name contains invalid characters.\"\n* 400 Bad Request, InvalidQueryParameterValue, \"Value for one of the query parameters specified in the request URI is invalid.\"\n* 400 Bad Request, InvalidResourceName, \"The specifed resource name contains invalid characters.\"\n* 400 Bad Request, InvalidSourceUri, \"The source URI is invalid.\"\n* 400 Bad Request, InvalidUri, \"The request URI is invalid.\"\n* 400 Bad Request, MissingRequiredHeader, \"An HTTP header that's mandatory for this request is not specified.\"\n* 400 Bad Request, MissingRequiredQueryParameter, \"A query parameter that's mandatory for this request is not specified.\"\n* 400 Bad Request, MultipleConditionHeadersNotSupported, \"Multiple condition headers are not supported.\"\n* 400 Bad Request, OutOfRangeInput, \"One of the request inputs is out of range.\"\n* 400 Bad Request, OutOfRangeQueryParameterValue, \"One of the query parameters specified in the request URI is outside the permissible range.\"\n* 400 Bad Request, UnsupportedHeader, \"One of the headers specified in the request is not supported.\"\n* 400 Bad Request, UnsupportedQueryParameter, \"One of the query parameters specified in the request URI is not supported.\"\n* 400 Bad Request, UnsupportedRestVersion, \"The specified Rest Version is Unsupported.\"\n* 403 Forbidden, AccountIsDisabled, \"The specified account is disabled.\"\n* 403 Forbidden, AuthorizationFailure, \"This request is not authorized to perform this operation.\"\n* 403 Forbidden, InsufficientAccountPermissions, \"The account being accessed does not have sufficient permissions to execute this operation.\"\n* 404 Not Found, FilesystemNotFound, \"The specified filesystem does not exist.\"\n* 404 Not Found, PathNotFound, \"The specified path does not exist.\"\n* 404 Not Found, RenameDestinationParentPathNotFound, \"The parent directory of the destination path does not exist.\"\n* 404 Not Found, ResourceNotFound, \"The specified resource does not exist.\"\n* 404 Not Found, SourcePathNotFound, \"The source path for a rename operation does not exist.\"\n* 405 Method Not Allowed, UnsupportedHttpVerb, \"The resource doesn't support the specified HTTP verb.\"\n* 409 Conflict, DestinationPathIsBeingDeleted, \"The specified destination path is marked to be deleted.\"\n* 409 Conflict, DirectoryNotEmpty, \"The recursive query parameter value must be true to delete a non-empty directory.\"\n* 409 Conflict, FilesystemAlreadyExists, \"The specified filesystem already exists.\"\n* 409 Conflict, FilesystemBeingDeleted, \"The specified filesystem is being deleted.\"\n* 409 Conflict, InvalidDestinationPath, \"The specified path, or an element of the path, exists and its resource type is invalid for this operation.\"* 409 Conflict, InvalidFlushOperation, \"The resource was created or modified by the Blob Service API and cannot be written to by the Data Lake Storage Service API.\"\n* 409 Conflict, InvalidRenameSourcePath, \"The source directory cannot be the same as the destination directory, nor can the destination be a subdirectory of the source directory.\"\n* 409 Conflict, InvalidSourceOrDestinationResourceType, \"The source and destination resource type must be identical.\"\n* 409 Conflict, LeaseAlreadyPresent, \"There is already a lease present.\"\n* 409 Conflict, LeaseIdMismatchWithLeaseOperation, \"The lease ID specified did not match the lease ID for the resource with the specified lease operation.\"\n* 409 Conflict, LeaseIsAlreadyBroken, \"The lease has already been broken and cannot be broken again.\"\n* 409 Conflict, LeaseIsBreakingAndCannotBeAcquired, \"The lease ID matched, but the lease is currently in breaking state and cannot be acquired until it is broken.\"\n* 409 Conflict, LeaseIsBreakingAndCannotBeChanged, \"The lease ID matched, but the lease is currently in breaking state and cannot be changed.\"\n* 409 Conflict, LeaseIsBrokenAndCannotBeRenewed, \"The lease ID matched, but the lease has been broken explicitly and cannot be renewed.\"\n* 409 Conflict, LeaseNameMismatch, \"The lease name specified did not match the existing lease name.\"\n* 409 Conflict, LeaseNotPresentWithLeaseOperation, \"The lease ID is not present with the specified lease operation.\"\n* 409 Conflict, PathAlreadyExists, \"The specified path already exists.\"\n* 409 Conflict, PathConflict, \"The specified path, or an element of the path, exists and its resource type is invalid for this operation.\"\n* 409 Conflict, SourcePathIsBeingDeleted, \"The specified source path is marked to be deleted.\"\n* 409 Conflict, ResourceTypeMismatch, \"The resource type specified in the request does not match the type of the resource.\"\n* 412 Precondition Failed, ConditionNotMet, \"The condition specified using HTTP conditional header(s) is not met.\"\n* 412 Precondition Failed, LeaseIdMismatch, \"The lease ID specified did not match the lease ID for the resource.\"\n* 412 Precondition Failed, LeaseIdMissing, \"There is currently a lease on the resource and no lease ID was specified in the request.\"\n* 412 Precondition Failed, LeaseNotPresent, \"There is currently no lease on the resource.\"\n* 412 Precondition Failed, LeaseLost, \"A lease ID was specified, but the lease for the resource has expired.\"\n* 412 Precondition Failed, SourceConditionNotMet, \"The source condition specified using HTTP conditional header(s) is not met.\"\n* 413 Request Entity Too Large, RequestBodyTooLarge, \"The request body is too large and exceeds the maximum permissible limit.\"\n* 416 Requested Range Not Satisfiable, InvalidRange, \"The range specified is invalid for the current size of the resource.\"\n* 500 Internal Server Error, InternalError, \"The server encountered an internal error. Please retry the request.\"\n* 500 Internal Server Error, OperationTimedOut, \"The operation could not be completed within the permitted time.\"\n* 503 Service Unavailable, ServerBusy, \"Egress is over the account limit.\"\n* 503 Service Unavailable, ServerBusy, \"Ingress is over the account limit.\"\n* 503 Service Unavailable, ServerBusy, \"Operations per second is over the account limit.\"\n* 503 Service Unavailable, ServerBusy, \"The server is currently unable to receive requests. Please retry your request.\"",
+      "description": "An error occurred. The possible HTTP status, code, and message strings are listed below:\n* 400 Bad Request, ContentLengthMustBeZero, \"The Content-Length request header must be zero.\"\n* 400 Bad Request, InvalidAuthenticationInfo, \"Authentication information is not given in the correct format. Check the value of Authorization header.\"\n* 400 Bad Request, InvalidFlushPosition, \"The uploaded data is not contiguous or the position query parameter value is not equal to the length of the file after appending the uploaded data.\"\n* 400 Bad Request, InvalidHeaderValue, \"The value for one of the HTTP headers is not in the correct format.\"\n* 400 Bad Request, InvalidHttpVerb, \"The HTTP verb specified is invalid - it is not recognized by the server.\"\n* 400 Bad Request, InvalidInput, \"One of the request inputs is not valid.\"\n* 400 Bad Request, InvalidPropertyName, \"A property name cannot be empty.\"\n* 400 Bad Request, InvalidPropertyName, \"The property name contains invalid characters.\"\n* 400 Bad Request, InvalidQueryParameterValue, \"Value for one of the query parameters specified in the request URI is invalid.\"\n* 400 Bad Request, InvalidResourceName, \"The specified resource name contains invalid characters.\"\n* 400 Bad Request, InvalidSourceUri, \"The source URI is invalid.\"\n* 400 Bad Request, InvalidUri, \"The request URI is invalid.\"\n* 400 Bad Request, MissingRequiredHeader, \"An HTTP header that's mandatory for this request is not specified.\"\n* 400 Bad Request, MissingRequiredQueryParameter, \"A query parameter that's mandatory for this request is not specified.\"\n* 400 Bad Request, MultipleConditionHeadersNotSupported, \"Multiple condition headers are not supported.\"\n* 400 Bad Request, OutOfRangeInput, \"One of the request inputs is out of range.\"\n* 400 Bad Request, OutOfRangeQueryParameterValue, \"One of the query parameters specified in the request URI is outside the permissible range.\"\n* 400 Bad Request, UnsupportedHeader, \"One of the headers specified in the request is not supported.\"\n* 400 Bad Request, UnsupportedQueryParameter, \"One of the query parameters specified in the request URI is not supported.\"\n* 400 Bad Request, UnsupportedRestVersion, \"The specified Rest Version is Unsupported.\"\n* 403 Forbidden, AccountIsDisabled, \"The specified account is disabled.\"\n* 403 Forbidden, AuthorizationFailure, \"This request is not authorized to perform this operation.\"\n* 403 Forbidden, InsufficientAccountPermissions, \"The account being accessed does not have sufficient permissions to execute this operation.\"\n* 404 Not Found, FilesystemNotFound, \"The specified filesystem does not exist.\"\n* 404 Not Found, PathNotFound, \"The specified path does not exist.\"\n* 404 Not Found, RenameDestinationParentPathNotFound, \"The parent directory of the destination path does not exist.\"\n* 404 Not Found, ResourceNotFound, \"The specified resource does not exist.\"\n* 404 Not Found, SourcePathNotFound, \"The source path for a rename operation does not exist.\"\n* 405 Method Not Allowed, UnsupportedHttpVerb, \"The resource doesn't support the specified HTTP verb.\"\n* 409 Conflict, DestinationPathIsBeingDeleted, \"The specified destination path is marked to be deleted.\"\n* 409 Conflict, DirectoryNotEmpty, \"The recursive query parameter value must be true to delete a non-empty directory.\"\n* 409 Conflict, FilesystemAlreadyExists, \"The specified filesystem already exists.\"\n* 409 Conflict, FilesystemBeingDeleted, \"The specified filesystem is being deleted.\"\n* 409 Conflict, InvalidDestinationPath, \"The specified path, or an element of the path, exists and its resource type is invalid for this operation.\"* 409 Conflict, InvalidFlushOperation, \"The resource was created or modified by the Blob Service API and cannot be written to by the Data Lake Storage Service API.\"\n* 409 Conflict, InvalidRenameSourcePath, \"The source directory cannot be the same as the destination directory, nor can the destination be a subdirectory of the source directory.\"\n* 409 Conflict, InvalidSourceOrDestinationResourceType, \"The source and destination resource type must be identical.\"\n* 409 Conflict, LeaseAlreadyPresent, \"There is already a lease present.\"\n* 409 Conflict, LeaseIdMismatchWithLeaseOperation, \"The lease ID specified did not match the lease ID for the resource with the specified lease operation.\"\n* 409 Conflict, LeaseIsAlreadyBroken, \"The lease has already been broken and cannot be broken again.\"\n* 409 Conflict, LeaseIsBreakingAndCannotBeAcquired, \"The lease ID matched, but the lease is currently in breaking state and cannot be acquired until it is broken.\"\n* 409 Conflict, LeaseIsBreakingAndCannotBeChanged, \"The lease ID matched, but the lease is currently in breaking state and cannot be changed.\"\n* 409 Conflict, LeaseIsBrokenAndCannotBeRenewed, \"The lease ID matched, but the lease has been broken explicitly and cannot be renewed.\"\n* 409 Conflict, LeaseNameMismatch, \"The lease name specified did not match the existing lease name.\"\n* 409 Conflict, LeaseNotPresentWithLeaseOperation, \"The lease ID is not present with the specified lease operation.\"\n* 409 Conflict, PathAlreadyExists, \"The specified path already exists.\"\n* 409 Conflict, PathConflict, \"The specified path, or an element of the path, exists and its resource type is invalid for this operation.\"\n* 409 Conflict, SourcePathIsBeingDeleted, \"The specified source path is marked to be deleted.\"\n* 409 Conflict, ResourceTypeMismatch, \"The resource type specified in the request does not match the type of the resource.\"\n* 412 Precondition Failed, ConditionNotMet, \"The condition specified using HTTP conditional header(s) is not met.\"\n* 412 Precondition Failed, LeaseIdMismatch, \"The lease ID specified did not match the lease ID for the resource.\"\n* 412 Precondition Failed, LeaseIdMissing, \"There is currently a lease on the resource and no lease ID was specified in the request.\"\n* 412 Precondition Failed, LeaseNotPresent, \"There is currently no lease on the resource.\"\n* 412 Precondition Failed, LeaseLost, \"A lease ID was specified, but the lease for the resource has expired.\"\n* 412 Precondition Failed, SourceConditionNotMet, \"The source condition specified using HTTP conditional header(s) is not met.\"\n* 413 Request Entity Too Large, RequestBodyTooLarge, \"The request body is too large and exceeds the maximum permissible limit.\"\n* 416 Requested Range Not Satisfiable, InvalidRange, \"The range specified is invalid for the current size of the resource.\"\n* 500 Internal Server Error, InternalError, \"The server encountered an internal error. Please retry the request.\"\n* 500 Internal Server Error, OperationTimedOut, \"The operation could not be completed within the permitted time.\"\n* 503 Service Unavailable, ServerBusy, \"Egress is over the account limit.\"\n* 503 Service Unavailable, ServerBusy, \"Ingress is over the account limit.\"\n* 503 Service Unavailable, ServerBusy, \"Operations per second is over the account limit.\"\n* 503 Service Unavailable, ServerBusy, \"The server is currently unable to receive requests. Please retry your request.\"",
       "headers": {
         "x-ms-request-id": {
           "description": "A server-generated UUID recorded in the analytics logs for troubleshooting and correlation.",
@@ -157,16 +164,20 @@
         }
       },
       "schema": {
-        "$ref": "#/definitions/ErrorSchema"
+        "$ref": "#/definitions/DataLakeStorageError"
       }
     }
   },
   "paths": {
     "/": {
       "get": {
-        "operationId": "ListFilesystems",
+        "operationId": "Filesystem_List",
         "summary": "List Filesystems",
         "description": "List filesystems and their properties in given account.",
+        "x-ms-pageable": {
+          "itemName": "filesystems",
+          "nextLinkName": null
+        },
         "tags": [
           "Account Operations"
         ],
@@ -197,7 +208,7 @@
               }
             },
             "schema": {
-              "$ref": "#/definitions/ListFilesystemSchema"
+              "$ref": "#/definitions/FilesystemList"
             }
           },
           "default": {
@@ -210,7 +221,14 @@
             "in": "query",
             "description": "The value must be \"account\" for all account operations.",
             "required": true,
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "account"
+            ],
+            "x-ms-enum": {
+              "name": "AccountResourceType",
+              "modelAsString": false
+            }
           },
           {
             "name": "prefix",
@@ -241,7 +259,8 @@
             "in": "header",
             "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
             "required": false,
-            "type": "string"
+            "type": "string",
+            "x-ms-client-request-id": true
           },
           {
             "name": "timeout",
@@ -267,7 +286,7 @@
     },
     "/{filesystem}": {
       "put": {
-        "operationId": "CreateFilesystem",
+        "operationId": "Filesystem_Create",
         "summary": "Create Filesystem",
         "description": "Create a filesystem rooted at the specified location. If the filesystem already exists, the operation fails.  This operation does not support conditional HTTP requests.",
         "tags": [
@@ -311,7 +330,7 @@
         "parameters": [
           {
             "name": "x-ms-properties",
-            "description": "User-defined properties to be stored with the filesystem, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+            "description": "User-defined properties to be stored with the filesystem, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
             "in": "header",
             "required": false,
             "type": "string"
@@ -319,7 +338,7 @@
         ]
       },
       "patch": {
-        "operationId": "SetFilesystemProperties",
+        "operationId": "Filesystem_SetProperties",
         "summary": "Set Filesystem Properties",
         "description": "Set properties for the filesystem.  This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "tags": [
@@ -359,7 +378,7 @@
         "parameters": [
           {
             "name": "x-ms-properties",
-            "description": "Optional. User-defined properties to be stored with the filesystem, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.  If the filesystem exists, any properties not included in the list will be removed.  All properties are removed if the header is omitted.  To merge new and existing properties, first get all existing properties and the current E-Tag, then make a conditional request with the E-Tag and include values for all properties.",
+            "description": "Optional. User-defined properties to be stored with the filesystem, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.  If the filesystem exists, any properties not included in the list will be removed.  All properties are removed if the header is omitted.  To merge new and existing properties, first get all existing properties and the current E-Tag, then make a conditional request with the E-Tag and include values for all properties.",
             "in": "header",
             "required": false,
             "type": "string"
@@ -381,9 +400,13 @@
         ]
       },
       "get": {
-        "operationId": "ListPaths",
+        "operationId": "Path_List",
         "summary": "List Paths",
         "description": "List filesystem paths and their properties.",
+        "x-ms-pageable": {
+          "itemName": "paths",
+          "nextLinkName": null
+        },
         "tags": [
           "Filesystem Operations"
         ],
@@ -418,7 +441,7 @@
               }
             },
             "schema": {
-              "$ref": "#/definitions/ListSchema"
+              "$ref": "#/definitions/PathList"
             }
           },
           "default": {
@@ -455,11 +478,18 @@
             "minimum": 1,
             "required": false,
             "type": "integer"
+          },
+          {
+            "name": "upn",
+            "in": "query",
+            "description": "Optional. Valid only when Hierarchical Namespace is enabled for the account. If \"true\", the user identity values returned in the owner and group fields of each list entry will be transformed from Azure Active Directory Object IDs to User Principal Names.  If \"false\", the values will be returned as Azure Active Directory Object IDs. The default value is false. Note that group and application Object IDs are not translated because they do not have unique friendly names.",
+            "required": false,
+            "type": "boolean"
           }
         ]
       },
       "head": {
-        "operationId": "GetFilesystemProperties",
+        "operationId": "Filesystem_GetProperties",
         "summary": "Get Filesystem Properties.",
         "description": "All system and user-defined filesystem properties are specified in the response headers.",
         "tags": [
@@ -491,7 +521,7 @@
                 "type": "string"
               },
               "x-ms-properties": {
-                "description": "The user-defined properties associated with the filesystem.  A comma-separated list of name and value pairs in the format \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+                "description": "The user-defined properties associated with the filesystem.  A comma-separated list of name and value pairs in the format \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
                 "type": "string"
               },
               "x-ms-namespace-enabled": {
@@ -506,7 +536,7 @@
         }
       },
       "delete": {
-        "operationId": "DeleteFilesystem",
+        "operationId": "Filesystem_Delete",
         "summary": "Delete Filesystem",
         "description": "Marks the filesystem for deletion.  When a filesystem is deleted, a filesystem with the same identifier cannot be created for at least 30 seconds. While the filesystem is being deleted, attempts to create a filesystem with the same identifier will fail with status code 409 (Conflict), with the service returning additional error information indicating that the filesystem is being deleted. All other operations, including operations on any files or directories within the filesystem, will fail with status code 404 (Not Found) while the filesystem is being deleted. This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "tags": [
@@ -557,6 +587,9 @@
           "name": "filesystem",
           "in": "path",
           "description": "The filesystem identifier.  The value must start and end with a letter or number and must contain only letters, numbers, and the dash (-) character.  Consecutive dashes are not permitted.  All letters must be lowercase.  The value must have between 3 and 63 characters.",
+          "pattern": "^[$a-z0-9](?!.*--)[-a-z0-9]{1,61}[a-z0-9]$",
+          "minLength": 3,
+          "maxLength": 63,
           "required": true,
           "type": "string"
         },
@@ -565,7 +598,14 @@
           "in": "query",
           "description": "The value must be \"filesystem\" for all filesystem operations.",
           "required": true,
-          "type": "string"
+          "type": "string",
+          "enum": [
+            "filesystem"
+          ],
+          "x-ms-enum": {
+            "name": "FilesystemResourceType",
+            "modelAsString": false
+          }
         },
         {
           "name": "x-ms-client-request-id",
@@ -573,7 +613,8 @@
           "in": "header",
           "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
           "required": false,
-          "type": "string"
+          "type": "string",
+          "x-ms-client-request-id": true
         },
         {
           "name": "timeout",
@@ -598,7 +639,7 @@
     },
     "/{filesystem}/{path}": {
       "put": {
-        "operationId": "CreatePath",
+        "operationId": "Path_Create",
         "summary": "Create File | Create Directory | Rename File | Rename Directory",
         "description": "Create or rename a file or directory.    By default, the destination is overwritten and if the destination already exists and has a lease the lease is broken.  This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).  To fail if the destination already exists, use a conditional request with If-None-Match: \"*\".",
         "consumes": [
@@ -638,7 +679,8 @@
               },
               "Content-Length": {
                 "description": "The size of the resource in bytes.",
-                "type": "string"
+                "type": "integer",
+                "format": "int64"
               }
             }
           },
@@ -652,7 +694,15 @@
             "in": "query",
             "description": "Required only for Create File and Create Directory. The value must be \"file\" or \"directory\".",
             "required": false,
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "directory",
+              "file"
+            ],
+            "x-ms-enum": {
+              "name": "PathResourceType",
+              "modelAsString": false
+            }
           },
           {
             "name": "continuation",
@@ -666,7 +716,15 @@
             "in": "query",
             "description": "Optional. Valid only when namespace is enabled. This parameter determines the behavior of the rename operation. The value must be \"legacy\" or \"posix\", and the default value will be \"posix\". ",
             "required": false,
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "legacy",
+              "posix"
+            ],
+            "x-ms-enum": {
+              "name": "PathRenameMode",
+              "modelAsString": false
+            }
           },
           {
             "name": "Cache-Control",
@@ -734,7 +792,7 @@
           {
             "name": "x-ms-rename-source",
             "in": "header",
-            "description": "An optional file or directory to be renamed.  The value must have the following format: \"/{filesysystem}/{path}\".  If \"x-ms-properties\" is specified, the properties will overwrite the existing properties; otherwise, the existing properties will be preserved.",
+            "description": "An optional file or directory to be renamed.  The value must have the following format: \"/{filesystem}/{path}\".  If \"x-ms-properties\" is specified, the properties will overwrite the existing properties; otherwise, the existing properties will be preserved. This value must be a URL percent-encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
             "required": false,
             "type": "string"
           },
@@ -742,14 +800,6 @@
             "name": "x-ms-lease-id",
             "in": "header",
             "description": "Optional.  A lease ID for the path specified in the URI.  The path to be overwritten must have an active lease and the lease ID must match.",
-            "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
-            "required": false,
-            "type": "string"
-          },
-          {
-            "name": "x-ms-proposed-lease-id",
-            "in": "header",
-            "description": "Optional for create operations.  Required when \"x-ms-lease-action\" is used.  A lease will be acquired using the proposed ID when the resource is created.",
             "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
             "required": false,
             "type": "string"
@@ -764,7 +814,7 @@
           },
           {
             "name": "x-ms-properties",
-            "description": "Optional.  User-defined properties to be stored with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+            "description": "Optional.  User-defined properties to be stored with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
             "in": "header",
             "required": false,
             "type": "string"
@@ -772,6 +822,13 @@
           {
             "name": "x-ms-permissions",
             "description": "Optional and only valid if Hierarchical Namespace is enabled for the account. Sets POSIX access permissions for the file owner, the file owning group, and others. Each class may be granted read, write, or execute permission.  The sticky bit is also supported.  Both symbolic (rwxrw-rw-) and 4-digit octal notation (e.g. 0766) are supported.",
+            "in": "header",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "x-ms-umask",
+            "description": "Optional and only valid if Hierarchical Namespace is enabled for the account. When creating a file or directory and the parent folder does not have a default ACL, the umask restricts the permissions of the file or directory to be created.  The resulting permission is given by p & ^u, where p is the permission and u is the umask.  For example, if p is 0777 and u is 0057, then the resulting permission is 0720.  The default permission is 0777 for a directory and 0666 for a file.  The default umask is 0027.  The umask must be specified in 4-digit octal notation (e.g. 0766).",
             "in": "header",
             "required": false,
             "type": "string"
@@ -835,7 +892,7 @@
         ]
       },
       "patch": {
-        "operationId": "UpdatePath",
+        "operationId": "Path_Update",
         "summary": "Append Data | Flush Data | Set Properties | Set Access Control",
         "description": "Uploads data to be appended to a file, flushes (writes) previously uploaded data to a file, sets properties for a file or directory, or sets access control for a file or directory. Data can only be appended to a file. This operation supports conditional HTTP requests. For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "consumes": [
@@ -883,7 +940,8 @@
               },
               "Content-Length": {
                 "description": "The size of the resource in bytes.",
-                "type": "string"
+                "type": "integer",
+                "format": "int64"
               },
               "Content-Range": {
                 "description": "Indicates the range of bytes returned in the event that the client requested a subset of the file by setting the Range request header.",
@@ -894,7 +952,7 @@
                 "type": "string"
               },
               "x-ms-properties": {
-                "description": "User-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+                "description": "User-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
                 "type": "string"
               },
               "x-ms-request-id": {
@@ -936,7 +994,17 @@
             "in": "query",
             "description": "The action must be \"append\" to upload data to be appended to a file, \"flush\" to flush previously uploaded data to a file, \"setProperties\" to set the properties of a file or directory, or \"setAccessControl\" to set the owner, group, permissions, or access control list for a file or directory.  Note that Hierarchical Namespace must be enabled for the account in order to use access control.  Also note that the Access Control List (ACL) includes permissions for the owner, owning group, and others, so the x-ms-permissions and x-ms-acl request headers are mutually exclusive.",
             "required": true,
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "append",
+              "flush",
+              "setProperties",
+              "setAccessControl"
+            ],
+            "x-ms-enum": {
+              "name": "PathUpdateAction",
+              "modelAsString": false
+            }
           },
           {
             "name": "position",
@@ -954,18 +1022,20 @@
             "type": "boolean"
           },
           {
+            "name": "close",
+            "in": "query",
+            "description": "Azure Storage Events allow applications to receive notifications when files change. When Azure Storage Events are enabled, a file changed event is raised. This event has a property indicating whether this is the final change to distinguish the difference between an intermediate flush to a file stream and the final close of a file stream. The close query parameter is valid only when the action is \"flush\" and change notifications are enabled. If the value of close is \"true\" and the flush operation completes successfully, the service raises a file change notification with a property indicating that this is the final update (the file stream has been closed). If \"false\" a change notification is raised indicating the file has changed. The default is false. This query parameter is set to true by the Hadoop ABFS driver to indicate that the file stream has been closed.\"",
+            "required": false,
+            "type": "boolean"
+          },
+          {
             "name": "Content-Length",
             "in": "header",
             "description": "Required for \"Append Data\" and \"Flush Data\".  Must be 0 for \"Flush Data\".  Must be the length of the request content in bytes for \"Append Data\".",
             "minimum": 0,
             "required": false,
-            "type": "string"
-          },
-          {
-            "name": "x-ms-lease-action",
-            "in": "header",
-            "description": "Optional.  The lease action can be \"renew\" to renew an existing lease or \"release\" to release a lease.",
-            "type": "string"
+            "type": "integer",
+            "format": "int64"
           },
           {
             "name": "x-ms-lease-id",
@@ -1011,8 +1081,15 @@
             "type": "string"
           },
           {
+            "name": "x-ms-content-md5",
+            "in": "header",
+            "description": "Optional and only valid for \"Flush & Set Properties\" operations.  The service stores this value and includes it in the \"Content-Md5\" response header for \"Read & Get Properties\" operations. If this property is not specified on the request, then the property will be cleared for the file. Subsequent calls to \"Read & Get Properties\" will not return this property unless it is explicitly set on that file again.",
+            "required": false,
+            "type": "string"
+          },
+          {
             "name": "x-ms-properties",
-            "description": "Optional.  User-defined properties to be stored with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.  Valid only for the setProperties operation.  If the file or directory exists, any properties not included in the list will be removed.  All properties are removed if the header is omitted.  To merge new and existing properties, first get all existing properties and the current E-Tag, then make a conditional request with the E-Tag and include values for all properties.",
+            "description": "Optional.  User-defined properties to be stored with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set. Valid only for the setProperties operation. If the file or directory exists, any properties not included in the list will be removed.  All properties are removed if the header is omitted.  To merge new and existing properties, first get all existing properties and the current E-Tag, then make a conditional request with the E-Tag and include values for all properties.",
             "in": "header",
             "required": false,
             "type": "string"
@@ -1074,13 +1151,6 @@
             "type": "string"
           },
           {
-            "name": "x-http-method-override",
-            "description": "Optional.  Override the http verb on the service side. Some older http clients do not support PATCH",
-            "in": "header",
-            "required": false,
-            "type": "string"
-          },
-          {
             "name": "requestBody",
             "description": "Valid only for append operations.  The data to be uploaded and appended to the file.",
             "in": "body",
@@ -1093,7 +1163,7 @@
         ]
       },
       "post": {
-        "operationId": "LeasePath",
+        "operationId": "Path_Lease",
         "summary": "Lease Path",
         "description": "Create and manage a lease to restrict write and delete access to the path. This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "tags": [
@@ -1198,7 +1268,18 @@
             "in": "header",
             "description": "There are five lease actions: \"acquire\", \"break\", \"change\", \"renew\", and \"release\". Use \"acquire\" and specify the \"x-ms-proposed-lease-id\" and \"x-ms-lease-duration\" to acquire a new lease. Use \"break\" to break an existing lease. When a lease is broken, the lease break period is allowed to elapse, during which time no lease operation except break and release can be performed on the file. When a lease is successfully broken, the response indicates the interval in seconds until a new lease can be acquired. Use \"change\" and specify the current lease ID in \"x-ms-lease-id\" and the new lease ID in \"x-ms-proposed-lease-id\" to change the lease ID of an active lease. Use \"renew\" and specify the \"x-ms-lease-id\" to renew an existing lease. Use \"release\" and specify the \"x-ms-lease-id\" to release a lease.",
             "required": true,
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "acquire",
+              "break",
+              "change",
+              "renew",
+              "release"
+            ],
+            "x-ms-enum": {
+              "name": "PathLeaseAction",
+              "modelAsString": false
+            }
           },
           {
             "name": "x-ms-lease-duration",
@@ -1263,7 +1344,7 @@
         ]
       },
       "get": {
-        "operationId": "ReadPath",
+        "operationId": "Path_Read",
         "summary": "Read File",
         "description": "Read the contents of a file.  For read operations, range requests are supported. This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "produces": [
@@ -1300,7 +1381,8 @@
               },
               "Content-Length": {
                 "description": "The size of the resource in bytes.",
-                "type": "string"
+                "type": "integer",
+                "format": "int64"
               },
               "Content-Range": {
                 "description": "Indicates the range of bytes returned in the event that the client requested a subset of the file by setting the Range request header.",
@@ -1308,6 +1390,10 @@
               },
               "Content-Type": {
                 "description": "The content type specified for the resource. If no content type was specified, the default content type is application/octet-stream.",
+                "type": "string"
+              },
+              "Content-MD5": {
+                "description": "The MD5 hash of complete file. If the file has an MD5 hash and this read operation is to read the complete file, this response header is returned so that the client can check for message content integrity.",
                 "type": "string"
               },
               "Date": {
@@ -1336,7 +1422,7 @@
                 "type": "string"
               },
               "x-ms-properties": {
-                "description": "The user-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+                "description": "The user-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
                 "type": "string"
               },
               "x-ms-lease-duration": {
@@ -1381,7 +1467,8 @@
               },
               "Content-Length": {
                 "description": "The size of the resource in bytes.",
-                "type": "string"
+                "type": "integer",
+                "format": "int64"
               },
               "Content-Range": {
                 "description": "Indicates the range of bytes returned in the event that the client requested a subset of the file by setting the Range request header.",
@@ -1417,7 +1504,7 @@
                 "type": "string"
               },
               "x-ms-properties": {
-                "description": "The user-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+                "description": "The user-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
                 "type": "string"
               },
               "x-ms-lease-duration": {
@@ -1450,6 +1537,14 @@
             "name": "Range"
           },
           {
+            "name": "x-ms-lease-id",
+            "in": "header",
+            "description": "Optional. If this header is specified, the operation will be performed only if both of the following conditions are met: i) the path's lease is currently active and ii) the lease ID specified in the request matches that of the path.",
+            "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
+            "required": false,
+            "type": "string"
+          },
+          {
             "name": "If-Match",
             "description": "Optional.  An ETag value. Specify this header to perform the operation only if the resource's ETag matches the value specified. The ETag must be specified in quotes.",
             "in": "header",
@@ -1480,9 +1575,9 @@
         ]
       },
       "head": {
-        "operationId": "GetPathProperties",
-        "summary": "Get Properties | Get Access Control List",
-        "description": "Get the properties for a file or directory, and optionally include the access control list.  This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
+        "operationId": "Path_GetProperties",
+        "summary": "Get Properties | Get Status | Get Access Control List",
+        "description": "Get Properties returns all system and user defined properties for a path. Get Status returns all system defined properties for a path. Get Access Control List returns the access control list for a path. This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "tags": [
           "File and Directory Operations"
         ],
@@ -1512,7 +1607,8 @@
               },
               "Content-Length": {
                 "description": "The size of the resource in bytes.",
-                "type": "string"
+                "type": "integer",
+                "format": "int64"
               },
               "Content-Range": {
                 "description": "Indicates the range of bytes returned in the event that the client requested a subset of the file by setting the Range request header.",
@@ -1520,6 +1616,10 @@
               },
               "Content-Type": {
                 "description": "The content type specified for the resource. If no content type was specified, the default content type is application/octet-stream.",
+                "type": "string"
+              },
+              "Content-MD5": {
+                "description": "The MD5 hash of complete file stored in storage. This header is returned only for \"GetProperties\" operation. If the Content-MD5 header has been set for the file, this response header is returned for GetProperties call so that the client can check for message content integrity.",
                 "type": "string"
               },
               "Date": {
@@ -1548,7 +1648,7 @@
                 "type": "string"
               },
               "x-ms-properties": {
-                "description": "The user-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is base64 encoded.",
+                "description": "The user-defined properties associated with the file or directory, in the format of a comma-separated list of name and value pairs \"n1=v1, n2=v2, ...\", where each value is a base64 encoded string. Note that the string may only contain ASCII characters in the ISO-8859-1 character set.",
                 "type": "string"
               },
               "x-ms-owner": {
@@ -1589,7 +1689,30 @@
           {
             "name": "action",
             "in": "query",
-            "description": "Optional. If the value is \"getAccessControl\" the access control list is returned in the response headers (Hierarchical Namespace must be enabled for the account).",
+            "description": "Optional. If the value is \"getStatus\" only the system defined properties for the path are returned. If the value is \"getAccessControl\" the access control list is returned in the response headers (Hierarchical Namespace must be enabled for the account), otherwise the properties are returned.",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "getAccessControl",
+              "getStatus"
+            ],
+            "x-ms-enum": {
+              "name": "PathGetPropertiesAction",
+              "modelAsString": false
+            }
+          },
+          {
+            "name": "upn",
+            "in": "query",
+            "description": "Optional. Valid only when Hierarchical Namespace is enabled for the account. If \"true\", the user identity values returned in the x-ms-owner, x-ms-group, and x-ms-acl response headers will be transformed from Azure Active Directory Object IDs to User Principal Names.  If \"false\", the values will be returned as Azure Active Directory Object IDs. The default value is false. Note that group and application Object IDs are not translated because they do not have unique friendly names.",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "x-ms-lease-id",
+            "in": "header",
+            "description": "Optional. If this header is specified, the operation will be performed only if both of the following conditions are met: i) the path's lease is currently active and ii) the lease ID specified in the request matches that of the path.",
+            "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
             "required": false,
             "type": "string"
           },
@@ -1624,7 +1747,7 @@
         ]
       },
       "delete": {
-        "operationId": "DeletePath",
+        "operationId": "Path_Delete",
         "summary": "Delete File | Delete Directory",
         "description": "Delete the file or directory. This operation supports conditional HTTP requests.  For more information, see [Specifying Conditional Headers for Blob Service Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).",
         "tags": [
@@ -1715,6 +1838,7 @@
           "name": "filesystem",
           "in": "path",
           "description": "The filesystem identifier.",
+          "pattern": "^[$a-z0-9](?!.*--)[-a-z0-9]{1,61}[a-z0-9]$",
           "minLength": 3,
           "maxLength": 63,
           "required": true,
@@ -1733,7 +1857,8 @@
           "in": "header",
           "pattern": "^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$",
           "required": false,
-          "type": "string"
+          "type": "string",
+          "x-ms-client-request-id": true
         },
         {
           "name": "timeout",
