@@ -379,8 +379,12 @@ func (fspr FilesystemSetPropertiesResponse) XMsVersion() string {
 
 // Path ...
 type Path struct {
-	Name          *string `json:"name,omitempty"`
-	IsDirectory   *bool   `json:"isDirectory,omitempty"`
+	Name *string `json:"name,omitempty"`
+
+	// begin manual edit to generated code
+	IsDirectory *bool `json:"isDirectory,string,omitempty"`
+	// end manual edit
+
 	LastModified  *string `json:"lastModified,omitempty"`
 	ETag          *string `json:"eTag,omitempty"`
 	ContentLength *int64  `json:"contentLength,omitempty"`
