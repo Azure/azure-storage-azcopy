@@ -219,9 +219,7 @@ func (client pathClient) createPreparer(filesystem string, pathParameter string,
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -326,9 +324,7 @@ func (client pathClient) deletePreparer(filesystem string, pathParameter string,
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -439,9 +435,7 @@ func (client pathClient) getPropertiesPreparer(filesystem string, pathParameter 
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -562,9 +556,7 @@ func (client pathClient) leasePreparer(xMsLeaseAction PathLeaseActionType, files
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -662,9 +654,7 @@ func (client pathClient) listPreparer(recursive bool, filesystem string, directo
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -778,9 +768,7 @@ func (client pathClient) readPreparer(filesystem string, pathParameter string, r
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -990,9 +978,7 @@ func (client pathClient) updatePreparer(action PathUpdateActionType, filesystem 
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 

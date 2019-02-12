@@ -89,9 +89,7 @@ func (client filesystemClient) createPreparer(filesystem string, xMsProperties *
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -176,9 +174,7 @@ func (client filesystemClient) deletePreparer(filesystem string, ifModifiedSince
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -247,9 +243,7 @@ func (client filesystemClient) getPropertiesPreparer(filesystem string, xMsClien
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -330,9 +324,7 @@ func (client filesystemClient) listPreparer(prefix *string, continuation *string
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 
@@ -434,9 +426,7 @@ func (client filesystemClient) setPropertiesPreparer(filesystem string, xMsPrope
     if xMsDate != nil {
         req.Header.Set("x-ms-date", *xMsDate)
     }
-    if xMsVersion != nil {
-        req.Header.Set("x-ms-version", *client.XMsVersion)
-    }
+    req.Header.Set("x-ms-version", ServiceVersion)
 	return req, nil
 }
 

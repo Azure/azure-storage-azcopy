@@ -43,10 +43,9 @@
       "description": "Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.",
       "in": "header",
       "name": "x-ms-version",
-      "required": false,
-      "type": "string",
-      "x-ms-parameter-location": "client"
-    },
+      "required": true,
+      "type": "string"
+      },
     "accountName": {
       "description": "The Azure Storage account name.",
       "in": "path",
