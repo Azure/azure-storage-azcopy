@@ -129,17 +129,15 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 		panic("body must contain readable data whose size is > 0")
 	}
 
-	// TODO: does this AppendData function even work now?  We use to override the Http verb, but the new API doesn't
-	//       let us do that
-	// Old_TODO_text: the go http client has a problem with PATCH and content-length header
+	// TODO: the go http client has a problem with PATCH and content-length header
 	//                we should investigate and report the issue
-	// overrideHttpVerb := "PATCH"
+	overrideHttpVerb := "PATCH"
 
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionAppend, f.fileSystemName, f.path, &offset,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, body, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, &overrideHttpVerb, body, nil, nil, nil)
 }
 
 // flushes writes previously uploaded data to a file
@@ -152,19 +150,17 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*PathUpdateResp
 	// azcopy does not need this
 	retainUncommittedData := false
 
-	// TODO: does this FlushData function even work now?  We use to override the Http verb, but the new API doesn't
-	//       let us do that
-	// Old_TODO_text: the go http client has a problem with PATCH and content-length header
-	//                we should investigate and report the issue
-	// overrideHttpVerb := "PATCH"
+	// TODO: the go http client has a problem with PATCH and content-length header
+	//       we should investigate and report the issue
+	overrideHttpVerb := "PATCH"
 
 	// TODO: feb 2019 API update: review the use of closeParameter here. Should it be true?
-	//    Doc implies only make it true if
+	//    Doc implies only make it true if this is the end of the file
 
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
 		&retainUncommittedData, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil)
+		nil, &overrideHttpVerb, nil, nil, nil, nil)
 }
