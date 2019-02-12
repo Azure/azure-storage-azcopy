@@ -7,12 +7,11 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"net/http"
-	"strconv"
 )
 
 // A FileURL represents a URL to an Azure Storage file.
 type FileURL struct {
-	fileClient     managementClient
+	fileClient     pathClient
 	fileSystemName string
 	path           string
 }
@@ -22,7 +21,7 @@ func NewFileURL(url url.URL, p pipeline.Pipeline) FileURL {
 	if p == nil {
 		panic("p can't be nil")
 	}
-	fileClient := newManagementClient(url, p)
+	fileClient := newPathClient(url, p)
 
 	urlParts := NewBfsURLParts(url)
 	return FileURL{fileClient: fileClient, fileSystemName: urlParts.FileSystemName, path: urlParts.DirectoryOrFilePath}
@@ -46,10 +45,9 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
-func (f FileURL) Create(ctx context.Context) (*CreatePathResponse, error) {
-	fileType := "file"
-	return f.fileClient.CreatePath(ctx, f.fileSystemName, f.path, &fileType,
-		nil, nil, nil, nil, nil, nil,
+func (f FileURL) Create(ctx context.Context) (*PathCreateResponse, error) {
+	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
+		nil, PathRenameModeNone, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -62,8 +60,8 @@ func (f FileURL) Create(ctx context.Context) (*CreatePathResponse, error) {
 // response header/property if the range is <= 4MB; the HTTP request fails with 400 (Bad Request) if the requested range is greater than 4MB.
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file.
 func (f FileURL) Download(ctx context.Context, offset int64, count int64) (*DownloadResponse, error) {
-	dr, err := f.fileClient.ReadPath(ctx, f.fileSystemName, f.path, (&httpRange{offset: offset, count: count}).pointers(),
-		nil, nil, nil, nil, nil, nil, nil)
+	dr, err := f.fileClient.Read(ctx, f.fileSystemName, f.path, (&httpRange{offset: offset, count: count}).pointers(),
+		nil, nil, nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +70,9 @@ func (f FileURL) Download(ctx context.Context, offset int64, count int64) (*Down
 		f:    f,
 		dr:   dr,
 		ctx:  ctx,
-		info: HTTPGetterInfo{Offset: offset, Count: count, ETag: dr.ETag()}, // TODO: Note conditional header is not currently supported in Azure File.
+		info: HTTPGetterInfo{Offset: offset, Count: count, ETag: dr.ETag()},
+		// TODO: Note conditional header is not currently supported in Azure File.
+		// TODO: review the above todo, since as of 8 Feb 2019 we are on a newer version of the API
 	}, err
 }
 
@@ -99,24 +99,24 @@ func (dr *DownloadResponse) Body(o RetryReaderOptions) io.ReadCloser {
 
 // Delete immediately removes the file from the storage account.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/delete-file2.
-func (f FileURL) Delete(ctx context.Context) (*DeletePathResponse, error) {
+func (f FileURL) Delete(ctx context.Context) (*PathDeleteResponse, error) {
 	recursive := false
-	return f.fileClient.DeletePath(ctx, f.fileSystemName, f.path, &recursive,
+	return f.fileClient.Delete(ctx, f.fileSystemName, f.path, &recursive,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil)
 }
 
 // GetProperties returns the file's metadata and properties.
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/get-file-properties.
-func (f FileURL) GetProperties(ctx context.Context) (*GetPathPropertiesResponse, error) {
-	return f.fileClient.GetPathProperties(ctx, f.fileSystemName, f.path, nil, nil,
+func (f FileURL) GetProperties(ctx context.Context) (*PathGetPropertiesResponse, error) {
+	return f.fileClient.GetProperties(ctx, f.fileSystemName, f.path, PathGetPropertiesActionGetStatus, nil,
 		nil, nil, nil,
-		nil, nil, nil)
+		nil, nil, nil, nil, nil)
 }
 
 // UploadRange writes bytes to a file.
 // offset indiciates the offset at which to begin writing, in bytes.
-func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeker) (*UpdatePathResponse, error) {
+func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeker) (*PathUpdateResponse, error) {
 	if offset < 0 {
 		panic("offset must be >= 0")
 	}
@@ -128,21 +128,22 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 	if count == 0 {
 		panic("body must contain readable data whose size is > 0")
 	}
-	countAsStr := strconv.FormatInt(count, 10)
 
-	// TODO the go http client has a problem with PATCH and content-length header
-	// TODO we should investigate and report the issue
-	overrideHttpVerb := "PATCH"
+	// TODO: does this AppendData function even work now?  We use to override the Http verb, but the new API doesn't
+	//       let us do that
+	// Old_TODO_text: the go http client has a problem with PATCH and content-length header
+	//                we should investigate and report the issue
+	// overrideHttpVerb := "PATCH"
 
 	// TransactionalContentMD5 isn't supported currently.
-	return f.fileClient.UpdatePath(ctx, "append", f.fileSystemName, f.path, &offset,
-		nil, &countAsStr, nil, nil, nil, nil,
+	return f.fileClient.Update(ctx, PathUpdateActionAppend, f.fileSystemName, f.path, &offset,
+		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, &overrideHttpVerb, body, nil, nil, nil)
+		nil, nil, nil, nil, nil, nil, body, nil, nil, nil)
 }
 
 // flushes writes previously uploaded data to a file
-func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResponse, error) {
+func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*PathUpdateResponse, error) {
 	if fileSize < 0 {
 		panic("fileSize must be >= 0")
 	}
@@ -151,14 +152,19 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*UpdatePathResp
 	// azcopy does not need this
 	retainUncommittedData := false
 
-	// TODO the go http client has a problem with PATCH and content-length header
-	// TODO we should investigate and report the issue
-	overrideHttpVerb := "PATCH"
+	// TODO: does this FlushData function even work now?  We use to override the Http verb, but the new API doesn't
+	//       let us do that
+	// Old_TODO_text: the go http client has a problem with PATCH and content-length header
+	//                we should investigate and report the issue
+	// overrideHttpVerb := "PATCH"
+
+	// TODO: feb 2019 API update: review the use of closeParameter here. Should it be true?
+	//    Doc implies only make it true if
 
 	// TransactionalContentMD5 isn't supported currently.
-	return f.fileClient.UpdatePath(ctx, "flush", f.fileSystemName, f.path, &fileSize,
+	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
 		&retainUncommittedData, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil,
-		&overrideHttpVerb, nil, nil, nil, nil)
+		nil, nil, nil, nil, nil)
 }

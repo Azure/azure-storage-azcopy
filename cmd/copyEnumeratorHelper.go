@@ -219,8 +219,8 @@ func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.D
 //////////////////////////////////////////////////////////////////////////////////////////
 // enumerateFilesInADLSGen2Directory enumerates files in ADLS Gen2 directory.
 func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.DirectoryURL,
-	filter func(fileItem azbfs.ListEntrySchema) bool,
-	callback func(fileItem azbfs.ListEntrySchema) error) error {
+	filter func(fileItem azbfs.Path) bool,
+	callback func(fileItem azbfs.Path) error) error {
 	marker := ""
 	for {
 		listDirResp, err := directoryURL.ListDirectorySegment(ctx, &marker, true)

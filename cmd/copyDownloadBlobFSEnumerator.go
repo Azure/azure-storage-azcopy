@@ -11,8 +11,6 @@ import (
 
 	"strings"
 
-	"strconv"
-
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -55,10 +53,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			destination = cca.destination
 		}
 
-		fileSize, err := strconv.ParseInt(props.ContentLength(), 10, 64)
-		if err != nil {
-			panic(err)
-		}
+		fileSize := props.ContentLength()
 
 		// Queue the transfer
 		e.addTransfer(common.CopyTransfer{
@@ -100,10 +95,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			fileURL := azbfs.NewFileURL(tempURLPartsExtension.URL(), p)
 			if fileProperties, err := fileURL.GetProperties(ctx); err == nil && strings.EqualFold(fileProperties.XMsResourceType(), "file") {
 				// file exists
-				fileSize, err := strconv.ParseInt(fileProperties.ContentLength(), 10, 64)
-				if err != nil {
-					panic(err)
-				}
+				fileSize := fileProperties.ContentLength()
 
 				// assembling the file relative path
 				fileRelativePath := fileOrDir
@@ -133,10 +125,10 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			err := enumerateFilesInADLSGen2Directory(
 				ctx,
 				dirURL,
-				func(fileItem azbfs.ListEntrySchema) bool { // filter always return true in this case
+				func(fileItem azbfs.Path) bool { // filter always return true in this case
 					return true
 				},
-				func(fileItem azbfs.ListEntrySchema) error {
+				func(fileItem azbfs.Path) error {
 					relativePath := strings.Replace(*fileItem.Name, parentSourcePath, "", 1)
 					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 						relativePath = relativePath[1:]

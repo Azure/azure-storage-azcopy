@@ -8,262 +8,262 @@ import (
 // DirectoryCreateResponse is the CreatePathResponse response type returned for directory specific operations
 // The type is used to establish difference in the response for file and directory operations since both type of
 // operations has same response type.
-type DirectoryCreateResponse CreatePathResponse
+type DirectoryCreateResponse PathCreateResponse
 
 // Response returns the raw HTTP response object.
 func (dcr DirectoryCreateResponse) Response() *http.Response {
-	return CreatePathResponse(dcr).Response()
+	return PathCreateResponse(dcr).Response()
 }
 
 // StatusCode returns the HTTP status code of the response, e.g. 200.
 func (dcr DirectoryCreateResponse) StatusCode() int {
-	return CreatePathResponse(dcr).StatusCode()
+	return PathCreateResponse(dcr).StatusCode()
 }
 
 // Status returns the HTTP status message of the response, e.g. "200 OK".
 func (dcr DirectoryCreateResponse) Status() string {
-	return CreatePathResponse(dcr).Status()
+	return PathCreateResponse(dcr).Status()
 }
 
 // ContentLength returns the value for header Content-Length.
-func (dcr DirectoryCreateResponse) ContentLength() string {
-	return CreatePathResponse(dcr).ContentLength()
+func (dcr DirectoryCreateResponse) ContentLength() int64 {
+	return PathCreateResponse(dcr).ContentLength()
 }
 
 // Date returns the value for header Date.
 func (dcr DirectoryCreateResponse) Date() string {
-	return CreatePathResponse(dcr).Date()
+	return PathCreateResponse(dcr).Date()
 }
 
 // ETag returns the value for header ETag.
 func (dcr DirectoryCreateResponse) ETag() string {
-	return CreatePathResponse(dcr).ETag()
+	return PathCreateResponse(dcr).ETag()
 }
 
 // LastModified returns the value for header Last-Modified.
 func (dcr DirectoryCreateResponse) LastModified() string {
-	return CreatePathResponse(dcr).LastModified()
+	return PathCreateResponse(dcr).LastModified()
 }
 
 // XMsContinuation returns the value for header x-ms-continuation.
 func (dcr DirectoryCreateResponse) XMsContinuation() string {
-	return CreatePathResponse(dcr).XMsContinuation()
+	return PathCreateResponse(dcr).XMsContinuation()
 }
 
 // XMsRequestID returns the value for header x-ms-request-id.
 func (dcr DirectoryCreateResponse) XMsRequestID() string {
-	return CreatePathResponse(dcr).XMsRequestID()
+	return PathCreateResponse(dcr).XMsRequestID()
 }
 
 // XMsVersion returns the value for header x-ms-version.
 func (dcr DirectoryCreateResponse) XMsVersion() string {
-	return CreatePathResponse(dcr).XMsVersion()
+	return PathCreateResponse(dcr).XMsVersion()
 }
 
 // DirectoryDeleteResponse is the DeletePathResponse response type returned for directory specific operations
 // The type is used to establish difference in the response for file and directory operations since both type of
 // operations has same response type.
-type DirectoryDeleteResponse DeletePathResponse
+type DirectoryDeleteResponse PathDeleteResponse
 
 // Response returns the raw HTTP response object.
 func (ddr DirectoryDeleteResponse) Response() *http.Response {
-	return DeletePathResponse(ddr).Response()
+	return PathDeleteResponse(ddr).Response()
 }
 
 // StatusCode returns the HTTP status code of the response, e.g. 200.
 func (ddr DirectoryDeleteResponse) StatusCode() int {
-	return DeletePathResponse(ddr).StatusCode()
+	return PathDeleteResponse(ddr).StatusCode()
 }
 
 // Status returns the HTTP status message of the response, e.g. "200 OK".
 func (ddr DirectoryDeleteResponse) Status() string {
-	return DeletePathResponse(ddr).Status()
+	return PathDeleteResponse(ddr).Status()
 }
 
 // Date returns the value for header Date.
 func (ddr DirectoryDeleteResponse) Date() string {
-	return DeletePathResponse(ddr).Date()
+	return PathDeleteResponse(ddr).Date()
 }
 
 // XMsContinuation returns the value for header x-ms-continuation.
 func (ddr DirectoryDeleteResponse) XMsContinuation() string {
-	return DeletePathResponse(ddr).XMsContinuation()
+	return PathDeleteResponse(ddr).XMsContinuation()
 }
 
 // XMsRequestID returns the value for header x-ms-request-id.
 func (ddr DirectoryDeleteResponse) XMsRequestID() string {
-	return DeletePathResponse(ddr).XMsRequestID()
+	return PathDeleteResponse(ddr).XMsRequestID()
 }
 
 // XMsVersion returns the value for header x-ms-version.
 func (ddr DirectoryDeleteResponse) XMsVersion() string {
-	return DeletePathResponse(ddr).XMsVersion()
+	return PathDeleteResponse(ddr).XMsVersion()
 }
 
 // DirectoryGetPropertiesResponse is the GetPathPropertiesResponse response type returned for directory specific operations
 // The type is used to establish difference in the response for file and directory operations since both type of
 // operations has same response type.
-type DirectoryGetPropertiesResponse GetPathPropertiesResponse
+type DirectoryGetPropertiesResponse PathGetPropertiesResponse
 
 // Response returns the raw HTTP response object.
 func (dgpr DirectoryGetPropertiesResponse) Response() *http.Response {
-	return GetPathPropertiesResponse(dgpr).Response()
+	return PathGetPropertiesResponse(dgpr).Response()
 }
 
 // StatusCode returns the HTTP status code of the response, e.g. 200.
 func (dgpr DirectoryGetPropertiesResponse) StatusCode() int {
-	return GetPathPropertiesResponse(dgpr).StatusCode()
+	return PathGetPropertiesResponse(dgpr).StatusCode()
 }
 
 // Status returns the HTTP status message of the response, e.g. "200 OK".
 func (dgpr DirectoryGetPropertiesResponse) Status() string {
-	return GetPathPropertiesResponse(dgpr).Status()
+	return PathGetPropertiesResponse(dgpr).Status()
 }
 
 // AcceptRanges returns the value for header Accept-Ranges.
 func (dgpr DirectoryGetPropertiesResponse) AcceptRanges() string {
-	return GetPathPropertiesResponse(dgpr).AcceptRanges()
+	return PathGetPropertiesResponse(dgpr).AcceptRanges()
 }
 
 // CacheControl returns the value for header Cache-Control.
 func (dgpr DirectoryGetPropertiesResponse) CacheControl() string {
-	return GetPathPropertiesResponse(dgpr).CacheControl()
+	return PathGetPropertiesResponse(dgpr).CacheControl()
 }
 
 // ContentDisposition returns the value for header Content-Disposition.
 func (dgpr DirectoryGetPropertiesResponse) ContentDisposition() string {
-	return GetPathPropertiesResponse(dgpr).ContentDisposition()
+	return PathGetPropertiesResponse(dgpr).ContentDisposition()
 }
 
 // ContentEncoding returns the value for header Content-Encoding.
 func (dgpr DirectoryGetPropertiesResponse) ContentEncoding() string {
-	return GetPathPropertiesResponse(dgpr).ContentEncoding()
+	return PathGetPropertiesResponse(dgpr).ContentEncoding()
 }
 
 // ContentLanguage returns the value for header Content-Language.
 func (dgpr DirectoryGetPropertiesResponse) ContentLanguage() string {
-	return GetPathPropertiesResponse(dgpr).ContentLanguage()
+	return PathGetPropertiesResponse(dgpr).ContentLanguage()
 }
 
 // ContentLength returns the value for header Content-Length.
-func (dgpr DirectoryGetPropertiesResponse) ContentLength() string {
-	return GetPathPropertiesResponse(dgpr).ContentLength()
+func (dgpr DirectoryGetPropertiesResponse) ContentLength() int64 {
+	return PathGetPropertiesResponse(dgpr).ContentLength()
 }
 
 // ContentRange returns the value for header Content-Range.
 func (dgpr DirectoryGetPropertiesResponse) ContentRange() string {
-	return GetPathPropertiesResponse(dgpr).ContentRange()
+	return PathGetPropertiesResponse(dgpr).ContentRange()
 }
 
 // ContentType returns the value for header Content-Type.
 func (dgpr DirectoryGetPropertiesResponse) ContentType() string {
-	return GetPathPropertiesResponse(dgpr).ContentType()
+	return PathGetPropertiesResponse(dgpr).ContentType()
 }
 
 // Date returns the value for header Date.
 func (dgpr DirectoryGetPropertiesResponse) Date() string {
-	return GetPathPropertiesResponse(dgpr).Date()
+	return PathGetPropertiesResponse(dgpr).Date()
 }
 
 // ETag returns the value for header ETag.
 func (dgpr DirectoryGetPropertiesResponse) ETag() string {
-	return GetPathPropertiesResponse(dgpr).ETag()
+	return PathGetPropertiesResponse(dgpr).ETag()
 }
 
 // LastModified returns the value for header Last-Modified.
 func (dgpr DirectoryGetPropertiesResponse) LastModified() string {
-	return GetPathPropertiesResponse(dgpr).LastModified()
+	return PathGetPropertiesResponse(dgpr).LastModified()
 }
 
 // XMsLeaseDuration returns the value for header x-ms-lease-duration.
 func (dgpr DirectoryGetPropertiesResponse) XMsLeaseDuration() string {
-	return GetPathPropertiesResponse(dgpr).XMsLeaseDuration()
+	return PathGetPropertiesResponse(dgpr).XMsLeaseDuration()
 }
 
 // XMsLeaseState returns the value for header x-ms-lease-state.
 func (dgpr DirectoryGetPropertiesResponse) XMsLeaseState() string {
-	return GetPathPropertiesResponse(dgpr).XMsLeaseState()
+	return PathGetPropertiesResponse(dgpr).XMsLeaseState()
 }
 
 // XMsLeaseStatus returns the value for header x-ms-lease-status.
 func (dgpr DirectoryGetPropertiesResponse) XMsLeaseStatus() string {
-	return GetPathPropertiesResponse(dgpr).XMsLeaseStatus()
+	return PathGetPropertiesResponse(dgpr).XMsLeaseStatus()
 }
 
 // XMsProperties returns the value for header x-ms-properties.
 func (dgpr DirectoryGetPropertiesResponse) XMsProperties() string {
-	return GetPathPropertiesResponse(dgpr).XMsProperties()
+	return PathGetPropertiesResponse(dgpr).XMsProperties()
 }
 
 // XMsRequestID returns the value for header x-ms-request-id.
 func (dgpr DirectoryGetPropertiesResponse) XMsRequestID() string {
-	return GetPathPropertiesResponse(dgpr).XMsRequestID()
+	return PathGetPropertiesResponse(dgpr).XMsRequestID()
 }
 
 // XMsResourceType returns the value for header x-ms-resource-type.
 func (dgpr DirectoryGetPropertiesResponse) XMsResourceType() string {
-	return GetPathPropertiesResponse(dgpr).XMsResourceType()
+	return PathGetPropertiesResponse(dgpr).XMsResourceType()
 }
 
 // XMsVersion returns the value for header x-ms-version.
 func (dgpr DirectoryGetPropertiesResponse) XMsVersion() string {
-	return GetPathPropertiesResponse(dgpr).XMsVersion()
+	return PathGetPropertiesResponse(dgpr).XMsVersion()
 }
 
 // DirectoryListResponse is the ListSchema response type. This type declaration is used to implement useful methods on
 // ListPath response
-type DirectoryListResponse ListSchema
+type DirectoryListResponse PathList // TODO: Used to by ListPathResponse. Have I changed it to the right thing?
 
 // Response returns the raw HTTP response object.
 func (dlr DirectoryListResponse) Response() *http.Response {
-	return ListSchema(dlr).Response()
+	return PathList(dlr).Response()
 }
 
 // StatusCode returns the HTTP status code of the response, e.g. 200.
 func (dlr DirectoryListResponse) StatusCode() int {
-	return ListSchema(dlr).StatusCode()
+	return PathList(dlr).StatusCode()
 }
 
 // Status returns the HTTP status message of the response, e.g. "200 OK".
 func (dlr DirectoryListResponse) Status() string {
-	return ListSchema(dlr).Status()
+	return PathList(dlr).Status()
 }
 
 // Date returns the value for header Date.
 func (dlr DirectoryListResponse) Date() string {
-	return ListSchema(dlr).Date()
+	return PathList(dlr).Date()
 }
 
 // ETag returns the value for header ETag.
 func (dlr DirectoryListResponse) ETag() string {
-	return ListSchema(dlr).ETag()
+	return PathList(dlr).ETag()
 }
 
 // LastModified returns the value for header Last-Modified.
 func (dlr DirectoryListResponse) LastModified() string {
-	return ListSchema(dlr).LastModified()
+	return PathList(dlr).LastModified()
 }
 
 // XMsContinuation returns the value for header x-ms-continuation.
 func (dlr DirectoryListResponse) XMsContinuation() string {
-	return ListSchema(dlr).XMsContinuation()
+	return PathList(dlr).XMsContinuation()
 }
 
 // XMsRequestID returns the value for header x-ms-request-id.
 func (dlr DirectoryListResponse) XMsRequestID() string {
-	return ListSchema(dlr).XMsRequestID()
+	return PathList(dlr).XMsRequestID()
 }
 
 // XMsVersion returns the value for header x-ms-version.
 func (dlr DirectoryListResponse) XMsVersion() string {
-	return ListSchema(dlr).XMsVersion()
+	return PathList(dlr).XMsVersion()
 }
 
 // Files returns the slice of all Files in ListDirectorySegment Response.
 // It does not include the sub-directory path
-func (dlr *DirectoryListResponse) Files() []ListEntrySchema {
-	files := []ListEntrySchema{}
-	lSchema := ListSchema(*dlr)
+func (dlr *DirectoryListResponse) Files() []Path {
+	files := []Path{}
+	lSchema := PathList(*dlr)
 	for _, path := range lSchema.Paths {
 		if path.IsDirectory != nil && *path.IsDirectory {
 			continue
@@ -277,7 +277,7 @@ func (dlr *DirectoryListResponse) Files() []ListEntrySchema {
 // It does not include the files inside the directory only returns the sub-directories
 func (dlr *DirectoryListResponse) Directories() []string {
 	var dir []string
-	lSchema := (ListSchema)(*dlr)
+	lSchema := (PathList)(*dlr)
 	for _, path := range lSchema.Paths {
 		if path.IsDirectory == nil || (path.IsDirectory != nil && !*path.IsDirectory) {
 			continue
@@ -287,9 +287,9 @@ func (dlr *DirectoryListResponse) Directories() []string {
 	return dir
 }
 
-func (dlr *DirectoryListResponse) FilesAndDirectories() []ListEntrySchema {
-	var entities []ListEntrySchema
-	lSchema := (ListSchema)(*dlr)
+func (dlr *DirectoryListResponse) FilesAndDirectories() []Path {
+	var entities []Path
+	lSchema := (PathList)(*dlr)
 	for _, path := range lSchema.Paths {
 		entities = append(entities, path)
 	}
@@ -298,7 +298,7 @@ func (dlr *DirectoryListResponse) FilesAndDirectories() []ListEntrySchema {
 
 // DownloadResponse wraps AutoRest generated downloadResponse and helps to provide info for retry.
 type DownloadResponse struct {
-	dr *ReadPathResponse
+	dr *ReadResponse
 
 	// Fields need for retry.
 	ctx  context.Context
@@ -347,7 +347,7 @@ func (dr DownloadResponse) ContentLanguage() string {
 }
 
 // ContentLength returns the value for header Content-Length.
-func (dr DownloadResponse) ContentLength() string {
+func (dr DownloadResponse) ContentLength() int64 {
 	return dr.dr.ContentLength()
 }
 

@@ -11,7 +11,7 @@ var directoryResourceName = "directory" // constant value for the resource query
 
 // A DirectoryURL represents a URL to the Azure Storage directory allowing you to manipulate its directories and files.
 type DirectoryURL struct {
-	directoryClient managementClient
+	directoryClient pathClient
 	// filesystem is the filesystem identifier
 	filesystem string
 	// pathParameter is the file or directory path
@@ -24,7 +24,7 @@ func NewDirectoryURL(url url.URL, p pipeline.Pipeline) DirectoryURL {
 		panic("p can't be nil")
 	}
 	urlParts := NewBfsURLParts(url)
-	directoryClient := newManagementClient(url, p)
+	directoryClient := newPathClient(url, p)
 	return DirectoryURL{directoryClient: directoryClient, filesystem: urlParts.FileSystemName, pathParameter: urlParts.DirectoryOrFilePath}
 }
 
@@ -65,8 +65,8 @@ func (d DirectoryURL) NewDirectoryURL(dirName string) DirectoryURL {
 
 // Create creates a new directory within a File System
 func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, error) {
-	resp, err := d.directoryClient.CreatePath(ctx, d.filesystem, d.pathParameter, &directoryResourceName, nil,
-		nil, nil, nil, nil, nil, nil,
+	resp, err := d.directoryClient.Create(ctx, d.filesystem, d.pathParameter, PathResourceDirectory, nil,
+		PathRenameModeNone, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil,
@@ -77,15 +77,15 @@ func (d DirectoryURL) Create(ctx context.Context) (*DirectoryCreateResponse, err
 // Delete removes the specified empty directory. Note that the directory must be empty before it can be deleted..
 // For more information, see https://docs.microsoft.com/rest/api/storageservices/delete-directory.
 func (d DirectoryURL) Delete(ctx context.Context, continuationString *string, recursive bool) (*DirectoryDeleteResponse, error) {
-	resp, err := d.directoryClient.DeletePath(ctx, d.filesystem, d.pathParameter, &recursive, continuationString, nil,
+	resp, err := d.directoryClient.Delete(ctx, d.filesystem, d.pathParameter, &recursive, continuationString, nil,
 		nil, nil, nil, nil, nil, nil, nil)
 	return (*DirectoryDeleteResponse)(resp), err
 }
 
 // GetProperties returns the directory's metadata and system properties.
 func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertiesResponse, error) {
-	resp, err := d.directoryClient.GetPathProperties(ctx, d.filesystem, d.pathParameter, nil, nil, nil,
-		nil, nil, nil, nil, nil)
+	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, PathGetPropertiesActionGetStatus, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil)
 	return (*DirectoryGetPropertiesResponse)(resp), err
 }
 
@@ -110,8 +110,8 @@ func (d DirectoryURL) ListDirectorySegment(ctx context.Context, marker *string, 
 	// and listPath for filesystem with directory path set in the path parameter
 	var maxEntriesInListOperation = int32(1000)
 
-	resp, err := d.FileSystemURL().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, fileSystemResourceName, &d.pathParameter, marker,
-		&maxEntriesInListOperation, nil, nil, nil)
+	resp, err := d.directoryClient.List(ctx, recursive, d.filesystem, &d.pathParameter, marker,
+		&maxEntriesInListOperation, nil, nil, nil, nil)
 	return (*DirectoryListResponse)(resp), err
 }
 
