@@ -38,7 +38,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// TODO plug this in
 // a max is set because we cannot buffer infinite amount of destination file info in memory
 const MaxNumberOfFilesAllowedInSync = 10000000
 

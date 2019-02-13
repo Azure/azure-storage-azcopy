@@ -51,12 +51,13 @@ func validateTransfersAreScheduled(c *chk.C, srcDirName, dstDirName string, expe
 
 func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
 	return rawSyncCmdArgs{
-		src:          src,
-		dst:          dst,
-		recursive:    true,
-		logVerbosity: defaultLogVerbosityForSync,
-		output:       defaultOutputFormatForSync,
-		force:        true,
+		src:                 src,
+		dst:                 dst,
+		recursive:           true,
+		logVerbosity:        defaultLogVerbosityForSync,
+		output:              defaultOutputFormatForSync,
+		force:               true,
+		md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}
 }
 

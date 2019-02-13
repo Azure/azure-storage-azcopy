@@ -1,11 +1,16 @@
 package cmd
 
+import (
+	"fmt"
+)
+
 // the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
 // 		1. objectProcessor: accumulate a lookup map with given storedObjects
 //		2. resourceTraverser: go through the entities in the map like a traverser
 type objectIndexer struct {
 	indexMap map[string]storedObject
+	counter  int
 }
 
 func newObjectIndexer() *objectIndexer {
@@ -17,7 +22,12 @@ func newObjectIndexer() *objectIndexer {
 
 // process the given stored object by indexing it using its relative path
 func (i *objectIndexer) store(storedObject storedObject) (err error) {
+	if i.counter == MaxNumberOfFilesAllowedInSync {
+		return fmt.Errorf("the maxium number of file allowed in sync is: %v", MaxNumberOfFilesAllowedInSync)
+	}
+
 	i.indexMap[storedObject.relativePath] = storedObject
+	i.counter += 1
 	return
 }
 

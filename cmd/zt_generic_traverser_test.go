@@ -8,6 +8,7 @@ import (
 	chk "gopkg.in/check.v1"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type genericTraverserSuite struct{}
@@ -72,6 +73,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	c.Assert(containerURL, chk.NotNil)
 
 	// set up the destination with a folder that have the exact same files
+	time.Sleep(2 * time.Second) // make the lmts of local files newer
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	scenarioHelper{}.generateFilesFromList(c, dstDirName, fileList)
 

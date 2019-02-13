@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
+	"path"
 	"strings"
 	"sync/atomic"
 )
@@ -13,9 +14,9 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 	var fullPath string
 
 	if isSource {
-		fullPath = cca.source
+		fullPath = path.Clean(cca.source)
 	} else {
-		fullPath = cca.destination
+		fullPath = path.Clean(cca.destination)
 	}
 
 	if strings.ContainsAny(fullPath, "*?") {
