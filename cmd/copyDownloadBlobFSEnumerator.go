@@ -174,7 +174,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	for {
 		dListResp, err := directoryURL.ListDirectorySegment(ctx, &continuationMarker, true)
 		if err != nil {
-			return fmt.Errorf("error listing the files inside the given source url %s", directoryURL.String())
+			return fmt.Errorf("error listing the files inside the given source url %s: %s", directoryURL.String(), err.Error())
 		}
 
 		// get only the files inside the given path
