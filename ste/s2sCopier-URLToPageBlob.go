@@ -143,6 +143,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+		s2sPacer := newS2SPacer(c.pacer)
 
 		// Set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
 		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
@@ -152,6 +153,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
 		}
+		s2sPacer.Done(adjustedChunkSize)
 	})
 }
 

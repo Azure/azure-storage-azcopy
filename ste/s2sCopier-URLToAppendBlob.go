@@ -133,6 +133,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		}
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+		s2sPacer := newS2SPacer(c.pacer)
 
 		// Set the latest service version from sdk as service version in the context, to use AppendBlockFromURL API.
 		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
@@ -141,6 +142,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return
 		}
+		s2sPacer.Done(adjustedChunkSize)
 	})
 }
 

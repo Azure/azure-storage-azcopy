@@ -209,7 +209,9 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// step 2: save the block ID into the list of block IDs
 		c.setBlockId(blockIndex, encodedBlockID)
+
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+		s2sPacer := newS2SPacer(c.pacer)
 
 		// Set the latest service version from sdk as service version in the context, to use StageBlockFromURL API
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
@@ -218,6 +220,7 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			jptm.FailActiveS2SCopy("Staging block from URL", err)
 			return
 		}
+		s2sPacer.Done(adjustedChunkSize)
 	})
 }
 
