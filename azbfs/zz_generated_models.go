@@ -4,6 +4,7 @@ package azbfs
 // Changes may cause incorrect behavior and will be lost if the code is regenerated.
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"reflect"
@@ -392,6 +393,15 @@ type Path struct {
 	ContentLength *int64 `json:"contentLength,string,omitempty"`
 	// end manual edit
 
+	// begin manual addition to generated code
+	// TODO:
+	//    (a) How can we verify this will actually work with the JSON that the service will emit, when the service starts to do so?
+	//    (b) One day, consider converting this to use a custom type, that implements TextMarshaller, as has been done
+	//        for the XML-based responses in other SDKs.  For now, the decoding from Base64 is up to the caller, and the name is chosen
+	//        to reflect that.
+	ContentMD5Base64 *string `json:"contentMd5,string,omitempty"`
+	// end manual addition
+
 	Owner       *string `json:"owner,omitempty"`
 	Group       *string `json:"group,omitempty"`
 	Permissions *string `json:"permissions,omitempty"`
@@ -559,9 +569,22 @@ func (pgpr PathGetPropertiesResponse) ContentLength() int64 {
 }
 
 // ContentMD5 returns the value for header Content-MD5.
-func (pgpr PathGetPropertiesResponse) ContentMD5() string {
-	return pgpr.rawResponse.Header.Get("Content-MD5")
+// begin manual edit to generated code
+func (pgpr PathGetPropertiesResponse) ContentMD5() []byte {
+	// TODO: why did I have to generate this myself, whereas for blob API corresponding function seems to be
+	//       auto-generated from the Swagger?
+	s := pgpr.rawResponse.Header.Get("Content-MD5")
+	if s == "" {
+		return nil
+	}
+	b, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		b = nil
+	}
+	return b
 }
+
+// end manual edit to generated code
 
 // ContentRange returns the value for header Content-Range.
 func (pgpr PathGetPropertiesResponse) ContentRange() string {
