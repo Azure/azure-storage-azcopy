@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
@@ -322,7 +322,7 @@ func createBucket(bucketURLStr string) {
 		os.Exit(1)
 	}
 
-	s3URLParts, err := cmd.NewS3URLParts(*u)
+	s3URLParts, err := common.NewS3URLParts(*u)
 	if err != nil {
 		fmt.Println("new S3 URL parts, ", err)
 		os.Exit(1)
@@ -348,7 +348,7 @@ func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptio
 		os.Exit(1)
 	}
 
-	s3URLParts, err := cmd.NewS3URLParts(*u)
+	s3URLParts, err := common.NewS3URLParts(*u)
 	if err != nil {
 		fmt.Println("new S3 URL parts, ", err)
 		os.Exit(1)

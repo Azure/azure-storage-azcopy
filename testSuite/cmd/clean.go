@@ -12,7 +12,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
@@ -369,7 +369,7 @@ func cleanS3Account(resourceURL string) {
 		os.Exit(1)
 	}
 
-	s3URLParts, err := cmd.NewS3URLParts(*u)
+	s3URLParts, err := common.NewS3URLParts(*u)
 	if err != nil {
 		fmt.Println("new S3 URL parts, ", err)
 		os.Exit(1)

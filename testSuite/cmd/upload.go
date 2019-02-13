@@ -11,7 +11,6 @@ import (
 
 	"github.com/minio/minio-go"
 
-	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -81,7 +80,7 @@ func init() {
 // a. upload single local file to single S3 object.
 // b. upload single local directory to S3 bucket recursively or non-recursively.
 func (u *testUploader) uploadToS3() {
-	s3URLParts, err := cmd.NewS3URLParts(u.destURL)
+	s3URLParts, err := common.NewS3URLParts(u.destURL)
 	if err != nil {
 		fmt.Println("fail to upload to S3, ", err)
 		os.Exit(1)
@@ -97,7 +96,7 @@ func (u *testUploader) uploadToS3() {
 			return err
 		}
 
-		s3URLPartsForFile, err := cmd.NewS3URLParts(t.destURL)
+		s3URLPartsForFile, err := common.NewS3URLParts(t.destURL)
 		if err != nil {
 			return err
 		}
