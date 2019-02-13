@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -61,6 +62,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			Destination:      destination,
 			LastModifiedTime: e.parseLmt(props.LastModified()),
 			SourceSize:       fileSize,
+			ContentMD5:       props.ContentMD5(),
 		}, cca)
 
 		return e.dispatchFinalPart(cca)
@@ -111,7 +113,9 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					Source:           srcURL.String(),
 					Destination:      util.generateLocalPath(cca.destination, fileRelativePath),
 					LastModifiedTime: e.parseLmt(fileProperties.LastModified()),
-					SourceSize:       fileSize}, cca)
+					SourceSize:       fileSize,
+					ContentMD5:       fileProperties.ContentMD5(),
+				}, cca)
 				continue
 			}
 
@@ -139,6 +143,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						Destination:      util.generateLocalPath(cca.destination, relativePath),
 						LastModifiedTime: e.parseLmt(*fileItem.LastModified),
 						SourceSize:       *fileItem.ContentLength,
+						ContentMD5:       getContentMd5(ctx, directoryURL, fileItem, cca.md5ValidationOption),
 					}, cca)
 				},
 			)
@@ -186,6 +191,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name)),
 				LastModifiedTime: e.parseLmt(*path.LastModified),
 				SourceSize:       *path.ContentLength,
+				ContentMD5:       getContentMd5(ctx, directoryURL, path, cca.md5ValidationOption),
 			}, cca)
 		}
 
@@ -204,6 +210,33 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return err
 	}
 	return nil
+}
+
+func getContentMd5(ctx context.Context, directoryURL azbfs.DirectoryURL, file azbfs.Path, md5ValidationOption common.HashValidationOption) []byte {
+	if md5ValidationOption == common.EHashValidationOption.NoCheck() {
+		return nil // not gonna check it, so don't need it
+	}
+
+	var returnValueForError []byte = nil // If we get an error, we just act like there was no content MD5. If validation is set to fail on error, this will fail the transfer of this file later on (at the time of the MD5 check)
+
+	// convert format of what we have, if we have something
+	if file.ContentMD5Base64 != nil {
+		value, err := base64.StdEncoding.DecodeString(*file.ContentMD5Base64)
+		if err != nil {
+			return returnValueForError
+		}
+		return value
+	}
+
+	// Fall back to making a new round trip to the server
+	// This is an interim measure, so that we can still validate MD5s even before they are being returned in the server's
+	// PathList response
+	fileURL := directoryURL.FileSystemURL().NewDirectoryURL(*file.Name)
+	props, err := fileURL.GetProperties(ctx)
+	if err != nil {
+		return returnValueForError
+	}
+	return props.ContentMD5()
 }
 
 func (e *copyDownloadBlobFSEnumerator) parseLmt(lastModifiedTime string) time.Time {
