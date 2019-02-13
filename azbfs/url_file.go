@@ -2,6 +2,7 @@ package azbfs
 
 import (
 	"context"
+	"encoding/base64"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -141,7 +142,8 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 }
 
 // flushes writes previously uploaded data to a file
-func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*PathUpdateResponse, error) {
+// The contentMd5 parameter, if not nil, should represent the MD5 hash that has been computed for the file as whole
+func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte) (*PathUpdateResponse, error) {
 	if fileSize < 0 {
 		panic("fileSize must be >= 0")
 	}
@@ -149,6 +151,12 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*PathUpdateResp
 	// hardcoded to be false for the moment
 	// azcopy does not need this
 	retainUncommittedData := false
+
+	var md5InBase64 *string = nil
+	if len(contentMd5) > 0 {
+		enc := base64.StdEncoding.EncodeToString(contentMd5)
+		md5InBase64 = &enc
+	}
 
 	// TODO: the go http client has a problem with PATCH and content-length header
 	//       we should investigate and report the issue
@@ -160,7 +168,7 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64) (*PathUpdateResp
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
 		&retainUncommittedData, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		nil, nil, nil, md5InBase64, nil,
 		nil, nil, nil, nil, nil, nil, nil,
 		nil, &overrideHttpVerb, nil, nil, nil, nil)
 }

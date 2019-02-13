@@ -210,6 +210,11 @@ func (dgpr DirectoryGetPropertiesResponse) XMsVersion() string {
 	return PathGetPropertiesResponse(dgpr).XMsVersion()
 }
 
+// ContentMD5 returns the value for header Content-MD5.
+func (dgpr DirectoryGetPropertiesResponse) ContentMD5() []byte {
+	return PathGetPropertiesResponse(dgpr).ContentMD5()
+}
+
 // DirectoryListResponse is the ListSchema response type. This type declaration is used to implement useful methods on
 // ListPath response
 type DirectoryListResponse PathList // TODO: Used to by ListPathResponse. Have I changed it to the right thing?
