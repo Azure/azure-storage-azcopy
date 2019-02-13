@@ -54,6 +54,10 @@ var errActualMd5NotComputed = errors.New("no MDB was computed within this applic
 // is respond to non-nil errors
 func (c *md5Comparer) Check() error {
 
+	if c.validationOption == common.EHashValidationOption.NoCheck() {
+		return nil
+	}
+
 	if c.actualAsSaved == nil || len(c.actualAsSaved) == 0 {
 		return errActualMd5NotComputed // Should never happen, so there's no way to opt out of this error being returned if it DOES happen
 	}

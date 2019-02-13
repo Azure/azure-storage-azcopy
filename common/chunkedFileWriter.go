@@ -86,6 +86,9 @@ type chunkedFileWriter struct {
 
 	// controls body-read retries. Public so value can be shared with retryReader
 	maxRetryPerDownloadBody int
+
+	// how will hashes be validated?
+	md5ValidationOption HashValidationOption
 }
 
 type fileChunk struct {
@@ -93,7 +96,7 @@ type fileChunk struct {
 	data []byte
 }
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
 	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
 	// very large numbers of very small files.
@@ -109,6 +112,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		newUnorderedChunks:      make(chan fileChunk, chanBufferSize),
 		creationTime:            time.Now(),
 		maxRetryPerDownloadBody: maxBodyRetries,
+		md5ValidationOption:     md5ValidationOption,
 	}
 	go w.workerRoutine(ctx)
 	return w
@@ -203,6 +207,10 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 	nextOffsetToSave := int64(0)
 	unsavedChunksByFileOffset := make(map[int64]fileChunk)
 	md5Hasher := md5.New()
+	if w.md5ValidationOption == EHashValidationOption.NoCheck() {
+		// save CPU time by not even computing a hash, if we are not going to check it
+		md5Hasher = &nullHasher{}
+	}
 
 	for {
 		var newChunk fileChunk
