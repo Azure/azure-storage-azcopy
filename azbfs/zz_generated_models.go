@@ -385,12 +385,16 @@ type Path struct {
 	IsDirectory *bool `json:"isDirectory,string,omitempty"`
 	// end manual edit
 
-	LastModified  *string `json:"lastModified,omitempty"`
-	ETag          *string `json:"eTag,omitempty"`
-	ContentLength *int64  `json:"contentLength,omitempty"`
-	Owner         *string `json:"owner,omitempty"`
-	Group         *string `json:"group,omitempty"`
-	Permissions   *string `json:"permissions,omitempty"`
+	LastModified *string `json:"lastModified,omitempty"`
+	ETag         *string `json:"eTag,omitempty"`
+
+	// begin manual edit to generated code
+	ContentLength *int64 `json:"contentLength,string,omitempty"`
+	// end manual edit
+
+	Owner       *string `json:"owner,omitempty"`
+	Group       *string `json:"group,omitempty"`
+	Permissions *string `json:"permissions,omitempty"`
 }
 
 // PathCreateResponse ...
