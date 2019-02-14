@@ -219,7 +219,7 @@ func getContentMd5(ctx context.Context, directoryURL azbfs.DirectoryURL, file az
 
 	var returnValueForError []byte = nil // If we get an error, we just act like there was no content MD5. If validation is set to fail on error, this will fail the transfer of this file later on (at the time of the MD5 check)
 
-	// convert format of what we have, if we have something
+	// convert format of what we have, if we have something in the PathListResponse from Service
 	if file.ContentMD5Base64 != nil {
 		value, err := base64.StdEncoding.DecodeString(*file.ContentMD5Base64)
 		if err != nil {
@@ -231,6 +231,10 @@ func getContentMd5(ctx context.Context, directoryURL azbfs.DirectoryURL, file az
 	// Fall back to making a new round trip to the server
 	// This is an interim measure, so that we can still validate MD5s even before they are being returned in the server's
 	// PathList response
+	// TODO: remove this in a future release, once we know that Service is always returning the MD5s in the PathListResponse.
+	//     Why? Because otherwise, if there's a file with NO MD5, we'll make a round-trip here, but that's pointless if we KNOW that
+	//     that Service is always returning them in the PathListResponse which we've already checked above.
+	//     As at mid-Feb 2019, we don't KNOW that (in fact it's not returning them in the PathListResponse) so we need this code for now.
 	fileURL := directoryURL.FileSystemURL().NewDirectoryURL(*file.Name)
 	props, err := fileURL.GetProperties(ctx)
 	if err != nil {
