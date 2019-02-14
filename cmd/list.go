@@ -76,7 +76,7 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(listContainerCmd)
-	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "outputRaw", "text", "format of the command's outputRaw, the choices include: text, json")
+	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "output", "text", "format of the command's output, the choices include: text, json")
 }
 
 // HandleListContainerCommand handles the list container command

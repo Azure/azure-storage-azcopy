@@ -943,7 +943,7 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("output")
-	cpCmd.PersistentFlags().MarkHidden("stdIn-enable")
+	cpCmd.PersistentFlags().MarkHidden("stdin-enable")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 }
