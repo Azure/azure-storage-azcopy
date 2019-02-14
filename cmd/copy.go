@@ -308,7 +308,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			var eBlobType common.BlobType
 			err := eBlobType.Parse(blobType)
 			if err != nil {
-				return cooked, fmt.Errorf("error parsing the excludeBlobType %s provided with excludeBlobTypeFlag ", blobType)
+				return cooked, fmt.Errorf("error parsing the exclude-blob-type %s provided with exclude-blob-type flag ", blobType)
 			}
 			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 		}
@@ -912,14 +912,14 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
-	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "fromTo", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
-	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "excludeBlobType", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
+	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
+	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blobType", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")

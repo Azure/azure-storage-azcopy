@@ -96,7 +96,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.FileBlob():
 		return URLToBlob
 	}
-	panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
+	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
