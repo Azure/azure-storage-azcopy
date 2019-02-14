@@ -92,17 +92,32 @@ func NewMultiSizeSlicePool(maxSliceLength uint32) ByteSlicePooler {
 }
 
 func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
-	// slot index is fast computation of the base-2 logarithm, rounded down
-	slotIndex = 32 - bits.LeadingZeros32(exactSliceLength)
-	// max cap in slot is the biggest number that maps to that slot index
-	// (e.g. slot index of 1 (which=2 to the power of 0) is 1, so (2 to the power of slotIndex)
-	//  is the first number that doesn't fit the slot)
-	maxCapInSlot = (1 << uint(slotIndex)) - 1
-
-	// check  TODO: replace this check with a proper unit test
-	if 32-bits.LeadingZeros32(uint32(maxCapInSlot)) != slotIndex {
-		panic("cross check of cap and slot index failed")
+	if exactSliceLength <= 0 {
+		panic("exact slice length must be greater than zero")
 	}
+	// raw slot index is fast computation of the base-2 logarithm, rounded down...
+	rawSlotIndex := 31 - bits.LeadingZeros32(exactSliceLength)
+
+	// ...but in most cases we actually want to round up.
+	// E.g. we want 255 to go into the same bucket as 256. Why? because we want exact
+	// powers of 2 to be the largest thing in each bucket, since usually
+	// we will be using powers of 2, and that means we will usually be using
+	// all the allocated capacity (i.e. len == cap).  That gives the most efficient use of RAM.
+	// The only time we don't want to round up, is if we already had an exact power of
+	// 2 to start with.
+	isExactPowerOfTwo := bits.OnesCount32(exactSliceLength) == 1
+	if isExactPowerOfTwo {
+		slotIndex = rawSlotIndex
+	} else {
+		slotIndex = rawSlotIndex + 1
+	}
+
+	// Max cap in slot is the biggest number that maps to that slot index
+	// (e.g. slot index of exactSliceLength=1 (which=2 to the power of 0)
+	// is 0 (because log-base2 of 1 == 0), so (2 to the power of slotIndex)
+	//  is the highest number that still fits the slot)
+	maxCapInSlot = 1 << uint(slotIndex)
+
 	return
 }
 
