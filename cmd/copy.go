@@ -99,12 +99,14 @@ type rawCopyCmdArgs struct {
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	preserveS2SProperties bool
+	s2sPreserveProperties bool
+	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
+	s2sGetS3PropertiesInBackend bool
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
-	// In such cases, use preserveS2SAccessTier=false to bypass the access tier copy.
+	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
 	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	preserveS2SAccessTier bool
+	s2sPreserveAccessTier bool
 }
 
 // validates and transform raw input into cooked input
@@ -263,11 +265,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
 		}
-		if cooked.preserveS2SProperties {
-			return cooked, fmt.Errorf("preserveS2SProperties is set to true while uploading")
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2sPreserveProperties is set to true while uploading")
 		}
-		if cooked.preserveS2SAccessTier {
-			return cooked, fmt.Errorf("preserveS2SAccessTier is set to true while uploading")
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is set to true while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -277,11 +279,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is set while uploading to Azure File")
 		}
-		if cooked.preserveS2SProperties {
-			return cooked, fmt.Errorf("preserveS2SProperties is set to true while uploading")
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2sPreserveProperties is set to true while uploading")
 		}
-		if cooked.preserveS2SAccessTier {
-			return cooked, fmt.Errorf("preserveS2SAccessTier is set to true while uploading")
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is set to true while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -298,11 +300,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
 		}
-		if cooked.preserveS2SProperties {
-			return cooked, fmt.Errorf("preserveS2SProperties is set to true while downloading")
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2sPreserveProperties is set to true while downloading")
 		}
-		if cooked.preserveS2SAccessTier {
-			return cooked, fmt.Errorf("preserveS2SAccessTier is set to true while downloading")
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is set to true while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
@@ -338,8 +340,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 	}
 
-	cooked.preserveS2SProperties = raw.preserveS2SProperties
-	cooked.preserveS2SAccessTier = raw.preserveS2SAccessTier
+	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
+	cooked.s2sGetS3PropertiesInBackend = raw.s2sGetS3PropertiesInBackend
+	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
 
 	return cooked, nil
 }
@@ -409,15 +412,17 @@ type cookedCopyCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
 
-	// whether user wants to preserves full properties during service to service copy, the default value is true.
+	// whether user wants to preserve full properties during service to service copy, the default value is true.
 	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
-	preserveS2SProperties bool
+	s2sPreserveProperties bool
+	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
+	s2sGetS3PropertiesInBackend bool
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
-	// In such cases, use preserveS2SAccessTier=false to bypass the access tier copy.
+	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
 	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	preserveS2SAccessTier bool
+	s2sPreserveAccessTier bool
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1003,11 +1008,12 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveS2SProperties, "preserve-s2s-properties", true, "preserves full properties during service to service copy, the default value is true. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
 		"For S3 and Azure File source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
-	cpCmd.PersistentFlags().BoolVar(&raw.preserveS2SAccessTier, "preserve-s2s-access-tier", true, "preserve access tier during service to service copy, the default value is true. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy, the default value is true. "+
 		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
-		"In the cases that setting access tier is not supported, please use preserveS2SAccessTier=false to bypass copying access tier. ")
+		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetS3PropertiesInBackend, "s2s-get-s3-properties-in-backend", true, "get S3 objects properties in backend. ")
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
@@ -1020,4 +1026,5 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("stdin-enable")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+	cpCmd.PersistentFlags().MarkHidden("get-s2s-properties-in-backend")
 }

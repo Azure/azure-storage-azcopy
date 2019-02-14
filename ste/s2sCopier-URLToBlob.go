@@ -28,44 +28,51 @@ import (
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
-func newURLToBlobCopier(jptm IJobPartTransferMgr, source string, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
-	targetBlobType := jptm.Info().SrcBlobType
-	blobTypeOverride := jptm.BlobTypeOverride()
+func newURLToBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+	targetBlobType := azblob.BlobBlockBlob // By default use block blob as destination type
 
-	if blobTypeOverride != common.EBlobType.None() && blobTypeOverride.ToAzBlobType() != targetBlobType {
-		targetBlobType = blobTypeOverride.ToAzBlobType()
+	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+		targetBlobType = blobSrcInfoProvider.BlobType()
+	}
+
+	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user
+
+	if blobTypeOverride != common.EBlobType.None() {
+		if blobTypeOverride.ToAzBlobType() != targetBlobType {
+			targetBlobType = blobTypeOverride.ToAzBlobType()
+		}
 		if jptm.ShouldLog(pipeline.LogInfo) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
 				pipeline.LogInfo,
-				source,
+				srcInfoProvider.RawSource(),
 				destination,
-				fmt.Sprintf("BlobType has been override from %q to %q for destination blob.", jptm.Info().SrcBlobType, blobTypeOverride))
+				fmt.Sprintf("BlobType has been explictly set to %q for destination blob.", blobTypeOverride))
 		}
 	}
 
-	if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
+	if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf, debug level verbose log
 		jptm.LogTransferInfo(
 			pipeline.LogDebug,
-			source,
+			srcInfoProvider.RawSource(),
 			destination,
 			fmt.Sprintf("BlobType %q is set for destination blob.", targetBlobType))
 	}
 
 	switch targetBlobType {
 	case azblob.BlobBlockBlob:
-		return newURLToBlockBlobCopier(jptm, source, destination, p, pacer)
+		return newURLToBlockBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
 	case azblob.BlobAppendBlob:
-		return newURLToAppendBlobCopier(jptm, source, destination, p, pacer)
+		return newURLToAppendBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
 	case azblob.BlobPageBlob:
-		return newURLToPageBlobCopier(jptm, source, destination, p, pacer)
+		return newURLToPageBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
 	default:
 		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
 				pipeline.LogDebug,
-				source,
+				srcInfoProvider.RawSource(),
 				destination,
 				fmt.Sprintf("BlobType %q is used for destination blob by default.", azblob.BlobBlockBlob))
 		}
-		return newURLToBlockBlobCopier(jptm, source, destination, p, pacer)
+		return newURLToBlockBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
 	}
 }

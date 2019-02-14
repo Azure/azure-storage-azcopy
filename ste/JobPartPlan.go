@@ -126,9 +126,11 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType) {
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType, s2sGetS3PropertiesInBackend bool) {
 	var err error
 	t := jpph.Transfer(transferIndex)
+
+	s2sGetS3PropertiesInBackend = t.S2SGetS3PropertiesInBackend
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 
@@ -254,6 +256,7 @@ type JobPartPlanTransfer struct {
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
+	S2SGetS3PropertiesInBackend bool
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

@@ -43,12 +43,9 @@ type urlToPageBlobCopier struct {
 	destBlobTier    azblob.AccessTierType
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, source string, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
 	// compute chunk count
-	info := jptm.Info()
-	srcSize := info.SourceSize
-	chunkSize := info.BlockSize
-
+	chunkSize := jptm.Info().BlockSize
 	// If the given chunk Size for the Job is invalild for page blob or greater than maximum page size,
 	// then set chunkSize as maximum pageSize.
 	chunkSize = common.Iffuint32(
@@ -56,29 +53,39 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, source string, destination
 		common.DefaultPageBlobChunkSize,
 		chunkSize)
 
+	srcSize := srcInfoProvider.SourceSize()
 	numChunks := getNumCopyChunks(srcSize, chunkSize)
 
-	srcURL, err := prepareSourceURL(jptm, info.Source)
+	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}
-	destURL, err := url.Parse(info.Destination)
+	destURL, err := url.Parse(destination)
 	if err != nil {
 		return nil, err
 	}
 
 	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
-	var azblobMetadata azblob.Metadata
-	if info.SrcMetadata != nil {
-		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()
+	srcProperties, err := srcInfoProvider.Properties()
+	if err != nil {
+		return nil, err
 	}
 
-	// Get blob tier properly.
-	destBlobTier := azblob.AccessTierNone
-	if info.SrcBlobType == azblob.BlobPageBlob {
-		destBlobTier = info.SrcBlobTier
+	var azblobMetadata azblob.Metadata
+	if srcProperties.SrcMetadata != nil {
+		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
 	}
+
+	// Get blob tier, by default set none.
+	destBlobTier := azblob.AccessTierNone
+	// If the source is page blob, preserve source's blob tier.
+	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
+			destBlobTier = blobSrcInfoProvider.BlobTier()
+		}
+	}
+	// If user set blob tier explictly for copy, use it accorcingly.
 	_, pageBlobTierOverride := jptm.BlobTiers()
 	if pageBlobTierOverride != common.EPageBlobTier.None() {
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
@@ -88,11 +95,11 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, source string, destination
 		jptm:            jptm,
 		srcURL:          *srcURL,
 		destPageBlobURL: destPageBlobURL,
-		srcSize:         info.SourceSize,
+		srcSize:         srcInfoProvider.SourceSize(),
 		chunkSize:       chunkSize,
 		numChunks:       numChunks,
 		pacer:           pacer,
-		srcHTTPHeaders:  info.SrcHTTPHeaders,
+		srcHTTPHeaders:  srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		srcMetadata:     azblobMetadata,
 		destBlobTier:    destBlobTier}, nil
 }

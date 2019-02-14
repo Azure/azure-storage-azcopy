@@ -51,7 +51,7 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
 type newJobXferWithUploaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory)
-type newJobXferWithS2SCopierFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory)
+type newJobXferWithS2SCopierFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory, sipf s2sSourceInfoProviderFactory)
 
 // Takes a multi-purpose up/downloader function, and makes it ready to use with a specific type of up/downloader
 func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory) newJobXfer {
@@ -65,9 +65,9 @@ func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df dow
 	}
 }
 
-func parameterizeS2SCopy(targetFunction newJobXferWithS2SCopierFactory, cpf s2sCopierFactory) newJobXfer {
+func parameterizeS2SCopy(targetFunction newJobXferWithS2SCopierFactory, cpf s2sCopierFactory, sipf s2sSourceInfoProviderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
-		targetFunction(jptm, pipeline, pacer, cpf)
+		targetFunction(jptm, pipeline, pacer, cpf, sipf)
 	}
 }
 
@@ -99,11 +99,11 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobFSLocal():
 		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():
-		fallthrough
+		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
 	case common.EFromTo.FileBlob():
-		fallthrough
+		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier, newDefaultSourceInfoProvider)
 	case common.EFromTo.S3Blob():
-		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier)
+		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 }

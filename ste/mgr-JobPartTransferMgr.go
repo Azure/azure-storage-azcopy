@@ -71,14 +71,20 @@ type TransferInfo struct {
 	Destination string
 
 	// Transfer info for S2S copy
-	SrcHTTPHeaders azblob.BlobHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
-	SrcMetadata    common.Metadata
-	SrcBlobType    azblob.BlobType
-	SrcBlobTier    azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
+	S2SGetS3PropertiesInBackend bool
+	S2SSrcProperties
+	// Blob
+	S2SSrcBlobType azblob.BlobType
+	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
 	// NumChunks is not used in case of AppendBlob transfer.
 	NumChunks uint16
+}
+
+type S2SSrcProperties struct {
+	SrcHTTPHeaders common.ResourceHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
+	SrcMetadata    common.Metadata
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -132,7 +138,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetS3PropertiesInBackend := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
@@ -183,14 +189,17 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	blockSize = common.Iffuint32(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	return TransferInfo{
-		BlockSize:      blockSize,
-		Source:         src,
-		SourceSize:     sourceSize,
-		Destination:    dst,
-		SrcHTTPHeaders: srcHTTPHeaders,
-		SrcMetadata:    srcMetadata,
-		SrcBlobType:    srcBlobType,
-		SrcBlobTier:    srcBlobTier,
+		BlockSize:                   blockSize,
+		Source:                      src,
+		SourceSize:                  sourceSize,
+		Destination:                 dst,
+		S2SGetS3PropertiesInBackend: s2sGetS3PropertiesInBackend,
+		S2SSrcProperties: S2SSrcProperties{
+			SrcHTTPHeaders: srcHTTPHeaders,
+			SrcMetadata:    srcMetadata,
+		},
+		S2SSrcBlobType: srcBlobType,
+		S2SSrcBlobTier: srcBlobTier,
 	}
 }
 

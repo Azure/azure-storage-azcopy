@@ -206,7 +206,7 @@ func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.C
 			}
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
-			if cca.preserveS2SProperties {
+			if cca.s2sPreserveProperties {
 				p, err := fileURL.GetProperties(ctx)
 				if err != nil {
 					return err

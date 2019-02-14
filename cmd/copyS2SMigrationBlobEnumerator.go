@@ -234,7 +234,7 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.
 			ContentMD5:         properties.ContentMD5,
 			Metadata:           common.FromAzBlobMetadataToCommonMetadata(metadata),
 			BlobType:           properties.BlobType,
-			BlobTier:           e.getAccessTier(properties.AccessTier, cca.preserveS2SAccessTier),
+			BlobTier:           e.getAccessTier(properties.AccessTier, cca.s2sPreserveAccessTier),
 		},
 		cca)
 }
@@ -255,13 +255,13 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url
 			ContentMD5:         properties.ContentMD5(),
 			Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata()),
 			BlobType:           properties.BlobType(),
-			BlobTier:           e.getAccessTier(azblob.AccessTierType(properties.AccessTier()), cca.preserveS2SAccessTier),
+			BlobTier:           e.getAccessTier(azblob.AccessTierType(properties.AccessTier()), cca.s2sPreserveAccessTier),
 		},
 		cca)
 }
 
-func (e *copyS2SMigrationBlobEnumerator) getAccessTier(accessTier azblob.AccessTierType, preserveS2SAccessTier bool) azblob.AccessTierType {
-	return azblob.AccessTierType(common.IffString(preserveS2SAccessTier, string(accessTier), string(azblob.AccessTierNone)))
+func (e *copyS2SMigrationBlobEnumerator) getAccessTier(accessTier azblob.AccessTierType, s2sPreserveAccessTier bool) azblob.AccessTierType {
+	return azblob.AccessTierType(common.IffString(s2sPreserveAccessTier, string(accessTier), string(azblob.AccessTierNone)))
 }
 
 func (e *copyS2SMigrationBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {

@@ -29,7 +29,7 @@ import (
 )
 
 // urlToRemote copies resource through URL to other remote persistence location.
-func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory) {
+func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory, sipf s2sSourceInfoProviderFactory) {
 
 	info := jptm.Info()
 	srcSize := info.SourceSize
@@ -40,8 +40,16 @@ func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cp
 		return
 	}
 
+	srcInfoProvider, err := sipf(jptm)
+	if err != nil {
+		jptm.LogS2SCopyError(info.Source, info.Destination, err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+
 	// step 2a. Create s2s copier
-	s2sCopier, err := cpf(jptm, info.Source, info.Destination, p, pacer)
+	s2sCopier, err := cpf(jptm, srcInfoProvider, info.Destination, p, pacer)
 	if err != nil {
 		jptm.LogS2SCopyError(info.Source, info.Destination, err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())

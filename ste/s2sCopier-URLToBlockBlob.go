@@ -52,38 +52,45 @@ type urlToBlockBlobCopier struct {
 	mu               *sync.Mutex // protects the fields below
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, source string, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
 	// compute chunk count
-	info := jptm.Info()
-	srcSize := info.SourceSize
-	chunkSize := info.BlockSize
-
+	chunkSize := jptm.Info().BlockSize
+	srcSize := srcInfoProvider.SourceSize()
 	numChunks := getNumCopyChunks(srcSize, chunkSize)
 	if numChunks > common.MaxNumberOfBlocksPerBlob {
 		return nil, fmt.Errorf("BlockSize %d for copying source of size %d is not correct. Number of blocks will exceed the limit", chunkSize, srcSize)
 	}
 
-	srcURL, err := prepareSourceURL(jptm, info.Source)
+	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}
-	destURL, err := url.Parse(info.Destination)
+	destURL, err := url.Parse(destination)
 	if err != nil {
 		return nil, err
 	}
 
 	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
 
-	var azblobMetadata azblob.Metadata
-	if info.SrcMetadata != nil {
-		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()
+	srcProperties, err := srcInfoProvider.Properties()
+	if err != nil {
+		return nil, err
 	}
 
-	// Get blob tier properly.
-	destBlobTier := azblob.AccessTierNone
-	if info.SrcBlobType == azblob.BlobBlockBlob {
-		destBlobTier = info.SrcBlobTier
+	var azblobMetadata azblob.Metadata
+	if srcProperties.SrcMetadata != nil {
+		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
 	}
+
+	// Get blob tier, by default set none.
+	destBlobTier := azblob.AccessTierNone
+	// If the source is block blob, preserve source's blob tier.
+	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+		if blobSrcInfoProvider.BlobType() == azblob.BlobBlockBlob {
+			destBlobTier = blobSrcInfoProvider.BlobTier()
+		}
+	}
+	// If user set blob tier explictly for copy, use it accorcingly.
 	blockBlobTierOverride, _ := jptm.BlobTiers()
 	if blockBlobTierOverride != common.EBlockBlobTier.None() {
 		destBlobTier = blockBlobTierOverride.ToAccessTierType()
@@ -97,7 +104,7 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, source string, destinatio
 		numChunks:        numChunks,
 		pacer:            pacer,
 		blockIDs:         make([]string, numChunks),
-		srcHTTPHeaders:   info.SrcHTTPHeaders,
+		srcHTTPHeaders:   srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		srcMetadata:      azblobMetadata,
 		destBlobTier:     destBlobTier,
 		mu:               &sync.Mutex{}}, nil

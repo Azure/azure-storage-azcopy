@@ -284,7 +284,9 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 
 		// S3's list operations doesn't return object's properties, such as: content-encoding and etc.
 		// So azcopy need additional get request to collect these properties.
-		if cca.preserveS2SProperties {
+		// When get S2S properties in backend is not enabled, get properties during enumerating.
+		if cca.s2sPreserveProperties && !cca.s2sGetS3PropertiesInBackend {
+			fmt.Println("Here in s2sPreserveProperties")
 			var err error
 			objectInfo, err = s3Client.StatObject(bucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {
@@ -320,20 +322,21 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 
 func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo,
 	cca *cookedCopyCmdArgs) error {
-	oie := objectInfoExtension{*objectInfo}
+	oie := common.ObjectInfoExtension{ObjectInfo: *objectInfo}
 
 	copyTransfer := common.CopyTransfer{
-		Source:             srcURL.String(),
-		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
-		LastModifiedTime:   objectInfo.LastModified,
-		SourceSize:         objectInfo.Size,
-		ContentType:        objectInfo.ContentType,
-		ContentEncoding:    oie.ContentEncoding(),
-		ContentDisposition: oie.ContentDisposition(),
-		ContentLanguage:    oie.ContentLanguage(),
-		CacheControl:       oie.CacheControl(),
-		ContentMD5:         oie.ContentMD5(),
-		Metadata:           oie.NewCommonMetadata()}
+		Source:                      srcURL.String(),
+		Destination:                 gCopyUtil.stripSASFromBlobUrl(destURL).String(),
+		LastModifiedTime:            objectInfo.LastModified,
+		SourceSize:                  objectInfo.Size,
+		ContentType:                 objectInfo.ContentType,
+		ContentEncoding:             oie.ContentEncoding(),
+		ContentDisposition:          oie.ContentDisposition(),
+		ContentLanguage:             oie.ContentLanguage(),
+		CacheControl:                oie.CacheControl(),
+		ContentMD5:                  oie.ContentMD5(),
+		Metadata:                    oie.NewCommonMetadata(),
+		S2SGetS3PropertiesInBackend: cca.s2sGetS3PropertiesInBackend}
 
 	return e.addTransfer(copyTransfer, cca)
 }

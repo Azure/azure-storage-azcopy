@@ -43,12 +43,9 @@ type urlToAppendBlobCopier struct {
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, source string, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
 	// compute chunk count
-	info := jptm.Info()
-	srcSize := info.SourceSize
-	chunkSize := info.BlockSize
-
+	chunkSize := jptm.Info().BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
 	// then set chunkSize as 4 MB.
 	chunkSize = common.Iffuint32(
@@ -56,22 +53,28 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, source string, destinati
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
 
+	srcSize := srcInfoProvider.SourceSize()
 	numChunks := getNumCopyChunks(srcSize, chunkSize)
 
-	srcURL, err := prepareSourceURL(jptm, info.Source)
+	srcURL, err := srcInfoProvider.PreSignedSourceURL()
 	if err != nil {
 		return nil, err
 	}
-	destURL, err := url.Parse(info.Destination)
+	destURL, err := url.Parse(destination)
 	if err != nil {
 		return nil, err
 	}
 
 	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
 
+	srcProperties, err := srcInfoProvider.Properties()
+	if err != nil {
+		return nil, err
+	}
+
 	var azblobMetadata azblob.Metadata
-	if info.SrcMetadata != nil {
-		azblobMetadata = info.SrcMetadata.ToAzBlobMetadata()
+	if srcProperties.SrcMetadata != nil {
+		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
 	}
 
 	return &urlToAppendBlobCopier{
@@ -81,7 +84,7 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, source string, destinati
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
-		srcHTTPHeaders:         info.SrcHTTPHeaders,
+		srcHTTPHeaders:         srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		srcMetadata:            azblobMetadata,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }

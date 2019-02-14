@@ -650,8 +650,9 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType azblob.BlobType
-	BlobTier azblob.AccessTierType
+	BlobType                    azblob.BlobType
+	BlobTier                    azblob.AccessTierType
+	S2SGetS3PropertiesInBackend bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -700,4 +701,28 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	}
 
 	return result, nil
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Common resource's HTTP headers stands for properties used in AzCopy.
+type ResourceHTTPHeaders struct {
+	ContentType        string
+	ContentMD5         []byte
+	ContentEncoding    string
+	ContentLanguage    string
+	ContentDisposition string
+	CacheControl       string
+}
+
+// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
+func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
+	return azblob.BlobHTTPHeaders{
+		ContentType:        h.ContentType,
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
 }
