@@ -136,6 +136,14 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 
 	// TODO: the go http client has a problem with PATCH and content-length header
 	//                we should investigate and report the issue
+	// Note: the "offending" code in the Go SDK is: func (t *transferWriter) shouldSendContentLength() bool
+	// That code suggests that a workaround would be to specify a Transfer-Encoding of "identity",
+	// but we haven't yet found any way to actually set that header, so that workaround does't
+	// seem to work. (Just setting Transfer-Encoding like a normal header doesn't seem to work.)
+	// Looks like it might actually be impossible to set
+	// the Transfer-Encoding header, because bradfitz wrote: "as a general rule of thumb, you don't get to mess
+	// with [that field] too much. The net/http package owns much of its behavior."
+	// https://grokbase.com/t/gg/golang-nuts/15bg66ryd9/go-nuts-cant-write-encoding-other-than-chunked-in-the-transfer-encoding-field-of-http-request
 	overrideHttpVerb := "PATCH"
 
 	// TransactionalContentMD5 isn't supported currently.
@@ -164,6 +172,7 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 
 	// TODO: the go http client has a problem with PATCH and content-length header
 	//       we should investigate and report the issue
+	// See similar todo, with larger comments, in AppendData
 	overrideHttpVerb := "PATCH"
 
 	// TODO: feb 2019 API update: review the use of closeParameter here. Should it be true?
