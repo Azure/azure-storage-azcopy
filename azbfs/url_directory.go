@@ -84,7 +84,11 @@ func (d DirectoryURL) Delete(ctx context.Context, continuationString *string, re
 
 // GetProperties returns the directory's metadata and system properties.
 func (d DirectoryURL) GetProperties(ctx context.Context) (*DirectoryGetPropertiesResponse, error) {
-	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, PathGetPropertiesActionGetStatus, nil, nil,
+	// Action MUST be "none", not "getStatus" because the latter does not include the MD5, and
+	// sometimes we call this method on things that are actually files
+	action := PathGetPropertiesActionNone
+
+	resp, err := d.directoryClient.GetProperties(ctx, d.filesystem, d.pathParameter, action, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil)
 	return (*DirectoryGetPropertiesResponse)(resp), err
 }
