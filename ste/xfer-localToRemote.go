@@ -22,6 +22,7 @@ package ste
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"os"
 
@@ -93,6 +94,20 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		return
 	}
 	defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
+
+	i, err := os.Stat(info.Source)
+	if err != nil {
+		jptm.LogUploadError(info.Source, info.Destination, "Couldn't stat source-"+err.Error(), 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
+	if i.ModTime() != jptm.LastModifiedTime() {
+		jptm.LogUploadError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
+		jptm.SetStatus(common.ETransferStatus.Failed())
+		jptm.ReportTransferDone()
+		return
+	}
 
 	// *****
 	// Error-handling rules change here.
@@ -215,6 +230,17 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 // Most of the processing is delegated to the uploader object, since details will
 // depend on the destination type
 func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
+
+	if jptm.TransferStatus() > 0 {
+		// Stat the file again to see if it was changed during transfer. If it was, mark the transfer as failed.
+		i, err := os.Stat(jptm.Info().Source)
+		if err != nil {
+			jptm.FailActiveUpload("epilogueWithCleanupUpload", err)
+		}
+		if i.ModTime() != jptm.LastModifiedTime() {
+			jptm.FailActiveUpload("epilogueWithCleanupUpload", errors.New("source modified during transfer"))
+		}
+	}
 
 	ul.Epilogue()
 

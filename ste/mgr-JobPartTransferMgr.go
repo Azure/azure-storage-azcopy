@@ -21,6 +21,7 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
+	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	MD5ValidationOption() common.HashValidationOption
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
@@ -211,6 +212,10 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer []byte) (headers azbl
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
+}
+
+func (jptm * jobPartTransferMgr) LastModifiedTime() time.Time {
+	return time.Unix(0, jptm.jobPartPlanTransfer.ModifiedTime)
 }
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.

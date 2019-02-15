@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"errors"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -51,6 +52,12 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
+		}
+
+		// Verify that the file has not been changed via a client side LMT check
+		if get.LastModified() != jptm.LastModifiedTime() {
+			jptm.FailActiveDownload("Azure File modified during transfer",
+				errors.New("Azure File modified during transfer"))
 		}
 
 		// step 2: Enqueue the response body to be written out to disk
