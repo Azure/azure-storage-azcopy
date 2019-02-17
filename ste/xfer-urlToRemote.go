@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -98,7 +97,7 @@ func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cp
 
 	// step 4: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupCopy(jptm, s2sCopier) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s2sCopier) })
 
 	// Step 5: Schedule to copy each chunk.
 	chunkIDCount := int32(0)
@@ -117,7 +116,7 @@ func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cp
 			// Run prologue before first chunk is scheduled
 			// There is deliberately no error return value from the Prologue.
 			// If it failed, the Prologue itself must call jptm.FailActiveS2SCopy.
-			s2sCopier.Prologue()
+			s2sCopier.Prologue(PrologueState{})
 		}
 
 		// schedule the chunk job/msg
@@ -132,42 +131,4 @@ func urlToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, cp
 	if chunkIDCount != int32(numChunks) {
 		jptm.Panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkIDCount, info.Source, srcSize))
 	}
-}
-
-// Complete epilogue. Handles both success and failure.
-// Most of the processing is delegated to the s2sCopier object, since details will
-// depend on the destination type
-func epilogueWithCleanupCopy(jptm IJobPartTransferMgr, scp s2sCopier) {
-	if jptm.ShouldLog(pipeline.LogDebug) {
-		jptm.Log(pipeline.LogDebug, "Starting epilogue")
-	}
-
-	scp.Epilogue()
-
-	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
-	if jptm.TransferStatus() == 0 {
-		jptm.Panic(errors.New("status is NotStarted in epilogue"))
-	}
-
-	if jptm.TransferStatus() > 0 {
-		// We know all chunks are done (because this routine was called)
-		// and we know the transfer didn't fail (because just checked its status above),
-		// so it must have succeeded. So make sure its not left "in progress" state
-		jptm.SetStatus(common.ETransferStatus.Success())
-
-		// Final logging
-		if jptm.ShouldLog(pipeline.LogInfo) {
-			jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
-		}
-		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")
-		}
-	} else {
-		if jptm.ShouldLog(pipeline.LogDebug) {
-			jptm.Log(pipeline.LogDebug, "Finalizing Transfer Cancellation")
-		}
-	}
-
-	// successful or unsuccessful, it's definitely over
-	jptm.ReportTransferDone()
 }

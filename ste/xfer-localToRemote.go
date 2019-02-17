@@ -104,8 +104,8 @@ func localToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// ******
 
 	// step 5: tell jptm what to expect, and how to clean up at the end
-	jptm.SetNumberOfChunks(ul.NumChunks())
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupUpload(jptm, ul) })
+	jptm.SetNumberOfChunks(numChunks)
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, ul) })
 
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
 	//     which means that we can't exit this loop early, if there is a cancellation or failure. Instead we
@@ -178,7 +178,7 @@ func scheduleUploadChunks(jptm IJobPartTransferMgr, srcName string, srcFile comm
 			// Run prologue before first chunk is scheduled
 			// There is deliberately no error return value from the Prologue.
 			// If it failed, the Prologue itself must call jptm.FailActiveUpload.
-			ul.Prologue(leadingBytes)
+			ul.Prologue(PrologueState{leadingBytes: leadingBytes})
 		}
 
 		// schedule the chunk job/msg
@@ -212,11 +212,9 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 }
 
 // Complete epilogue. Handles both success and failure.
-// Most of the processing is delegated to the uploader object, since details will
-// depend on the destination type
-func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
+func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase) {
 
-	ul.Epilogue()
+	s.Epilogue()
 
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 	if jptm.TransferStatus() == 0 {
@@ -231,7 +229,13 @@ func epilogueWithCleanupUpload(jptm IJobPartTransferMgr, ul uploader) {
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
-			jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+			if _, ok := s.(s2sCopier); ok {
+				jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
+			} else if _, ok := s.(uploader); ok {
+				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+			} else {
+				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
+			}
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")

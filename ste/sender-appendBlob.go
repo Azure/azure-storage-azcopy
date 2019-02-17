@@ -31,21 +31,22 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-type urlToAppendBlobCopier struct {
+type appendBlobSenderBase struct {
 	jptm                   IJobPartTransferMgr
-	srcURL                 url.URL
 	destAppendBlobURL      azblob.AppendBlobURL
 	chunkSize              uint32
 	numChunks              uint32
 	pacer                  *pacer
-	srcHTTPHeaders         azblob.BlobHTTPHeaders
-	srcMetadata            azblob.Metadata
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+type appendBlockFunc = func()
+
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (*appendBlobSenderBase, error) {
+	transferInfo := jptm.Info()
+
 	// compute chunk count
-	chunkSize := jptm.Info().BlockSize
+	chunkSize := transferInfo.BlockSize
 	// If the given chunk Size for the Job is greater than maximum append blob block size i.e 4 MB,
 	// then set chunkSize as 4 MB.
 	chunkSize = common.Iffuint32(
@@ -53,13 +54,9 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourc
 		common.MaxAppendBlobBlockSize,
 		chunkSize)
 
-	srcSize := srcInfoProvider.SourceSize()
-	numChunks := getNumCopyChunks(srcSize, chunkSize)
+	srcSize := transferInfo.SourceSize
+	numChunks := getNumChunks(srcSize, chunkSize)
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
 	destURL, err := url.Parse(destination)
 	if err != nil {
 		return nil, err
@@ -67,90 +64,58 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourc
 
 	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
 
-	srcProperties, err := srcInfoProvider.Properties()
-	if err != nil {
-		return nil, err
-	}
-
-	var azblobMetadata azblob.Metadata
-	if srcProperties.SrcMetadata != nil {
-		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
-	}
-
-	return &urlToAppendBlobCopier{
+	return &appendBlobSenderBase{
 		jptm:                   jptm,
-		srcURL:                 *srcURL,
 		destAppendBlobURL:      destAppendBlobURL,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
-		srcHTTPHeaders:         srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		srcMetadata:            azblobMetadata,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
-func (c *urlToAppendBlobCopier) ChunkSize() uint32 {
-	return c.chunkSize
+func (s *appendBlobSenderBase) ChunkSize() uint32 {
+	return s.chunkSize
 }
 
-func (c *urlToAppendBlobCopier) NumChunks() uint32 {
-	return c.numChunks
+func (s *appendBlobSenderBase) NumChunks() uint32 {
+	return s.numChunks
 }
 
-func (c *urlToAppendBlobCopier) RemoteFileExists() (bool, error) {
-	return remoteObjectExists(c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{}))
+func (s *appendBlobSenderBase) RemoteFileExists() (bool, error) {
+	return remoteObjectExists(s.destAppendBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
-func (c *urlToAppendBlobCopier) Prologue() {
-	jptm := c.jptm
-
-	if _, err := c.destAppendBlobURL.Create(jptm.Context(), c.srcHTTPHeaders, c.srcMetadata, azblob.BlobAccessConditions{}); err != nil {
-		jptm.FailActiveS2SCopy("Creating blob", err)
-		return
-	}
-}
-
-// Returns a chunk-func for blob copies
-func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
+// Returns a chunk-func for sending append blob to remote
+func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID, blockIndex int32, chunkIsWholeFile bool, appendBlock appendBlockFunc) chunkFunc {
 	// Copy must be totally sequential for append blobs
 	// The way we enforce that is simple: we won't even CREATE
 	// a chunk func, until all previously-scheduled chunk funcs have completed
 	// Here we block until there are no other chunkfuncs in existence for this blob
-	err := c.soleChunkFuncSemaphore.Acquire(c.jptm.Context(), 1)
+	err := s.soleChunkFuncSemaphore.Acquire(s.jptm.Context(), 1)
 	if err != nil {
 		// Must have been cancelled
 		// We must still return a chunk func, so return a no-op one
-		return createCopyChunkFunc(c.jptm, id, func() {})
+		return createSendToRemoteChunkFunc(s.jptm, id, func() {})
 	}
 
-	return createCopyChunkFunc(c.jptm, id, func() {
+	return createSendToRemoteChunkFunc(s.jptm, id, func() {
 
 		// Here, INSIDE the chunkfunc, we release the semaphore when we have finished running
-		defer c.soleChunkFuncSemaphore.Release(1)
+		defer s.soleChunkFuncSemaphore.Release(1)
 
-		jptm := c.jptm
+		jptm := s.jptm
 
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
 			return
 		}
 
-		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		s2sPacer := newS2SPacer(c.pacer)
-
-		// Set the latest service version from sdk as service version in the context, to use AppendBlockFromURL API.
-		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-		_, err = c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.AppendBlobAccessConditions{}, nil)
-		if err != nil {
-			jptm.FailActiveS2SCopy("Appending block from URL", err)
-			return
-		}
-		s2sPacer.Done(adjustedChunkSize)
+		appendBlock()
 	})
 }
 
-func (c *urlToAppendBlobCopier) Epilogue() {
-	jptm := c.jptm
+func (s *appendBlobSenderBase) epilogue() {
+	jptm := s.jptm
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure
@@ -160,9 +125,9 @@ func (c *urlToAppendBlobCopier) Epilogue() {
 		//    situation. Deletion has very different semantics then, compared to not deleting.
 		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFunc()
-		_, err := c.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		_, err := s.destAppendBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 		if err != nil {
-			jptm.LogError(c.destAppendBlobURL.String(), "Delete (incomplete) Append Blob ", err)
+			jptm.LogError(s.destAppendBlobURL.String(), "Delete (incomplete) Append Blob ", err)
 		}
 	}
 }
