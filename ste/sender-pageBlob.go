@@ -92,15 +92,11 @@ func (s *pageBlobSenderBase) prologue(httpHeader azblob.BlobHTTPHeaders, metadat
 
 	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
 	if accessTier != azblob.AccessTierNone {
-		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
-		var blockBlobTier common.BlockBlobTier
-		if err := blockBlobTier.Parse(string(accessTier)); err != nil {
-			// Set the latest service version from sdk as service version in the context.
-			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, accessTier, azblob.LeaseAccessConditions{}); err != nil {
-				logger.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-				return
-			}
+		// Set the latest service version from sdk as service version in the context.
+		ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, accessTier, azblob.LeaseAccessConditions{}); err != nil {
+			logger.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+			return
 		}
 	}
 }

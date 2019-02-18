@@ -43,15 +43,13 @@ type ISenderBase interface {
 	// Prologue is called automatically before the first chunkFunc is generated.
 	// Implementation should do any initialization that is necessary - e.g.
 	// creating the remote file for those destinations that require an explicit
-	// creation step. Implementations should call jptm.FailActiveS2SCopy if anything
-	// goes wrong during the prologue.
+	// creation step.
 	Prologue(state PrologueState)
 
 	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
 	// Implementation should interact with its jptm to do
 	// post-success processing if transfer has been successful so far,
-	// or post-failure processing otherwise.  Implementations should
-	// use jptm.FailActiveS2SCopy if anything fails during the epilogue.
+	// or post-failure processing otherwise.
 	Epilogue()
 }
 

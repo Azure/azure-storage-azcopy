@@ -98,6 +98,7 @@ func (s *blockBlobSenderBase) generatePutBlockToRemoteFunc(id common.ChunkID, bl
 		// step 2: save the block ID into the list of block IDs
 		s.setBlockID(blockIndex, encodedBlockID)
 
+		// step 3: put block to remote
 		putBlock(encodedBlockID)
 	})
 }
