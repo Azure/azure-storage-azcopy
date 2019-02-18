@@ -41,12 +41,12 @@ type pageBlobSenderBase struct {
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
 	// the properties of the local file
-	headersToApply	azblob.BlobHTTPHeaders
+	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
 	destBlobTier    azblob.AccessTierType
 }
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfo sourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider sourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -68,7 +68,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 
 	destPageBlobURL := azblob.NewPageBlobURL(*destURL, p)
 
-	props, err := srcInfo.Properties()
+	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +88,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		chunkSize:       chunkSize,
 		numChunks:       numChunks,
 		pacer:           pacer,
-		headersToApply:  props.SrcHTTPHeaders.ToAzBlobHeaders(),
+		headersToApply:  props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply: props.SrcMetadata.ToAzBlobMetadata(),
 		destBlobTier:    destBlobTier,
 	}, nil
@@ -110,7 +110,7 @@ func (s *pageBlobSenderBase) Prologue(ps PrologueState) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
-		s.headersToApply.ContentType = ps.GetInferredContentType()
+		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
 	}
 
 	if _, err := s.destPageBlobURL.Create(s.jptm.Context(),
@@ -118,10 +118,8 @@ func (s *pageBlobSenderBase) Prologue(ps PrologueState) {
 		0,
 		s.headersToApply,
 		s.metadataToApply,
-		azblob.BlobAccessConditions{});
-
-	err != nil {
-		s.jptm.FailActiveUpload("Creating blob", err)
+		azblob.BlobAccessConditions{}); err != nil {
+		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 
@@ -130,7 +128,7 @@ func (s *pageBlobSenderBase) Prologue(ps PrologueState) {
 		// Set the latest service version from sdk as service version in the context.
 		ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-			logger.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+			s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
 			return
 		}
 	}

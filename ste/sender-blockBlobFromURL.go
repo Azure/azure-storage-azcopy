@@ -23,6 +23,7 @@ package ste
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -33,15 +34,20 @@ import (
 type urlToBlockBlobCopier struct {
 	blockBlobSenderBase
 
-	srcURL         url.URL
-	srcHTTPHeaders azblob.BlobHTTPHeaders
-	srcMetadata    azblob.Metadata
-	destBlobTier   azblob.AccessTierType
-	logger         ISenderLogger
+	srcURL url.URL
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer)
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider s2sSourceInfoProvider) (s2sCopier, error) {
+	// Get blob tier, by default set none.
+	destBlobTier := azblob.AccessTierNone
+	// If the source is block blob, preserve source's blob tier.
+	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+		if blobSrcInfoProvider.BlobType() == azblob.BlobBlockBlob {
+			destBlobTier = blobSrcInfoProvider.BlobTier()
+		}
+	}
+
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
@@ -51,41 +57,9 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSource
 		return nil, err
 	}
 
-	srcProperties, err := srcInfoProvider.Properties()
-	if err != nil {
-		return nil, err
-	}
-
-	var azblobMetadata azblob.Metadata
-	if srcProperties.SrcMetadata != nil {
-		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
-	}
-
-	// Get blob tier, by default set none.
-	destBlobTier := azblob.AccessTierNone
-	// If the source is block blob, preserve source's blob tier.
-	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
-		if blobSrcInfoProvider.BlobType() == azblob.BlobBlockBlob {
-			destBlobTier = blobSrcInfoProvider.BlobTier()
-		}
-	}
-	// If user set blob tier explictly for copy, use it accorcingly.
-	blockBlobTierOverride, _ := jptm.BlobTiers()
-	if blockBlobTierOverride != common.EBlockBlobTier.None() {
-		destBlobTier = blockBlobTierOverride.ToAccessTierType()
-	}
-
 	return &urlToBlockBlobCopier{
 		blockBlobSenderBase: *senderBase,
-		srcURL:              *srcURL,
-		srcHTTPHeaders:      srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		srcMetadata:         azblobMetadata,
-		destBlobTier:        destBlobTier,
-		logger:              &s2sCopierLogger{jptm: jptm}}, nil
-}
-
-func (c *urlToBlockBlobCopier) Prologue(state PrologueState) {
-	// block blobs don't need any work done at this stage
+		srcURL:              *srcURL}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -100,10 +74,6 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
 
-func (c *urlToBlockBlobCopier) Epilogue() {
-	c.epilogue(c.srcHTTPHeaders, c.srcMetadata, c.destBlobTier, c.logger)
-}
-
 // generateCreateEmptyBlob generates a func to create empty blob in destination.
 // This could be replaced by sync version of copy blob from URL.
 func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkFunc {
@@ -112,8 +82,8 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		// Create blob and finish.
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.srcHTTPHeaders, c.srcMetadata, azblob.BlobAccessConditions{}); err != nil {
-			jptm.FailActiveS2SCopy("Creating empty blob", err)
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
+			jptm.FailActiveSend("Creating empty blob", err)
 			return
 		}
 	})
@@ -121,8 +91,15 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 
 // generatePutBlockFromURL generates a func to copy the block of src data from given startIndex till the given chunkSize.
 func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {
+	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+		// step 1: generate block ID
+		blockID := common.NewUUID().String()
+		encodedBlockID := base64.StdEncoding.EncodeToString([]byte(blockID))
 
-	putBlockFromURL := func(encodedBlockID string) {
+		// step 2: save the block ID into the list of block IDs
+		c.setBlockID(blockIndex, encodedBlockID)
+
+		// step 3: put block to remote
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		s2sPacer := newS2SPacer(c.pacer)
 
@@ -130,11 +107,9 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
 		if err != nil {
-			c.jptm.FailActiveS2SCopy("Staging block from URL", err)
+			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
 		s2sPacer.Done(adjustedChunkSize)
-	}
-
-	return c.generatePutBlockToRemoteFunc(id, blockIndex, putBlockFromURL)
+	})
 }

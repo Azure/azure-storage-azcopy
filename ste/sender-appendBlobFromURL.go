@@ -32,14 +32,11 @@ import (
 type urlToAppendBlobCopier struct {
 	appendBlobSenderBase
 
-	srcURL         url.URL
-	srcHTTPHeaders azblob.BlobHTTPHeaders
-	srcMetadata    azblob.Metadata
-	logger         ISenderLogger
+	srcURL url.URL
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer)
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider s2sSourceInfoProvider) (s2sCopier, error) {
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -48,26 +45,10 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourc
 	if err != nil {
 		return nil, err
 	}
-	srcProperties, err := srcInfoProvider.Properties()
-	if err != nil {
-		return nil, err
-	}
-
-	var azblobMetadata azblob.Metadata
-	if srcProperties.SrcMetadata != nil {
-		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
-	}
 
 	return &urlToAppendBlobCopier{
 		appendBlobSenderBase: *senderBase,
-		srcURL:               *srcURL,
-		srcHTTPHeaders:       srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		srcMetadata:          azblobMetadata,
-		logger:               &s2sCopierLogger{jptm: jptm}}, nil
-}
-
-func (c *urlToAppendBlobCopier) Prologue(state PrologueState) {
-	c.prologue(c.srcHTTPHeaders, c.srcMetadata, c.logger)
+		srcURL:               *srcURL}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -87,9 +68,4 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 	}
 
 	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)
-}
-
-func (c *urlToAppendBlobCopier) Epilogue() {
-	// Temporarily no behavior diff. Additional logic might be added for changing source validation
-	c.epilogue()
 }

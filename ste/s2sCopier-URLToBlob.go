@@ -60,11 +60,11 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoP
 
 	switch targetBlobType {
 	case azblob.BlobBlockBlob:
-		return newURLToBlockBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
+		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	case azblob.BlobAppendBlob:
-		return newURLToAppendBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
+		return newURLToAppendBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	case azblob.BlobPageBlob:
-		return newURLToPageBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
+		return newURLToPageBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	default:
 		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
 			jptm.LogTransferInfo(
@@ -73,6 +73,6 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoP
 				destination,
 				fmt.Sprintf("BlobType %q is used for destination blob by default.", azblob.BlobBlockBlob))
 		}
-		return newURLToBlockBlobCopier(jptm, srcInfoProvider, destination, p, pacer)
+		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	}
 }

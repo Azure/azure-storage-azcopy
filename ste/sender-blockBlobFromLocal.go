@@ -22,6 +22,7 @@ package ste
 
 import (
 	"bytes"
+	"encoding/base64"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -30,28 +31,15 @@ import (
 
 type blockBlobUploader struct {
 	blockBlobSenderBase
-
-	leadingBytes []byte // no lock because is written before first chunk-func go routine is scheduled
-	logger       ISenderLogger
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
-	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer)
+	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
 	if err != nil {
 		return nil, err
 	}
 
-	return &blockBlobUploader{blockBlobSenderBase: *senderBase, logger: &uploaderLogger{jptm: jptm}}, nil
-}
-
-func (u *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
-	u.leadingBytes = leadingBytes
-}
-
-func (u *blockBlobUploader) Prologue(state PrologueState) {
-	// block blobs don't need any work done at this stage
-	// But we do need to remember the leading bytes because we'll need them later
-	u.leadingBytes = state.leadingBytes
+	return &blockBlobUploader{blockBlobSenderBase: *senderBase}, nil
 }
 
 // Returns a chunk-func for blob uploads
@@ -70,7 +58,15 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 
 // generatePutBlock generates a func to upload the block of src data from given startIndex till the given chunkSize.
 func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
-	putBlockFromLocal := func(encodedBlockID string) {
+	return createSendToRemoteChunkFunc(u.jptm, id, func() {
+		// step 1: generate block ID
+		blockID := common.NewUUID().String()
+		encodedBlockID := base64.StdEncoding.EncodeToString([]byte(blockID))
+
+		// step 2: save the block ID into the list of block IDs
+		u.setBlockID(blockIndex, encodedBlockID)
+
+		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		_, err := u.destBlockBlobURL.StageBlock(u.jptm.Context(), encodedBlockID, body, azblob.LeaseAccessConditions{}, nil)
@@ -78,9 +74,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 			u.jptm.FailActiveUpload("Staging block", err)
 			return
 		}
-	}
-
-	return u.generatePutBlockToRemoteFunc(id, blockIndex, putBlockFromLocal)
+	})
 }
 
 // generates PUT Blob (for a blob that fits in a single put request)
@@ -89,17 +83,14 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
-		// Get blob http headers and metadata.
-		blobHTTPHeader, metaData := jptm.BlobDstData(u.leadingBytes)
-
 		// Upload the blob
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
 		if jptm.Info().SourceSize == 0 {
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), blobHTTPHeader, metaData, azblob.BlobAccessConditions{})
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{})
 		} else {
 			body := newLiteRequestBodyPacer(reader, u.pacer)
-			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, blobHTTPHeader, metaData, azblob.BlobAccessConditions{})
+			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{})
 		}
 
 		// if the put blob is a failure, update the transfer status to failed
@@ -108,13 +99,4 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			return
 		}
 	})
-}
-
-func (u *blockBlobUploader) Epilogue() {
-	// fetching the blob http headers with content-type, content-encoding attributes
-	// fetching the metadata passed with the JobPartOrder
-	blobHTTPHeader, metadata := u.jptm.BlobDstData(u.leadingBytes)
-	blockBlobTier, _ := u.jptm.BlobTiers()
-
-	u.epilogue(blobHTTPHeader, metadata, blockBlobTier.ToAccessTierType(), u.logger)
 }

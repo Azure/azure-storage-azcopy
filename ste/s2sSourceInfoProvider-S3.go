@@ -84,8 +84,8 @@ func (p *s3SourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	return p.s3Client.PresignedGetObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, defaultPresignExpires, url.Values{})
 }
 
-func (p *s3SourceInfoProvider) Properties() (*S2SSrcProperties, error) {
-	srcProperties := S2SSrcProperties{
+func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
+	srcProperties := SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
 	}
@@ -97,7 +97,7 @@ func (p *s3SourceInfoProvider) Properties() (*S2SSrcProperties, error) {
 			return nil, err
 		}
 		oie := common.ObjectInfoExtension{ObjectInfo: objectInfo}
-		srcProperties = S2SSrcProperties{
+		srcProperties = SrcProperties{
 			SrcHTTPHeaders: common.ResourceHTTPHeaders{
 				ContentType:        objectInfo.ContentType,
 				ContentEncoding:    oie.ContentEncoding(),

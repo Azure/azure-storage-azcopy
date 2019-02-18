@@ -32,11 +32,10 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL         url.URL
-	logger         ISenderLogger
+	srcURL url.URL
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider s2sSourceInfoProvider) (s2sCopier, error) {
 
 	destBlobTier := azblob.AccessTierNone
 	// If the source is page blob, preserve source's blob tier.
@@ -58,8 +57,7 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceI
 
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase: *senderBase,
-		srcURL:         *srcURL,
-		logger:         &s2sCopierLogger{jptm: jptm}}, nil
+		srcURL:             *srcURL}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -85,4 +83,3 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		s2sPacer.Done(adjustedChunkSize)
 	})
 }
-

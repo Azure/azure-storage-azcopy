@@ -28,22 +28,15 @@ import (
 
 type appendBlobUploader struct {
 	appendBlobSenderBase
-
-	logger ISenderLogger
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer)
+	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, sip)
 	if err != nil {
 		return nil, err
 	}
 
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase, logger: &uploaderLogger{jptm: jptm}}, nil
-}
-
-func (u *appendBlobUploader) Prologue(state PrologueState) {
-	blobHTTPHeaders, metadata := u.jptm.BlobDstData(state.leadingBytes)
-	u.prologue(blobHTTPHeaders, metadata, u.logger)
+	return &appendBlobUploader{appendBlobSenderBase: *senderBase}, nil
 }
 
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -58,8 +51,4 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	}
 
 	return u.generateAppendBlockToRemoteFunc(id, appendBlockFromLocal)
-}
-
-func (u *appendBlobUploader) Epilogue() {
-	u.epilogue()
 }

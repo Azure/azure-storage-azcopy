@@ -21,15 +21,15 @@
 package ste
 
 import (
-	"github.com/jiacfan/azure-storage-azcopy/common"
 	"net/url"
 
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 type sourceInfoProvider interface {
 	// Properties returns source's properties.
-	Properties() (*S2SSrcProperties, error)
+	Properties() (*SrcProperties, error)
 }
 
 // Abstraction of the methods needed to prepare copy source
@@ -80,8 +80,8 @@ func (p *defaultSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	return srcURL, nil
 }
 
-func (p *defaultSourceInfoProvider) Properties() (*S2SSrcProperties, error) {
-	return &S2SSrcProperties{
+func (p *defaultSourceInfoProvider) Properties() (*SrcProperties, error) {
+	return &SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
 	}, nil
@@ -104,19 +104,18 @@ func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) sourceInfoProvider {
 	return &localFileSourceInfoProvider{jptm}
 }
 
-func(f localFileSourceInfoProvider) Properties() (*S2SSrcProperties, error) {
+func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 	// create simulated headers, to represent what we want to propagate to the destination based on
 	// this file
 
 	// TODO: find a better way to get generic ("Resource" headers/metadata, from jptm)
 	headers, metadata := f.jptm.BlobDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
 
-	return &S2SSrcProperties{
+	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{
-			ContentType: headers.ContentType,
+			ContentType:     headers.ContentType,
 			ContentEncoding: headers.ContentEncoding,
 		},
-		// TODO: does't compile due to different "common" libraries (Jasons vs main)
-		SrcMetadata:   common.FromAzBlobMetadataToCommonMetadata(metadata),
+		SrcMetadata: common.FromAzBlobMetadataToCommonMetadata(metadata),
 	}, nil
 }

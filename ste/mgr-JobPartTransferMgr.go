@@ -53,6 +53,9 @@ type IJobPartTransferMgr interface {
 	FailActiveDownloadWithStatus(where string, err error, failureStatus common.TransferStatus)
 	FailActiveS2SCopy(where string, err error)
 	FailActiveS2SCopyWithStatus(where string, err error, failureStatus common.TransferStatus)
+	// TODO: Cleanup FailActiveUpload/FailActiveUploadWithStatus & FailActiveS2SCopy/FailActiveS2SCopyWithStatus
+	FailActiveSend(where string, err error)
+	FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus)
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
@@ -71,8 +74,9 @@ type TransferInfo struct {
 	Destination string
 
 	// Transfer info for S2S copy
+	SrcProperties
 	S2SGetS3PropertiesInBackend bool
-	S2SSrcProperties
+
 	// Blob
 	S2SSrcBlobType azblob.BlobType
 	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
@@ -82,7 +86,7 @@ type TransferInfo struct {
 	NumChunks uint16
 }
 
-type S2SSrcProperties struct {
+type SrcProperties struct {
 	SrcHTTPHeaders common.ResourceHTTPHeaders // User for S2S copy, where per transfer's src properties need be set in destination.
 	SrcMetadata    common.Metadata
 }
@@ -194,7 +198,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:                  sourceSize,
 		Destination:                 dst,
 		S2SGetS3PropertiesInBackend: s2sGetS3PropertiesInBackend,
-		S2SSrcProperties: S2SSrcProperties{
+		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,
 		},
@@ -370,6 +374,43 @@ func (jptm *jobPartTransferMgr) FailActiveDownloadWithStatus(where string, err e
 
 func (jptm *jobPartTransferMgr) FailActiveS2SCopyWithStatus(where string, err error, failureStatus common.TransferStatus) {
 	jptm.failActiveTransfer(transferErrorCodeCopyFailed, where, err, failureStatus)
+}
+
+// TODO: FailActive* need be further refactored with a seperate workitem.
+func (jptm *jobPartTransferMgr) TempJudgeUploadOrCopy() (isUpload, isCopy bool) {
+	fromTo := jptm.FromTo()
+
+	fromIsLocal := fromTo.From() == common.ELocation.Local()
+	toIsLocal := fromTo.To() == common.ELocation.Local()
+
+	isUpload = fromIsLocal && !toIsLocal
+	isCopy = !fromIsLocal && !toIsLocal
+
+	return isUpload, isCopy
+}
+
+func (jptm *jobPartTransferMgr) FailActiveSend(where string, err error) {
+	isUpload, isCopy := jptm.TempJudgeUploadOrCopy()
+
+	if isUpload {
+		jptm.FailActiveUpload(where, err)
+	} else if isCopy {
+		jptm.FailActiveS2SCopy(where, err)
+	} else {
+		panic("invalid state, FailActiveSend used by illegal direction")
+	}
+}
+
+func (jptm *jobPartTransferMgr) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	isUpload, isCopy := jptm.TempJudgeUploadOrCopy()
+
+	if isUpload {
+		jptm.FailActiveUploadWithStatus(where, err, failureStatus)
+	} else if isCopy {
+		jptm.FailActiveS2SCopyWithStatus(where, err, failureStatus)
+	} else {
+		panic("invalid state, FailActiveSendWithStatus used by illegal direction")
+	}
 }
 
 // Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.

@@ -32,17 +32,24 @@ import (
 )
 
 type appendBlobSenderBase struct {
-	jptm                   IJobPartTransferMgr
-	destAppendBlobURL      azblob.AppendBlobURL
-	chunkSize              uint32
-	numChunks              uint32
-	pacer                  *pacer
+	jptm              IJobPartTransferMgr
+	destAppendBlobURL azblob.AppendBlobURL
+	chunkSize         uint32
+	numChunks         uint32
+	pacer             *pacer
+	// Headers and other info that we will apply to the destination
+	// object. For S2S, these come from the source service.
+	// When sending local data, they are computed based on
+	// the properties of the local file
+	headersToApply  azblob.BlobHTTPHeaders
+	metadataToApply azblob.Metadata
+
 	soleChunkFuncSemaphore *semaphore.Weighted
 }
 
 type appendBlockFunc = func()
 
-func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (*appendBlobSenderBase, error) {
+func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider sourceInfoProvider) (*appendBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -64,12 +71,19 @@ func newAppendBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pip
 
 	destAppendBlobURL := azblob.NewAppendBlobURL(*destURL, p)
 
+	props, err := srcInfoProvider.Properties()
+	if err != nil {
+		return nil, err
+	}
+
 	return &appendBlobSenderBase{
 		jptm:                   jptm,
 		destAppendBlobURL:      destAppendBlobURL,
 		chunkSize:              chunkSize,
 		numChunks:              numChunks,
 		pacer:                  pacer,
+		headersToApply:         props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
+		metadataToApply:        props.SrcMetadata.ToAzBlobMetadata(),
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1)}, nil
 }
 
@@ -114,17 +128,21 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 	})
 }
 
-func (s *appendBlobSenderBase) prologue(httpHeaders azblob.BlobHTTPHeaders, metadata azblob.Metadata, logger ISenderLogger) {
-	jptm := s.jptm
+func (s *appendBlobSenderBase) Prologue(ps PrologueState) {
+	if ps.CanInferContentType() {
+		// sometimes, specifically when reading local files, we have more info
+		// about the file type at this time than what we had before
+		s.headersToApply.ContentType = ps.GetInferredContentType(s.jptm)
+	}
 
-	_, err := s.destAppendBlobURL.Create(jptm.Context(), httpHeaders, metadata, azblob.BlobAccessConditions{})
+	_, err := s.destAppendBlobURL.Create(s.jptm.Context(), s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{})
 	if err != nil {
-		logger.FailActiveSend("Creating blob", err)
+		s.jptm.FailActiveSend("Creating blob", err)
 		return
 	}
 }
 
-func (s *appendBlobSenderBase) epilogue() {
+func (s *appendBlobSenderBase) Epilogue() {
 	jptm := s.jptm
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
