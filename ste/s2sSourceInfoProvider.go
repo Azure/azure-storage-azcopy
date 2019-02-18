@@ -21,18 +21,23 @@
 package ste
 
 import (
+	"github.com/jiacfan/azure-storage-azcopy/common"
 	"net/url"
 
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
-// Abstraction of the methods needed to prepare copy source
-type s2sSourceInfoProvider interface {
-	// SourceURL returns source's URL.
-	PreSignedSourceURL() (*url.URL, error)
-
+type sourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*S2SSrcProperties, error)
+}
+
+// Abstraction of the methods needed to prepare copy source
+type s2sSourceInfoProvider interface {
+	sourceInfoProvider
+
+	// SourceURL returns source's URL.
+	PreSignedSourceURL() (*url.URL, error)
 
 	// SourceSize returns size of source
 	SourceSize() int64
@@ -52,6 +57,8 @@ type s2sBlobSourceInfoProvider interface {
 	// BlobType returns source's blob type.
 	BlobType() azblob.BlobType
 }
+
+type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) sourceInfoProvider
 
 type s2sSourceInfoProviderFactory func(jptm IJobPartTransferMgr) (s2sSourceInfoProvider, error)
 
@@ -86,4 +93,30 @@ func (p *defaultSourceInfoProvider) SourceSize() int64 {
 
 func (p *defaultSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
+}
+
+// Source info provider for local files
+type localFileSourceInfoProvider struct {
+	jptm IJobPartTransferMgr
+}
+
+func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) sourceInfoProvider {
+	return &localFileSourceInfoProvider{jptm}
+}
+
+func(f localFileSourceInfoProvider) Properties() (*S2SSrcProperties, error) {
+	// create simulated headers, to represent what we want to propagate to the destination based on
+	// this file
+
+	// TODO: find a better way to get generic ("Resource" headers/metadata, from jptm)
+	headers, metadata := f.jptm.BlobDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
+
+	return &S2SSrcProperties{
+		SrcHTTPHeaders: common.ResourceHTTPHeaders{
+			ContentType: headers.ContentType,
+			ContentEncoding: headers.ContentEncoding,
+		},
+		// TODO: does't compile due to different "common" libraries (Jasons vs main)
+		SrcMetadata:   common.FromAzBlobMetadataToCommonMetadata(metadata),
+	}, nil
 }

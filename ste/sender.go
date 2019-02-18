@@ -53,12 +53,23 @@ type ISenderBase interface {
 	Epilogue()
 }
 
-// PrologueState contains info neccesary for different sending operations' prologue.
+// PrologueState contains info necessary for different sending operations' prologue.
 type PrologueState struct {
 	// Leading bytes are the early bytes of the file, to be used
 	// for mime-type detection (or nil if file is empty or the bytes code
 	// not be read).
 	leadingBytes []byte
+}
+
+func(ps PrologueState) CanInferContentType() bool {
+	return len(ps.leadingBytes) > 0  // we can have a go, if we have some leading bytes
+}
+
+func(ps PrologueState) GetInferredContentType(jptm IJobPartTransferMgr) string {
+	headers, _ := jptm.BlobDstData(ps.leadingBytes)
+	return headers.ContentType
+	// TODO: this BlobDstData method is messy, both because of the blob/file distinction and
+	//     because its so coarse grained.  Do something about that one day.
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,7 +99,7 @@ type uploader interface {
 	Md5Channel() chan<- []byte
 }
 
-type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error)
+type uploaderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error)
 
 func newMd5Channel() chan []byte {
 	return make(chan []byte, 1) // must be buffered, so as not to hold up the goroutine running localToRemote (which needs to start on the NEXT file after finishing its current one)

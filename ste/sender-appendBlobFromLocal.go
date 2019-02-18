@@ -32,7 +32,7 @@ type appendBlobUploader struct {
 	logger ISenderLogger
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
+func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
 	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer)
 	if err != nil {
 		return nil, err

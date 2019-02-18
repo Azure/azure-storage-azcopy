@@ -50,13 +50,13 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
-type newJobXferWithUploaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory)
+type newJobXferWithUploaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory, sipf sourceInfoProviderFactory)
 type newJobXferWithS2SCopierFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory, sipf s2sSourceInfoProviderFactory)
 
 // Takes a multi-purpose up/downloader function, and makes it ready to use with a specific type of up/downloader
-func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory) newJobXfer {
+func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory, sipf sourceInfoProviderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
-		targetFunction(jptm, pipeline, pacer, uf)
+		targetFunction(jptm, pipeline, pacer, uf, sipf)
 	}
 }
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
@@ -80,22 +80,22 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch blobType {
 		case common.EBlobType.None(),
 			common.EBlobType.BlockBlob():
-			return parameterizeUpload(localToRemote, newBlockBlobUploader)
+			return parameterizeUpload(localToRemote, newBlockBlobUploader, newLocalSourceInfoProvider)
 		case common.EBlobType.PageBlob():
-			return parameterizeUpload(localToRemote, newPageBlobUploader)
+			return parameterizeUpload(localToRemote, newPageBlobUploader, newLocalSourceInfoProvider)
 		case common.EBlobType.AppendBlob():
-			return parameterizeUpload(localToRemote, newAppendBlobUploader)
+			return parameterizeUpload(localToRemote, newAppendBlobUploader, newLocalSourceInfoProvider)
 		}
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
 		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-		return parameterizeUpload(localToRemote, newAzureFilesUploader)
+		return parameterizeUpload(localToRemote, newAzureFilesUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.FileTrash():
 		return DeleteFilePrologue
 	case common.EFromTo.LocalBlobFS():
-		return parameterizeUpload(localToRemote, newBlobFSUploader)
+		return parameterizeUpload(localToRemote, newBlobFSUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.BlobFSLocal():
 		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():

@@ -35,7 +35,7 @@ type blockBlobUploader struct {
 	logger       ISenderLogger
 }
 
-func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
+func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
 	senderBase, err := newBlockBlobSenderBase(jptm, destination, p, pacer)
 	if err != nil {
 		return nil, err

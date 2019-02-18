@@ -33,14 +33,20 @@ type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
 	srcURL         url.URL
-	srcHTTPHeaders azblob.BlobHTTPHeaders
-	srcMetadata    azblob.Metadata
-	destBlobTier   azblob.AccessTierType
 	logger         ISenderLogger
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer)
+
+	destBlobTier := azblob.AccessTierNone
+	// If the source is page blob, preserve source's blob tier.
+	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
+			destBlobTier = blobSrcInfoProvider.BlobTier()
+		}
+	}
+
+	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider, destBlobTier)
 	if err != nil {
 		return nil, err
 	}
@@ -50,48 +56,21 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceI
 		return nil, err
 	}
 
-	srcProperties, err := srcInfoProvider.Properties()
-	if err != nil {
-		return nil, err
-	}
-
-	var azblobMetadata azblob.Metadata
-	if srcProperties.SrcMetadata != nil {
-		azblobMetadata = srcProperties.SrcMetadata.ToAzBlobMetadata()
-	}
-
-	// Get blob tier, by default set none.
-	destBlobTier := azblob.AccessTierNone
-	// If the source is page blob, preserve source's blob tier.
-	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
-		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
-			destBlobTier = blobSrcInfoProvider.BlobTier()
-		}
-	}
-	// If user set blob tier explictly for copy, use it accorcingly.
-	_, pageBlobTierOverride := jptm.BlobTiers()
-	if pageBlobTierOverride != common.EPageBlobTier.None() {
-		destBlobTier = pageBlobTierOverride.ToAccessTierType()
-	}
-
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase: *senderBase,
-
 		srcURL:         *srcURL,
-		srcHTTPHeaders: srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		srcMetadata:    azblobMetadata,
-		destBlobTier:   destBlobTier,
 		logger:         &s2sCopierLogger{jptm: jptm}}, nil
-}
-
-func (c *urlToPageBlobCopier) Prologue(state PrologueState) {
-	c.prologue(c.srcHTTPHeaders, c.srcMetadata, c.destBlobTier, c.logger)
 }
 
 // Returns a chunk-func for blob copies
 func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 
-	putPageFromURL := func() {
+	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+		if c.jptm.Info().SourceSize == 0 {
+			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
+			return
+		}
+
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		s2sPacer := newS2SPacer(c.pacer)
 
@@ -104,11 +83,6 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 		s2sPacer.Done(adjustedChunkSize)
-	}
-
-	return c.generatePutPageToRemoteFunc(id, putPageFromURL)
+	})
 }
 
-func (c *urlToPageBlobCopier) Epilogue() {
-	c.epilogue()
-}

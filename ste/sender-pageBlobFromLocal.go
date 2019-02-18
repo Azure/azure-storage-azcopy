@@ -34,8 +34,8 @@ type pageBlobUploader struct {
 	logger ISenderLogger
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
-	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer)
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
+	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
 	if err != nil {
 		return nil, err
 	}
@@ -43,17 +43,14 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 	return &pageBlobUploader{pageBlobSenderBase: *senderBase, logger: &uploaderLogger{jptm: jptm}}, nil
 }
 
-func (u *pageBlobUploader) Prologue(state PrologueState) {
-	blobHTTPHeaders, metadata := u.jptm.BlobDstData(state.leadingBytes)
-	_, pageBlobTier := u.jptm.BlobTiers()
-
-	u.prologue(blobHTTPHeaders, metadata, pageBlobTier.ToAccessTierType(), u.logger)
-}
-
 func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
-	putPageFromLocal := func() {
+	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
+		if u.jptm.Info().SourceSize == 0 {
+			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
+			return
+		}
 
 		if reader.HasPrefetchedEntirelyZeros() {
 			// for this destination type, there is no need to upload ranges than consist entirely of zeros
@@ -70,11 +67,6 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			jptm.FailActiveUpload("Uploading page", err)
 			return
 		}
-	}
-
-	return u.generatePutPageToRemoteFunc(id, putPageFromLocal)
+	})
 }
 
-func (u *pageBlobUploader) Epilogue() {
-	u.epilogue()
-}
