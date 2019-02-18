@@ -72,6 +72,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		chunkSize:        chunkSize,
 		numChunks:        numChunks,
 		pacer:            pacer,
+		blockIDs:         make([]string, numChunks),
 		mu:               &sync.Mutex{}}, nil
 }
 
