@@ -31,9 +31,11 @@ import (
 
 type urlToAppendBlobCopier struct {
 	appendBlobSenderBase
+
 	srcURL         url.URL
 	srcHTTPHeaders azblob.BlobHTTPHeaders
 	srcMetadata    azblob.Metadata
+	logger         ISenderLogger
 }
 
 func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
@@ -60,16 +62,12 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourc
 		appendBlobSenderBase: *senderBase,
 		srcURL:               *srcURL,
 		srcHTTPHeaders:       srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
-		srcMetadata:          azblobMetadata}, nil
+		srcMetadata:          azblobMetadata,
+		logger:               &s2sCopierLogger{jptm: jptm}}, nil
 }
 
 func (c *urlToAppendBlobCopier) Prologue(state PrologueState) {
-	jptm := c.jptm
-
-	if _, err := c.destAppendBlobURL.Create(jptm.Context(), c.srcHTTPHeaders, c.srcMetadata, azblob.BlobAccessConditions{}); err != nil {
-		jptm.FailActiveS2SCopy("Creating blob", err)
-		return
-	}
+	c.prologue(c.srcHTTPHeaders, c.srcMetadata, c.logger)
 }
 
 // Returns a chunk-func for blob copies
@@ -88,7 +86,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		s2sPacer.Done(adjustedChunkSize)
 	}
 
-	return c.generateAppendBlockToRemoteFunc(id, blockIndex, chunkIsWholeFile, appendBlockFromURL)
+	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)
 }
 
 func (c *urlToAppendBlobCopier) Epilogue() {

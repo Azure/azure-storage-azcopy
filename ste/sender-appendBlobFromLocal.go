@@ -28,6 +28,8 @@ import (
 
 type appendBlobUploader struct {
 	appendBlobSenderBase
+
+	logger ISenderLogger
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -36,18 +38,12 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		return nil, err
 	}
 
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase}, nil
+	return &appendBlobUploader{appendBlobSenderBase: *senderBase, logger: &uploaderLogger{jptm: jptm}}, nil
 }
 
 func (u *appendBlobUploader) Prologue(state PrologueState) {
-	jptm := u.jptm
-
-	blobHTTPHeaders, metaData := jptm.BlobDstData(state.leadingBytes)
-	_, err := u.destAppendBlobURL.Create(u.jptm.Context(), blobHTTPHeaders, metaData, azblob.BlobAccessConditions{})
-	if err != nil {
-		jptm.FailActiveUpload("Creating blob", err)
-		return
-	}
+	blobHTTPHeaders, metadata := u.jptm.BlobDstData(state.leadingBytes)
+	u.prologue(blobHTTPHeaders, metadata, u.logger)
 }
 
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -61,7 +57,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		}
 	}
 
-	return u.generateAppendBlockToRemoteFunc(id, blockIndex, chunkIsWholeFile, appendBlockFromLocal)
+	return u.generateAppendBlockToRemoteFunc(id, appendBlockFromLocal)
 }
 
 func (u *appendBlobUploader) Epilogue() {

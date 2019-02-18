@@ -30,6 +30,8 @@ import (
 
 type pageBlobUploader struct {
 	pageBlobSenderBase
+
+	logger ISenderLogger
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -38,14 +40,14 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 		return nil, err
 	}
 
-	return &pageBlobUploader{pageBlobSenderBase: *senderBase}, nil
+	return &pageBlobUploader{pageBlobSenderBase: *senderBase, logger: &uploaderLogger{jptm: jptm}}, nil
 }
 
 func (u *pageBlobUploader) Prologue(state PrologueState) {
 	blobHTTPHeaders, metadata := u.jptm.BlobDstData(state.leadingBytes)
 	_, pageBlobTier := u.jptm.BlobTiers()
 
-	u.prologue(blobHTTPHeaders, metadata, pageBlobTier.ToAccessTierType(), u)
+	u.prologue(blobHTTPHeaders, metadata, pageBlobTier.ToAccessTierType(), u.logger)
 }
 
 func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -75,12 +77,4 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 func (u *pageBlobUploader) Epilogue() {
 	u.epilogue()
-}
-
-func (u *pageBlobUploader) FailActiveSend(where string, err error) {
-	u.jptm.FailActiveUpload(where, err)
-}
-
-func (u *pageBlobUploader) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	u.jptm.FailActiveUploadWithStatus(where, err, failureStatus)
 }

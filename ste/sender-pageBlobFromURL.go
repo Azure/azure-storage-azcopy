@@ -36,6 +36,7 @@ type urlToPageBlobCopier struct {
 	srcHTTPHeaders azblob.BlobHTTPHeaders
 	srcMetadata    azblob.Metadata
 	destBlobTier   azblob.AccessTierType
+	logger         ISenderLogger
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
@@ -79,11 +80,12 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceI
 		srcURL:         *srcURL,
 		srcHTTPHeaders: srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		srcMetadata:    azblobMetadata,
-		destBlobTier:   destBlobTier}, nil
+		destBlobTier:   destBlobTier,
+		logger:         &s2sCopierLogger{jptm: jptm}}, nil
 }
 
 func (c *urlToPageBlobCopier) Prologue(state PrologueState) {
-	c.prologue(c.srcHTTPHeaders, c.srcMetadata, c.destBlobTier, c)
+	c.prologue(c.srcHTTPHeaders, c.srcMetadata, c.destBlobTier, c.logger)
 }
 
 // Returns a chunk-func for blob copies
@@ -109,12 +111,4 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 
 func (c *urlToPageBlobCopier) Epilogue() {
 	c.epilogue()
-}
-
-func (c *urlToPageBlobCopier) FailActiveSend(where string, err error) {
-	c.jptm.FailActiveS2SCopy(where, err)
-}
-
-func (c *urlToPageBlobCopier) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	c.jptm.FailActiveS2SCopyWithStatus(where, err, failureStatus)
 }

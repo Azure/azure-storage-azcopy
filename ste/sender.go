@@ -55,11 +55,6 @@ type ISenderBase interface {
 	Epilogue()
 }
 
-type ISenderLogger interface {
-	FailActiveSend(where string, err error)
-	FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus)
-}
-
 // PrologueState contains info neccesary for different sending operations' prologue.
 type PrologueState struct {
 	// Leading bytes are the early bytes of the file, to be used
@@ -118,6 +113,38 @@ func tryPutMd5Hash(jptm IJobPartTransferMgr, md5Channel <-chan []byte, worker fu
 }
 
 var errNoHash = errors.New("no hash computed")
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Abstraction of sender logger
+/////////////////////////////////////////////////////////////////////////////////////////////////
+type ISenderLogger interface {
+	FailActiveSend(where string, err error)
+	FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus)
+}
+
+type s2sCopierLogger struct {
+	jptm IJobPartTransferMgr
+}
+
+func (l *s2sCopierLogger) FailActiveSend(where string, err error) {
+	l.jptm.FailActiveS2SCopy(where, err)
+}
+
+func (l *s2sCopierLogger) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	l.jptm.FailActiveS2SCopyWithStatus(where, err, failureStatus)
+}
+
+type uploaderLogger struct {
+	jptm IJobPartTransferMgr
+}
+
+func (l *uploaderLogger) FailActiveSend(where string, err error) {
+	l.jptm.FailActiveUpload(where, err)
+}
+
+func (l *uploaderLogger) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
+	l.jptm.FailActiveUploadWithStatus(where, err, failureStatus)
+}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 

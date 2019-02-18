@@ -37,6 +37,7 @@ type urlToBlockBlobCopier struct {
 	srcHTTPHeaders azblob.BlobHTTPHeaders
 	srcMetadata    azblob.Metadata
 	destBlobTier   azblob.AccessTierType
+	logger         ISenderLogger
 }
 
 func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
@@ -79,7 +80,8 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSource
 		srcURL:              *srcURL,
 		srcHTTPHeaders:      srcProperties.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		srcMetadata:         azblobMetadata,
-		destBlobTier:        destBlobTier}, nil
+		destBlobTier:        destBlobTier,
+		logger:              &s2sCopierLogger{jptm: jptm}}, nil
 }
 
 func (c *urlToBlockBlobCopier) Prologue(state PrologueState) {
@@ -99,7 +101,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 }
 
 func (c *urlToBlockBlobCopier) Epilogue() {
-	c.epilogue(c.srcHTTPHeaders, c.srcMetadata, c.destBlobTier, c) // TODO: discuss about logger
+	c.epilogue(c.srcHTTPHeaders, c.srcMetadata, c.destBlobTier, c.logger)
 }
 
 // generateCreateEmptyBlob generates a func to create empty blob in destination.
@@ -135,12 +137,4 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 	}
 
 	return c.generatePutBlockToRemoteFunc(id, blockIndex, putBlockFromURL)
-}
-
-func (c *urlToBlockBlobCopier) FailActiveSend(where string, err error) {
-	c.jptm.FailActiveS2SCopy(where, err)
-}
-
-func (c *urlToBlockBlobCopier) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	c.jptm.FailActiveS2SCopyWithStatus(where, err, failureStatus)
 }

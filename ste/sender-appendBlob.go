@@ -86,7 +86,7 @@ func (s *appendBlobSenderBase) RemoteFileExists() (bool, error) {
 }
 
 // Returns a chunk-func for sending append blob to remote
-func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID, blockIndex int32, chunkIsWholeFile bool, appendBlock appendBlockFunc) chunkFunc {
+func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID, appendBlock appendBlockFunc) chunkFunc {
 	// Copy must be totally sequential for append blobs
 	// The way we enforce that is simple: we won't even CREATE
 	// a chunk func, until all previously-scheduled chunk funcs have completed
@@ -112,6 +112,16 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 
 		appendBlock()
 	})
+}
+
+func (s *appendBlobSenderBase) prologue(httpHeaders azblob.BlobHTTPHeaders, metadata azblob.Metadata, logger ISenderLogger) {
+	jptm := s.jptm
+
+	_, err := s.destAppendBlobURL.Create(jptm.Context(), httpHeaders, metadata, azblob.BlobAccessConditions{})
+	if err != nil {
+		logger.FailActiveSend("Creating blob", err)
+		return
+	}
 }
 
 func (s *appendBlobSenderBase) epilogue() {

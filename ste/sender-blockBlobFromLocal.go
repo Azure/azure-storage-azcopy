@@ -32,6 +32,7 @@ type blockBlobUploader struct {
 	blockBlobSenderBase
 
 	leadingBytes []byte // no lock because is written before first chunk-func go routine is scheduled
+	logger       ISenderLogger
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -40,7 +41,7 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 		return nil, err
 	}
 
-	return &blockBlobUploader{blockBlobSenderBase: *senderBase}, nil
+	return &blockBlobUploader{blockBlobSenderBase: *senderBase, logger: &uploaderLogger{jptm: jptm}}, nil
 }
 
 func (u *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
@@ -115,13 +116,5 @@ func (u *blockBlobUploader) Epilogue() {
 	blobHTTPHeader, metadata := u.jptm.BlobDstData(u.leadingBytes)
 	blockBlobTier, _ := u.jptm.BlobTiers()
 
-	u.epilogue(blobHTTPHeader, metadata, blockBlobTier.ToAccessTierType(), u)
-}
-
-func (u *blockBlobUploader) FailActiveSend(where string, err error) {
-	u.jptm.FailActiveUpload(where, err)
-}
-
-func (u *blockBlobUploader) FailActiveSendWithStatus(where string, err error, failureStatus common.TransferStatus) {
-	u.jptm.FailActiveUploadWithStatus(where, err, failureStatus)
+	u.epilogue(blobHTTPHeader, metadata, blockBlobTier.ToAccessTierType(), u.logger)
 }
