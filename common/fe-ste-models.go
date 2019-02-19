@@ -726,3 +726,15 @@ func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
 		CacheControl:       h.CacheControl,
 	}
 }
+
+// ToAzFileHTTPHeaders converts ResourceHTTPHeaders to azfile's FileHTTPHeaders.
+func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
+	return azfile.FileHTTPHeaders{
+		ContentType:        h.ContentType,
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}

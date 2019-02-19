@@ -29,6 +29,7 @@ import (
 	minio "github.com/minio/minio-go"
 )
 
+// Source info provider for S3
 type s3SourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
 	transferInfo TransferInfo
@@ -45,7 +46,7 @@ const defaultPresignExpires = time.Hour * 7 * 24
 
 var s3ClientFactory = common.NewS3ClientFactory()
 
-func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
+func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
 	var err error
 	p := s3SourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}
 
@@ -119,4 +120,8 @@ func (p *s3SourceInfoProvider) SourceSize() int64 {
 
 func (p *s3SourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
+}
+
+func (p *s3SourceInfoProvider) IsLocal() bool {
+	return false
 }

@@ -36,11 +36,11 @@ type urlToBlockBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider s2sSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	destBlobTier := azblob.AccessTierNone
 	// If the source is block blob, preserve source's blob tier.
-	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		if blobSrcInfoProvider.BlobType() == azblob.BlobBlockBlob {
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 		}

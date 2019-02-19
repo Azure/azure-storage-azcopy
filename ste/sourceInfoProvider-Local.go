@@ -20,35 +20,33 @@
 
 package ste
 
-import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
-)
+import "github.com/Azure/azure-storage-azcopy/common"
 
-type appendBlobUploader struct {
-	appendBlobSenderBase
+// Source info provider for local files
+type localFileSourceInfoProvider struct {
+	jptm IJobPartTransferMgr
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, sip)
-	if err != nil {
-		return nil, err
-	}
-
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase}, nil
+func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
+	return &localFileSourceInfoProvider{jptm}, nil
 }
 
-func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
-	appendBlockFromLocal := func() {
-		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
-		if err != nil {
-			u.jptm.FailActiveUpload("Appending block", err)
-			return
-		}
-	}
+func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
+	// create simulated headers, to represent what we want to propagate to the destination based on
+	// this file
 
-	return u.generateAppendBlockToRemoteFunc(id, appendBlockFromLocal)
+	// TODO: find a better way to get generic ("Resource" headers/metadata, from jptm)
+	headers, metadata := f.jptm.BlobDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
+
+	return &SrcProperties{
+		SrcHTTPHeaders: common.ResourceHTTPHeaders{
+			ContentType:     headers.ContentType,
+			ContentEncoding: headers.ContentEncoding,
+		},
+		SrcMetadata: common.FromAzBlobMetadataToCommonMetadata(metadata),
+	}, nil
+}
+
+func (f localFileSourceInfoProvider) IsLocal() bool {
+	return true
 }

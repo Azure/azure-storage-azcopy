@@ -33,15 +33,15 @@ type PrologueState struct {
 	// Leading bytes are the early bytes of the file, to be used
 	// for mime-type detection (or nil if file is empty or the bytes code
 	// not be read).
-	leadingBytes []byte
+	LeadingBytes []byte
 }
 
 func (ps PrologueState) CanInferContentType() bool {
-	return len(ps.leadingBytes) > 0 // we can have a go, if we have some leading bytes
+	return len(ps.LeadingBytes) > 0 // we can have a go, if we have some leading bytes
 }
 
 func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
-	headers, _ := jptm.BlobDstData(ps.leadingBytes)
+	headers, _ := jptm.BlobDstData(ps.LeadingBytes)
 	return headers.ContentType
 	// TODO: this BlobDstData method is messy, both because of the blob/file distinction and
 	//     because its so coarse grained.  Do something about that one day.

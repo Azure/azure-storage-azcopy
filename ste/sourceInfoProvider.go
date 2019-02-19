@@ -23,22 +23,20 @@ package ste
 import (
 	"net/url"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
-/////////////////////////////////////////////////////////////////////////////////////////////////
-// Abstraction of generic source info provider which provides source's properties.
-type sourceInfoProvider interface {
+// ISourceInfoProvider is the abstraction of generic source info provider which provides source's properties.
+type ISourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
 
 	IsLocal() bool
 }
 
-// Abstraction of the methods needed to prepare s2s copy source.
-type s2sSourceInfoProvider interface {
-	sourceInfoProvider
+// IRemoteSourceInfoProvider is the abstraction of the methods needed to prepare remote copy source.
+type IRemoteSourceInfoProvider interface {
+	ISourceInfoProvider
 
 	// SourceURL returns source's URL.
 	PreSignedSourceURL() (*url.URL, error)
@@ -52,9 +50,9 @@ type s2sSourceInfoProvider interface {
 	// This can be further extended, e.g. add DownloadSourceRange, which can be used to implement download+upload fashion S2S copy.
 }
 
-// Abstraction of the methods needed to prepare s2s copy blob source.
-type s2sBlobSourceInfoProvider interface {
-	s2sSourceInfoProvider
+// IBlobSourceInfoProvider is the abstraction of the methods needed to prepare blob copy source.
+type IBlobSourceInfoProvider interface {
+	IRemoteSourceInfoProvider
 
 	// BlobTier returns source's blob tier.
 	BlobTier() azblob.AccessTierType
@@ -63,20 +61,20 @@ type s2sBlobSourceInfoProvider interface {
 	BlobType() azblob.BlobType
 }
 
-type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (sourceInfoProvider, error)
+type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (ISourceInfoProvider, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-// Default S2S copy source info provider which provides info sourced from transferInfo.
-type defaultS2SSourceInfoProvider struct {
+// Default copy remote source info provider which provides info sourced from transferInfo.
+type defaultRemoteSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
 	transferInfo TransferInfo
 }
 
-func newDefaultS2SSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
-	return &defaultS2SSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
+func newDefaultRemoteSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
+	return &defaultRemoteSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
 }
 
-func (p *defaultS2SSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+func (p *defaultRemoteSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	srcURL, err := url.Parse(p.transferInfo.Source)
 	if err != nil {
 		return nil, err
@@ -85,50 +83,21 @@ func (p *defaultS2SSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	return srcURL, nil
 }
 
-func (p *defaultS2SSourceInfoProvider) Properties() (*SrcProperties, error) {
+func (p *defaultRemoteSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
 	}, nil
 }
 
-func (p *defaultS2SSourceInfoProvider) IsLocal() bool {
+func (p *defaultRemoteSourceInfoProvider) IsLocal() bool {
 	return false
 }
 
-func (p *defaultS2SSourceInfoProvider) SourceSize() int64 {
+func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 	return p.transferInfo.SourceSize
 }
 
-func (p *defaultS2SSourceInfoProvider) RawSource() string {
+func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
-}
-
-// Source info provider for local files
-type localFileSourceInfoProvider struct {
-	jptm IJobPartTransferMgr
-}
-
-func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
-	return &localFileSourceInfoProvider{jptm}, nil
-}
-
-func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
-	// create simulated headers, to represent what we want to propagate to the destination based on
-	// this file
-
-	// TODO: find a better way to get generic ("Resource" headers/metadata, from jptm)
-	headers, metadata := f.jptm.BlobDstData(nil) // we don't have a known MIME type yet, so pass nil for the sniffed content of thefile
-
-	return &SrcProperties{
-		SrcHTTPHeaders: common.ResourceHTTPHeaders{
-			ContentType:     headers.ContentType,
-			ContentEncoding: headers.ContentEncoding,
-		},
-		SrcMetadata: common.FromAzBlobMetadataToCommonMetadata(metadata),
-	}, nil
-}
-
-func (f localFileSourceInfoProvider) IsLocal() bool {
-	return true
 }

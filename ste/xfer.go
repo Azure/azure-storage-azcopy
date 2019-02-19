@@ -96,7 +96,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobBlob():
 		return parameterizeSend(anyToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
 	case common.EFromTo.FileBlob():
-		return parameterizeSend(urlToRemote, newURLToBlobCopier, newDefaultS2SSourceInfoProvider)
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newDefaultRemoteSourceInfoProvider)
 	case common.EFromTo.S3Blob():
 		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}

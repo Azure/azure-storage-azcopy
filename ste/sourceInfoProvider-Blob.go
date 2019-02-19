@@ -24,19 +24,20 @@ import (
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
+// Source info provider for Azure blob
 type blobSourceInfoProvider struct {
-	defaultS2SSourceInfoProvider
+	defaultRemoteSourceInfoProvider
 }
 
-func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
-	b, err := newDefaultS2SSourceInfoProvider(jptm)
+func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
+	b, err := newDefaultRemoteSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err
 	}
 
-	base, _ := b.(*defaultS2SSourceInfoProvider)
+	base, _ := b.(*defaultRemoteSourceInfoProvider)
 
-	return &blobSourceInfoProvider{defaultS2SSourceInfoProvider: *base}, nil
+	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {

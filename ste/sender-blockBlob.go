@@ -56,7 +56,7 @@ type blockBlobSenderBase struct {
 
 type putBlockFunc = func(encodedBlockID string)
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfo sourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -74,7 +74,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 
 	destBlockBlobURL := azblob.NewBlockBlobURL(*destURL, p)
 
-	props, err := srcInfo.Properties()
+	props, err := srcInfoProvider.Properties()
 	if err != nil {
 		return nil, err
 	}

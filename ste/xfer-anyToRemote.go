@@ -88,7 +88,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 	}
 
 	// step 4: Open the local Source File (if any)
-	sourceFileFactory := func() (common.CloseableReaderAt, error) {}
+	var sourceFileFactory func() (common.CloseableReaderAt, error)
 	srcFile := (*os.File)(nil)
 	if srcInfoProvider.IsLocal() {
 		sourceFileFactory = func() (common.CloseableReaderAt, error) {
@@ -199,7 +199,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 
 	// sanity check to verify the number of chunks scheduled
 	if chunkIDCount != int32(numChunks) {
-		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
+		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkIDCount, info.Source, srcSize))
 	}
 
 	if srcInfoProvider.IsLocal() && safeToUseHash {

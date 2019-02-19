@@ -42,7 +42,7 @@ type blobFSUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (ISenderBase, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 
@@ -134,7 +134,7 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *blobFSUploader) Prologue(state PrologueState) {
+func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	// Create file with the source size
 	_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
 	if err != nil {

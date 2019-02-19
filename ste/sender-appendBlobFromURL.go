@@ -35,7 +35,7 @@ type urlToAppendBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider s2sSourceInfoProvider) (s2sCopier, error) {
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider)
 	if err != nil {
 		return nil, err

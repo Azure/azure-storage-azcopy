@@ -96,7 +96,7 @@ func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *azureFilesUploader) Prologue(state PrologueState) {
+func (u *azureFilesUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 	info := jptm.Info()
 
@@ -108,7 +108,7 @@ func (u *azureFilesUploader) Prologue(state PrologueState) {
 	}
 
 	// Create Azure file with the source size
-	fileHTTPHeaders, metaData := jptm.FileDstData(state.leadingBytes)
+	fileHTTPHeaders, metaData := jptm.FileDstData(state.LeadingBytes)
 	_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)

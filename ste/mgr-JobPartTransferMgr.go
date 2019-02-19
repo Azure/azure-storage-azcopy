@@ -59,6 +59,7 @@ type IJobPartTransferMgr interface {
 	LogUploadError(source, destination, errorMsg string, status int)
 	LogDownloadError(source, destination, errorMsg string, status int)
 	LogS2SCopyError(source, destination, errorMsg string, status int)
+	LogSendError(source, destination, errorMsg string, status int)
 	LogError(resource, context string, err error)
 	LogTransferInfo(level pipeline.LogLevel, source, destination, msg string)
 	LogTransferStart(source, destination, description string)
@@ -497,6 +498,19 @@ func (jptm *jobPartTransferMgr) LogDownloadError(source, destination, errorMsg s
 
 func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg string, status int) {
 	jptm.logTransferError(transferErrorCodeCopyFailed, source, destination, errorMsg, status)
+}
+
+// TODO: Log*Error need be further refactored with a seperate workitem.
+func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg string, status int) {
+	isUpload, isCopy := jptm.TempJudgeUploadOrCopy()
+
+	if isUpload {
+		jptm.LogUploadError(source, destination, errorMsg, status)
+	} else if isCopy {
+		jptm.LogS2SCopyError(source, destination, errorMsg, status)
+	} else {
+		panic("invalid state, LogSendError used by illegal direction")
+	}
 }
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {

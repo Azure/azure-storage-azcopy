@@ -35,11 +35,11 @@ type urlToPageBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider s2sSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 
 	destBlobTier := azblob.AccessTierNone
 	// If the source is page blob, preserve source's blob tier.
-	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {
+	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
 			destBlobTier = blobSrcInfoProvider.BlobTier()
 		}
