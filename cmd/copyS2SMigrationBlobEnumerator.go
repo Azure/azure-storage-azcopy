@@ -220,6 +220,15 @@ func (e *copyS2SMigrationBlobEnumerator) addTransfersFromContainer(ctx context.C
 
 func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
+	if common.IsEnhanceS2SCopyDisabled() {
+		if properties.BlobType != azblob.BlobBlockBlob {
+			glcm.Info(fmt.Sprintf(
+				"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
+				properties.BlobType,
+				common.URLExtension{URL: srcURL}.RedactSecretQueryParamForLogging()))
+		}
+	}
+
 	return e.addTransfer(
 		common.CopyTransfer{
 			Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -241,6 +250,15 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.
 
 func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
+	if common.IsEnhanceS2SCopyDisabled() {
+		if properties.BlobType() != azblob.BlobBlockBlob {
+			glcm.Info(fmt.Sprintf(
+				"Skipping %v: %s. This version of AzCopy only supports BlockBlob transfer.",
+				properties.BlobType(),
+				common.URLExtension{URL: srcURL}.RedactSecretQueryParamForLogging()))
+		}
+	}
+
 	return e.addTransfer(
 		common.CopyTransfer{
 			Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),

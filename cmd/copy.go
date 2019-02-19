@@ -315,6 +315,18 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from service to service")
 		}
+		// Not support blob tier customization, when copying block -> block blob or page -> page blob, blob tier will be kept,
+		// For s3 and file, only hot block blob tier is supported.
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is set while copying from sevice to service")
+		}
+		// Disabling blob type override.
+		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
+		// and when file and s3 is source, only block blob destination is supported.
+		if cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blobType is set while coping from service to service")
+		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from service to service")
 		}
@@ -726,6 +738,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileBlob():
+		if common.IsEnhanceS2SCopyDisabled() {
+			return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
+		}
 		e := copyS2SMigrationFileEnumerator{
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
@@ -734,6 +749,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.S3Blob():
+		if common.IsEnhanceS2SCopyDisabled() {
+			return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
+		}
 		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,

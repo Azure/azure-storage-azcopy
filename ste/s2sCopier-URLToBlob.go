@@ -65,8 +65,14 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 	case azblob.BlobBlockBlob:
 		return newURLToBlockBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	case azblob.BlobAppendBlob:
+		if common.IsEnhanceS2SCopyDisabled() {
+			return nil, fmt.Errorf("skipping %v. This version of AzCopy only supports BlockBlob transfer", azblob.BlobAppendBlob)
+		}
 		return newURLToAppendBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	case azblob.BlobPageBlob:
+		if common.IsEnhanceS2SCopyDisabled() {
+			return nil, fmt.Errorf("skipping %v. This version of AzCopy only supports BlockBlob transfer", azblob.BlobPageBlob)
+		}
 		return newURLToPageBlobCopier(jptm, destination, p, pacer, srcInfoProvider)
 	default:
 		if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf
