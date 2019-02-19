@@ -22,6 +22,7 @@ package ste
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -182,4 +183,9 @@ func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
 		s.jptm.Panic(errors.New("block id set twice for one block"))
 	}
 	s.blockIDs[index] = value
+}
+
+func (s *blockBlobSenderBase) generateEncodedBlockID() string {
+	blockID := common.NewUUID().String()
+	return base64.StdEncoding.EncodeToString([]byte(blockID))
 }

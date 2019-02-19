@@ -27,6 +27,8 @@ import (
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Abstraction of generic source info provider which provides source's properties.
 type sourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
@@ -34,7 +36,7 @@ type sourceInfoProvider interface {
 	IsLocal() bool
 }
 
-// Abstraction of the methods needed to prepare copy source
+// Abstraction of the methods needed to prepare s2s copy source.
 type s2sSourceInfoProvider interface {
 	sourceInfoProvider
 
@@ -50,6 +52,7 @@ type s2sSourceInfoProvider interface {
 	// This can be further extended, e.g. add DownloadSourceRange, which can be used to implement download+upload fashion S2S copy.
 }
 
+// Abstraction of the methods needed to prepare s2s copy blob source.
 type s2sBlobSourceInfoProvider interface {
 	s2sSourceInfoProvider
 
@@ -62,16 +65,18 @@ type s2sBlobSourceInfoProvider interface {
 
 type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (sourceInfoProvider, error)
 
-func newDefaultSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
-	return &defaultSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
-}
-
-type defaultSourceInfoProvider struct {
+/////////////////////////////////////////////////////////////////////////////////////////////////
+// Default S2S copy source info provider which provides info sourced from transferInfo.
+type defaultS2SSourceInfoProvider struct {
 	jptm         IJobPartTransferMgr
 	transferInfo TransferInfo
 }
 
-func (p *defaultSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
+func newDefaultS2SSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
+	return &defaultS2SSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
+}
+
+func (p *defaultS2SSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	srcURL, err := url.Parse(p.transferInfo.Source)
 	if err != nil {
 		return nil, err
@@ -80,22 +85,22 @@ func (p *defaultSourceInfoProvider) PreSignedSourceURL() (*url.URL, error) {
 	return srcURL, nil
 }
 
-func (p *defaultSourceInfoProvider) Properties() (*SrcProperties, error) {
+func (p *defaultS2SSourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &SrcProperties{
 		SrcHTTPHeaders: p.transferInfo.SrcHTTPHeaders,
 		SrcMetadata:    p.transferInfo.SrcMetadata,
 	}, nil
 }
 
-func (p *defaultSourceInfoProvider) IsLocal() bool {
+func (p *defaultS2SSourceInfoProvider) IsLocal() bool {
 	return false
 }
 
-func (p *defaultSourceInfoProvider) SourceSize() int64 {
+func (p *defaultS2SSourceInfoProvider) SourceSize() int64 {
 	return p.transferInfo.SourceSize
 }
 
-func (p *defaultSourceInfoProvider) RawSource() string {
+func (p *defaultS2SSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
 }
 

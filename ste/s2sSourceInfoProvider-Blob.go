@@ -25,18 +25,18 @@ import (
 )
 
 type blobSourceInfoProvider struct {
-	defaultSourceInfoProvider
+	defaultS2SSourceInfoProvider
 }
 
 func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
-	b, err := newDefaultSourceInfoProvider(jptm)
+	b, err := newDefaultS2SSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err
 	}
 
-	base, _ := b.(*defaultSourceInfoProvider)
+	base, _ := b.(*defaultS2SSourceInfoProvider)
 
-	return &blobSourceInfoProvider{defaultSourceInfoProvider: *base}, nil
+	return &blobSourceInfoProvider{defaultS2SSourceInfoProvider: *base}, nil
 }
 
 func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {

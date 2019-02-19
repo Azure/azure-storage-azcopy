@@ -66,7 +66,6 @@ func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFacto
 	}
 }
 
-
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	switch fromTo {
@@ -97,7 +96,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobBlob():
 		return parameterizeSend(anyToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
 	case common.EFromTo.FileBlob():
-		return parameterizeSend(anyToRemote, newURLToBlobCopier, newDefaultSourceInfoProvider)
+		return parameterizeSend(urlToRemote, newURLToBlobCopier, newDefaultS2SSourceInfoProvider)
 	case common.EFromTo.S3Blob():
 		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}

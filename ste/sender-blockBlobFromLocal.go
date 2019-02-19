@@ -22,7 +22,6 @@ package ste
 
 import (
 	"bytes"
-	"encoding/base64"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -60,8 +59,7 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader) chunkFunc {
 	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		// step 1: generate block ID
-		blockID := common.NewUUID().String()
-		encodedBlockID := base64.StdEncoding.EncodeToString([]byte(blockID))
+		encodedBlockID := u.generateEncodedBlockID()
 
 		// step 2: save the block ID into the list of block IDs
 		u.setBlockID(blockIndex, encodedBlockID)
