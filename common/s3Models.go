@@ -74,7 +74,7 @@ func (oie *ObjectInfoExtension) NewCommonMetadata() Metadata {
 	for k, v := range oie.ObjectInfo.Metadata {
 		if len(k) > s3MetadataPrefixLen {
 			if prefix := k[0:s3MetadataPrefixLen]; strings.EqualFold(prefix, s3MetadataPrefix) {
-				md[strings.ToLower(k[s3MetadataPrefixLen:])] = v[0]
+				md[k[s3MetadataPrefixLen:]] = v[0]
 			}
 		}
 	}
