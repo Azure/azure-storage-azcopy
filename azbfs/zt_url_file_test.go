@@ -206,7 +206,7 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	resp, err := fileURL.Download(context.Background(), 0, 1024)
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, http.StatusPartialContent)
-	c.Assert(resp.ContentLength(), chk.Equals, "1024")
+	c.Assert(resp.ContentLength(), chk.Equals, int64(1024))
 	c.Assert(resp.ContentType(), chk.Equals, "application/octet-stream")
 	c.Assert(resp.Status(), chk.Not(chk.Equals), "")
 
@@ -219,7 +219,7 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	resp, err = fileURL.Download(context.Background(), 0, 0)
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, http.StatusOK)
-	c.Assert(resp.ContentLength(), chk.Equals, "4096")
+	c.Assert(resp.ContentLength(), chk.Equals, int64(4096))
 	c.Assert(resp.Date(), chk.Not(chk.Equals), "")
 	c.Assert(resp.ETag(), chk.Not(chk.Equals), "")
 	c.Assert(resp.LastModified(), chk.Not(chk.Equals), "")
