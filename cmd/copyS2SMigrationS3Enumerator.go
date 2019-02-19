@@ -82,7 +82,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				return err
 			}
 
-			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, cca); err != nil {
+			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, false, cca); err != nil {
 				return err
 			}
 
@@ -286,7 +286,6 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 		// So azcopy need additional get request to collect these properties.
 		// When get S2S properties in backend is not enabled, get properties during enumerating.
 		if cca.s2sPreserveProperties && !cca.s2sGetS3PropertiesInBackend {
-			fmt.Println("Here in s2sPreserveProperties")
 			var err error
 			objectInfo, err = s3Client.StatObject(bucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {
@@ -303,6 +302,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 			tmpS3URLPart.URL(),
 			urlExtension{URL: destBaseURL}.generateObjectPath(objectRelativePath),
 			&objectInfo,
+			cca.s2sGetS3PropertiesInBackend,
 			cca)
 	}
 
@@ -320,7 +320,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 	return nil
 }
 
-func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo,
+func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo, getS3PropertiesInBackend bool,
 	cca *cookedCopyCmdArgs) error {
 	oie := common.ObjectInfoExtension{ObjectInfo: *objectInfo}
 
@@ -336,7 +336,7 @@ func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.
 		CacheControl:                oie.CacheControl(),
 		ContentMD5:                  oie.ContentMD5(),
 		Metadata:                    oie.NewCommonMetadata(),
-		S2SGetS3PropertiesInBackend: cca.s2sGetS3PropertiesInBackend}
+		S2SGetS3PropertiesInBackend: getS3PropertiesInBackend}
 
 	return e.addTransfer(copyTransfer, cca)
 }
