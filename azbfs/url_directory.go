@@ -110,12 +110,13 @@ func (d DirectoryURL) FileSystemURL() FileSystemURL {
 // Marker) to get the next segment.
 func (d DirectoryURL) ListDirectorySegment(ctx context.Context, marker *string, recursive bool) (*DirectoryListResponse, error) {
 	// Since listPath is supported on filesystem Url
-	// covert the directory url to fileSystemUrl
+	// convert the directory url to fileSystemUrl
 	// and listPath for filesystem with directory path set in the path parameter
 	var maxEntriesInListOperation = int32(1000)
 
-	resp, err := d.directoryClient.List(ctx, recursive, d.filesystem, &d.pathParameter, marker,
+	resp, err := d.FileSystemURL().fileSystemClient.ListPaths(ctx, recursive, d.filesystem, &d.pathParameter, marker,
 		&maxEntriesInListOperation, nil, nil, nil, nil)
+
 	return (*DirectoryListResponse)(resp), err
 }
 

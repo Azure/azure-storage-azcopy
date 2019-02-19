@@ -341,6 +341,115 @@ func (client filesystemClient) listResponder(resp pipeline.Response) (pipeline.R
 	return result, nil
 }
 
+// ListPaths list filesystem paths and their properties.
+//
+// recursive is if "true", all paths are listed; otherwise, only paths at the root of the filesystem are listed.  If
+// "directory" is specified, the list will only include paths that share the same root. filesystem is the filesystem
+// identifier.  The value must start and end with a letter or number and must contain only letters, numbers, and the
+// dash (-) character.  Consecutive dashes are not permitted.  All letters must be lowercase.  The value must have
+// between 3 and 63 characters. directory is filters results to paths within the specified directory. An error occurs
+// if the directory does not exist. continuation is the number of paths returned with each invocation is limited. If
+// the number of paths to be returned exceeds this limit, a continuation token is returned in the response header
+// x-ms-continuation. When a continuation token is  returned in the response, it must be specified in a subsequent
+// invocation of the list operation to continue listing the paths. maxResults is an optional value that specifies the
+// maximum number of items to return. If omitted or greater than 5,000, the response will include up to 5,000 items.
+// upn is optional. Valid only when Hierarchical Namespace is enabled for the account. If "true", the user identity
+// values returned in the owner and group fields of each list entry will be transformed from Azure Active Directory
+// Object IDs to User Principal Names.  If "false", the values will be returned as Azure Active Directory Object IDs.
+// The default value is false. Note that group and application Object IDs are not translated because they do not have
+// unique friendly names. xMsClientRequestID is a UUID recorded in the analytics logs for troubleshooting and
+// correlation. timeout is an optional operation timeout value in seconds. The period begins when the request is
+// received by the service. If the timeout value elapses before the operation completes, the operation fails. xMsDate
+// is specifies the Coordinated Universal Time (UTC) for the request.  This is required when using shared key
+// authorization.
+func (client filesystemClient) ListPaths(ctx context.Context, recursive bool, filesystem string, directory *string, continuation *string, maxResults *int32, upn *bool, xMsClientRequestID *string, timeout *int32, xMsDate *string) (*PathList, error) {
+	if err := validate([]validation{
+		{targetValue: maxResults,
+			constraints: []constraint{{target: "maxResults", name: null, rule: false,
+				chain: []constraint{{target: "maxResults", name: inclusiveMinimum, rule: 1, chain: nil}}}}},
+		{targetValue: filesystem,
+			constraints: []constraint{{target: "filesystem", name: maxLength, rule: 63, chain: nil},
+				{target: "filesystem", name: minLength, rule: 3, chain: nil},
+				{target: "filesystem", name: pattern, rule: `^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$`, chain: nil}}},
+		{targetValue: xMsClientRequestID,
+			constraints: []constraint{{target: "xMsClientRequestID", name: null, rule: false,
+				chain: []constraint{{target: "xMsClientRequestID", name: pattern, rule: `^[{(]?[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}[)}]?$`, chain: nil}}}}},
+		{targetValue: timeout,
+			constraints: []constraint{{target: "timeout", name: null, rule: false,
+				chain: []constraint{{target: "timeout", name: inclusiveMinimum, rule: 1, chain: nil}}}}}}); err != nil {
+		return nil, err
+	}
+	req, err := client.listPathsPreparer(recursive, filesystem, directory, continuation, maxResults, upn, xMsClientRequestID, timeout, xMsDate)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Pipeline().Do(ctx, responderPolicyFactory{responder: client.listPathsResponder}, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.(*PathList), err
+}
+
+// listPathsPreparer prepares the ListPaths request.
+func (client filesystemClient) listPathsPreparer(recursive bool, filesystem string, directory *string, continuation *string, maxResults *int32, upn *bool, xMsClientRequestID *string, timeout *int32, xMsDate *string) (pipeline.Request, error) {
+	req, err := pipeline.NewRequest("GET", client.url, nil)
+	if err != nil {
+		return req, pipeline.NewError(err, "failed to create request")
+	}
+	params := req.URL.Query()
+	if directory != nil && len(*directory) > 0 {
+		params.Set("directory", *directory)
+	}
+	params.Set("recursive", strconv.FormatBool(recursive))
+	if continuation != nil && len(*continuation) > 0 {
+		params.Set("continuation", *continuation)
+	}
+	if maxResults != nil {
+		params.Set("maxResults", strconv.FormatInt(int64(*maxResults), 10))
+	}
+	if upn != nil {
+		params.Set("upn", strconv.FormatBool(*upn))
+	}
+	params.Set("resource", "filesystem")
+	if timeout != nil {
+		params.Set("timeout", strconv.FormatInt(int64(*timeout), 10))
+	}
+	req.URL.RawQuery = params.Encode()
+	if xMsClientRequestID != nil {
+		req.Header.Set("x-ms-client-request-id", *xMsClientRequestID)
+	}
+	if xMsDate != nil {
+		req.Header.Set("x-ms-date", *xMsDate)
+	}
+	req.Header.Set("x-ms-version", ServiceVersion)
+	return req, nil
+}
+
+// listPathsResponder handles the response to the ListPaths request.
+func (client filesystemClient) listPathsResponder(resp pipeline.Response) (pipeline.Response, error) {
+	err := validateResponse(resp, http.StatusOK)
+	if resp == nil {
+		return nil, err
+	}
+	result := &PathList{rawResponse: resp.Response()}
+	if err != nil {
+		return result, err
+	}
+	defer resp.Response().Body.Close()
+	b, err := ioutil.ReadAll(resp.Response().Body)
+	if err != nil {
+		return result, err
+	}
+	if len(b) > 0 {
+		b = removeBOM(b)
+		err = json.Unmarshal(b, result)
+		if err != nil {
+			return result, NewResponseError(err, resp.Response(), "failed to unmarshal response body")
+		}
+	}
+	return result, nil
+}
+
 // SetProperties set properties for the filesystem.  This operation supports conditional HTTP requests.  For more
 // information, see [Specifying Conditional Headers for Blob Service
 // Operations](https://docs.microsoft.com/en-us/rest/api/storageservices/specifying-conditional-headers-for-blob-service-operations).

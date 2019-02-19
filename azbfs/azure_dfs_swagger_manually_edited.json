@@ -399,7 +399,7 @@
         ]
       },
       "get": {
-        "operationId": "Path_List",
+        "operationId": "Filesystem_ListPaths",
         "summary": "List Paths",
         "description": "List filesystem paths and their properties.",
         "x-ms-pageable": {
