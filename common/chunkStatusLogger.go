@@ -93,6 +93,8 @@ func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{9, "Queu
 func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "DiskIO"} }            // waiting on disk read/write to complete
 func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
 func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
+// extra status used only by S2S copy
+func (WaitReason) S2SCopyOnWire() WaitReason { return WaitReason{13, "S2SCopyOnWire"} } // waiting for S2S copy on wire get finished
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -149,9 +151,6 @@ var downloadWaitReasons = []WaitReason{
 	EWaitReason.DiskIO(),
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
-
-// extra status used only by S2S copy
-func (WaitReason) S2SCopyOnWire() WaitReason { return WaitReason("S2SCopyOnWire") } // waiting for S2S copy on wire get finished
 
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot

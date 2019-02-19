@@ -44,7 +44,7 @@ type azureFilesUploader struct {
 	creationTimeHeaders *azfile.FileHTTPHeaders // pointer so default value, nil, is clearly "wrong" and can't be used by accident
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (uploader, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 

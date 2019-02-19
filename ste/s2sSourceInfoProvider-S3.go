@@ -45,7 +45,7 @@ const defaultPresignExpires = time.Hour * 7 * 24
 
 var s3ClientFactory = common.NewS3ClientFactory()
 
-func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (s2sSourceInfoProvider, error) {
+func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
 	var err error
 	p := s3SourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}
 

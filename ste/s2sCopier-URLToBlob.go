@@ -28,7 +28,10 @@ import (
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
-func newURLToBlobCopier(jptm IJobPartTransferMgr, srcInfoProvider s2sSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error) {
+// Creates the right kind of URL to blob copier, based on the blob type of the source
+func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider,) (ISenderBase, error) {
+	srcInfoProvider := sip.(s2sSourceInfoProvider)  // "downcast" to the type we know it really has
+
 	targetBlobType := azblob.BlobBlockBlob // By default use block blob as destination type
 
 	if blobSrcInfoProvider, ok := srcInfoProvider.(s2sBlobSourceInfoProvider); ok {

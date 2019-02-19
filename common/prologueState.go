@@ -18,37 +18,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package common
 
 import (
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
-type appendBlobUploader struct {
-	appendBlobSenderBase
+type cutdownJptm interface {
+	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 }
 
-func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip sourceInfoProvider) (ISenderBase, error) {
-	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, sip)
-	if err != nil {
-		return nil, err
-	}
-
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase}, nil
+// PrologueState contains info necessary for different sending operations' prologue.
+type PrologueState struct {
+	// Leading bytes are the early bytes of the file, to be used
+	// for mime-type detection (or nil if file is empty or the bytes code
+	// not be read).
+	leadingBytes []byte
 }
 
-func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
-	appendBlockFromLocal := func() {
-		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
-		if err != nil {
-			u.jptm.FailActiveUpload("Appending block", err)
-			return
-		}
-	}
+func (ps PrologueState) CanInferContentType() bool {
+	return len(ps.leadingBytes) > 0 // we can have a go, if we have some leading bytes
+}
 
-	return u.generateAppendBlockToRemoteFunc(id, appendBlockFromLocal)
+func (ps PrologueState) GetInferredContentType(jptm cutdownJptm) string {
+	headers, _ := jptm.BlobDstData(ps.leadingBytes)
+	return headers.ContentType
+	// TODO: this BlobDstData method is messy, both because of the blob/file distinction and
+	//     because its so coarse grained.  Do something about that one day.
 }

@@ -128,7 +128,7 @@ func (s *appendBlobSenderBase) generateAppendBlockToRemoteFunc(id common.ChunkID
 	})
 }
 
-func (s *appendBlobSenderBase) Prologue(ps PrologueState) {
+func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before

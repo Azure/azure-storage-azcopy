@@ -22,12 +22,13 @@ package ste
 
 import (
 	"context"
+	"net/url"
+	"time"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
-	"net/url"
-	"time"
 )
 
 type appendBlobUploader struct {
@@ -64,12 +65,12 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	return &appendBlobUploader{
-		jptm:          jptm,
-		appendBlobUrl: azblob.NewBlobURL(*destURL, p).ToAppendBlobURL(),
-		chunkSize:     chunkSize,
-		numChunks:     numChunks,
-		pipeline:      p,
-		pacer:         pacer,
+		jptm:                   jptm,
+		appendBlobUrl:          azblob.NewBlobURL(*destURL, p).ToAppendBlobURL(),
+		chunkSize:              chunkSize,
+		numChunks:              numChunks,
+		pipeline:               p,
+		pacer:                  pacer,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1),
 		md5Channel:             newMd5Channel(),
 	}, nil
@@ -139,6 +140,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	})
 }
 
+// TODO: Confirm with john about the epilogue difference.
 func (u *appendBlobUploader) Epilogue() {
 	jptm := u.jptm
 

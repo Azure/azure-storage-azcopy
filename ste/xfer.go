@@ -50,26 +50,22 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
-type newJobXferWithUploaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory, sipf sourceInfoProviderFactory)
-type newJobXferWithS2SCopierFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, cpf s2sCopierFactory, sipf s2sSourceInfoProviderFactory)
+type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
-// Takes a multi-purpose up/downloader function, and makes it ready to use with a specific type of up/downloader
-func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory, sipf sourceInfoProviderFactory) newJobXfer {
-	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
-		targetFunction(jptm, pipeline, pacer, uf, sipf)
-	}
-}
+// Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
 		targetFunction(jptm, pipeline, pacer, df)
 	}
 }
 
-func parameterizeS2SCopy(targetFunction newJobXferWithS2SCopierFactory, cpf s2sCopierFactory, sipf s2sSourceInfoProviderFactory) newJobXfer {
+// Takes a multi-purpose send function, and makes it ready to use with a specific type of sender
+func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
-		targetFunction(jptm, pipeline, pacer, cpf, sipf)
+		targetFunction(jptm, pipeline, pacer, sf, sipf)
 	}
 }
+
 
 // the xfer factory is generated based on the type of source and destination
 func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
@@ -80,30 +76,30 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch blobType {
 		case common.EBlobType.None(),
 			common.EBlobType.BlockBlob():
-			return parameterizeUpload(localToRemote, newBlockBlobUploader, newLocalSourceInfoProvider)
+			return parameterizeSend(anyToRemote, newBlockBlobUploader, newLocalSourceInfoProvider)
 		case common.EBlobType.PageBlob():
-			return parameterizeUpload(localToRemote, newPageBlobUploader, newLocalSourceInfoProvider)
+			return parameterizeSend(anyToRemote, newPageBlobUploader, newLocalSourceInfoProvider)
 		case common.EBlobType.AppendBlob():
-			return parameterizeUpload(localToRemote, newAppendBlobUploader, newLocalSourceInfoProvider)
+			return parameterizeSend(anyToRemote, newAppendBlobUploader, newLocalSourceInfoProvider)
 		}
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
 		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-		return parameterizeUpload(localToRemote, newAzureFilesUploader, newLocalSourceInfoProvider)
+		return parameterizeSend(anyToRemote, newAzureFilesUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.FileTrash():
 		return DeleteFilePrologue
 	case common.EFromTo.LocalBlobFS():
-		return parameterizeUpload(localToRemote, newBlobFSUploader, newLocalSourceInfoProvider)
+		return parameterizeSend(anyToRemote, newBlobFSUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.BlobFSLocal():
 		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():
-		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
 	case common.EFromTo.FileBlob():
-		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier, newDefaultSourceInfoProvider)
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newDefaultSourceInfoProvider)
 	case common.EFromTo.S3Blob():
-		return parameterizeS2SCopy(urlToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 }

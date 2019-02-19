@@ -28,7 +28,7 @@ type blobSourceInfoProvider struct {
 	defaultSourceInfoProvider
 }
 
-func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (s2sSourceInfoProvider, error) {
+func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
 	b, err := newDefaultSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err

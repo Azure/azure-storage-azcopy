@@ -30,6 +30,8 @@ import (
 type sourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
+
+	IsLocal() bool
 }
 
 // Abstraction of the methods needed to prepare copy source
@@ -58,11 +60,9 @@ type s2sBlobSourceInfoProvider interface {
 	BlobType() azblob.BlobType
 }
 
-type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) sourceInfoProvider
+type sourceInfoProviderFactory func(jptm IJobPartTransferMgr) (sourceInfoProvider, error)
 
-type s2sSourceInfoProviderFactory func(jptm IJobPartTransferMgr) (s2sSourceInfoProvider, error)
-
-func newDefaultSourceInfoProvider(jptm IJobPartTransferMgr) (s2sSourceInfoProvider, error) {
+func newDefaultSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
 	return &defaultSourceInfoProvider{jptm: jptm, transferInfo: jptm.Info()}, nil
 }
 
@@ -87,6 +87,10 @@ func (p *defaultSourceInfoProvider) Properties() (*SrcProperties, error) {
 	}, nil
 }
 
+func (p *defaultSourceInfoProvider) IsLocal() bool {
+	return false
+}
+
 func (p *defaultSourceInfoProvider) SourceSize() int64 {
 	return p.transferInfo.SourceSize
 }
@@ -100,8 +104,8 @@ type localFileSourceInfoProvider struct {
 	jptm IJobPartTransferMgr
 }
 
-func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) sourceInfoProvider {
-	return &localFileSourceInfoProvider{jptm}
+func newLocalSourceInfoProvider(jptm IJobPartTransferMgr) (sourceInfoProvider, error) {
+	return &localFileSourceInfoProvider{jptm}, nil
 }
 
 func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -118,4 +122,8 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		},
 		SrcMetadata: common.FromAzBlobMetadataToCommonMetadata(metadata),
 	}, nil
+}
+
+func (f localFileSourceInfoProvider) IsLocal() bool {
+	return true
 }

@@ -111,7 +111,7 @@ func (s *blockBlobSenderBase) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(s.destBlockBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{}))
 }
 
-func (s *blockBlobSenderBase) Prologue(ps PrologueState) {
+func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) {
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
