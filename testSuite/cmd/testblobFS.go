@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -96,11 +95,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 		os.Exit(1)
 	}
 	// get the size of the downloaded file
-	downloadedLength, err := strconv.ParseInt(dResp.ContentLength(), 10, 64)
-	if err != nil {
-		fmt.Println("error converting the content length to int64. failed with error ", err.Error())
-		os.Exit(1)
-	}
+	downloadedLength := dResp.ContentLength()
 
 	// open the local file
 	f, err := os.Open(tbfsc.Object)
