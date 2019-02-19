@@ -805,7 +805,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// display a scanning keyword if the job is not completely ordered
 	var scanningString = ""
 	if !summary.CompleteJobOrdered {
-		scanningString = "(scanning...)"
+		scanningString = " (scanning...)"
 	}
 
 	// compute the average throughput for the last time interval
@@ -827,7 +827,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.TotalTransfers,
 			scanningString))
 	} else {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total %s, 2-sec Throughput (Mb/s): %v",
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, 2-sec Throughput (Mb/s): %v",
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
