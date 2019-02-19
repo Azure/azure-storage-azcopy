@@ -145,6 +145,7 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 	prefetchSucceed := false
 
 	var chunkReader common.SingleChunkReader
+	ps := common.PrologueState{}
 	chunkIDCount := int32(0)
 	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize); startIndex += int64(chunkSize) {
 
@@ -159,23 +160,19 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 		if srcInfoProvider.IsLocal() {
 			// create reader and prefetch the data into it
 			chunkReader, prefetchSucceed = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+			ps = chunkReader.GetPrologueState()
 			if prefetchSucceed {
 				chunkReader.WriteBufferTo(md5Hasher)
 			} else {
 				safeToUseHash = false // because we've missed a chunk
 			}
-		} else {
-			// the data is remote, so there's nothing to read locally
-			chunkReader = common.NewEmptyChunkReader()
 		}
 
 		// If this is the the very first chunk, do special init steps
 		if startIndex == 0 {
 			// Run prologue before first chunk is scheduled.
-			// We do this here for cases where bytes from the start of the file are used.
 			// If file is not local, we'll get no leading bytes, but we still run the prologue in case
 			// there's other initialization to do in the sender.
-			ps := chunkReader.GetPrologueState()
 			s.Prologue(ps)
 		}
 

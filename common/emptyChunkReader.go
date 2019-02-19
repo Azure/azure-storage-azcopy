@@ -30,10 +30,6 @@ import (
 type emptyChunkReader struct {
 }
 
-func NewEmptyChunkReader() SingleChunkReader {
-	return &emptyChunkReader{}
-}
-
 func (cr *emptyChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
 	return true
 }
