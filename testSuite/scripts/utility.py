@@ -84,7 +84,7 @@ def process_oauth_command(
     cmd,
     fromTo=""):
     if fromTo!="":
-        cmd.add_flags("fromTo", fromTo)
+        cmd.add_flags("from-to", fromTo)
 
 # api executes the clean command on validator which deletes all the contents of the container.
 def clean_test_container(container):

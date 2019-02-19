@@ -421,7 +421,7 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 				},
 				jpm.pacer)
 		default:
-			panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
+			panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 		}
 	}
 }
