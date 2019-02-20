@@ -829,7 +829,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.TransfersSkipped,
 			summary.TotalTransfers,
 			scanningString,
-			getPerfString))
+			perfString))
 	} else {
 		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s2-sec Throughput (Mb/s): %v%s",
 			summary.TransfersCompleted,
