@@ -44,7 +44,7 @@ const copyCmdExample = `Upload a single file using OAuth authentication. Please 
 Upload a single file with a SAS:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Upload a single file with a SAS using a pipeline (block blobs only):
+Upload a single file with a SAS using piping (block blobs only):
   - cat "/path/to/file.txt" | azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
 Upload an entire directory with a SAS:
@@ -62,7 +62,7 @@ Download a single file using OAuth authentication. Please use 'azcopy login' com
 Download a single file with a SAS:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "/path/to/file.txt"
 
-Download a single file with a SAS using a pipeline (block blobs only):
+Download a single file with a SAS using piping (block blobs only):
   - azcopy cp "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" > "/path/to/file.txt"
 
 Download an entire directory with a SAS:
