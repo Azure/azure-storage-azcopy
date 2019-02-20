@@ -178,6 +178,12 @@ const syncCmdLongDescription = `
 Replicates source to the destination location. The last modified times are used for comparison. The supported pairs are:
   - local <-> Azure Blob (SAS or OAuth authentication)
 
+Please note that the sync command differs from the copy command in several ways:
+  0. The recursive flag is on by default.
+  1. The source and destination should not contain patterns(such as * or ?).
+  2. The include/exclude flags can be a list of patterns matching to the file names. Please refer to the example section for illustration.
+  3. If there are files/blobs at the destination that are not present at the source, the user will be prompted to delete them. This prompt can be silenced by using the corresponding flags to automatically answer the deletion question.
+
 Advanced:
 Please note that AzCopy automatically detects the Content-Type of files when uploading from local disk, based on file extension or file content(if no extension).
 
@@ -187,4 +193,23 @@ The built-in lookup table is small but on unix it is augmented by the local syst
   - /etc/apache/mime.types
 
 On Windows, MIME types are extracted from the registry.
+`
+
+const syncCmdExample = `
+Sync a single file:
+  - azcopy sync "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
+
+Sync an entire directory including its sub-directories (note that recursive is by default on):
+  - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]"
+
+Sync only the top files inside a directory but not its sub-directories:
+  - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=false
+
+Sync a subset of files in a directory (ex: only jpg and pdf files, or if the file name is "exactName"):
+  - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --include="*.jpg;*.pdf;exactName"
+
+Sync an entire directory but exclude certain files from the scope (ex: every file that starts with foo or ends with bar):
+  - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude="foo*;*bar"
+
+Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
 `

@@ -1,0 +1,100 @@
+// Copyright © 2017 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package cmd
+
+import (
+	"github.com/Azure/azure-storage-azcopy/common"
+	"time"
+)
+
+// the interceptor gathers/saves the job part orders for validation
+type interceptor struct {
+	transfers   []common.CopyTransfer
+	lastRequest interface{}
+}
+
+func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response interface{}) {
+	switch cmd {
+	case common.ERpcCmd.CopyJobPartOrder():
+		// cache the transfers
+		copyRequest := *request.(*common.CopyJobPartOrderRequest)
+		i.transfers = append(i.transfers, copyRequest.Transfers...)
+		i.lastRequest = request
+
+		// mock the result
+		*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: true}
+
+	case common.ERpcCmd.ListSyncJobSummary():
+		copyRequest := *request.(*common.CopyJobPartOrderRequest)
+
+		// fake the result saying that job is already completed
+		// doing so relies on the mockedLifecycleManager not quitting the application
+		*(response.(*common.ListSyncJobSummaryResponse)) = common.ListSyncJobSummaryResponse{
+			Timestamp:          time.Now().UTC(),
+			JobID:              copyRequest.JobID,
+			ErrorMsg:           "",
+			JobStatus:          common.EJobStatus.Completed(),
+			CompleteJobOrdered: true,
+			FailedTransfers:    []common.TransferDetail{},
+		}
+	case common.ERpcCmd.ListJobs():
+	case common.ERpcCmd.ListJobSummary():
+	case common.ERpcCmd.ListJobTransfers():
+	case common.ERpcCmd.PauseJob():
+	case common.ERpcCmd.CancelJob():
+	case common.ERpcCmd.ResumeJob():
+	case common.ERpcCmd.GetJobFromTo():
+		fallthrough
+	default:
+		panic("RPC mock not implemented")
+	}
+}
+
+func (i *interceptor) init() {
+	// mock out the lifecycle manager so that it can no longer terminate the application
+	glcm = mockedLifecycleManager{}
+}
+
+func (i *interceptor) reset() {
+	i.transfers = make([]common.CopyTransfer, 0)
+	i.lastRequest = nil
+}
+
+// this lifecycle manager substitute does not perform any action
+type mockedLifecycleManager struct{}
+
+func (mockedLifecycleManager) Progress(string)                                          {}
+func (mockedLifecycleManager) Info(string)                                              {}
+func (mockedLifecycleManager) Prompt(string) string                                     { return "" }
+func (mockedLifecycleManager) Exit(string, common.ExitCode)                             {}
+func (mockedLifecycleManager) Error(string)                                             {}
+func (mockedLifecycleManager) SurrenderControl()                                        {}
+func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController, bool)    {}
+func (mockedLifecycleManager) GetEnvironmentVariable(common.EnvironmentVariable) string { return "" }
+
+type dummyProcessor struct {
+	record []storedObject
+}
+
+func (d *dummyProcessor) process(storedObject storedObject) (err error) {
+	d.record = append(d.record, storedObject)
+	return
+}

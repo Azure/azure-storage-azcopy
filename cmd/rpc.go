@@ -14,7 +14,6 @@ import (
 // Global singleton for sending RPC requests from the frontend to the STE
 var Rpc = func(cmd common.RpcCmd, request interface{}, response interface{}) {
 	err := inprocSend(cmd, request, response)
-	//err := NewHttpClient("").send(cmd, request, response)
 	common.PanicIfErr(err)
 }
 

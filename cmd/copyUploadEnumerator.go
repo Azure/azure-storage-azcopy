@@ -87,7 +87,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if len(cca.listOfFilesToCopy) > 0 {
 		for _, file := range cca.listOfFilesToCopy {
 			tempDestinationURl := *destinationURL
-			parentSourcePath, _ := util.sourceRootPathWithoutWildCards(cca.source)
+			parentSourcePath, _ := util.getRootPathWithoutWildCards(cca.source)
 			if len(parentSourcePath) > 0 && parentSourcePath[len(parentSourcePath)-1] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 				parentSourcePath = parentSourcePath[:len(parentSourcePath)-1]
 			}
@@ -283,7 +283,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					return err
 				}
 			}
-		}else{
+		} else {
 			glcm.Info(fmt.Sprintf("error %s accessing the filepath %s", err.Error(), fileOrDirectoryPath))
 		}
 	}
@@ -303,7 +303,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 // ffile1, ffile2, then destination for ffile1, ffile2 remotely will be MountedD/MountedF/ffile1 and
 // MountedD/MountedF/ffile2
 func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, parentSource, cleanContainerPath string,
-	destinationUrl *url.URL, cca *cookedCopyCmdArgs) error{
+	destinationUrl *url.URL, cca *cookedCopyCmdArgs) error {
 
 	util := copyHandlerUtil{}
 	// replace the "\\" path separator with "/" separator

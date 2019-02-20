@@ -21,35 +21,40 @@
 package cmd
 
 import (
-	chk "gopkg.in/check.v1"
-	"net/url"
+	"fmt"
 )
 
-type copyUtilTestSuite struct{}
+// the objectIndexer is essential for the generic sync enumerator to work
+// it can serve as a:
+// 		1. objectProcessor: accumulate a lookup map with given storedObjects
+//		2. resourceTraverser: go through the entities in the map like a traverser
+type objectIndexer struct {
+	indexMap map[string]storedObject
+	counter  int
+}
 
-var _ = chk.Suite(&copyUtilTestSuite{})
+func newObjectIndexer() *objectIndexer {
+	return &objectIndexer{indexMap: make(map[string]storedObject)}
+}
 
-func (s *copyUtilTestSuite) TestUrlIsContainerOrShare(c *chk.C) {
-	util := copyHandlerUtil{}
+// process the given stored object by indexing it using its relative path
+func (i *objectIndexer) store(storedObject storedObject) (err error) {
+	if i.counter == MaxNumberOfFilesAllowedInSync {
+		return fmt.Errorf("the maxium number of file allowed in sync is: %v", MaxNumberOfFilesAllowedInSync)
+	}
 
-	testUrl := url.URL{Path: "/container/dir1"}
-	isContainerOrShare := util.urlIsContainerOrShare(&testUrl)
-	c.Assert(isContainerOrShare, chk.Equals, false)
+	i.indexMap[storedObject.relativePath] = storedObject
+	i.counter += 1
+	return
+}
 
-	testUrl.Path = "/container/dir1/dir2"
-	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
-	c.Assert(isContainerOrShare, chk.Equals, false)
-
-	testUrl.Path = "/container/"
-	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
-	c.Assert(isContainerOrShare, chk.Equals, true)
-
-	testUrl.Path = "/container"
-	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
-	c.Assert(isContainerOrShare, chk.Equals, true)
-
-	// root container
-	testUrl.Path = "/"
-	isContainerOrShare = util.urlIsContainerOrShare(&testUrl)
-	c.Assert(isContainerOrShare, chk.Equals, true)
+// go through the remaining stored objects in the map to process them
+func (i *objectIndexer) traverse(processor objectProcessor, filters []objectFilter) (err error) {
+	for _, value := range i.indexMap {
+		err = processIfPassedFilters(filters, value, processor)
+		if err != nil {
+			return
+		}
+	}
+	return
 }

@@ -35,6 +35,8 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		e.PartNum++
 	}
 
+	// only append the transfer after we've checked and dispatched a part
+	// so that there is at least one transfer for the final part
 	e.Transfers = append(e.Transfers, transfer)
 
 	return nil
