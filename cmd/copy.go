@@ -315,7 +315,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from service to service")
 		}
-		// Not support blob tier customization, when copying block -> block blob or page -> page blob, blob tier will be kept,
+		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
@@ -1031,6 +1031,15 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy, the default value is true. "+
 		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
+
+	// s2sGetS3PropertiesInBackend is an optional flag for controlling whether S3 object's full properties are get during enumerating in frontend or
+	// right before transferring in ste(backend).
+	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
+	// while this could cause big performance issue for S3, where listing doesn't return full properties,
+	// and enumerating logic do fetching properties sequentially!
+	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
+	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
+	// The usage of this hidden flag is to provide fallback to traditional behavior.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetS3PropertiesInBackend, "s2s-get-s3-properties-in-backend", true, "get S3 objects properties in backend. ")
 
 	// not implemented
@@ -1044,5 +1053,5 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("stdin-enable")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
-	cpCmd.PersistentFlags().MarkHidden("get-s2s-properties-in-backend")
+	cpCmd.PersistentFlags().MarkHidden("s2s-get-s3-properties-in-backend")
 }
