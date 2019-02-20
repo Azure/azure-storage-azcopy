@@ -843,7 +843,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 // to give an (arbitrary) amount of time for things to reach steady-state.
 func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, durationOfJob time.Duration) (perfString string, diskString string) {
 	perfString = ""
-	if shouldDisplayPerfStates(glcm) {
+	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
@@ -856,8 +856,8 @@ func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, 
 	return
 }
 
-func shouldDisplayPerfStates(lcm common.LifecycleMgr) bool {
-	return lcm.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
+func shouldDisplayPerfStates() bool {
+	return glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {
