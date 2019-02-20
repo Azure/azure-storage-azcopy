@@ -301,7 +301,8 @@ func (csl *chunkStatusLogger) isUploadDiskConstrained() bool {
 	// (not the _execution_ and so their counts will just tend to equal that of the small goroutine pool that runs them).
 	// It might be convenient if we could compare TWO queue sizes here, as we do in isDownloadDiskConstrained, but unfortunately our
 	// Jan 2019 architecture only gives us ONE useful queue-like state when uploading, so we can't compare two.
-	queueForNetworkIsSmall := csl.getCount(EWaitReason.WorkerGR()) < 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
+	const nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
+	queueForNetworkIsSmall := csl.getCount(EWaitReason.WorkerGR()) < nearZeroQueueSize
 
 	beforeGRWaitQueue := csl.getCount(EWaitReason.RAMToSchedule()) + csl.getCount(EWaitReason.DiskIO())
 	areStillReadingDisk := beforeGRWaitQueue > 0 // size of queue for network is irrelevant if we are no longer actually reading disk files, and therefore no longer putting anything into the queue for network
@@ -320,8 +321,10 @@ func (csl *chunkStatusLogger) isDownloadDiskConstrained() bool {
 	chunksWaitingOnNetwork := csl.getCount(EWaitReason.WorkerGR())
 
 	// if we have way more stuff waiting on disk than on network, we can assume disk is the bottleneck
-	return chunksWaitingOnDisk > 10 && // this test is in case both are near zero, as they would be near the end of the job
-		chunksWaitingOnDisk > 5*chunksWaitingOnNetwork // TODO: review/tune the arbitrary constant here
+	const activeDiskQThreshold = 10
+	const bigDifference = 5                              // TODO: review/tune the arbitrary constant here
+	return chunksWaitingOnDisk > activeDiskQThreshold && // this test is in case both are near zero, as they would be near the end of the job
+		chunksWaitingOnDisk > bigDifference*chunksWaitingOnNetwork
 }
 
 ///////////////////////////////////// Sample LinqPad query for manual analysis of chunklog /////////////////////////////////////
