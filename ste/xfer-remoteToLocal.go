@@ -118,7 +118,8 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		chunkLogger,
 		dstFile,
 		numChunks,
-		MaxRetryPerDownloadBody)
+		MaxRetryPerDownloadBody,
+		jptm.MD5ValidationOption())
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)

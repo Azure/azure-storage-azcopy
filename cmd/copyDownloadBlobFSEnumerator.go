@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -10,8 +11,6 @@ import (
 	"time"
 
 	"strings"
-
-	"strconv"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -55,10 +54,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			destination = cca.destination
 		}
 
-		fileSize, err := strconv.ParseInt(props.ContentLength(), 10, 64)
-		if err != nil {
-			panic(err)
-		}
+		fileSize := props.ContentLength()
 
 		// Queue the transfer
 		e.addTransfer(common.CopyTransfer{
@@ -66,6 +62,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			Destination:      destination,
 			LastModifiedTime: e.parseLmt(props.LastModified()),
 			SourceSize:       fileSize,
+			ContentMD5:       props.ContentMD5(),
 		}, cca)
 
 		return e.dispatchFinalPart(cca)
@@ -100,10 +97,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			fileURL := azbfs.NewFileURL(tempURLPartsExtension.URL(), p)
 			if fileProperties, err := fileURL.GetProperties(ctx); err == nil && strings.EqualFold(fileProperties.XMsResourceType(), "file") {
 				// file exists
-				fileSize, err := strconv.ParseInt(fileProperties.ContentLength(), 10, 64)
-				if err != nil {
-					panic(err)
-				}
+				fileSize := fileProperties.ContentLength()
 
 				// assembling the file relative path
 				fileRelativePath := fileOrDir
@@ -119,7 +113,9 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					Source:           srcURL.String(),
 					Destination:      util.generateLocalPath(cca.destination, fileRelativePath),
 					LastModifiedTime: e.parseLmt(fileProperties.LastModified()),
-					SourceSize:       fileSize}, cca)
+					SourceSize:       fileSize,
+					ContentMD5:       fileProperties.ContentMD5(),
+				}, cca)
 				continue
 			}
 
@@ -133,10 +129,10 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			err := enumerateFilesInADLSGen2Directory(
 				ctx,
 				dirURL,
-				func(fileItem azbfs.ListEntrySchema) bool { // filter always return true in this case
+				func(fileItem azbfs.Path) bool { // filter always return true in this case
 					return true
 				},
-				func(fileItem azbfs.ListEntrySchema) error {
+				func(fileItem azbfs.Path) error {
 					relativePath := strings.Replace(*fileItem.Name, parentSourcePath, "", 1)
 					if len(relativePath) > 0 && relativePath[0] == common.AZCOPY_PATH_SEPARATOR_CHAR {
 						relativePath = relativePath[1:]
@@ -147,6 +143,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						Destination:      util.generateLocalPath(cca.destination, relativePath),
 						LastModifiedTime: e.parseLmt(*fileItem.LastModified),
 						SourceSize:       *fileItem.ContentLength,
+						ContentMD5:       getContentMd5(ctx, directoryURL, fileItem, cca.md5ValidationOption),
 					}, cca)
 				},
 			)
@@ -182,7 +179,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	for {
 		dListResp, err := directoryURL.ListDirectorySegment(ctx, &continuationMarker, true)
 		if err != nil {
-			return fmt.Errorf("error listing the files inside the given source url %s", directoryURL.String())
+			return fmt.Errorf("error listing the files inside the given source url %s: %s", directoryURL.String(), err.Error())
 		}
 
 		// get only the files inside the given path
@@ -194,6 +191,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				Destination:      util.generateLocalPath(cca.destination, util.getRelativePath(fsUrlParts.DirectoryOrFilePath, *path.Name)),
 				LastModifiedTime: e.parseLmt(*path.LastModified),
 				SourceSize:       *path.ContentLength,
+				ContentMD5:       getContentMd5(ctx, directoryURL, path, cca.md5ValidationOption),
 			}, cca)
 		}
 
@@ -212,6 +210,37 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return err
 	}
 	return nil
+}
+
+func getContentMd5(ctx context.Context, directoryURL azbfs.DirectoryURL, file azbfs.Path, md5ValidationOption common.HashValidationOption) []byte {
+	if md5ValidationOption == common.EHashValidationOption.NoCheck() {
+		return nil // not gonna check it, so don't need it
+	}
+
+	var returnValueForError []byte = nil // If we get an error, we just act like there was no content MD5. If validation is set to fail on error, this will fail the transfer of this file later on (at the time of the MD5 check)
+
+	// convert format of what we have, if we have something in the PathListResponse from Service
+	if file.ContentMD5Base64 != nil {
+		value, err := base64.StdEncoding.DecodeString(*file.ContentMD5Base64)
+		if err != nil {
+			return returnValueForError
+		}
+		return value
+	}
+
+	// Fall back to making a new round trip to the server
+	// This is an interim measure, so that we can still validate MD5s even before they are being returned in the server's
+	// PathList response
+	// TODO: remove this in a future release, once we know that Service is always returning the MD5s in the PathListResponse.
+	//     Why? Because otherwise, if there's a file with NO MD5, we'll make a round-trip here, but that's pointless if we KNOW that
+	//     that Service is always returning them in the PathListResponse which we've already checked above.
+	//     As at mid-Feb 2019, we don't KNOW that (in fact it's not returning them in the PathListResponse) so we need this code for now.
+	fileURL := directoryURL.FileSystemURL().NewDirectoryURL(*file.Name)
+	props, err := fileURL.GetProperties(ctx)
+	if err != nil {
+		return returnValueForError
+	}
+	return props.ContentMD5()
 }
 
 func (e *copyDownloadBlobFSEnumerator) parseLmt(lastModifiedTime string) time.Time {

@@ -558,18 +558,21 @@ var DefaultHashValidationOption = EHashValidationOption.FailIfDifferent()
 
 type HashValidationOption uint8
 
-// LogOnly is the least strict option
-func (HashValidationOption) LogOnly() HashValidationOption { return HashValidationOption(0) }
-
 // FailIfDifferent says fail if hashes different, but NOT fail if saved hash is
 // totally missing. This is a balance of convenience (for cases where no hash is saved) vs strictness
 // (to validate strictly when one is present)
-func (HashValidationOption) FailIfDifferent() HashValidationOption { return HashValidationOption(1) }
+func (HashValidationOption) FailIfDifferent() HashValidationOption { return HashValidationOption(0) }
+
+// Do not check hashes at download time at all
+func (HashValidationOption) NoCheck() HashValidationOption { return HashValidationOption(1) }
+
+// LogOnly means only log if missing or different, don't fail the transfer
+func (HashValidationOption) LogOnly() HashValidationOption { return HashValidationOption(2) }
 
 // FailIfDifferentOrMissing is the strictest option, and useful for testing or validation in cases when
 // we _know_ there should be a hash
 func (HashValidationOption) FailIfDifferentOrMissing() HashValidationOption {
-	return HashValidationOption(2)
+	return HashValidationOption(3)
 }
 
 func (hvo HashValidationOption) String() string {

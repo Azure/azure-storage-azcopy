@@ -168,9 +168,15 @@ func (u *blobFSUploader) Epilogue() {
 
 	// flush
 	if jptm.TransferStatus() > 0 {
-		_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize)
-		if err != nil {
-			jptm.FailActiveUpload("Flushing data", err)
+		md5Hash, ok := <-u.md5Channel
+		if ok {
+			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash)
+			if err != nil {
+				jptm.FailActiveUpload("Flushing data", err)
+				// don't return, since need cleanup below
+			}
+		} else {
+			jptm.FailActiveUpload("Getting hash", errNoHash)
 			// don't return, since need cleanup below
 		}
 	}

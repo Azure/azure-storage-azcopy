@@ -43,10 +43,9 @@
       "description": "Specifies the version of the REST protocol used for processing the request. This is required when using shared key authorization.",
       "in": "header",
       "name": "x-ms-version",
-      "required": false,
-      "type": "string",
-      "x-ms-parameter-location": "client"
-    },
+      "required": true,
+      "type": "string"
+      },
     "accountName": {
       "description": "The Azure Storage account name.",
       "in": "path",
@@ -400,7 +399,7 @@
         ]
       },
       "get": {
-        "operationId": "Path_List",
+        "operationId": "Filesystem_ListPaths",
         "summary": "List Paths",
         "description": "List filesystem paths and their properties.",
         "x-ms-pageable": {
@@ -587,7 +586,7 @@
           "name": "filesystem",
           "in": "path",
           "description": "The filesystem identifier.  The value must start and end with a letter or number and must contain only letters, numbers, and the dash (-) character.  Consecutive dashes are not permitted.  All letters must be lowercase.  The value must have between 3 and 63 characters.",
-          "pattern": "^[$a-z0-9](?!.*--)[-a-z0-9]{1,61}[a-z0-9]$",
+          "pattern": "^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$",
           "minLength": 3,
           "maxLength": 63,
           "required": true,
@@ -1146,6 +1145,13 @@
           {
             "name": "If-Unmodified-Since",
             "description": "Optional for Flush Data and Set Properties, but invalid for Append Data. A date and time value. Specify this header to perform the operation only if the resource has not been modified since the specified date and time.",
+            "in": "header",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "x-http-method-override",
+            "description": "Optional.  Override the http verb on the service side. Some older http clients do not support PATCH",
             "in": "header",
             "required": false,
             "type": "string"
@@ -1838,7 +1844,7 @@
           "name": "filesystem",
           "in": "path",
           "description": "The filesystem identifier.",
-          "pattern": "^[$a-z0-9](?!.*--)[-a-z0-9]{1,61}[a-z0-9]$",
+          "pattern": "^[$a-z0-9][-a-z0-9]{1,61}[a-z0-9]$",
           "minLength": 3,
           "maxLength": 63,
           "required": true,

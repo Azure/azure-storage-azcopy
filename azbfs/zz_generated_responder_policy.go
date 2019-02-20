@@ -55,7 +55,7 @@ func validateResponse(resp pipeline.Response, successStatusCodes ...int) error {
 	defer resp.Response().Body.Close()
 	b, err := ioutil.ReadAll(resp.Response().Body)
 	if err != nil {
-		return NewResponseError(err, resp.Response(), "failed to read response body")
+		return err
 	}
 	// the service code, description and details will be populated during unmarshalling
 	responseError := NewResponseError(nil, resp.Response(), resp.Response().Status)
