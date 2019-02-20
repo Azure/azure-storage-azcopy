@@ -79,7 +79,12 @@ func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Can
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
 //     the String method below, on the assumption that it will be called a lot.  Is that a premature optimization?
 
-//Upload chunks go through these states, in this order
+// Upload chunks go through these states, in this order.
+// We record this set of states, in this order, so that when we are uploading GetCounts() can return
+// counts for only those states that are relevant to upload (some are not relevant, so they are not in this list)
+// AND so that GetCounts will return the counts in the order that the states actually happen when uploading.
+// That makes it easy for end-users of the counts (i.e. logging and display code) to show the state counts
+// in a meaningful left-to-right sequential order.
 var uploadWaitReasons = []WaitReason{
 	// These first two happen in the transfer initiation function (i.e. the chunkfunc creation loop)
 	// So their total is constrained to the size of the goroutine pool that runs those functions.
@@ -97,6 +102,7 @@ var uploadWaitReasons = []WaitReason{
 }
 
 // Download chunks go through a larger set of states, due to needing to be re-assembled into sequential order
+// See comment on uploadWaitReasons for rationale.
 var downloadWaitReasons = []WaitReason{
 	// Done by the transfer initiation function (i.e. chunkfunc creation loop)
 	EWaitReason.RAMToSchedule(),
