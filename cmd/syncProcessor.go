@@ -106,7 +106,7 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 func (d *interactiveDeleteProcessor) promptForConfirmation() (shouldDelete bool) {
 	shouldDelete = false
 
-	answer := glcm.Prompt(fmt.Sprintf("Sync has discovered %s that are not present at the source, would you like to delete them from the destination? Please confirm with y/n: ", d.objectType))
+	answer := glcm.Prompt(fmt.Sprintf("Sync has discovered %s that are not present at the source, would you like to delete them from the destination? Please confirm with y/n (default: n): ", d.objectType))
 	if answer == "y" || answer == "yes" {
 		shouldDelete = true
 		glcm.Info(fmt.Sprintf("Confirmed. The extra %s will be deleted:", d.objectType))
