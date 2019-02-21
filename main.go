@@ -28,6 +28,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"time"
 )
 
 // get the lifecycle manager to print messages
@@ -63,5 +64,8 @@ func main() {
 // But our "survivors" add up to many GB, so its hard for users to be confident that we don't have
 // a memory leak (since with that default setting new GCs are very rare in our case). So configure them to be more frequent.
 func configureGC() {
-	debug.SetGCPercent(15)
+	go func() {
+		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
+		debug.SetGCPercent(20)       // active more aggressive/frequent GC than the default
+	}()
 }
