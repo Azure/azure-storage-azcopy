@@ -180,6 +180,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 	})
 }
 
+/* commented out. Ze will put it back in in his next change
 // regular container->directory sync but destination is identical to the source, transfers are scheduled based on lmt
 func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C) {
 	bsu := getBSU()
@@ -222,7 +223,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 		validateTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
 	})
 }
-
+*/
 // regular container->directory sync where destination is missing some files from source, and also has some extra files
 func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C) {
 	bsu := getBSU()
