@@ -27,6 +27,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"runtime/debug"
 )
 
 // get the lifecycle manager to print messages
@@ -51,7 +52,16 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
+	configureGC()
+
 	ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder, azcopyLogPathFolder)
 	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)
 	glcm.Exit("", common.EExitCode.Success())
+}
+
+// Golang's default behaviour is to GC when new objects = (100% of) total of objects surviving previous GC.
+// But our "survivors" add up to many GB, so its hard for users to be confident that we don't have
+// a memory leak (since with that default setting new GCs are very rare in our case). So configure them to be more frequent.
+func configureGC() {
+	debug.SetGCPercent(15)
 }
