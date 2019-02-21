@@ -61,7 +61,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 
 	// the blob was created after the file, so no sync should happen
 	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
@@ -154,7 +154,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	raw := getDefaultRawInput(srcDirName, rawContainerURLWithSAS.String())
 
 	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
+
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})

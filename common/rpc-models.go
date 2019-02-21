@@ -157,6 +157,10 @@ type ListSyncJobSummaryResponse struct {
 	FailedTransfers          []TransferDetail
 	IsDiskConstrained        bool
 	PerfStrings              []string
+	// sum of the size of transfer completed successfully so far.
+	TotalBytesTransferred uint64
+	// sum of the total transfer enumerated so far.
+	TotalBytesEnumerated uint64
 }
 
 type ListJobTransfersRequest struct {

@@ -87,20 +87,39 @@ func (s scenarioHelper) generateFilesFromList(c *chk.C, dirPath string, fileList
 	}
 }
 
-// make 30 blobs with random names
+// make 50 blobs with random names
 // 10 of them at the top level
 // 10 of them in sub dir "sub1"
 // 10 of them in sub dir "sub2"
+// 10 of them in deeper sub dir "sub1/sub3/sub5"
+// 10 of them with special characters
 func (scenarioHelper) generateCommonRemoteScenario(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
-	blobList = make([]string, 30)
+	blobList = make([]string, 50)
+	specialNames := []string{
+		"打麻将.txt",
+		"wow such space so much space",
+		"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy",
+		"coração",
+		"আপনার নাম কি",
+		"%4509%4254$85140&",
+		"Donaudampfschifffahrtselektrizitätenhauptbetriebswerkbauunterbeamtengesellschaft",
+		"お名前は何ですか",
+		"Adın ne",
+		"як вас звати",
+	}
+
 	for i := 0; i < 10; i++ {
 		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
 		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
 		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
 
-		blobList[3*i] = blobName1
-		blobList[3*i+1] = blobName2
-		blobList[3*i+2] = blobName3
+		blobList[5*i] = blobName1
+		blobList[5*i+1] = blobName2
+		blobList[5*i+2] = blobName3
+		blobList[5*i+3] = blobName4
+		blobList[5*i+4] = blobName5
 	}
 
 	return

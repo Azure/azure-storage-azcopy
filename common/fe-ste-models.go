@@ -98,6 +98,26 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type DeleteDestination uint32
+
+var EDeleteDestination = DeleteDestination(0)
+
+func (DeleteDestination) Prompt() DeleteDestination { return DeleteDestination(0) }
+func (DeleteDestination) True() DeleteDestination   { return DeleteDestination(1) }
+func (DeleteDestination) False() DeleteDestination  { return DeleteDestination(2) }
+
+func (dd *DeleteDestination) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(dd), s, true)
+	if err == nil {
+		*dd = val.(DeleteDestination)
+	}
+	return err
+}
+
+func (dd DeleteDestination) String() string {
+	return enum.StringInt(dd, reflect.TypeOf(dd))
+}
+
 type OutputFormat uint32
 
 var EOutputFormat = OutputFormat(0)
