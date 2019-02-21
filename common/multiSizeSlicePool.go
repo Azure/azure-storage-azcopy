@@ -187,7 +187,7 @@ func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
 }
 
 // Prune inactive stuff in all the big slots if due (don't worry about the little ones, they don't eat much RAM)
-// Why do this? Because for the large slot sizes its hard to deal with slots that are full and IDLE idle.
+// Why do this? Because for the large slot sizes its hard to deal with slots that are full and IDLE.
 // I.e. we were using them, but now we're working with other files in the same job that have different chunk sizes,
 // so we have a pool slot that's full of slices that are no longer getting used.
 // Would it work to just give the slot a very small max capacity? Maybe. E.g. max number in slot = 4 for the 128 MB slot.

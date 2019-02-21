@@ -66,6 +66,6 @@ func main() {
 func configureGC() {
 	go func() {
 		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
-		debug.SetGCPercent(20)       // active more aggressive/frequent GC than the default
+		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default
 	}()
 }
