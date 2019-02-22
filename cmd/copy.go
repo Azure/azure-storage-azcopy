@@ -783,8 +783,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	}
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	if jobDone {
-		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 		exitCode := common.EExitCode.Success()
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
@@ -817,22 +817,47 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	cca.intervalStartTime = time.Now()
 	cca.intervalBytesTransferred = summary.BytesOverWire
 
+	// indicate whether constrained by disk or not
+	perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+
 	// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 	if throughPut == 0 {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s",
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s  %s",
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
 			summary.TransfersSkipped,
 			summary.TotalTransfers,
-			scanningString))
+			scanningString,
+			perfString))
 	} else {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, 2-sec Throughput (Mb/s): %v",
+		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s2-sec Throughput (Mb/s): %v%s",
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-			summary.TransfersSkipped, summary.TotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+			summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, ste.ToFixed(throughPut, 4), diskString))
 	}
+}
+
+// Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
+// to give an (arbitrary) amount of time for things to reach steady-state.
+func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, durationOfJob time.Duration) (perfString string, diskString string) {
+	perfString = ""
+	if shouldDisplayPerfStates() {
+		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
+	}
+
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
+	if isDiskConstrained && haveBeenRunningLongEnoughToStabilize {
+		diskString = " (disk may be limiting speed)"
+	} else {
+		diskString = ""
+	}
+	return
+}
+
+func shouldDisplayPerfStates() bool {
+	return glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ShowPerfStates()) != ""
 }
 
 func isStdinPipeIn() (bool, error) {

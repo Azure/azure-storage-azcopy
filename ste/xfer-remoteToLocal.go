@@ -136,7 +136,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	chunkCount := uint32(0)
 	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
-		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
+		id := common.NewChunkID(info.Destination, startIndex)
 		adjustedChunkSize := downloadChunkSize
 
 		// compute exact size of the chunk

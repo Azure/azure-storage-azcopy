@@ -161,7 +161,7 @@ func (w *chunkedFileWriter) EnqueueChunk(ctx context.Context, id ChunkID, chunkS
 	}
 
 	// enqueue it
-	w.chunkLogger.LogChunkStatus(id, EWaitReason.WriterChannel())
+	w.chunkLogger.LogChunkStatus(id, EWaitReason.Sorting())
 	select {
 	case err = <-w.failureError:
 		if err != nil {
@@ -237,6 +237,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk()) // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can
+		w.setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset, nextOffsetToSave) // update states of those that have all their prior ones already here
 		err := w.sequentiallyProcessAvailableChunks(unsavedChunksByFileOffset, &nextOffsetToSave, md5Hasher)
 		if err != nil {
 			w.failureError <- err
@@ -268,6 +269,19 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 	}
 }
 
+// Advances the status of chunks which are no longer waiting on missing predecessors, but are instead just waiting on
+// us to get around to (sequentially) saving them
+func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksByFileOffset map[int64]fileChunk, nextOffsetToSave int64) {
+	for {
+		nextChunkInSequence, exists := unsavedChunksByFileOffset[nextOffsetToSave]
+		if !exists {
+			return //its not there yet, so no need to touch anything AFTER it. THEY are still waiting for prior chunk
+		}
+		nextOffsetToSave += int64(len(nextChunkInSequence.data))
+		w.chunkLogger.LogChunkStatus(nextChunkInSequence.id, EWaitReason.QueueToWrite()) // we WILL write this. Just may have to write others before it
+	}
+}
+
 // Saves one chunk to its destination
 func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 	defer func() {
@@ -277,7 +291,7 @@ func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 		w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 
-	w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.Disk())
+	w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.DiskIO())
 	_, err := w.file.Write(chunk.data) // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
 	if err != nil {
 		return err

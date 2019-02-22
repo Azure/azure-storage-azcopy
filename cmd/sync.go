@@ -329,8 +329,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	}
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	if jobDone {
-		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 		exitCode := common.EExitCode.Success()
 		if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
@@ -348,11 +348,14 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			summary.JobStatus), exitCode)
 	}
 
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total, 2-sec Throughput (Mb/s): %v",
+	// indicate whether constrained by disk or not
+	perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+
+	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
 		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
 		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
 		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, ste.ToFixed(throughput, 4)))
+		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString))
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {

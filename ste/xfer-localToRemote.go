@@ -139,7 +139,7 @@ func scheduleUploadChunks(jptm IJobPartTransferMgr, srcName string, srcFile comm
 	safeToUseHash := true
 	for startIndex := int64(0); startIndex < fileSize || isDummyChunkInEmptyFile(startIndex, fileSize); startIndex += int64(chunkSize) {
 
-		id := common.ChunkID{Name: srcName, OffsetInFile: startIndex}
+		id := common.NewChunkID(srcName, startIndex)
 		adjustedChunkSize := int64(chunkSize)
 
 		// compute actual size of the chunk
