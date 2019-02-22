@@ -210,12 +210,20 @@ type cookedSyncCmdArgs struct {
 	atomicDestinationFilesScanned uint64
 
 	// deletion count keeps track of how many extra files from the destination were removed
-	deletionCount uint32
+	atomicDeletionCount uint32
 
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
 	deleteDestination common.DeleteDestination
+}
+
+func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
+	atomic.AddUint32(&cca.atomicDeletionCount, 1)
+}
+
+func (cca *cookedSyncCmdArgs) getDeletionCount() uint32 {
+	return atomic.LoadUint32(&cca.atomicDeletionCount)
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
@@ -327,8 +335,8 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	if cca.output == common.EOutputFormat.Json() {
 		// TODO figure out if deletions should be done by the enumeration engine or not
 		// TODO if not, remove this so that we get the proper number from the ste
-		summary.DeleteTotalTransfers = cca.deletionCount
-		summary.DeleteTransfersCompleted = cca.deletionCount
+		summary.DeleteTotalTransfers = cca.getDeletionCount()
+		summary.DeleteTransfersCompleted = cca.getDeletionCount()
 
 		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		jsonOutput, err := json.Marshal(summary)
@@ -368,13 +376,13 @@ Total Number of Bytes Enumerated: %v
 Final Job Status: %v
 `,
 			summary.JobID.String(),
-			cca.atomicSourceFilesScanned,
-			cca.atomicDestinationFilesScanned,
+			atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+			atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.CopyTotalTransfers,
 			summary.CopyTransfersCompleted,
 			summary.CopyTransfersFailed,
-			cca.deletionCount,
+			cca.atomicDeletionCount,
 			summary.TotalBytesTransferred,
 			summary.TotalBytesEnumerated,
 			summary.JobStatus), exitCode)

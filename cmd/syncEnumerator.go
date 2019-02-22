@@ -78,7 +78,7 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 			return err
 		}
 
-		quitIfInSync(jobInitiated, deleteScheduler.wasAnyFileDeleted(), cca)
+		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
 		cca.setScanningComplete()
 		return nil
 	}
@@ -139,7 +139,7 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 			return err
 		}
 
-		quitIfInSync(jobInitiated, destinationCleaner.wasAnyFileDeleted(), cca)
+		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
 		cca.setScanningComplete()
 		return nil
 	}

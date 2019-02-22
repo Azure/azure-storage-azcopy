@@ -102,9 +102,9 @@ type DeleteDestination uint32
 
 var EDeleteDestination = DeleteDestination(0)
 
-func (DeleteDestination) Prompt() DeleteDestination { return DeleteDestination(0) }
-func (DeleteDestination) True() DeleteDestination   { return DeleteDestination(1) }
-func (DeleteDestination) False() DeleteDestination  { return DeleteDestination(2) }
+func (DeleteDestination) False() DeleteDestination  { return DeleteDestination(0) }
+func (DeleteDestination) Prompt() DeleteDestination { return DeleteDestination(1) }
+func (DeleteDestination) True() DeleteDestination   { return DeleteDestination(2) }
 
 func (dd *DeleteDestination) Parse(s string) error {
 	val, err := enum.Parse(reflect.TypeOf(dd), s, true)
