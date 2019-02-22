@@ -112,7 +112,7 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 	return func(workerId int) {
 
 		// BEGIN standard prefix that all chunk funcs need
-		defer jptm.ReportChunkDone() // whether successful or failed, it's always "done" and we must always tell the jptm
+		defer jptm.ReportChunkDone(id) // whether successful or failed, it's always "done" and we must always tell the jptm
 
 		jptm.OccupyAConnection() // TODO: added the two operations for debugging purpose. remove later
 		defer jptm.ReleaseAConnection()

@@ -229,7 +229,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 				bbc.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled. not picking up chunk %d", chunkId))
 			}
-			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
+			if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
@@ -266,7 +266,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				}
 			}
 
-			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
+			if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
@@ -276,7 +276,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		}
 
 		// step 4: check if this is the last chunk
-		if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
+		if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 			// If the transfer gets cancelled before the putblock list
 			if bbc.jptm.WasCanceled() {
 				transferDone()
