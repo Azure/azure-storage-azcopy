@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
-	"strings"
 )
 
 type copyTransferProcessor struct {
@@ -69,14 +68,22 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		s.copyJobTemplate.PartNum++
 	}
 
-	sourceObjectRelativePath := s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName)
-	destinationObjectRelativePath := s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName)
+	// In the case of single file transfers, relative path is empty and we must use the object name.
+	var source string
+	var destination string
+	if storedObject.relativePath == "" {
+		source = storedObject.name
+		destination = storedObject.name
+	} else {
+		source = storedObject.relativePath
+		destination = storedObject.relativePath
+	}
 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.appendObjectPathToResourcePath(sourceObjectRelativePath, s.source),
-		Destination:      s.appendObjectPathToResourcePath(destinationObjectRelativePath, s.destination),
+		Source:           s.escapeIfNecessary(source, s.shouldEscapeSourceObjectName),
+		Destination:      s.escapeIfNecessary(destination, s.shouldEscapeSourceObjectName),
 		SourceSize:       storedObject.size,
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
@@ -90,14 +97,6 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 	}
 
 	return path
-}
-
-func (s *copyTransferProcessor) appendObjectPathToResourcePath(storedObjectPath, parentPath string) string {
-	if storedObjectPath == "" {
-		return parentPath
-	}
-
-	return strings.Join([]string{parentPath, storedObjectPath}, common.AZCOPY_PATH_SEPARATOR_STRING)
 }
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {

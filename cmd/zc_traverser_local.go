@@ -66,9 +66,8 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				t.incrementEnumerationCounter()
 				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(),
-					strings.Replace(filePath, t.fullPath+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1),
-					fileInfo.ModTime(),
-					fileInfo.Size(), nil), processor)
+					strings.Replace(replacePathSeparators(filePath), t.fullPath+common.AZCOPY_PATH_SEPARATOR_STRING,
+						"", 1), fileInfo.ModTime(), fileInfo.Size(), nil), processor)
 			})
 
 			return
@@ -98,6 +97,14 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 	return
 }
 
+func replacePathSeparators(path string) string {
+	if os.PathSeparator != common.AZCOPY_PATH_SEPARATOR_CHAR {
+		return strings.Replace(path, string(os.PathSeparator), common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	} else {
+		return path
+	}
+}
+
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	fileInfo, err := os.Stat(t.fullPath)
 
@@ -114,7 +121,7 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 
 func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCounter func()) *localTraverser {
 	traverser := localTraverser{
-		fullPath:                    fullPath,
+		fullPath:                    replacePathSeparators(fullPath),
 		recursive:                   recursive,
 		incrementEnumerationCounter: incrementEnumerationCounter}
 	return &traverser

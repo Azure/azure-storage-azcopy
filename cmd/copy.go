@@ -644,6 +644,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	// set the source and destination roots on the job part orders after they have been computed and cleaned
+	jobPartOrder.SourceRoot = cca.source
+	jobPartOrder.DestinationRoot = cca.destination
+
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
 	// depending on the source and destination type, we process the cp command differently
