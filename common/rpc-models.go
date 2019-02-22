@@ -115,8 +115,8 @@ type ListContainerResponse struct {
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListJobSummaryResponse struct {
 	ErrorMsg  string
-	Timestamp time.Time
-	JobID     JobID
+	Timestamp time.Time `json:"-"`
+	JobID     JobID     `json:"-"`
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
@@ -134,14 +134,14 @@ type ListJobSummaryResponse struct {
 	FailedTransfers      []TransferDetail
 	SkippedTransfers     []TransferDetail
 	IsDiskConstrained    bool
-	PerfStrings          []string
+	PerfStrings          []string `json:"-"`
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListSyncJobSummaryResponse struct {
 	ErrorMsg  string
-	Timestamp time.Time
-	JobID     JobID
+	Timestamp time.Time `json:"-"`
+	JobID     JobID     `json:"-"`
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
@@ -156,7 +156,7 @@ type ListSyncJobSummaryResponse struct {
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
 	IsDiskConstrained        bool
-	PerfStrings              []string
+	PerfStrings              []string `json:"-"`
 	// sum of the size of transfer completed successfully so far.
 	TotalBytesTransferred uint64
 	// sum of the total transfer enumerated so far.

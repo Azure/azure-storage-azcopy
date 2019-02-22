@@ -60,12 +60,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Exit("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("failed to parse user input due to error " + err.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Exit("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("failed to perform copy command due to error " + err.Error())
 			}
 
 			glcm.SurrenderControl()
@@ -75,5 +75,4 @@ func init() {
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when deleting from container.")
 	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	deleteCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 }

@@ -27,6 +27,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TODO should this command be removed? Previously AzCopy was supposed to have an independent backend (out of proc)
+// TODO but that's not the plan anymore
 func init() {
 	var commandLineInput = ""
 
@@ -49,7 +51,7 @@ func init() {
 		},
 		Run: func(cmd *cobra.Command, args []string) {
 			HandlePauseCommand(commandLineInput)
-			glcm.Exit("", common.EExitCode.Success())
+			glcm.Exit(nil, common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release
@@ -66,10 +68,12 @@ func HandlePauseCommand(jobIdString string) {
 	jobID, err := common.ParseJobID(jobIdString)
 	if err != nil {
 		// If parsing gives an error, hence it is not a valid JobId format
-		glcm.Exit("invalid jobId string passed. Failed while parsing string to jobId", common.EExitCode.Error())
+		glcm.Error("invalid jobId string passed. Failed while parsing string to jobId")
 	}
 
 	var pauseJobResponse common.CancelPauseResumeResponse
 	Rpc(common.ERpcCmd.PauseJob(), jobID, &pauseJobResponse)
-	glcm.Exit("Job "+jobID.String()+" paused successfully", common.EExitCode.Success())
+	glcm.Exit(func(format common.OutputFormat) string {
+		return "Job " + jobID.String() + " paused successfully"
+	}, common.EExitCode.Success())
 }

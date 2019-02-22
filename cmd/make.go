@@ -200,15 +200,17 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cookedArgs, err := rawArgs.cook()
 			if err != nil {
-				glcm.Exit(err.Error(), common.EExitCode.Error())
+				glcm.Error(err.Error())
 			}
 
 			err = cookedArgs.process()
 			if err != nil {
-				glcm.Exit(err.Error(), common.EExitCode.Error())
+				glcm.Error(err.Error())
 			}
 
-			glcm.Exit("Successfully created the resource.", common.EExitCode.Success())
+			glcm.Exit(func(format common.OutputFormat) string {
+				return "Successfully created the resource."
+			}, common.EExitCode.Success())
 		},
 	}
 

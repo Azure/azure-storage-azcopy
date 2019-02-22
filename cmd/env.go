@@ -31,7 +31,7 @@ var envCmd = &cobra.Command{
 				env.Name, glcm.GetEnvironmentVariable(env), env.Description))
 		}
 
-		glcm.Exit("", common.EExitCode.Success())
+		glcm.Exit(nil, common.EExitCode.Success())
 	},
 }
 

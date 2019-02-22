@@ -55,9 +55,11 @@ func main() {
 
 	configureGC()
 
-	ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder, azcopyLogPathFolder)
+	err = ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder, azcopyLogPathFolder)
+	common.PanicIfErr(err)
+
 	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)
-	glcm.Exit("", common.EExitCode.Success())
+	glcm.Exit(nil, common.EExitCode.Success())
 }
 
 // Golang's default behaviour is to GC when new objects = (100% of) total of objects surviving previous GC.

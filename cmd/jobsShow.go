@@ -23,6 +23,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"encoding/json"
 
@@ -33,7 +34,6 @@ import (
 type ListReq struct {
 	JobID    common.JobID
 	OfStatus string
-	Output   string
 }
 
 func init() {
@@ -63,15 +63,12 @@ func init() {
 			listRequest := common.ListRequest{}
 			listRequest.JobID = commandLineInput.JobID
 			listRequest.OfStatus = commandLineInput.OfStatus
-			err := listRequest.Output.Parse(commandLineInput.Output)
-			if err != nil {
-				glcm.Exit(fmt.Errorf("error parsing the given output format %s", commandLineInput.Output).Error(), common.EExitCode.Error())
-			}
-			err = HandleShowCommand(listRequest)
+
+			err := HandleShowCommand(listRequest)
 			if err == nil {
-				glcm.Exit("", common.EExitCode.Success())
+				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
-				glcm.Exit(err.Error(), common.EExitCode.Error())
+				glcm.Error(err.Error())
 			}
 		},
 	}
@@ -80,8 +77,6 @@ func init() {
 
 	// filters
 	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: Started, Success, Failed")
-	// filters
-	shJob.PersistentFlags().StringVar(&commandLineInput.Output, "output", "text", "format of the command's output, the choices include: text, json")
 }
 
 // handles the list command
@@ -92,7 +87,7 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 		resp := common.ListJobSummaryResponse{}
 		rpcCmd = common.ERpcCmd.ListJobSummary()
 		Rpc(rpcCmd, &listRequest.JobID, &resp)
-		PrintJobProgressSummary(listRequest.Output, resp)
+		PrintJobProgressSummary(resp)
 	} else {
 		lsRequest := common.ListJobTransfersRequest{}
 		lsRequest.JobID = listRequest.JobID
@@ -105,67 +100,59 @@ func HandleShowCommand(listRequest common.ListRequest) error {
 		resp := common.ListJobTransfersResponse{}
 		rpcCmd = common.ERpcCmd.ListJobTransfers()
 		Rpc(rpcCmd, lsRequest, &resp)
-		PrintJobTransfers(listRequest.Output, resp)
+		PrintJobTransfers(resp)
 	}
 	return nil
 }
 
 // PrintJobTransfers prints the response of listOrder command when list Order command requested the list of specific transfer of an existing job
-func PrintJobTransfers(outputForamt common.OutputFormat, listTransfersResponse common.ListJobTransfersResponse) {
-	if outputForamt == common.EOutputFormat.Json() {
-		var exitCode = common.EExitCode.Success()
-		if listTransfersResponse.ErrorMsg != "" {
-			exitCode = common.EExitCode.Error()
-		}
-		//jsonOutput, err := json.MarshalIndent(listTransfersResponse, "", "  ")
-		jsonOutput, err := json.Marshal(listTransfersResponse)
-		common.PanicIfErr(err)
-		glcm.Exit(string(jsonOutput), exitCode)
-		return
-	}
+func PrintJobTransfers(listTransfersResponse common.ListJobTransfersResponse) {
 	if listTransfersResponse.ErrorMsg != "" {
-		glcm.Exit("request failed with following message "+listTransfersResponse.ErrorMsg, common.EExitCode.Error())
-		return
+		glcm.Error("request failed with following message " + listTransfersResponse.ErrorMsg)
 	}
 
-	glcm.Info("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------")
-	for index := 0; index < len(listTransfersResponse.Details); index++ {
-		glcm.Info("transfer--> source: " + listTransfersResponse.Details[index].Src + " destination: " +
-			listTransfersResponse.Details[index].Dst + " status " + listTransfersResponse.Details[index].TransferStatus.String())
-	}
+	glcm.Exit(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(listTransfersResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		}
+
+		var sb strings.Builder
+		sb.WriteString("----------- Transfers for JobId " + listTransfersResponse.JobID.String() + " -----------\n")
+		for index := 0; index < len(listTransfersResponse.Details); index++ {
+			sb.WriteString("transfer--> source: " + listTransfersResponse.Details[index].Src + " destination: " +
+				listTransfersResponse.Details[index].Dst + " status " + listTransfersResponse.Details[index].TransferStatus.String() + "\n")
+		}
+
+		return sb.String()
+	}, common.EExitCode.Success())
 }
 
 // PrintJobProgressSummary prints the response of listOrder command when listOrder command requested the progress summary of an existing job
-func PrintJobProgressSummary(outputFormat common.OutputFormat, summary common.ListJobSummaryResponse) {
+func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
+	if summary.ErrorMsg != "" {
+		glcm.Error("list progress summary of job failed because " + summary.ErrorMsg)
+	}
+
 	// Reset the bytes over the wire counter
 	summary.BytesOverWire = 0
 
-	// If the output format is Json, check the summary's error Message.
-	// If there is an error message, then the exit code is error
-	// else the exit code is success.
-	// Marshal the summary and print in the Json format.
-	if outputFormat == common.EOutputFormat.Json() {
-		var exitCode = common.EExitCode.Success()
-		if summary.ErrorMsg != "" {
-			exitCode = common.EExitCode.Error()
+	glcm.Exit(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(summary)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
 		}
-		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		jsonOutput, err := json.Marshal(summary)
-		common.PanicIfErr(err)
-		glcm.Exit(string(jsonOutput), exitCode)
-		return
-	}
 
-	if summary.ErrorMsg != "" {
-		glcm.Exit("list progress summary of job failed because "+summary.ErrorMsg, common.EExitCode.Error())
-	}
-	glcm.Info(fmt.Sprintf(
-		"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\n",
-		summary.JobID.String(),
-		summary.TotalTransfers,
-		summary.TransfersCompleted,
-		summary.TransfersFailed,
-		summary.TransfersSkipped,
-		summary.JobStatus,
-	))
+		return fmt.Sprintf(
+			"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\n",
+			summary.JobID.String(),
+			summary.TotalTransfers,
+			summary.TransfersCompleted,
+			summary.TransfersFailed,
+			summary.TransfersSkipped,
+			summary.JobStatus,
+		)
+	}, common.EExitCode.Success())
 }

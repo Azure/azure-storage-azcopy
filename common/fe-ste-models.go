@@ -134,6 +134,10 @@ func (of *OutputFormat) Parse(s string) error {
 	return err
 }
 
+func (of OutputFormat) String() string {
+	return enum.StringInt(of, reflect.TypeOf(of))
+}
+
 var EExitCode = ExitCode(0)
 
 type ExitCode uint32
