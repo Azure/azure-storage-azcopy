@@ -36,7 +36,7 @@ func (s *syncFilterSuite) TestSyncSourceFilter(c *chk.C) {
 
 	// create a sample destination object
 	sampleDestinationObject := storedObject{name: "test", relativePath: "/usr/test", lastModifiedTime: time.Now()}
-
+	time.Sleep(time.Second)
 	// test the filter in case a given source object is not present at the destination
 	// meaning no entry in the index, so the filter should pass the given object to schedule a transfer
 	passed := sourceFilter.doesPass(storedObject{name: "only_at_source", relativePath: "only_at_source", lastModifiedTime: time.Now()})

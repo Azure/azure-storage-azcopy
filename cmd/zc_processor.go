@@ -23,7 +23,6 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
 )
 
 type copyTransferProcessor struct {
@@ -61,24 +60,27 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		s.copyJobTemplate.PartNum++
 	}
 
+	// In the case of single file transfers, relative path is empty and we must use the object name.
+	var source string
+	var destination string
+	if storedObject.relativePath == "" {
+		source = storedObject.name
+		destination = storedObject.name
+	} else {
+		source = storedObject.relativePath
+		destination = storedObject.relativePath
+	}
+
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.appendObjectPathToResourcePath(storedObject.relativePath, s.source),
-		Destination:      s.appendObjectPathToResourcePath(storedObject.relativePath, s.destination),
+		Source:           source,
+		Destination:      destination,
 		SourceSize:       storedObject.size,
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
 	})
 	return nil
-}
-
-func (s *copyTransferProcessor) appendObjectPathToResourcePath(storedObjectPath, parentPath string) string {
-	if storedObjectPath == "" {
-		return parentPath
-	}
-
-	return strings.Join([]string{parentPath, storedObjectPath}, common.AZCOPY_PATH_SEPARATOR_STRING)
 }
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {

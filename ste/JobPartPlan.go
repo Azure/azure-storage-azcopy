@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 2
+const DataSchemaVersion common.Version = 3
 
 const (
 	ContentTypeMaxBytes     = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
@@ -39,20 +39,24 @@ func (mmf *JobPartPlanMMF) Unmap() { (*common.MMF)(mmf).Unmap() }
 // JobPartPlanHeader represents the header of Job Part's memory-mapped file
 type JobPartPlanHeader struct {
 	// Once set, the following fields are constants; they should never be modified
-	Version             common.Version     // The version of data schema format of header; see the dataSchemaVersion constant
-	StartTime           int64              // The start time of this part
-	JobID               common.JobID       // Job Part's JobID
-	PartNum             common.PartNumber  // Job Part's part number (0+)
-	IsFinalPart         bool               // True if this is the Job's last part; else false
-	ForceWrite          bool               // True if the existing blobs needs to be overwritten.
-	Priority            common.JobPriority // The Job Part's priority
-	TTLAfterCompletion  uint32             // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
-	FromTo              common.FromTo      // The location of the transfer's source & destination
-	CommandStringLength uint32
-	NumTransfers        uint32              // The number of transfers in the Job part
-	LogLevel            common.LogLevel     // This Job Part's minimal log level
-	DstBlobData         JobPartPlanDstBlob  // Additional data for blob destinations
-	DstLocalData        JobPartPlanDstLocal // Additional data for local destinations
+	Version               common.Version     // The version of data schema format of header; see the dataSchemaVersion constant
+	StartTime             int64              // The start time of this part
+	JobID                 common.JobID       // Job Part's JobID
+	PartNum               common.PartNumber  // Job Part's part number (0+)
+	SourceRootLength      uint16             // The length of the source root path
+	SourceRoot            [1000]byte         // The root directory of the source
+	DestinationRootLength uint16             // The length of the destination root path
+	DestinationRoot       [1000]byte         // The root directory of the destination
+	IsFinalPart           bool               // True if this is the Job's last part; else false
+	ForceWrite            bool               // True if the existing blobs needs to be overwritten.
+	Priority              common.JobPriority // The Job Part's priority
+	TTLAfterCompletion    uint32             // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
+	FromTo                common.FromTo      // The location of the transfer's source & destination
+	CommandStringLength   uint32
+	NumTransfers          uint32              // The number of transfers in the Job part
+	LogLevel              common.LogLevel     // This Job Part's minimal log level
+	DstBlobData           JobPartPlanDstBlob  // Additional data for blob destinations
+	DstLocalData          JobPartPlanDstLocal // Additional data for local destinations
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
@@ -97,6 +101,9 @@ func (jpph *JobPartPlanHeader) CommandString() string {
 
 // TransferSrcDstDetail returns the source and destination string for a transfer at given transferIndex in JobPartOrder
 func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (source, destination string) {
+	srcRoot := string(jpph.SourceRoot[:jpph.SourceRootLength])
+	dstRoot := string(jpph.DestinationRoot[:jpph.DestinationRootLength])
+
 	jppt := jpph.Transfer(transferIndex)
 
 	srcSlice := []byte{}
@@ -111,7 +118,7 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Len = int(jppt.DstLength)
 	sh.Cap = sh.Len
 
-	return string(srcSlice), string(dstSlice)
+	return srcRoot + string(srcSlice), dstRoot + string(dstSlice)
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
