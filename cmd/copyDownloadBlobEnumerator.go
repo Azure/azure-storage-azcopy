@@ -213,7 +213,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		}
 		// If there are no transfer to queue up, exit with message
 		if len(e.Transfers) == 0 {
-			glcm.Exit(fmt.Sprintf("no transfer queued for copying data from %s to %s", cca.source, cca.destination), 1)
+			glcm.Error(fmt.Sprintf("no transfer queued for copying data from %s to %s", cca.source, cca.destination))
 			return nil
 		}
 		// dispatch the JobPart as Final Part of the Job

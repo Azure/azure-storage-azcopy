@@ -52,7 +52,7 @@ func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pa
 			// If the status code was 403, it means there was an authentication error and we exit.
 			// User can resume the job if completely ordered with a new sas.
 			if strErr.Response().StatusCode == http.StatusForbidden {
-				common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+				common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 			}
 		} else {
 			transferDone(common.ETransferStatus.Failed(), err)

@@ -238,9 +238,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
-		cooked.output = common.EOutputFormat.None()
-	} else {
-		cooked.output.Parse(raw.output)
+		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
 
 	// generate a unique job ID
@@ -358,7 +356,6 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	md5ValidationOption      common.HashValidationOption
 	background               bool
-	output                   common.OutputFormat
 	acl                      string
 	logVerbosity             common.LogLevel
 	cancelFromStdin          bool
@@ -408,7 +405,7 @@ func (cca *cookedCopyCmdArgs) process() error {
 		}
 
 		// if no error, the operation is now complete
-		glcm.Exit("", common.EExitCode.Success())
+		glcm.Exit(nil, common.EExitCode.Success())
 	}
 	return cca.processCopyJobPartOrders()
 }
@@ -719,8 +716,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	glcm.Info(fmt.Sprintf("Log file is located at: %s/%s.log", azcopyLogPathFolder, cca.jobID))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -739,10 +735,10 @@ func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	// prompt for confirmation, except when:
-	// 1. output is in json format
+	// 1. output is not in text format
 	// 2. azcopy was spawned by another process (cancelFromStdin indicates this)
 	// 3. enumeration is complete
-	if !(cca.output == common.EOutputFormat.Json() || cca.cancelFromStdin || cca.isEnumerationComplete) {
+	if !(azcopyOutputFormat != common.EOutputFormat.Text() || cca.cancelFromStdin || cca.isEnumerationComplete) {
 		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
 
 		// read a line from stdin, if the answer is not yes, then abort cancel by returning
@@ -753,7 +749,7 @@ func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ": " + err.Error())
 	}
 }
 
@@ -763,80 +759,77 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
 	jobDone := summary.JobStatus.IsJobDone()
 
-	// if json output is desired, simply marshal and return
-	// note that if job is already done, we simply exit
-	if cca.output == common.EOutputFormat.Json() {
-		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		jsonOutput, err := json.Marshal(summary)
-		common.PanicIfErr(err)
-
-		if jobDone {
-			exitCode := common.EExitCode.Success()
-			if summary.TransfersFailed > 0 {
-				exitCode = common.EExitCode.Error()
-			}
-			lcm.Exit(string(jsonOutput), exitCode)
-		} else {
-			lcm.Info(string(jsonOutput))
-			return
-		}
-	}
-
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+
 	if jobDone {
 		exitCode := common.EExitCode.Success()
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
-		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
-			summary.JobID.String(),
-			ste.ToFixed(duration.Minutes(), 4),
-			summary.TotalTransfers,
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TransfersSkipped,
-			summary.TotalBytesTransferred,
-			summary.JobStatus), exitCode)
+
+		lcm.Exit(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				jsonOutput, err := json.Marshal(summary)
+				common.PanicIfErr(err)
+				return string(jsonOutput)
+			} else {
+				return fmt.Sprintf(
+					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					summary.JobID.String(),
+					ste.ToFixed(duration.Minutes(), 4),
+					summary.TotalTransfers,
+					summary.TransfersCompleted,
+					summary.TransfersFailed,
+					summary.TransfersSkipped,
+					summary.TotalBytesTransferred,
+					summary.JobStatus)
+			}
+		}, exitCode)
 	}
 
-	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
-	// display a scanning keyword if the job is not completely ordered
-	var scanningString = ""
-	if !summary.CompleteJobOrdered {
-		scanningString = " (scanning...)"
+	var computeThroughput = func() float64 {
+		// compute the average throughput for the last time interval
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+
+		// reset the interval timer and byte count
+		cca.intervalStartTime = time.Now()
+		cca.intervalBytesTransferred = summary.BytesOverWire
+
+		return common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
 	}
 
-	// compute the average throughput for the last time interval
-	bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
-	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0) * 8
+	glcm.Progress(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(summary)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		} else {
+			// if json is not needed, then we generate a message that goes nicely on the same line
+			// display a scanning keyword if the job is not completely ordered
+			var scanningString = " (scanning...)"
+			if summary.CompleteJobOrdered {
+				scanningString = ""
+			}
 
-	// reset the interval timer and byte count
-	cca.intervalStartTime = time.Now()
-	cca.intervalBytesTransferred = summary.BytesOverWire
+			throughput := computeThroughput()
+			throughputString := fmt.Sprintf("2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+			if throughput == 0 {
+				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
+				throughputString = ""
+			}
 
-	// indicate whether constrained by disk or not
-	perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+			// indicate whether constrained by disk or not
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
 
-	// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
-	if throughPut == 0 {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s  %s",
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-			summary.TransfersSkipped,
-			summary.TotalTransfers,
-			scanningString,
-			perfString))
-	} else {
-		glcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s2-sec Throughput (Mb/s): %v%s",
-			summary.TransfersCompleted,
-			summary.TransfersFailed,
-			summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
-			summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, ste.ToFixed(throughPut, 4), diskString))
-	}
+			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+				summary.TransfersCompleted,
+				summary.TransfersFailed,
+				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
+				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
+		}
+	})
 }
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
@@ -909,17 +902,15 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Exit("failed to parse user input due to error: "+err.Error(), common.EExitCode.Error())
+				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 
-			if cooked.output == common.EOutputFormat.Text() {
-				glcm.Info("Scanning...")
-			}
+			glcm.Info("Scanning...")
 
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Exit("failed to perform copy command due to error: "+err.Error(), common.EExitCode.Error())
+				glcm.Error("failed to perform copy command due to error: " + err.Error())
 			}
 
 			glcm.SurrenderControl()
@@ -941,7 +932,6 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json.")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
@@ -967,8 +957,5 @@ func init() {
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("include")
-	cpCmd.PersistentFlags().MarkHidden("output")
-	cpCmd.PersistentFlags().MarkHidden("stdin-enable")
-	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 }

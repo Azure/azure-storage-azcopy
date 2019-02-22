@@ -21,8 +21,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -52,9 +54,9 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			err := HandleListJobsCommand()
 			if err == nil {
-				glcm.Exit("", common.EExitCode.Success())
+				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
-				glcm.Exit(err.Error(), common.EExitCode.Error())
+				glcm.Error(err.Error())
 			}
 		},
 	}
@@ -79,14 +81,24 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 	// before displaying the jobs, sort them accordingly so that they are displayed in a consistent way
 	sortJobs(listJobResponse.JobIDDetails)
 
-	glcm.Info("Existing Jobs ")
-	for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
-		jobDetail := listJobResponse.JobIDDetails[index]
-		glcm.Info(fmt.Sprintf("JobId: %s\nStart Time: %s\nCommand: %s\n",
-			jobDetail.JobId.String(),
-			time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
-			jobDetail.CommandString))
-	}
+	glcm.Exit(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			jsonOutput, err := json.Marshal(listJobResponse)
+			common.PanicIfErr(err)
+			return string(jsonOutput)
+		}
+
+		var sb strings.Builder
+		sb.WriteString("Existing Jobs \n")
+		for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
+			jobDetail := listJobResponse.JobIDDetails[index]
+			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nCommand: %s\n\n",
+				jobDetail.JobId.String(),
+				time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
+				jobDetail.CommandString))
+		}
+		return sb.String()
+	}, common.EExitCode.Success())
 	return nil
 }
 

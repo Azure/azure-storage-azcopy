@@ -114,7 +114,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 				// If the status code was 403, it means there was an authentication error and we exit.
 				// User can resume the job if completely ordered with a new sas.
 				if status == http.StatusForbidden {
-					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 				}
 			}
 		} else {
@@ -262,7 +262,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				// If the status code was 403, it means there was an authentication error and we exit.
 				// User can resume the job if completely ordered with a new sas.
 				if status == http.StatusForbidden {
-					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 				}
 			}
 
@@ -299,7 +299,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				// If the status code was 403, it means there was an authentication error and we exit.
 				// User can resume the job if completely ordered with a new sas.
 				if status == http.StatusForbidden {
-					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 				}
 				return
 			}

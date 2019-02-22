@@ -51,7 +51,6 @@ type rawSyncCmdArgs struct {
 	include             string
 	exclude             string
 	followSymlinks      bool
-	output              string
 	md5ValidationOption string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
@@ -149,11 +148,6 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	err = cooked.output.Parse(raw.output)
-	if err != nil {
-		return cooked, err
-	}
-
 	return cooked, nil
 }
 
@@ -175,7 +169,6 @@ type cookedSyncCmdArgs struct {
 	md5ValidationOption common.HashValidationOption
 	blockSize           uint32
 	logVerbosity        common.LogLevel
-	output              common.OutputFormat
 
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -251,8 +244,7 @@ func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	glcm.Info(fmt.Sprintf("Log file is located at: %s/%s.log", azcopyLogPathFolder, cca.jobID))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -270,10 +262,8 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	// prompt for confirmation, except when:
-	// 1. output is in json format
-	// 2. enumeration is complete
-	if cca.output == common.EOutputFormat.Text() && !cca.isEnumerationComplete {
+	// prompt for confirmation, except when enumeration is complete
+	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
 
 		// read a line from stdin, if the answer is not yes, then abort cancel by returning
@@ -284,16 +274,53 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
 	}
 }
 
-func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughputString string) {
-	lcm.Progress(fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
-		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned), throughputString))
+type scanningProgressJsonTemplate struct {
+	FilesScannedAtSource      uint64
+	FilesScannedAtDestination uint64
+}
+
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
+
+	lcm.Progress(func(format common.OutputFormat) string {
+		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
+		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
+
+		if format == common.EOutputFormat.Json() {
+			jsonOutputTemplate := scanningProgressJsonTemplate{
+				FilesScannedAtSource:      srcScanned,
+				FilesScannedAtDestination: dstScanned,
+			}
+			outputString, err := json.Marshal(jsonOutputTemplate)
+			common.PanicIfErr(err)
+			return string(outputString)
+		}
+
+		// text output
+		throughputString := ""
+		if cca.firstPartOrdered() {
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+		}
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+			srcScanned, dstScanned, throughputString)
+	})
+}
+
+func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListSyncJobSummaryResponse) string {
+	// TODO figure out if deletions should be done by the enumeration engine or not
+	// TODO if not, remove this so that we get the proper number from the ste
+	summary.DeleteTotalTransfers = cca.getDeletionCount()
+	summary.DeleteTransfersCompleted = cca.getDeletionCount()
+	jsonOutput, err := json.Marshal(summary)
+	common.PanicIfErr(err)
+	return string(jsonOutput)
 }
 
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	var summary common.ListSyncJobSummaryResponse
 	var throughput float64
 	var jobDone bool
@@ -315,54 +342,24 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 	// first part not dispatched, and we are still scanning
 	// so a special message is outputted to notice the user that we are not stalling
-	if !jobDone && !cca.scanningComplete() {
-		// skip the interactive message if we were triggered by another tool
-		if cca.output == common.EOutputFormat.Json() {
-			return
-		}
-
-		var throughputString string
-		if cca.firstPartOrdered() {
-			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
-		}
-
-		cca.reportScanningProgress(lcm, throughputString)
+	if !cca.scanningComplete() {
+		cca.reportScanningProgress(lcm, throughput)
 		return
 	}
 
-	// if json output is desired, simply marshal and return
-	// note that if job is already done, we simply exit
-	if cca.output == common.EOutputFormat.Json() {
-		// TODO figure out if deletions should be done by the enumeration engine or not
-		// TODO if not, remove this so that we get the proper number from the ste
-		summary.DeleteTotalTransfers = cca.getDeletionCount()
-		summary.DeleteTransfersCompleted = cca.getDeletionCount()
-
-		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		jsonOutput, err := json.Marshal(summary)
-		common.PanicIfErr(err)
-
-		if jobDone {
-			exitCode := common.EExitCode.Success()
-			if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
-				exitCode = common.EExitCode.Error()
-			}
-			lcm.Exit(string(jsonOutput), exitCode)
-		} else {
-			lcm.Info(string(jsonOutput))
-			return
-		}
-	}
-
-	// if json is not desired, and job is done, then we generate a special end message to conclude the job
-	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 	if jobDone {
 		exitCode := common.EExitCode.Success()
 		if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
-		lcm.Exit(fmt.Sprintf(
-			`
+
+		lcm.Exit(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				return cca.getJsonOfSyncJobSummary(summary)
+			}
+
+			return fmt.Sprintf(
+				`
 Job %s Summary
 Files Scanned at Source: %v
 Files Scanned at Destination: %v
@@ -375,27 +372,35 @@ Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 Final Job Status: %v
 `,
-			summary.JobID.String(),
-			atomic.LoadUint64(&cca.atomicSourceFilesScanned),
-			atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
-			ste.ToFixed(duration.Minutes(), 4),
-			summary.CopyTotalTransfers,
-			summary.CopyTransfersCompleted,
-			summary.CopyTransfersFailed,
-			cca.atomicDeletionCount,
-			summary.TotalBytesTransferred,
-			summary.TotalBytesEnumerated,
-			summary.JobStatus), exitCode)
+				summary.JobID.String(),
+				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+				ste.ToFixed(duration.Minutes(), 4),
+				summary.CopyTotalTransfers,
+				summary.CopyTransfersCompleted,
+				summary.CopyTransfersFailed,
+				cca.atomicDeletionCount,
+				summary.TotalBytesTransferred,
+				summary.TotalBytesEnumerated,
+				summary.JobStatus)
+
+		}, exitCode)
 	}
 
-	// indicate whether constrained by disk or not
-	perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+	lcm.Progress(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			return cca.getJsonOfSyncJobSummary(summary)
+		}
 
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
-		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
-		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString))
+		// indicate whether constrained by disk or not
+		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+
+		return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+			summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
+			summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
+			summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
+			summary.CopyTotalTransfers+summary.DeleteTotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
+	})
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
@@ -479,12 +484,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Exit("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Exit("Cannot perform sync due to error: "+err.Error(), common.EExitCode.Error())
+				glcm.Error("Cannot perform sync due to error: " + err.Error())
 			}
 
 			glcm.SurrenderControl()
@@ -496,7 +501,6 @@ func init() {
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")

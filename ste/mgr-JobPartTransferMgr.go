@@ -364,7 +364,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		// User can resume the job if completely ordered with a new sas.
 		if status == http.StatusForbidden {
 			// TODO: should this really exit??? why not just log like everything else does???  We've Failed the transfer anyway....
-			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 		}
 	}
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
