@@ -121,8 +121,9 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	mockedRPC.init()
 
 	// set up the processor
+	blobURL := containerURL.NewBlockBlobURL(blobList[0]).String()
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2,
-		containerURL.NewBlockBlobURL(blobList[0]).String(), filepath.Join(dstDirName, dstFileName), false, false, nil, nil)
+		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil)
 
 	// exercise the copy transfer processor
 	storedObject := newStoredObject(blobList[0], "", time.Now(), 0, nil)
@@ -136,7 +137,12 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	jobInitiated, err := copyProcessor.dispatchFinalPart()
 	c.Assert(jobInitiated, chk.Equals, true)
 
+	// In cases of syncing file to file, the source and destination are empty because this info is already in the root
+	// path.
+	c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
+	c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "")
+
 	// assert the right transfers were scheduled
-	validateTransfersAreScheduled(c, containerURL.String(), false, dstDirName, false,
-		blobList, mockedRPC)
+	validateTransfersAreScheduled(c, blobURL, false, filepath.Join(dstDirName, dstFileName), false,
+		[]string{""}, mockedRPC)
 }

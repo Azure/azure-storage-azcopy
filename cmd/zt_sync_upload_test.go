@@ -71,7 +71,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		runSyncAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
-			validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
+			validateUploadTransfersAreScheduled(c, filepath.Join(srcDirName, srcFileName),
+				containerURL.NewBlobURL(dstBlobName).String(), []string{""}, mockedRPC)
 		})
 	}
 }
