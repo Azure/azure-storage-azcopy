@@ -29,6 +29,7 @@ import (
 type ByteSlicePooler interface {
 	RentSlice(desiredLength uint32) []byte
 	ReturnSlice(slice []byte)
+	Prune()
 }
 
 // Pools byte slices of a single size.
@@ -86,11 +87,16 @@ func NewMultiSizeSlicePool(maxSliceLength uint32) ByteSlicePooler {
 	maxSlotIndex, _ := getSlotInfo(maxSliceLength)
 	poolsBySize := make([]*simpleSlicePool, maxSlotIndex+1)
 	for i := 0; i <= maxSlotIndex; i++ {
-		poolsBySize[i] = newSimpleSlicePool(1000) // TODO: review capacity (setting too low doesn't break anything, since we don't block when full, so maybe only 100 or so is OK?)
+		maxCount := getMaxSliceCountInPool(i)
+		poolsBySize[i] = newSimpleSlicePool(maxCount)
 	}
 	return &multiSizeSlicePool{poolsBySize: poolsBySize}
 }
 
+var indexOf32KSlot, _ = getSlotInfo(32 * 1024)
+
+// For a given requested len(slice), this returns the slot index to use, and the max
+// cap(slice) of the slices that will be found at that index
 func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
 	if exactSliceLength <= 0 {
 		panic("exact slice length must be greater than zero")
@@ -119,6 +125,24 @@ func getSlotInfo(exactSliceLength uint32) (slotIndex int, maxCapInSlot int) {
 	maxCapInSlot = 1 << uint(slotIndex)
 
 	return
+}
+
+func holdsSmallSlices(slotIndex int) bool {
+	return slotIndex <= indexOf32KSlot
+}
+
+// For a given slot index, this returns the max number of pooled slices which the pool at
+// that index should be allowed to hold.
+func getMaxSliceCountInPool(slotIndex int) int {
+	if holdsSmallSlices(slotIndex) {
+		// Choose something fairly high for these because there's no significant RAM
+		// cost in doing so, and small files are a tricky case for perf so let's give
+		// them all the pooling help we can
+		return 500
+	} else {
+		// Limit the medium and large ones a bit more strictly.
+		return 100
+	}
 }
 
 // RentSlice borrows a slice from the pool (or creates a new one if none of suitable capacity is available)
@@ -160,4 +184,25 @@ func (mp *multiSizeSlicePool) ReturnSlice(slice []byte) {
 
 	// put the slice back into the pool
 	pool.Put(slice)
+}
+
+// Prune inactive stuff in all the big slots if due (don't worry about the little ones, they don't eat much RAM)
+// Why do this? Because for the large slot sizes its hard to deal with slots that are full and IDLE.
+// I.e. we were using them, but now we're working with other files in the same job that have different chunk sizes,
+// so we have a pool slot that's full of slices that are no longer getting used.
+// Would it work to just give the slot a very small max capacity? Maybe. E.g. max number in slot = 4 for the 128 MB slot.
+// But can we be confident that 4 is enough for the pooling to have the desired benefits?  Not sure.
+// Hence the pruning, so that we don't need to set the fixed limits that low.  With pruning, the count will (gradually)
+// come down only when the slot is IDLE.
+func (mp *multiSizeSlicePool) Prune() {
+	for index := 0; index < len(mp.poolsBySize); index++ {
+		shouldPrune := !holdsSmallSlices(index)
+		if shouldPrune {
+			// Get one item from the pool and throw it away.
+			// With repeated calls of Prune, this will gradually drain idle pools.
+			// But, since Prune is not called very often,
+			// it won't have much adverse impact on active pools.
+			_ = mp.poolsBySize[index].Get()
+		}
+	}
 }
