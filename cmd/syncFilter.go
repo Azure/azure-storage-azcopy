@@ -41,13 +41,13 @@ func newSyncDestinationFilter(i *objectIndexer, recyclers objectProcessor) objec
 // if file x from the destination exists at the source, then we'd only transfer it if it is considered stale compared to its counterpart at the source
 // if file x does not exist at the source, then it is considered extra, and will be deleted
 func (f *syncDestinationFilter) doesPass(destinationObject storedObject) bool {
-	storedObjectInMap, present := f.sourceIndex.indexMap[destinationObject.relativePath]
+	sourceObjectInMap, present := f.sourceIndex.indexMap[destinationObject.relativePath]
 
 	// if the destinationObject is present and stale, we let it pass
 	if present {
 		defer delete(f.sourceIndex.indexMap, destinationObject.relativePath)
 
-		if storedObjectInMap.isMoreRecentThan(destinationObject) {
+		if sourceObjectInMap.isMoreRecentThan(destinationObject) {
 			return true
 		}
 	} else {
@@ -78,13 +78,13 @@ func newSyncSourceFilter(i *objectIndexer) objectFilter {
 // note: we remove the storedObject if it is present so that when we have finished
 // the index will contain all objects which exist at the destination but were NOT passed to this routine
 func (f *syncSourceFilter) doesPass(sourceObject storedObject) bool {
-	storedObjectInMap, present := f.destinationIndex.indexMap[sourceObject.relativePath]
+	destinationObjectInMap, present := f.destinationIndex.indexMap[sourceObject.relativePath]
 
 	// if the sourceObject is more recent, we let it pass
 	if present {
 		defer delete(f.destinationIndex.indexMap, sourceObject.relativePath)
 
-		if sourceObject.isMoreRecentThan(storedObjectInMap) {
+		if sourceObject.isMoreRecentThan(destinationObjectInMap) {
 			return true
 		}
 

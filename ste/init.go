@@ -494,6 +494,9 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 * DeleteTransfersCompleted - number of delete transfers failed in the job.
 * FailedTransfers - list of transfer that failed.
  */
+// TODO determine if this should be removed, since we currently perform the deletions in the enumeration engine
+// TODO if deletions are also done in the backend, then we should keep this & improve it potentially
+// TODO deletions and copies can currently be placed in different job parts
 func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 	// getJobPartMapFromJobPartInfoMap gives the map of partNo to JobPartPlanInfo Pointer for a given JobId
 	jm, found := JobsAdmin.JobMgr(jobID)
@@ -542,6 +545,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 				if fromTo == common.EFromTo.LocalBlob() ||
 					fromTo == common.EFromTo.BlobLocal() {
 					js.CopyTransfersCompleted++
+					js.TotalBytesTransferred += uint64(jppt.SourceSize)
+					js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 				}
 				if fromTo == common.EFromTo.BlobTrash() {
 					js.DeleteTransfersCompleted++
@@ -552,6 +557,7 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 				if fromTo == common.EFromTo.LocalBlob() ||
 					fromTo == common.EFromTo.BlobLocal() {
 					js.CopyTransfersFailed++
+					js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 				}
 				if fromTo == common.EFromTo.BlobTrash() {
 					js.DeleteTransfersFailed++
@@ -602,8 +608,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 
 	if js.JobStatus == common.EJobStatus.Completed() {
 		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(false,
-			js.CopyTransfersFailed + js.DeleteTransfersFailed > 0,
-			js.CopyTransfersCompleted + js.DeleteTransfersCompleted > 0)
+			js.CopyTransfersFailed+js.DeleteTransfersFailed > 0,
+			js.CopyTransfersCompleted+js.DeleteTransfersCompleted > 0)
 	}
 
 	return js

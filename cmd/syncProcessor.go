@@ -67,24 +67,28 @@ type interactiveDeleteProcessor struct {
 	// the plugged-in deleter that performs the actual deletion
 	deleter objectProcessor
 
-	// whether force delete is on
-	force bool
-
-	// ask the user for permission the first time we delete a file
-	hasPromptedUser bool
-
-	// used for prompt message
-	// examples: "blobs", "local files", etc.
-	objectType string
+	// whether we should ask the user for permission the first time we delete a file
+	shouldPromptUser bool
 
 	// note down whether any delete should happen
 	shouldDelete bool
+
+	// used for prompt message
+	// examples: "blobs", "local files", etc.
+	objectTypeToDisplay string
+
+	// used for prompt message
+	// examples: a directory path, or url to container
+	objectLocationToDisplay string
+
+	// count the deletions that happened
+	incrementDeletionCount func()
 }
 
 func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err error) {
-	if !d.hasPromptedUser {
-		d.shouldDelete = d.promptForConfirmation()
-		d.hasPromptedUser = true
+	if d.shouldPromptUser {
+		d.shouldDelete = d.promptForConfirmation() // note down the user's decision
+		d.shouldPromptUser = false                 // only prompt the first time that this function is called
 	}
 
 	if !d.shouldDelete {
@@ -96,35 +100,42 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 		glcm.Info(fmt.Sprintf("error %s deleting the object %s", err.Error(), object.relativePath))
 	}
 
+	if d.incrementDeletionCount != nil {
+		d.incrementDeletionCount()
+	}
 	return
 }
 
 func (d *interactiveDeleteProcessor) promptForConfirmation() (shouldDelete bool) {
 	shouldDelete = false
 
-	// omit asking if the user has already specified
-	if d.force {
+	answer := glcm.Prompt(fmt.Sprintf("Sync has discovered %s that are not present at the source, would you like to delete them from the destination(%s)? Please confirm with y/n (default: n): ",
+		d.objectTypeToDisplay, d.objectLocationToDisplay))
+	if answer == "y" || answer == "yes" {
 		shouldDelete = true
+		glcm.Info(fmt.Sprintf("Confirmed. The extra %s will be deleted:", d.objectTypeToDisplay))
 	} else {
-		answer := glcm.Prompt(fmt.Sprintf("Sync has discovered %s that are not present at the source, would you like to delete them? Please confirm with y/n: ", d.objectType))
-		if answer == "y" || answer == "yes" {
-			shouldDelete = true
-			glcm.Info(fmt.Sprintf("Confirmed. The extra %s will be deleted:", d.objectType))
-		} else {
-			glcm.Info("No deletions will happen.")
-		}
+		glcm.Info("No deletions will happen.")
 	}
 	return
 }
 
-func (d *interactiveDeleteProcessor) wasAnyFileDeleted() bool {
-	// we'd have prompted the user if any stored object was passed in
-	return d.hasPromptedUser
+func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination common.DeleteDestination,
+	objectTypeToDisplay string, objectLocationToDisplay string, incrementDeletionCounter func()) *interactiveDeleteProcessor {
+
+	return &interactiveDeleteProcessor{
+		deleter:                 deleter,
+		objectTypeToDisplay:     objectTypeToDisplay,
+		objectLocationToDisplay: objectLocationToDisplay,
+		incrementDeletionCount:  incrementDeletionCounter,
+		shouldPromptUser:        deleteDestination == common.EDeleteDestination.Prompt(),
+		shouldDelete:            deleteDestination == common.EDeleteDestination.True(), // if shouldPromptUser is true, this will start as false, but we will determine its value later
+	}
 }
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
 	localDeleter := localFileDeleter{rootPath: cca.destination}
-	return &interactiveDeleteProcessor{deleter: localDeleter.deleteFile, force: cca.force, objectType: "local files"}
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local files", cca.destination, cca.incrementDeletionCount)
 }
 
 type localFileDeleter struct {
@@ -132,7 +143,7 @@ type localFileDeleter struct {
 }
 
 func (l *localFileDeleter) deleteFile(object storedObject) error {
-	glcm.Info("Deleting file: " + object.relativePath)
+	glcm.Info("Deleting extra file: " + object.relativePath)
 	return os.Remove(filepath.Join(l.rootPath, object.relativePath))
 }
 
@@ -150,7 +161,8 @@ func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProce
 		return nil, err
 	}
 
-	return &interactiveDeleteProcessor{deleter: newBlobDeleter(rawURL, p, ctx).deleteBlob, force: cca.force, objectType: "blobs"}, nil
+	return newInteractiveDeleteProcessor(newBlobDeleter(rawURL, p, ctx).deleteBlob,
+		cca.deleteDestination, "blobs", cca.destination, cca.incrementDeletionCount), nil
 }
 
 type blobDeleter struct {
@@ -168,7 +180,7 @@ func newBlobDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Contex
 }
 
 func (b *blobDeleter) deleteBlob(object storedObject) error {
-	glcm.Info("Deleting: " + object.relativePath)
+	glcm.Info("Deleting extra blob: " + object.relativePath)
 
 	// construct the blob URL using its relative path
 	// the rootURL could be pointing to a container, or a virtual directory

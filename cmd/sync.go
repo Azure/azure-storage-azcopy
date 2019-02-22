@@ -53,10 +53,10 @@ type rawSyncCmdArgs struct {
 	followSymlinks      bool
 	output              string
 	md5ValidationOption string
-	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
-	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
-	// deleting the flag.
-	force bool
+	// this flag indicates the user agreement with respect to deleting the extra files at the destination
+	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
+	// otherwise the user is prompted to make a decision
+	deleteDestination string
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -125,13 +125,18 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.blockSize = raw.blockSize
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.recursive = raw.recursive
-	cooked.force = raw.force
+
+	// determine whether we should prompt the user to delete extra files
+	err := cooked.deleteDestination.Parse(raw.deleteDestination)
+	if err != nil {
+		return cooked, err
+	}
 
 	// parse the filter patterns
 	cooked.include = raw.parsePatterns(raw.include)
 	cooked.exclude = raw.parsePatterns(raw.exclude)
 
-	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
 	}
@@ -203,10 +208,22 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesScanned uint64
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
-	// this flag determines the user-agreement to delete the files in case sync found files/blobs at the destination
-	// that do not exist at the source. With this flag turned on, user will not be prompted for permission before
-	// deleting the files/blobs.
-	force bool
+
+	// deletion count keeps track of how many extra files from the destination were removed
+	atomicDeletionCount uint32
+
+	// this flag indicates the user agreement with respect to deleting the extra files at the destination
+	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
+	// otherwise the user is prompted to make a decision
+	deleteDestination common.DeleteDestination
+}
+
+func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
+	atomic.AddUint32(&cca.atomicDeletionCount, 1)
+}
+
+func (cca *cookedSyncCmdArgs) getDeletionCount() uint32 {
+	return atomic.LoadUint32(&cca.atomicDeletionCount)
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
@@ -271,6 +288,11 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughputString string) {
+	lcm.Progress(fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+		atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned), throughputString))
+}
+
 func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	var summary common.ListSyncJobSummaryResponse
 	var throughput float64
@@ -279,7 +301,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
-		jobDone = summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+		jobDone = summary.JobStatus.IsJobDone()
 
 		// compute the average throughput for the last time interval
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
@@ -304,14 +326,18 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
 		}
 
-		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination%s",
-			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned), throughputString))
+		cca.reportScanningProgress(lcm, throughputString)
 		return
 	}
 
 	// if json output is desired, simply marshal and return
 	// note that if job is already done, we simply exit
 	if cca.output == common.EOutputFormat.Json() {
+		// TODO figure out if deletions should be done by the enumeration engine or not
+		// TODO if not, remove this so that we get the proper number from the ste
+		summary.DeleteTotalTransfers = cca.getDeletionCount()
+		summary.DeleteTransfersCompleted = cca.getDeletionCount()
+
 		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
 		jsonOutput, err := json.Marshal(summary)
 		common.PanicIfErr(err)
@@ -336,15 +362,29 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			exitCode = common.EExitCode.Error()
 		}
 		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Copy Transfers: %v\nTotal Number Of Delete Transfers: %v\nNumber of Copy Transfers Completed: %v\nNumber of Copy Transfers Failed: %v\nNumber of Delete Transfers Completed: %v\nNumber of Delete Transfers Failed: %v\nFinal Job Status: %v\n",
+			`
+Job %s Summary
+Files Scanned at Source: %v
+Files Scanned at Destination: %v
+Elapsed Time (Minutes): %v
+Total Number Of Copy Transfers: %v
+Number of Copy Transfers Completed: %v
+Number of Copy Transfers Failed: %v
+Number of Deletions at Destination: %v
+Total Number of Bytes Transferred: %v
+Total Number of Bytes Enumerated: %v
+Final Job Status: %v
+`,
 			summary.JobID.String(),
+			atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+			atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
 			ste.ToFixed(duration.Minutes(), 4),
 			summary.CopyTotalTransfers,
-			summary.DeleteTotalTransfers,
 			summary.CopyTransfersCompleted,
 			summary.CopyTransfersFailed,
-			summary.DeleteTransfersCompleted,
-			summary.DeleteTransfersFailed,
+			cca.atomicDeletionCount,
+			summary.TotalBytesTransferred,
+			summary.TotalBytesEnumerated,
 			summary.JobStatus), exitCode)
 	}
 
@@ -457,9 +497,9 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete extra files at the destination that are not present at the source. "+
-		"If false, user will be prompted with a question while scheduling files/blobs for deletion.")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
+	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
+		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading.")
 	// TODO: should the previous line list the allowable values?
 

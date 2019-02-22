@@ -29,7 +29,6 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 const (
@@ -73,13 +72,15 @@ func validateTransfersAreScheduled(c *chk.C, srcDirName, dstDirName string, expe
 }
 
 func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
+	deleteDestination := common.EDeleteDestination.True()
+
 	return rawSyncCmdArgs{
 		src:                 src,
 		dst:                 dst,
 		recursive:           true,
 		logVerbosity:        defaultLogVerbosityForSync,
 		output:              defaultOutputFormatForSync,
-		force:               true,
+		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}
 }
@@ -112,14 +113,11 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 
 	// the file was created after the blob, so no sync should happen
 	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
-
-	// sleep for 1 sec so that the blob's last modified times are guaranteed to be newer
-	time.Sleep(time.Second)
 
 	// recreate the blob to have a later last modified time
 	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
@@ -206,13 +204,11 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
+
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
-
-	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
-	time.Sleep(time.Second)
 
 	// refresh the blobs' last modified time so that they are newer
 	scenarioHelper{}.generateBlobs(c, containerURL, blobList)

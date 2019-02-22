@@ -29,11 +29,25 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const defaultFileSize = 1024
 
 type scenarioHelper struct{}
+
+var specialNames = []string{
+	"打麻将.txt",
+	"wow such space so much space",
+	"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy",
+	"coração",
+	"আপনার নাম কি",
+	"%4509%4254$85140&",
+	"Donaudampfschifffahrtselektrizitätenhauptbetriebswerkbauunterbeamtengesellschaft",
+	"お名前は何ですか",
+	"Adın ne",
+	"як вас звати",
+}
 
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopySyncDownload")
@@ -58,25 +72,25 @@ func (scenarioHelper) generateFile(filePath string, fileSize int) ([]byte, error
 }
 
 func (s scenarioHelper) generateRandomLocalFiles(c *chk.C, dirPath string, prefix string) (fileList []string) {
-	fileList = make([]string, 30)
+	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
-		fileName1 := generateName(prefix + "top")
-		fileName2 := generateName(prefix + "sub1/")
-		fileName3 := generateName(prefix + "sub2/")
+		batch := []string{
+			generateName(prefix + "top"),
+			generateName(prefix + "sub1/"),
+			generateName(prefix + "sub2/"),
+			generateName(prefix + "sub1/sub3/sub5/"),
+			generateName(prefix + specialNames[i]),
+		}
 
-		fileList[3*i] = fileName1
-		fileList[3*i+1] = fileName2
-		fileList[3*i+2] = fileName3
-
-		_, err := s.generateFile(filepath.Join(dirPath, fileName1), defaultFileSize)
-		c.Assert(err, chk.IsNil)
-
-		_, err = s.generateFile(filepath.Join(dirPath, fileName2), defaultFileSize)
-		c.Assert(err, chk.IsNil)
-
-		_, err = s.generateFile(filepath.Join(dirPath, fileName3), defaultFileSize)
-		c.Assert(err, chk.IsNil)
+		for j, name := range batch {
+			fileList[5*i+j] = name
+			_, err := s.generateFile(filepath.Join(dirPath, name), defaultFileSize)
+			c.Assert(err, chk.IsNil)
+		}
 	}
+
+	// sleep a bit so that the files' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
 	return
 }
 
@@ -85,24 +99,36 @@ func (s scenarioHelper) generateFilesFromList(c *chk.C, dirPath string, fileList
 		_, err := s.generateFile(filepath.Join(dirPath, fileName), defaultFileSize)
 		c.Assert(err, chk.IsNil)
 	}
+
+	// sleep a bit so that the files' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
 }
 
-// make 30 blobs with random names
+// make 50 blobs with random names
 // 10 of them at the top level
 // 10 of them in sub dir "sub1"
 // 10 of them in sub dir "sub2"
+// 10 of them in deeper sub dir "sub1/sub3/sub5"
+// 10 of them with special characters
 func (scenarioHelper) generateCommonRemoteScenario(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
-	blobList = make([]string, 30)
+	blobList = make([]string, 50)
+
 	for i := 0; i < 10; i++ {
 		_, blobName1 := createNewBlockBlob(c, containerURL, prefix+"top")
 		_, blobName2 := createNewBlockBlob(c, containerURL, prefix+"sub1/")
 		_, blobName3 := createNewBlockBlob(c, containerURL, prefix+"sub2/")
+		_, blobName4 := createNewBlockBlob(c, containerURL, prefix+"sub1/sub3/sub5/")
+		_, blobName5 := createNewBlockBlob(c, containerURL, prefix+specialNames[i])
 
-		blobList[3*i] = blobName1
-		blobList[3*i+1] = blobName2
-		blobList[3*i+2] = blobName3
+		blobList[5*i] = blobName1
+		blobList[5*i+1] = blobName2
+		blobList[5*i+2] = blobName3
+		blobList[5*i+3] = blobName4
+		blobList[5*i+4] = blobName5
 	}
 
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
 	return
 }
 
@@ -115,6 +141,9 @@ func (scenarioHelper) generateBlobs(c *chk.C, containerURL azblob.ContainerURL, 
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
 }
 
 // Golang does not have sets, so we have to use a map to fulfill the same functionality

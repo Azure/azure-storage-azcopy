@@ -27,7 +27,6 @@ import (
 	chk "gopkg.in/check.v1"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // regular file->blob sync
@@ -39,9 +38,6 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 	srcFileName := "singlefileisbest"
 	fileList := []string{srcFileName}
 	scenarioHelper{}.generateFilesFromList(c, srcDirName, fileList)
-
-	// wait for 1 second so that the last modified time of the blob is guaranteed to be newer
-	time.Sleep(time.Second)
 
 	// set up the destination container with a single blob
 	dstBlobName := srcFileName
@@ -61,14 +57,11 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 
 	// the blob was created after the file, so no sync should happen
 	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
-
-	// sleep for 1 sec so the blob's last modified time is older
-	time.Sleep(time.Second)
 
 	// recreate the file to have a later last modified time
 	scenarioHelper{}.generateFilesFromList(c, srcDirName, []string{srcFileName})
@@ -141,7 +134,6 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 
 	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
-	time.Sleep(time.Second)
 	scenarioHelper{}.generateBlobs(c, containerURL, fileList)
 
 	// set up interceptor
@@ -154,13 +146,11 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	raw := getDefaultRawInput(srcDirName, rawContainerURLWithSAS.String())
 
 	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.NotNil)
+		c.Assert(err, chk.IsNil)
+
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
 	})
-
-	// wait for 1 second so that the last modified times of the files are guaranteed to be newer
-	time.Sleep(time.Second)
 
 	// refresh the files' last modified time so that they are newer
 	scenarioHelper{}.generateFilesFromList(c, srcDirName, fileList)
@@ -179,9 +169,6 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 	// set up the source with numerous files
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
 	fileList := scenarioHelper{}.generateRandomLocalFiles(c, srcDirName, "")
-
-	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
-	time.Sleep(time.Second)
 
 	// set up an the container with half of the files, but later lmts
 	// also add some extra blobs that are not present at the source

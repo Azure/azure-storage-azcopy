@@ -62,11 +62,6 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 	comparator := newSyncSourceFilter(indexer)
 
 	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-
 		// remove the extra files at the destination that were not present at the source
 		// we can only know what needs to be deleted when we have FINISHED traversing the remote source
 		// since only then can we know which local files definitely don't exist remotely
@@ -76,13 +71,14 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 			return err
 		}
 
-		if !jobInitiated && !deleteScheduler.wasAnyFileDeleted() {
-			return errors.New("the source and destination are already in sync")
-		} else if !jobInitiated && deleteScheduler.wasAnyFileDeleted() {
-			// some files were deleted but no transfer scheduled
-			glcm.Exit("the source and destination are now in sync", common.EExitCode.Success())
+		// let the deletions happen first
+		// otherwise if the final part is executed too quickly, we might quit before deletions could finish
+		jobInitiated, err := transferScheduler.dispatchFinalPart()
+		if err != nil {
+			return err
 		}
 
+		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
 		cca.setScanningComplete()
 		return nil
 	}
@@ -138,23 +134,27 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 			return err
 		}
 
-		anyBlobDeleted := destinationCleaner.wasAnyFileDeleted()
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
 			return err
 		}
 
-		if !jobInitiated && !anyBlobDeleted {
-			return errors.New("the source and destination are already in sync")
-		} else if !jobInitiated && anyBlobDeleted {
-			// some files were deleted but no transfer scheduled
-			glcm.Exit("the source and destination are now in sync", common.EExitCode.Success())
-		}
-
+		quitIfInSync(jobInitiated, cca.getDeletionCount() > 0, cca)
 		cca.setScanningComplete()
 		return nil
 	}
 
 	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator,
 		transferScheduler.scheduleCopyTransfer, finalize), nil
+}
+
+func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
+	if !transferJobInitiated && !anyDestinationFileDeleted {
+		cca.reportScanningProgress(glcm, "")
+		glcm.Exit("The source and destination are already in sync.", common.EExitCode.Success())
+	} else if !transferJobInitiated && anyDestinationFileDeleted {
+		// some files were deleted but no transfer scheduled
+		cca.reportScanningProgress(glcm, "")
+		glcm.Exit("The source and destination are now in sync.", common.EExitCode.Success())
+	}
 }

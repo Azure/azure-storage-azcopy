@@ -41,8 +41,8 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
-		destination: dstDirName,
-		force:       true,
+		destination:       dstDirName,
+		deleteDestination: common.EDeleteDestination.True(),
 	}
 
 	// set up local deleter
@@ -79,10 +79,10 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	rawContainerURL := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	parts := azblob.NewBlobURLParts(rawContainerURL)
 	cca := &cookedSyncCmdArgs{
-		destination:    containerURL.String(),
-		destinationSAS: parts.SAS.Encode(),
-		credentialInfo: common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
-		force:          true,
+		destination:       containerURL.String(),
+		destinationSAS:    parts.SAS.Encode(),
+		credentialInfo:    common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()},
+		deleteDestination: common.EDeleteDestination.True(),
 	}
 
 	// set up the blob deleter
