@@ -89,27 +89,24 @@ type syncEnumerator struct {
 	// general filters apply to both the primary and secondary traverser
 	filters []objectFilter
 
-	// a special filters that apply only to the secondary traverser
-	// it filters objects as scanning happens, based on the data from the primary traverser stored in the objectIndexer
-	objectComparator objectFilter
-
-	// the processor responsible for scheduling copy transfers
-	copyTransferScheduler objectProcessor
+	// the processor that apply only to the secondary traverser
+	// it processes objects as scanning happens
+	// based on the data from the primary traverser stored in the objectIndexer
+	objectComparator objectProcessor
 
 	// a finalizer that is always called if the enumeration finishes properly
 	finalize func() error
 }
 
 func newSyncEnumerator(primaryTraverser, secondaryTraverser resourceTraverser, indexer *objectIndexer,
-	filters []objectFilter, comparator objectFilter, copyTransferScheduler objectProcessor, finalize func() error) *syncEnumerator {
+	filters []objectFilter, comparator objectProcessor, finalize func() error) *syncEnumerator {
 	return &syncEnumerator{
-		primaryTraverser:      primaryTraverser,
-		secondaryTraverser:    secondaryTraverser,
-		objectIndexer:         indexer,
-		filters:               filters,
-		objectComparator:      comparator,
-		copyTransferScheduler: copyTransferScheduler,
-		finalize:              finalize,
+		primaryTraverser:   primaryTraverser,
+		secondaryTraverser: secondaryTraverser,
+		objectIndexer:      indexer,
+		filters:            filters,
+		objectComparator:   comparator,
+		finalize:           finalize,
 	}
 }
 
@@ -120,13 +117,11 @@ func (e *syncEnumerator) enumerate() (err error) {
 		return
 	}
 
-	// add the objectComparator as an extra filter to the list
-	// so that it can filter given objects based on what's already indexed
-	e.filters = append(e.filters, e.objectComparator)
-
 	// enumerate the secondary resource and as the objects pass the filters
-	// they will be scheduled so that transferring can start while scanning is ongoing
-	err = e.secondaryTraverser.traverse(e.copyTransferScheduler, e.filters)
+	// they will be passed to the object comparator
+	// which can process given objects based on what's already indexed
+	// note: transferring can start while scanning is ongoing
+	err = e.secondaryTraverser.traverse(e.objectComparator, e.filters)
 	if err != nil {
 		return
 	}

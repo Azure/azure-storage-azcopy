@@ -59,7 +59,7 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
-	comparator := newSyncSourceFilter(indexer)
+	comparator := newSyncSourceComparator(indexer, transferScheduler.scheduleCopyTransfer)
 
 	finalize := func() error {
 		// remove the extra files at the destination that were not present at the source
@@ -83,8 +83,8 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 		return nil
 	}
 
-	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters, comparator,
-		transferScheduler.scheduleCopyTransfer, finalize), nil
+	return newSyncEnumerator(destinationTraverser, sourceTraverser, indexer, filters,
+		comparator.processIfNecessary, finalize), nil
 }
 
 // upload implies transferring from a local disk to a remote resource
@@ -125,7 +125,7 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 	// when uploading, we can delete remote objects immediately, because as we traverse the remote location
 	// we ALREADY have available a complete map of everything that exists locally
 	// so as soon as we see a remote destination object we can know whether it exists in the local source
-	comparator := newSyncDestinationFilter(indexer, destinationCleaner.removeImmediately)
+	comparator := newSyncDestinationComparator(indexer, transferScheduler.scheduleCopyTransfer, destinationCleaner.removeImmediately)
 
 	finalize := func() error {
 		// schedule every local file that doesn't exist at the destination
@@ -144,8 +144,8 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 		return nil
 	}
 
-	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters, comparator,
-		transferScheduler.scheduleCopyTransfer, finalize), nil
+	return newSyncEnumerator(sourceTraverser, destinationTraverser, indexer, filters,
+		comparator.processIfNecessary, finalize), nil
 }
 
 func quitIfInSync(transferJobInitiated, anyDestinationFileDeleted bool, cca *cookedSyncCmdArgs) {
