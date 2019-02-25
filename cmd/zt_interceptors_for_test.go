@@ -81,14 +81,17 @@ func (i *interceptor) reset() {
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct{}
 
-func (mockedLifecycleManager) Progress(string)                                          {}
+func (mockedLifecycleManager) Progress(common.OutputBuilder)                            {}
+func (mockedLifecycleManager) Init(common.OutputBuilder)                                {}
 func (mockedLifecycleManager) Info(string)                                              {}
 func (mockedLifecycleManager) Prompt(string) string                                     { return "" }
-func (mockedLifecycleManager) Exit(string, common.ExitCode)                             {}
+func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)               {}
 func (mockedLifecycleManager) Error(string)                                             {}
+func (mockedLifecycleManager) StdError(string)                                          {}
 func (mockedLifecycleManager) SurrenderControl()                                        {}
 func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController, bool)    {}
 func (mockedLifecycleManager) GetEnvironmentVariable(common.EnvironmentVariable) string { return "" }
+func (mockedLifecycleManager) SetOutputFormat(common.OutputFormat)                      {}
 
 type dummyProcessor struct {
 	record []storedObject

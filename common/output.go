@@ -35,7 +35,7 @@ type outputMessage struct {
 
 // used for output types that are not simple strings, such as progress and init
 // a given format(text,json) is passed in, and the appropriate string is returned
-type outputBuilder func(OutputFormat) string
+type OutputBuilder func(OutputFormat) string
 
 // -------------------------------------- JSON templates -------------------------------------- //
 // used to help formatting of JSON outputs
@@ -63,7 +63,7 @@ type InitMsgJsonTemplate struct {
 	JobID           string
 }
 
-func GetStandardInitOutputBuilder(jobID string, logFileLocation string) outputBuilder {
+func GetStandardInitOutputBuilder(jobID string, logFileLocation string) OutputBuilder {
 	return func(format OutputFormat) string {
 		if format == EOutputFormat.Json() {
 			return GetJsonStringFromTemplate(InitMsgJsonTemplate{
