@@ -34,9 +34,9 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Init(outputBuilder)                                // let the user know the job has started and initial information like log location
-	Progress(outputBuilder)                            // print on the same line over and over again, not allowed to float up
-	Exit(outputBuilder, ExitCode)                      // indicates successful execution exit after printing, allow user to specify exit code
+	Init(OutputBuilder)                                // let the user know the job has started and initial information like log location
+	Progress(OutputBuilder)                            // print on the same line over and over again, not allowed to float up
+	Exit(OutputBuilder, ExitCode)                      // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                       // simple print, allowed to float up
 	Error(string)                                      // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(string) string                              // ask the user a question(after erasing the progress), then return the response
@@ -109,14 +109,14 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	}
 }
 
-func (lcm *lifecycleMgr) Init(o outputBuilder) {
+func (lcm *lifecycleMgr) Init(o OutputBuilder) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: o(lcm.outputFormat),
 		msgType:    eOutputMessageType.Init(),
 	}
 }
 
-func (lcm *lifecycleMgr) Progress(o outputBuilder) {
+func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
 	messageContent := ""
 	if o != nil {
 		messageContent = o(lcm.outputFormat)
@@ -171,7 +171,7 @@ func (lcm *lifecycleMgr) Error(msg string) {
 	lcm.SurrenderControl()
 }
 
-func (lcm *lifecycleMgr) Exit(o outputBuilder, exitCode ExitCode) {
+func (lcm *lifecycleMgr) Exit(o OutputBuilder, exitCode ExitCode) {
 	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
 	lcm.checkAndTriggerMemoryProfiling()
 

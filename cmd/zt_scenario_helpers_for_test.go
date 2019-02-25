@@ -239,7 +239,6 @@ func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
 		dst:                 dst,
 		recursive:           true,
 		logVerbosity:        defaultLogVerbosityForSync,
-		output:              defaultOutputFormatForSync,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}

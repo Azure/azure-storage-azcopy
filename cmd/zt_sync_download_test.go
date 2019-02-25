@@ -33,7 +33,6 @@ import (
 
 const (
 	defaultLogVerbosityForSync = "WARNING"
-	defaultOutputFormatForSync = "text"
 )
 
 // regular blob->file sync
