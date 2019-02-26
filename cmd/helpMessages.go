@@ -139,8 +139,8 @@ const listCmdExample = "azcopy list [containerURL]"
 // ===================================== LOGIN COMMAND ===================================== //
 const loginCmdShortDescription = "Log in to Azure Active Directory to access Azure Storage resources."
 
-const loginCmdLongDescription = `Log in to Azure Active Directory to access Azure Storage resources. 
-		Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
+const loginCmdLongDescription = `Log in to Azure Active Directory to access Azure storage resources. 
+Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
 Please refer to the examples for more information.`
 

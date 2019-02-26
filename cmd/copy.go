@@ -97,7 +97,7 @@ type rawCopyCmdArgs struct {
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
-	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
+	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	s2sPreserveProperties bool
 	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
@@ -425,7 +425,7 @@ type cookedCopyCmdArgs struct {
 	isEnumerationComplete bool
 
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
-	// For S3 and Azure File source, as list operation doesn't return full properties of objects/files,
+	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	s2sPreserveProperties bool
 	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
@@ -1027,7 +1027,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserves full properties during service to service copy, the default value is true. "+
-		"For S3 and Azure File source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
+		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy, the default value is true. "+
 		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")

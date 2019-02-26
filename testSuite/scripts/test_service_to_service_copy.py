@@ -95,7 +95,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url, 
             "Blob")
 
-    def test_overwrite_copy_single_file_from_file_to_blob(self):
+    def test_overwrite_copy_single_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_overwrite_copy_single_file_from_x_to_x(
@@ -106,7 +106,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             False,
             True)
 
-    def test_non_overwrite_copy_single_file_from_file_to_blob(self):
+    def test_non_overwrite_copy_single_file_from_blob_to_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_overwrite_copy_single_file_from_x_to_x(

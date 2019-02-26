@@ -302,7 +302,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 			tmpS3URLPart.URL(),
 			urlExtension{URL: destBaseURL}.generateObjectPath(objectRelativePath),
 			&objectInfo,
-			cca.s2sGetS3PropertiesInBackend,
+			cca.s2sPreserveProperties && cca.s2sGetS3PropertiesInBackend,
 			cca)
 	}
 
