@@ -59,7 +59,6 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	return u.generateAppendBlockToRemoteFunc(id, appendBlockFromLocal)
 }
 
-// TODO: Confirm with john about the epilogue difference.
 func (u *appendBlobUploader) Epilogue() {
 	jptm := u.jptm
 

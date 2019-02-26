@@ -116,7 +116,6 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 	})
 }
 
-// TODO: confirm with john
 func (u *blockBlobUploader) Epilogue() {
 	jptm := u.jptm
 
