@@ -36,11 +36,11 @@ import (
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
 func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:         cca.jobID,
-		CommandString: cca.commandString,
-		FromTo:        cca.fromTo,
-		SourceRoot:    cca.source,
-		DestinationRoot: cca.destination,
+		JobID:           cca.jobID,
+		CommandString:   cca.commandString,
+		FromTo:          cca.fromTo,
+		SourceRoot:      replacePathSeparators(cca.source),
+		DestinationRoot: replacePathSeparators(cca.destination),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,
