@@ -703,6 +703,50 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	return result, nil
 }
 
+func isValidMetadataKey(key string) bool {
+	for i := 0; i < len(key); i++ {
+		if !isValidMetadataKeyChar(key[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isValidMetadataKeyChar(c byte) bool {
+	if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' {
+		return true
+	}
+	return false
+}
+
+const metadataKeyRenameHeader = "rename_"
+
+// var metadataRegExp = regexp.MustCompile("\\W")
+
+func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, isValid bool) {
+	if m == nil {
+		return
+	}
+
+	resolvedMetadata = make(map[string]string)
+	isValid = true
+	for k, v := range m {
+		if isValidMetadataKey(k) {
+			resolvedMetadata[k] = v
+		}
+		// else {
+		// 	isValid = false
+		// 	validKey := metadataRegExp.ReplaceAllString(k, "_")
+		// 	validKey = metadataKeyRenameHeader + validKey
+		// 	resolvedMetadata[validKey] = v
+		// }
+
+	}
+
+	return resolvedMetadata, isValid
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Common resource's HTTP headers stands for properties used in AzCopy.

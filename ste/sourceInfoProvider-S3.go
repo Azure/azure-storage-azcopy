@@ -98,6 +98,9 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 			return nil, err
 		}
 		oie := common.ObjectInfoExtension{ObjectInfo: objectInfo}
+		metadata := oie.NewCommonMetadata()
+		resolvedMetadata, _ := metadata.ResolveInvalidKey() // TODO: ensure how to handle invalid key
+
 		srcProperties = SrcProperties{
 			SrcHTTPHeaders: common.ResourceHTTPHeaders{
 				ContentType:        objectInfo.ContentType,
@@ -107,7 +110,7 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 				CacheControl:       oie.CacheControl(),
 				ContentMD5:         oie.ContentMD5(),
 			},
-			SrcMetadata: oie.NewCommonMetadata(),
+			SrcMetadata: resolvedMetadata,
 		}
 	}
 
