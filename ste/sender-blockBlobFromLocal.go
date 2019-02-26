@@ -30,6 +30,8 @@ import (
 
 type blockBlobUploader struct {
 	blockBlobSenderBase
+
+	md5Channel chan []byte
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -38,7 +40,11 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 		return nil, err
 	}
 
-	return &blockBlobUploader{blockBlobSenderBase: *senderBase}, nil
+	return &blockBlobUploader{blockBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+}
+
+func (u *blockBlobUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 // Returns a chunk-func for blob uploads
@@ -87,6 +93,17 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		if jptm.Info().SourceSize == 0 {
 			_, err = u.destBlockBlobURL.Upload(jptm.Context(), bytes.NewReader(nil), u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{})
 		} else {
+			// File with content
+
+			// Get the MD5 that was computed as we read the file
+			md5Hash, ok := <-u.md5Channel
+			if !ok {
+				jptm.FailActiveUpload("Getting hash", errNoHash)
+				return
+			}
+			u.headersToApply.ContentMD5 = md5Hash
+
+			// Upload the file
 			body := newLiteRequestBodyPacer(reader, u.pacer)
 			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{})
 		}
@@ -97,4 +114,25 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			return
 		}
 	})
+}
+
+// TODO: confirm with john
+func (u *blockBlobUploader) Epilogue() {
+	jptm := u.jptm
+
+	shouldPutBlockList := getPutListNeed(&u.putListIndicator)
+
+	// commit the blocks, if necessary
+	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
+
+		md5Hash, ok := <-u.md5Channel
+		if ok {
+			u.headersToApply.ContentMD5 = md5Hash
+		} else {
+			jptm.FailActiveSend("Getting hash", errNoHash)
+			// don't return, since need cleanup below
+		}
+	}
+
+	u.blockBlobSenderBase.Epilogue()
 }

@@ -58,10 +58,9 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 		return
 	}
 	// step 2b. Read chunk size and count from the sender (since it may have applied its own defaults and/or calculations to produce these values
-	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
 	if jptm.ShouldLog(pipeline.LogInfo) {
-		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", ul.ChunkSize()))
+		jptm.LogTransferStart(info.Source, info.Destination, fmt.Sprintf("Specified chunk size %d", s.ChunkSize()))
 	}
 	if s.NumChunks() == 0 {
 		panic("must always schedule one chunk, even if file is empty") // this keeps our code structure simpler, by using a dummy chunk for empty files
@@ -121,7 +120,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s) })
 
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
-	scheduleSendChunks(jptm, info.Source, srcFile, fileSize, s, sourceFileFactory)
+	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
 }
 
 // Schedule all the send chunks.
@@ -132,24 +131,27 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 // is harmless (and a good thing, to avoid excessive RAM usage).
 // To take advantage of the good sequential read performance provided by many file systems,
 // and to be able to compute an MD5 hash for the file, we work sequentially through the file here.
-func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common.CloseableReaderAt, fileSize int64, s ISenderBase, sourceFileFactory common.ChunkReaderSourceFactory) {
+func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common.CloseableReaderAt, srcSize int64, s ISenderBase, sourceFileFactory common.ChunkReaderSourceFactory, srcInfoProvider ISourceInfoProvider) {
+	var md5Channel chan<- []byte
+	var prefetchErr error
+
+	if srcInfoProvider.IsLocal() {
+		md5Channel = s.(uploader).Md5Channel()
+		defer close(md5Channel)
+	}
+
 	chunkSize := s.ChunkSize()
 	numChunks := s.NumChunks()
-	context := jptm.Context()
-	slicePool := jptm.SlicePool()
-	cacheLimiter := jptm.CacheLimiter()
-
 	chunkCount := int32(0)
 	md5Hasher := md5.New()
 	safeToUseHash := true
-	prefetchSucceed := false
 
 	var chunkReader common.SingleChunkReader
 	ps := common.PrologueState{}
 	chunkIDCount := int32(0)
 	for startIndex := int64(0); startIndex < srcSize || isDummyChunkInEmptyFile(startIndex, srcSize); startIndex += int64(chunkSize) {
 
-		id := common.NewChunkID(srcName, startIndex)
+		id := common.NewChunkID(srcPath, startIndex)
 		adjustedChunkSize := int64(chunkSize)
 
 		// compute actual size of the chunk
@@ -159,9 +161,9 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 
 		if srcInfoProvider.IsLocal() {
 			// create reader and prefetch the data into it
-			chunkReader, prefetchSucceed = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
+			chunkReader, prefetchErr = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
 			ps = chunkReader.GetPrologueState()
-			if prefetchSucceed {
+			if prefetchErr == nil {
 				chunkReader.WriteBufferTo(md5Hasher)
 			} else {
 				safeToUseHash = false // because we've missed a chunk
@@ -181,13 +183,13 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 		isWholeFile := numChunks == 1
 		var cf chunkFunc
 		if srcInfoProvider.IsLocal() {
-			if prefetchSucceed {
+			if prefetchErr == nil {
 				cf = s.(uploader).GenerateUploadFunc(id, chunkCount, chunkReader, isWholeFile)
 			} else {
 				_ = chunkReader.Close()
 				// Our jptm logic currently requires us to schedule every chunk, even if we know there's an error,
 				// so we schedule a func that will just fail with the given error
-				cf = createUploadChunkFunc(jptm, id, func() { jptm.FailActiveUpload("chunk data read", chunkDataError) })
+				cf = createSendToRemoteChunkFunc(jptm, id, func() { jptm.FailActiveSend("chunk data read", prefetchErr) })
 			}
 		} else {
 			cf = s.(s2sCopier).GenerateCopyFunc(id, chunkIDCount, adjustedChunkSize, isWholeFile)
@@ -199,13 +201,10 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 
 	// sanity check to verify the number of chunks scheduled
 	if chunkIDCount != int32(numChunks) {
-		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkIDCount, info.Source, srcSize))
+		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkIDCount, srcPath, srcSize))
 	}
 
 	if srcInfoProvider.IsLocal() && safeToUseHash {
-		md5Channel := s.(uploader).Md5Channel()
-		defer close(md5Channel) // never leave receiver hanging, waiting for a result, even if we fail here
-
 		md5Channel <- md5Hasher.Sum(nil)
 	}
 }
@@ -216,18 +215,22 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcName string, srcFile common
 // BTW, the reader we create here just works with a single chuck. (That's in contrast with downloads, where we have
 // to use an object that encompasses the whole file, so that it can put the chunks back into order. We don't have that requirement here.)
 // TODO: confirm with john about the signature change
-func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, srcFile *os.File) (common.SingleChunkReader, bool) {
+func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory common.ChunkReaderSourceFactory, id common.ChunkID, adjustedChunkSize int64, srcFile common.CloseableReaderAt) (common.SingleChunkReader, error) {
 	chunkReader := common.NewSingleChunkReader(jptm.Context(),
 		sourceFileFactory,
 		id,
 		adjustedChunkSize,
-		jptm, jptm.SlicePool(),
+		jptm,
+		jptm,
+		jptm.SlicePool(),
 		jptm.CacheLimiter())
 
 	// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
-	prefetchSucceed := chunkReader.TryBlockingPrefetch(srcFile)
+	if err := chunkReader.BlockingPrefetch(srcFile, false); err != nil {
+		return nil, err
+	}
 
-	return chunkReader, prefetchSucceed
+	return chunkReader, nil
 }
 
 func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {

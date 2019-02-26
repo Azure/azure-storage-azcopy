@@ -49,11 +49,8 @@ type SingleChunkReader interface {
 	// Closer is needed to clean up resources
 	io.Closer
 
-	// TryBlockingPrefetch tries to read the full contents of the chunk into RAM. Returns true if succeeded for false if failed,
-	// although callers do not have to check the return value (and there is no error object returned). Why?
-	// Because its OK to keep using this object even if the prefetch fails, since in that case
-	// any subsequent Read will just retry the same read as we do here, and if it fails at that time then Read will return an error.
-	TryBlockingPrefetch(fileReader io.ReaderAt) bool
+	// BlockingPrefetch tries to read the full contents of the chunk into RAM.
+	BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error
 
 	// GetPrologueState is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
 	// on the first chunk in each file (since there's no point in calling it on others)
@@ -154,22 +151,6 @@ func (cr *singleChunkReader) unuse() {
 	}
 }
 
-// Prefetch, and ignore any errors (just leave in not-prefetch-yet state, if there was an error)
-// If we leave it in the not-prefetched state here, then when Read happens that will trigger another read attempt,
-// and that one WILL return any error that happens
-// TODO: confirm with john, replaced this with BlockingPrefetch
-func (cr *singleChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
-	cr.use()
-	defer cr.unuse()
-
-	err := cr.blockingPrefetch(fileReader, false)
-	if err != nil {
-		cr.returnBuffer() // if there was an error, be sure to put us back into a valid "not-yet-prefetched" state
-		return false
-	}
-	return true
-}
-
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	cr.use()
 	defer cr.unuse()
@@ -190,6 +171,13 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	//       and (b) some sources seem to imply that the middle of it should be &rangeBytes[0] instead of just &rangeBytes, so we'd want to
 	//       check out the pros and cons of using the [0] before using it.
 	//       and (c) we would want to check whether it really did offer meaningful real-world performance gain, before introducing use of unsafe.
+}
+
+func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+	cr.use()
+	defer cr.unuse()
+
+	return cr.blockingPrefetch(fileReader, isRetry)
 }
 
 // Prefetch the data in this chunk, using a file reader that is provided to us.
@@ -371,8 +359,13 @@ func (cr *singleChunkReader) Close() error {
 	return nil
 }
 
+// Grab the leading bytes, for later MIME type recognition
+// (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
+// reads as much as possible)
 func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	cr.use()
+	// can't defer unuse here. See explict calls (plural) below
+
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)
 	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
@@ -388,9 +381,6 @@ func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	cr.unuse()
 	// MUST re-wind, so that the bytes we read will get transferred too!
 	_, err = cr.Seek(0, io.SeekStart)
-	if err != nil {
-		panic("can't seek after reading leading bytes")
-	}
 	return PrologueState{LeadingBytes: leadingBytes}
 }
 

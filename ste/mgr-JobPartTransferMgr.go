@@ -474,9 +474,9 @@ const (
 
 func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string) {
 	// order of log elements here is mirrored, with some more added, in logTransferError
-	fullMsg := common.URLStringExtension(jptm.Info().Source).RedactSigQueryParamForLogging() + " " +
+	fullMsg := common.URLStringExtension(jptm.Info().Source).RedactSecretQueryParamForLogging() + " " +
 		msg +
-		" Dst: " + common.URLStringExtension(jptm.Info().Destination).RedactSigQueryParamForLogging()
+		" Dst: " + common.URLStringExtension(jptm.Info().Destination).RedactSecretQueryParamForLogging()
 
 	jptm.Log(level, fullMsg)
 }

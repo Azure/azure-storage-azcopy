@@ -112,9 +112,6 @@ func (uotm *UserOAuthTokenManager) GetTokenInfo(ctx context.Context) (*OAuthToke
 		return nil, errors.New("invalid state, cannot get valid token info")
 	}
 
-	if tokenInfo.ClientID == "" {
-		tokenInfo.ClientID = ApplicationID
-	}
 	return tokenInfo, nil
 }
 

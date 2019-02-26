@@ -37,7 +37,7 @@ import (
 
 	"math/rand"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 // Hookup to the testing framework

@@ -28,6 +28,8 @@ import (
 
 type appendBlobUploader struct {
 	appendBlobSenderBase
+
+	md5Channel chan []byte
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -36,7 +38,11 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		return nil, err
 	}
 
-	return &appendBlobUploader{appendBlobSenderBase: *senderBase}, nil
+	return &appendBlobUploader{appendBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+}
+
+func (u *appendBlobUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -51,4 +57,21 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	}
 
 	return u.generateAppendBlockToRemoteFunc(id, appendBlockFromLocal)
+}
+
+// TODO: Confirm with john about the epilogue difference.
+func (u *appendBlobUploader) Epilogue() {
+	jptm := u.jptm
+
+	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
+	if jptm.TransferStatus() > 0 {
+		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
+			epilogueHeaders := u.headersToApply
+			epilogueHeaders.ContentMD5 = md5Hash
+			_, err := u.destAppendBlobURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			return err
+		})
+	}
+
+	u.appendBlobSenderBase.Epilogue()
 }

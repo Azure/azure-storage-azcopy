@@ -30,6 +30,8 @@ import (
 
 type pageBlobUploader struct {
 	pageBlobSenderBase
+
+	md5Channel chan []byte
 }
 
 func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -38,7 +40,11 @@ func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipelin
 		return nil, err
 	}
 
-	return &pageBlobUploader{pageBlobSenderBase: *senderBase}, nil
+	return &pageBlobUploader{pageBlobSenderBase: *senderBase, md5Channel: newMd5Channel()}, nil
+}
+
+func (u *pageBlobUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -66,4 +72,20 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			return
 		}
 	})
+}
+
+func (u *pageBlobUploader) Epilogue() {
+	jptm := u.jptm
+
+	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
+	if jptm.TransferStatus() > 0 {
+		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
+			epilogueHeaders := u.headersToApply
+			epilogueHeaders.ContentMD5 = md5Hash
+			_, err := u.destPageBlobURL.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			return err
+		})
+	}
+
+	u.pageBlobSenderBase.Epilogue()
 }
