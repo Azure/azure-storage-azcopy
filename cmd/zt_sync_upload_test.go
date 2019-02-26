@@ -71,7 +71,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
 	})
 }
 
@@ -103,7 +103,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
 
 		// validate that the right transfers were sent
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
@@ -158,7 +158,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
 	})
 }
 
@@ -190,7 +190,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), expectedOutput, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), expectedOutput, mockedRPC)
 
 		// make sure the extra blobs were deleted
 		for _, blobName := range extraBlobs {
@@ -229,7 +229,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeFlag(c *chk.C) {
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), filesToInclude, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), filesToInclude, mockedRPC)
 	})
 }
 
@@ -262,7 +262,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeFlag(c *chk.C) {
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), fileList, mockedRPC)
 	})
 }
 
@@ -302,7 +302,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludeFlag(c *chk.C) 
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateTransfersAreScheduled(c, srcDirName, containerURL.String(), filesToInclude, mockedRPC)
+		validateUploadTransfersAreScheduled(c, srcDirName, containerURL.String(), filesToInclude, mockedRPC)
 	})
 }
 

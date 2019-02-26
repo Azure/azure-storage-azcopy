@@ -297,6 +297,10 @@ func fromToValue(from Location, to Location) FromTo {
 	return FromTo((FromTo(from) << 8) | FromTo(to))
 }
 
+func (l Location) IsRemote() bool {
+	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
