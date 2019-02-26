@@ -416,16 +416,22 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
                 src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob")    
 
-    def test_copy_single_file_from_s3_object_to_blockblob_with_specified_blobtier(self):
+    def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
         blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
         for size in blob_sizes:
             self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
                 src_bucket_url, "S3", dst_container_url, "Blob", size)
+
+    @unittest.skip("override blob tier not enabled")
+    def test_copy_single_file_from_s3_object_to_blockblob_with_specified_blobtier(self):
+        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
                 src_bucket_url, "S3", dst_container_url, "Blob", 8*1024*1024+1, "", "", "BlockBlob", "Cool", "BlockBlob", "Cool")
 
+    @unittest.skip("override blob type not enabled")
     def test_copy_single_file_from_s3_object_to_appendblob_from_source(self):
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
@@ -434,6 +440,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
                 src_bucket_url, "S3", dst_container_url, "Blob", size, "", "", "AppendBlob", "", "AppendBlob")
 
+    @unittest.skip("override blob type not enabled")
     def test_copy_single_file_from_s3_object_to_pageblob_with_blobtier_from_source(self):
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
@@ -475,7 +482,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         else:
             cmd = util.Command("copy").add_arguments(localFilePath).add_arguments(srcURLForCopy).add_flags("log-level", "info")
             if blobType != "" :
-                cmd.add_flags("blobType", blobType)
+                cmd.add_flags("blob-type", blobType)
             if blobType == "PageBlob" and blobTier != "" :
                 cmd.add_flags("page-blob-tier", blobTier)
             if blobType == "BlockBlob" and blobTier != "" :
@@ -1094,7 +1101,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         copyCmd = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
             add_flags("log-level", "info")
         if destBlobTypeOverride != "":
-            copyCmd.add_flags("blobType", destBlobTypeOverride)
+            copyCmd.add_flags("blob-type", destBlobTypeOverride)
         if destBlobTierOverride != "":
             if destBlobTypeOverride == "PageBlob" or (srcBlobType == "PageBlob" and destBlobTypeOverride == ""):
                 copyCmd.add_flags("page-blob-tier", destBlobTierOverride)

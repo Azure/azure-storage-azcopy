@@ -325,7 +325,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
 		// and when file and s3 is source, only block blob destination is supported.
 		if cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blobType is set while coping from service to service")
+			return cooked, fmt.Errorf("blob-type is set while coping from service to service")
 		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from service to service")

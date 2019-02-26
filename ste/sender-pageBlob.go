@@ -125,11 +125,16 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 
 	// Set tier, https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
 	if s.destBlobTier != azblob.AccessTierNone {
-		// Set the latest service version from sdk as service version in the context.
-		ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-		if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
-			s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
-			return
+		// Ensure destBlobTier is not block blob tier, i.e. not Hot, Cool and Archive.
+		// Note: When copying from page blob source, the inferred blob tier could be Hot.
+		var blockBlobTier common.BlockBlobTier
+		if err := blockBlobTier.Parse(string(s.destBlobTier)); err != nil { // i.e it's not block blob tier
+			// Set the latest service version from sdk as service version in the context.
+			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
+				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
+				return
+			}
 		}
 	}
 }
