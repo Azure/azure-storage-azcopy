@@ -76,7 +76,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 	for _, numOfParts := range []int{1, 3} {
 		numOfTransfersPerPart := len(sampleObjects) / numOfParts
 		copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), numOfTransfersPerPart,
-			containerURL.String(), dstDirName, nil, nil)
+			containerURL.String(), dstDirName, false, false, nil, nil)
 
 		// go through the objects and make sure they are processed without error
 		for _, storedObject := range sampleObjects {
@@ -93,7 +93,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 		c.Assert(err, chk.IsNil)
 
 		// assert the right transfers were scheduled
-		validateTransfersAreScheduled(c, containerURL.String(), dstDirName,
+		validateTransfersAreScheduled(c, containerURL.String(), false, dstDirName, false,
 			processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
 
 		mockedRPC.reset()
@@ -122,7 +122,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 
 	// set up the processor
 	copyProcessor := newCopyTransferProcessor(processorTestSuiteHelper{}.getCopyJobTemplate(), 2,
-		containerURL.NewBlockBlobURL(blobList[0]).String(), filepath.Join(dstDirName, dstFileName), nil, nil)
+		containerURL.NewBlockBlobURL(blobList[0]).String(), filepath.Join(dstDirName, dstFileName), false, false, nil, nil)
 
 	// exercise the copy transfer processor
 	storedObject := newStoredObject(blobList[0], "", time.Now(), 0, nil)
@@ -137,6 +137,6 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	c.Assert(jobInitiated, chk.Equals, true)
 
 	// assert the right transfers were scheduled
-	validateTransfersAreScheduled(c, containerURL.String(), dstDirName,
+	validateTransfersAreScheduled(c, containerURL.String(), false, dstDirName, false,
 		blobList, mockedRPC)
 }

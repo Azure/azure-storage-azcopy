@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 	"io/ioutil"
@@ -177,4 +178,69 @@ func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
 		return true
 	}
 	return false
+}
+
+func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
+	// the simulated user input should parse properly
+	cooked, err := raw.cook()
+	c.Assert(err, chk.IsNil)
+
+	// the enumeration ends when process() returns
+	err = cooked.process()
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
+}
+
+func validateUploadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
+	validateTransfersAreScheduled(c, srcDirName, false, dstDirName, true, expectedTransfers, mockedRPC)
+}
+
+func validateDownloadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
+	validateTransfersAreScheduled(c, srcDirName, true, dstDirName, false, expectedTransfers, mockedRPC)
+}
+
+func validateTransfersAreScheduled(c *chk.C, srcDirName string, isSrcEncoded bool, dstDirName string, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
+	// validate that the right number of transfers were scheduled
+	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+
+	// validate that the right transfers were sent
+	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
+	for _, transfer := range mockedRPC.transfers {
+		srcRelativeFilePath := strings.Replace(transfer.Source, srcDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
+		dstRelativeFilePath := strings.Replace(transfer.Destination, dstDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
+
+		if isSrcEncoded {
+			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
+		}
+
+		if isDstEncoded {
+			dstRelativeFilePath, _ = url.PathUnescape(dstRelativeFilePath)
+		}
+
+		// the relative paths should be equal
+		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
+
+		// look up the source from the expected transfers, make sure it exists
+		_, srcExist := lookupMap[dstRelativeFilePath]
+		c.Assert(srcExist, chk.Equals, true)
+
+		// look up the destination from the expected transfers, make sure it exists
+		_, dstExist := lookupMap[dstRelativeFilePath]
+		c.Assert(dstExist, chk.Equals, true)
+	}
+}
+
+func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
+	deleteDestination := common.EDeleteDestination.True()
+
+	return rawSyncCmdArgs{
+		src:                 src,
+		dst:                 dst,
+		recursive:           true,
+		logVerbosity:        defaultLogVerbosityForSync,
+		output:              defaultOutputFormatForSync,
+		deleteDestination:   deleteDestination.String(),
+		md5ValidationOption: common.DefaultHashValidationOption.String(),
+	}
 }
