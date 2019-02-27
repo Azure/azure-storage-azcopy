@@ -40,45 +40,46 @@ const (
 func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 	bsu := getBSU()
 
-	// set up the container with a single blob
-	blobName := "singleblobisbest"
-	blobList := []string{blobName}
-	containerURL, containerName := createNewContainer(c, bsu)
-	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
-	defer deleteContainer(c, containerURL)
-	c.Assert(containerURL, chk.NotNil)
+	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the container with a single blob
+		blobList := []string{blobName}
+		containerURL, containerName := createNewContainer(c, bsu)
+		scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+		defer deleteContainer(c, containerURL)
+		c.Assert(containerURL, chk.NotNil)
 
-	// set up the destination as a single file
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-	dstFileName := blobName
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
+		// set up the destination as a single file
+		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+		dstFileName := blobName
+		scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
 
-	// set up interceptor
-	mockedRPC := interceptor{}
-	Rpc = mockedRPC.intercept
-	mockedRPC.init()
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
 
-	// construct the raw input to simulate user input
-	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-	raw := getDefaultRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
+		raw := getDefaultRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
-	// the file was created after the blob, so no sync should happen
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+		// the file was created after the blob, so no sync should happen
+		runSyncAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
 
-		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
-	})
+			// validate that the right number of transfers were scheduled
+			c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+		})
 
-	// recreate the blob to have a later last modified time
-	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
-	mockedRPC.reset()
+		// recreate the blob to have a later last modified time
+		scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+		mockedRPC.reset()
 
-	runSyncAndVerify(c, raw, func(err error) {
-		c.Assert(err, chk.IsNil)
+		runSyncAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
 
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
-	})
+			validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
+		})
+	}
 }
 
 // regular container->directory sync but destination is empty, so everything has to be transferred

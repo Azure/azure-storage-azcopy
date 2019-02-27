@@ -298,7 +298,16 @@ func fromToValue(from Location, to Location) FromTo {
 }
 
 func (l Location) IsRemote() bool {
-	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File()
+	switch l {
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File():
+		return true
+	case ELocation.Local(), ELocation.Pipe():
+		return false
+	default:
+		panic("unexpected location, please specify if it is remote")
+	}
+
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
