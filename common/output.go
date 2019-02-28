@@ -18,8 +18,7 @@ func (outputMessageType) Info() outputMessageType     { return outputMessageType
 func (outputMessageType) Progress() outputMessageType { return outputMessageType(2) } // should be printed on the same line over and over again, not allowed to float up
 func (outputMessageType) Exit() outputMessageType     { return outputMessageType(3) } // exit after printing
 func (outputMessageType) Error() outputMessageType    { return outputMessageType(4) } // indicate fatal error, exit right after
-func (outputMessageType) StdError() outputMessageType { return outputMessageType(5) } // print to stderr
-func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(6) } // ask the user a question after erasing the progress
+func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(5) } // ask the user a question after erasing the progress
 
 func (o outputMessageType) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
