@@ -26,6 +26,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+	"time"
 )
 
 type blobFSDownloader struct{}
@@ -53,8 +54,13 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 			return
 		}
 
+		// parse the remote lmt, there shouldn't be any error, unless the service returned a new format
+		remoteLastModified, err := time.Parse(time.RFC1123, get.LastModified())
+		common.PanicIfErr(err)
+		remoteLmtLocation := remoteLastModified.Location()
+
 		// Verify that the file has not been changed via a client side LMT check
-		if get.LastModified() != jptm.LastModifiedTime().String() {
+		if !remoteLastModified.Equal(jptm.LastModifiedTime().In(remoteLmtLocation)) {
 			jptm.FailActiveDownload("BFS File modified during transfer",
 				errors.New("BFS File modified during transfer"))
 		}
