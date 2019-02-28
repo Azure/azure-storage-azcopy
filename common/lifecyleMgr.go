@@ -40,7 +40,6 @@ type LifecycleMgr interface {
 	Info(string)                                       // simple print, allowed to float up
 	Error(string)                                      // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(string) string                              // ask the user a question(after erasing the progress), then return the response
-	StdError(string)                                   // print to stderr
 	SurrenderControl()                                 // give up control, this should never return
 	InitiateProgressReporting(WorkController, bool)    // start writing progress with another routine
 	GetEnvironmentVariable(EnvironmentVariable) string // get the environment variable or its default value
@@ -135,13 +134,6 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	}
 }
 
-func (lcm *lifecycleMgr) StdError(msg string) {
-	lcm.msgQueue <- outputMessage{
-		msgContent: msg,
-		msgType:    eOutputMessageType.StdError(),
-	}
-}
-
 func (lcm *lifecycleMgr) Prompt(msg string) string {
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
@@ -154,6 +146,7 @@ func (lcm *lifecycleMgr) Prompt(msg string) string {
 	return <-expectedInputChannel
 }
 
+// TODO minor: consider merging with Exit
 func (lcm *lifecycleMgr) Error(msg string) {
 	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
 	lcm.checkAndTriggerMemoryProfiling()
@@ -230,12 +223,9 @@ func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 	msgType := msgToOutput.msgType
 
-	// omit outputs to Stderr, since these could confuse the tools integrating AzCopy
-	if msgType == eOutputMessageType.StdError() {
-		return
-	} else if msgType == eOutputMessageType.Prompt() {
+	// right now, we return nothing so that the default behavior is triggered for the part that intended to get response
+	if msgType == eOutputMessageType.Prompt() {
 		// TODO determine how prompts work with JSON output
-		// right now, we return nothing so that the default behavior is trigger for the part that intended to get response
 		msgToOutput.inputChannel <- ""
 		return
 	}
@@ -262,10 +252,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 	}
 
 	switch msgToOutput.msgType {
-	case eOutputMessageType.Error():
-		// same handling as Exit
-		fallthrough
-	case eOutputMessageType.Exit():
+	case eOutputMessageType.Error(), eOutputMessageType.Exit():
 		// simply print and quit
 		// if no message is intended, avoid adding new lines
 		if msgToOutput.msgContent != "" {
@@ -283,10 +270,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		lcm.progressCache = msgToOutput.msgContent
 
-	case eOutputMessageType.Init():
-		// same handling as Info
-		fallthrough
-	case eOutputMessageType.Info():
+	case eOutputMessageType.Init(), eOutputMessageType.Info():
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the info from the beginning on current line
 			fmt.Print("\r")
@@ -302,26 +286,6 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 		} else {
 			fmt.Println(msgToOutput.msgContent)
 		}
-
-	case eOutputMessageType.StdError():
-		// we need to print to stderr but it's mostly likely that both stdout and stderr are directed to the terminal
-		// in case we are already printing progress to stdout, we need to make sure that the content from
-		// stderr gets displayed properly on its own line
-		if lcm.progressCache != "" { // a progress status is already on the last line
-			// erase the progress status
-			fmt.Print("\r")
-			matchLengthWithSpaces(len(lcm.progressCache), 0)
-			fmt.Print("\r")
-
-			os.Stderr.WriteString(msgToOutput.msgContent)
-
-			// print the previous progress status again, so that it's on the last line
-			fmt.Print("\n")
-			fmt.Print(lcm.progressCache)
-		} else {
-			os.Stderr.WriteString(msgToOutput.msgContent)
-		}
-
 	case eOutputMessageType.Prompt():
 		if lcm.progressCache != "" { // a progress status is already on the last line
 			// print the prompt from the beginning on current line
