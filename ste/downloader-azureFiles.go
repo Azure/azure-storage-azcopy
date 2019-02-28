@@ -55,7 +55,8 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 		}
 
 		// Verify that the file has not been changed via a client side LMT check
-		if get.LastModified() != jptm.LastModifiedTime() {
+		getLocation := get.LastModified().Location()
+		if !get.LastModified().Equal(jptm.LastModifiedTime().In(getLocation)) {
 			jptm.FailActiveDownload("Azure File modified during transfer",
 				errors.New("Azure File modified during transfer"))
 		}
