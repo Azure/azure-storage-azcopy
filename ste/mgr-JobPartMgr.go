@@ -351,11 +351,15 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 	if jpm.pipeline == nil {
 		fromTo := jpm.planMMF.Plan().FromTo
 		credInfo := jpm.jobMgr.getInMemoryTransitJobState().credentialInfo
+		userAgent := common.UserAgent
 
 		switch fromTo {
 		// Create pipeline for Azure Blob.
+		case common.EFromTo.S3Blob():
+			userAgent = common.S3ImportUserAgent
+			fallthrough
 		case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
-			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
 			credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
 				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
@@ -370,7 +374,7 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 				azblob.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azblob.TelemetryOptions{
-						Value: common.UserAgent,
+						Value: userAgent,
 					},
 				},
 				XferRetryOptions{
@@ -396,7 +400,7 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 				azbfs.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azbfs.TelemetryOptions{
-						Value: common.UserAgent,
+						Value: userAgent,
 					},
 				},
 				XferRetryOptions{
@@ -413,7 +417,7 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 				azfile.PipelineOptions{
 					Log: jpm.jobMgr.PipelineLogInfo(),
 					Telemetry: azfile.TelemetryOptions{
-						Value: common.UserAgent,
+						Value: userAgent,
 					},
 				},
 				azfile.RetryOptions{
