@@ -50,7 +50,7 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 		return nil, errors.New("sync must happen between source and destination of the same type: either blob <-> file, or container/virtual directory <-> local directory")
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isSingleBlob && isSingleFile)
 	includeFilters := buildIncludeFilters(cca.include)
 	excludeFilters := buildExcludeFilters(cca.exclude)
 
@@ -109,7 +109,7 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 		return nil, errors.New("sync must happen between source and destination of the same type: either blob <-> file, or container/virtual directory <-> local directory")
 	}
 
-	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
+	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isSingleBlob && isSingleFile)
 	includeFilters := buildIncludeFilters(cca.include)
 	excludeFilters := buildExcludeFilters(cca.exclude)
 

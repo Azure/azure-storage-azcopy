@@ -218,7 +218,8 @@ func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfi
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
 }
 
-func (jptm * jobPartTransferMgr) LastModifiedTime() time.Time {
+// TODO refactor into something like jptm.IsLastModifiedTimeEqual() so that there is NO LastModifiedTime method and people therefore CAN'T do it wrong due to time zone
+func (jptm *jobPartTransferMgr) LastModifiedTime() time.Time {
 	return time.Unix(0, jptm.jobPartPlanTransfer.ModifiedTime)
 }
 

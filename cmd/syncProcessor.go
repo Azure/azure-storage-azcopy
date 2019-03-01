@@ -34,7 +34,7 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
+func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, isSingleFileSync bool) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
@@ -54,6 +54,11 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 			BlockSizeInBytes:         cca.blockSize},
 		ForceWrite: true, // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		LogLevel:   cca.logVerbosity,
+	}
+
+	if !isSingleFileSync {
+		copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
+		copyJobTemplate.DestinationRoot += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
 	reportFirstPart := func() { cca.setFirstPartOrdered() }
