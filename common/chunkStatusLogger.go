@@ -152,6 +152,15 @@ var downloadWaitReasons = []WaitReason{
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
+var s2sCopyWaitReasons = []WaitReason{
+	// Waiting for a worker Go routine to pick up the scheduled chunk func.
+	// Chunks in this state are effectively a queue of work waiting to be sent over the network
+	EWaitReason.WorkerGR(),
+
+	// Start to send Put*FromURL, then S2S copy will start in service side, and Azcopy will wait the response which indicates copy get finished.
+	EWaitReason.S2SCopyOnWire(),
+}
+
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot
 }
@@ -162,8 +171,8 @@ type ChunkStatusLogger interface {
 
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
-	GetCounts(isDownload bool) []chunkStatusCount
-	IsDiskConstrained(isUpload, isDownload bool) bool
+	GetCounts(td TransferDirection) []chunkStatusCount
+	IsDiskConstrained(td TransferDirection) bool
 	CloseLog()
 }
 
@@ -189,7 +198,7 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
+	return EWaitReason.S2SCopyOnWire().index + 1 // assume this is the last wait reason
 }
 
 type chunkStatusCount struct {
@@ -277,13 +286,18 @@ func (csl *chunkStatusLogger) getCount(reason WaitReason) int64 {
 
 // Gets the current counts of chunks in each wait state
 // Intended for performance diagnostics and reporting
-func (csl *chunkStatusLogger) GetCounts(isDownload bool) []chunkStatusCount {
-
+func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount {
 	var allReasons []WaitReason
-	if isDownload {
-		allReasons = downloadWaitReasons
-	} else {
+
+	switch td {
+	case ETransferDirection.Upload():
 		allReasons = uploadWaitReasons
+	case ETransferDirection.Download():
+		allReasons = downloadWaitReasons
+	case ETransferDirection.S2SCopy():
+		allReasons = s2sCopyWaitReasons
+	default:
+		panic("invalid state: GetCounts should be used for Upload/Download/S2SCopy")
 	}
 
 	result := make([]chunkStatusCount, len(allReasons))
@@ -304,13 +318,14 @@ func (csl *chunkStatusLogger) GetCounts(isDownload bool) []chunkStatusCount {
 	return result
 }
 
-func (csl *chunkStatusLogger) IsDiskConstrained(isUpload, isDownload bool) bool {
-	if isUpload {
+func (csl *chunkStatusLogger) IsDiskConstrained(td TransferDirection) bool {
+	switch td {
+	case ETransferDirection.Upload():
 		return csl.isUploadDiskConstrained()
-	} else if isDownload {
+	case ETransferDirection.Download():
 		return csl.isDownloadDiskConstrained()
-	} else {
-		return false // it's neither upload nor download (e.g. S2S)
+	default:
+		return false
 	}
 }
 

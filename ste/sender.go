@@ -78,12 +78,12 @@ type uploader interface {
 	// file IO out of the upload func, and lets that func concentrate only on the details of the remote endpoint
 	GenerateUploadFunc(chunkID common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc
 
-	// Md5Channel returns the channel on which localToRemote should send the MD5 hash to the uploader
+	// Md5Channel returns the channel on which anyToRemote should send the MD5 hash to the uploader
 	Md5Channel() chan<- []byte
 }
 
 func newMd5Channel() chan []byte {
-	return make(chan []byte, 1) // must be buffered, so as not to hold up the goroutine running localToRemote (which needs to start on the NEXT file after finishing its current one)
+	return make(chan []byte, 1) // must be buffered, so as not to hold up the goroutine running anyToRemote (which needs to start on the NEXT file after finishing its current one)
 }
 
 // Tries to set the MD5 hash using the given function

@@ -298,6 +298,10 @@ func fromToValue(from Location, to Location) FromTo {
 	return FromTo((FromTo(from) << 8) | FromTo(to))
 }
 
+func (l Location) IsRemote() bool {
+	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File() || l == ELocation.S3()
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 var EFromTo = FromTo(0)
@@ -781,4 +785,33 @@ func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
 		ContentDisposition: h.ContentDisposition,
 		CacheControl:       h.CacheControl,
 	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var ETransferDirection = TransferDirection(0)
+
+type TransferDirection int32
+
+func (TransferDirection) UnKnown() TransferDirection  { return TransferDirection(0) }
+func (TransferDirection) Upload() TransferDirection   { return TransferDirection(1) }
+func (TransferDirection) Download() TransferDirection { return TransferDirection(2) }
+func (TransferDirection) S2SCopy() TransferDirection  { return TransferDirection(3) }
+
+func (td TransferDirection) String() string {
+	return enum.StringInt(td, reflect.TypeOf(td))
+}
+func (td *TransferDirection) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(td), s, false, true)
+	if err == nil {
+		*td = val.(TransferDirection)
+	}
+	return err
+}
+
+func (td *TransferDirection) AtomicLoad() TransferDirection {
+	return TransferDirection(atomic.LoadInt32((*int32)(td)))
+}
+func (td *TransferDirection) AtomicStore(newTransferDirection TransferDirection) {
+	atomic.StoreInt32((*int32)(td), int32(newTransferDirection))
 }
