@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -96,11 +97,20 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 	if len(commandString) > 0 {
 		jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Job-Command %s", commandString))
 	}
+	jm.logConcurrencyParameters()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
 	jm.partsDone = 0
 	return jm
+}
+
+func (jm *jobMgr) logConcurrencyParameters() {
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB", float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d", JobsAdmin.(*jobsAdmin).fileCountLimiter.Limit()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d", NumTransferInitiationRoutines))
+	// TODO: find a way to add concurrency value here (i.e. number of chunk func worker go routines)
 }
 
 // jobMgr represents the runtime information for a Job

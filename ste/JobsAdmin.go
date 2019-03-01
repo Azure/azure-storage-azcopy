@@ -182,10 +182,12 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < 64; cc++ {
+	for cc := 0; cc < NumTransferInitiationRoutines; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }
+
+const NumTransferInitiationRoutines = 64 // TODO make this configurable
 
 // QueueJobParts puts the given JobPartManager into the partChannel
 // from where this JobPartMgr will be picked by a routine and
