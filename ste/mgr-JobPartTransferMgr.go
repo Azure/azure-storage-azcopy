@@ -30,6 +30,7 @@ type IJobPartTransferMgr interface {
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
+	FileCountLimiter() common.CacheLimiter
 	StartJobXfer()
 	IsForceWriteTrue() bool
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
@@ -225,6 +226,10 @@ func (jptm *jobPartTransferMgr) SlicePool() common.ByteSlicePooler {
 
 func (jptm *jobPartTransferMgr) CacheLimiter() common.CacheLimiter {
 	return jptm.jobPartMgr.CacheLimiter()
+}
+
+func (jptm *jobPartTransferMgr) FileCountLimiter() common.CacheLimiter {
+	return jptm.jobPartMgr.FileCountLimiter()
 }
 
 func (jptm *jobPartTransferMgr) RescheduleTransfer() {

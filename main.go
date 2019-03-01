@@ -47,15 +47,23 @@ func main() {
 		return
 	}
 
+	configureGC()
+
 	// Perform os specific initialization
-	_, err := ProcessOSSpecificInitialization()
+	maxFileAndSocketHandles, err := ProcessOSSpecificInitialization()
 	if err != nil {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	configureGC()
+	concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
 
-	err = ste.MainSTE(common.ComputeConcurrencyValue(runtime.NumCPU()), 2400, azcopyAppPathFolder, azcopyLogPathFolder)
+	// Set a concurrent files limit such that we'll have enough handles left, after using
+	// some of our max handle count (concurrentConnections of them to be precise) as network handles
+	// TODO: add environment var to optionally allow bringing concurrentFiles down lower
+	//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
+	concurrentFilesLimit := maxFileAndSocketHandles - concurrentConnections
+
+	err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, 2400, azcopyAppPathFolder, azcopyLogPathFolder)
 	common.PanicIfErr(err)
 
 	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)

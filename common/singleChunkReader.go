@@ -194,7 +194,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// here doing retries, but no RAM _will_ become available because its
 	// all used by queued chunkfuncs (that can't be processed because all goroutines are active).
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
-	err := cr.cacheLimiter.WaitUntilAddBytes(cr.ctx, cr.length, func() bool { return isRetry })
+	err := cr.cacheLimiter.WaitUntilAdd(cr.ctx, cr.length, func() bool { return isRetry })
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (cr *singleChunkReader) returnBuffer() {
 		return
 	}
 	cr.slicePool.ReturnSlice(cr.buffer)
-	cr.cacheLimiter.RemoveBytes(int64(len(cr.buffer)))
+	cr.cacheLimiter.Remove(int64(len(cr.buffer)))
 	cr.buffer = nil
 }
 

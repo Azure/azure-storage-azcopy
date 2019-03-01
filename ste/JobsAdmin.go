@@ -96,7 +96,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -140,14 +140,15 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
 	ja := &jobsAdmin{
-		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
-		jobIDToJobMgr: newJobIDToJobMgr(),
-		logDir:        azcopyLogPathFolder,
-		planDir:       planDir,
-		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
-		slicePool:     common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:  common.NewCacheLimiter(maxRamBytesToUse),
-		appCtx:        appCtx,
+		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
+		jobIDToJobMgr:    newJobIDToJobMgr(),
+		logDir:           azcopyLogPathFolder,
+		planDir:          planDir,
+		pacer:            newPacer(targetRateInMBps * 1024 * 1024),
+		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
+		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),
+		appCtx:           appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -289,6 +290,7 @@ type jobsAdmin struct {
 	pacer               *pacer
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
+	fileCountLimiter    common.CacheLimiter
 }
 
 type CoordinatorChannels struct {

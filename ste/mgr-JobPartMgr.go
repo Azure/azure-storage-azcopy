@@ -39,6 +39,7 @@ type IJobPartMgr interface {
 	ReleaseAConnection()
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
+	FileCountLimiter() common.CacheLimiter
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
@@ -210,7 +211,8 @@ type jobPartMgr struct {
 
 	slicePool common.ByteSlicePooler
 
-	cacheLimiter common.CacheLimiter
+	cacheLimiter     common.CacheLimiter
+	fileCountLimiter common.CacheLimiter
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
@@ -472,6 +474,10 @@ func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
 
 func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter {
 	return jpm.cacheLimiter
+}
+
+func (jpm *jobPartMgr) FileCountLimiter() common.CacheLimiter {
+	return jpm.fileCountLimiter
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {

@@ -212,8 +212,9 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer,
-		slicePool:    JobsAdmin.(*jobsAdmin).slicePool,
-		cacheLimiter: JobsAdmin.(*jobsAdmin).cacheLimiter}
+		slicePool:        JobsAdmin.(*jobsAdmin).slicePool,
+		cacheLimiter:     JobsAdmin.(*jobsAdmin).cacheLimiter,
+		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
