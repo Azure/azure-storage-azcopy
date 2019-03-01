@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"time"
 
 	"net/url"
@@ -80,9 +81,10 @@ func (raw *rawSyncCmdArgs) separateSasFromURL(rawURL string) (cleanURL string, s
 	blobParts := azblob.NewBlobURLParts(*fromUrl)
 	sas = blobParts.SAS.Encode()
 
-	// get clean URL without SAS
+	// get clean URL without SAS and trailing / in the path
 	blobParts.SAS = azblob.SASQueryParameters{}
 	bUrl := blobParts.URL()
+	bUrl.Path = strings.TrimSuffix(bUrl.Path, common.AZCOPY_PATH_SEPARATOR_STRING)
 	cleanURL = bUrl.String()
 
 	return
@@ -97,7 +99,7 @@ func (raw *rawSyncCmdArgs) cleanLocalPath(rawPath string) (cleanPath string) {
 	if os.PathSeparator == '\\' {
 		cleanPath = strings.Replace(rawPath, common.OS_PATH_SEPARATOR, "/", -1)
 	}
-	cleanPath = rawPath
+	cleanPath = path.Clean(rawPath)
 	return
 }
 

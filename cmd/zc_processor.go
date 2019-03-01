@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
-	"strings"
 )
 
 type copyTransferProcessor struct {
@@ -69,14 +68,11 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		s.copyJobTemplate.PartNum++
 	}
 
-	sourceObjectRelativePath := s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName)
-	destinationObjectRelativePath := s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName)
-
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.appendObjectPathToResourcePath(sourceObjectRelativePath, s.source),
-		Destination:      s.appendObjectPathToResourcePath(destinationObjectRelativePath, s.destination),
+		Source:           s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		Destination:      s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
 		SourceSize:       storedObject.size,
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
@@ -90,14 +86,6 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 	}
 
 	return path
-}
-
-func (s *copyTransferProcessor) appendObjectPathToResourcePath(storedObjectPath, parentPath string) string {
-	if storedObjectPath == "" {
-		return parentPath
-	}
-
-	return strings.Join([]string{parentPath, storedObjectPath}, common.AZCOPY_PATH_SEPARATOR_STRING)
 }
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {

@@ -76,7 +76,8 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		runSyncAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
-			validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
+			validateDownloadTransfersAreScheduled(c, containerURL.NewBlobURL(blobName).String(),
+				filepath.Join(dstDirName, dstFileName), []string{""}, mockedRPC)
 		})
 	}
 }

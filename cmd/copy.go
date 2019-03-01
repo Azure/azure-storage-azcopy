@@ -568,6 +568,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 	}
 
+	// TODO remove this copy pasted code during refactoring
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
@@ -584,6 +585,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		blobParts.SAS = azblob.SASQueryParameters{}
 		bUrl := blobParts.URL()
 		cca.source = bUrl.String()
+
+		// set the clean source root
+		bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		jobPartOrder.SourceRoot = bUrl.String()
+
 	case common.ELocation.File():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -595,6 +601,25 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
 		cca.source = fUrl.String()
+
+		// set the clean source root
+		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		jobPartOrder.SourceRoot = fUrl.String()
+
+	case common.ELocation.Local():
+		// If the path separator is '\\', it means
+		// local path is a windows path
+		// To avoid path separator check and handling the windows
+		// path differently, replace the path separator with the
+		// the linux path separator '/'
+		if os.PathSeparator == '\\' {
+			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+		}
+
+		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
+
+	default:
+		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 	}
 
 	switch to {
@@ -620,29 +645,19 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
 		cca.destination = fUrl.String()
-	}
-
-	if from == common.ELocation.Local() {
+	case common.ELocation.Local():
 		// If the path separator is '\\', it means
 		// local path is a windows path
 		// To avoid path separator check and handling the windows
 		// path differently, replace the path separator with the
 		// the linux path separator '/'
 		if os.PathSeparator == '\\' {
-			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			cca.destination = strings.Replace(cca.destination, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 		}
 	}
 
-	if to == common.ELocation.Local() {
-		// If the path separator is '\\', it means
-		// local path is a windows path
-		// To avoid path separator check and handling the windows
-		// path differently, replace the path separator with the
-		// the linux path separator '/'
-		if os.PathSeparator == '\\' {
-			cca.destination = strings.Replace(cca.destination, common.OS_PATH_SEPARATOR, "/", -1)
-		}
-	}
+	// set the root destination after it's been cleaned
+	jobPartOrder.DestinationRoot = cca.destination
 
 	// lastPartNumber determines the last part number order send for the Job.
 	var lastPartNumber common.PartNumber
