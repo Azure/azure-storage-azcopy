@@ -70,6 +70,8 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
+const AzCopyMaxIdleConnsPerHost = 500
+
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
@@ -81,7 +83,7 @@ func newAzcopyHTTPClient() *http.Client {
 				DualStack: true,
 			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
-			MaxIdleConnsPerHost:    1000,
+			MaxIdleConnsPerHost:    AzCopyMaxIdleConnsPerHost,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
