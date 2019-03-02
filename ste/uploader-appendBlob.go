@@ -38,6 +38,8 @@ type appendBlobUploader struct {
 	pipeline               pipeline.Pipeline
 	pacer                  *pacer
 	soleChunkFuncSemaphore *semaphore.Weighted
+	md5Channel             chan []byte
+	creationTimeHeaders    *azblob.BlobHTTPHeaders
 }
 
 func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -69,6 +71,7 @@ func newAppendBlobUploader(jptm IJobPartTransferMgr, destination string, p pipel
 		pipeline:      p,
 		pacer:         pacer,
 		soleChunkFuncSemaphore: semaphore.NewWeighted(1),
+		md5Channel:             newMd5Channel(),
 	}, nil
 }
 
@@ -78,6 +81,10 @@ func (u *appendBlobUploader) ChunkSize() uint32 {
 
 func (u *appendBlobUploader) NumChunks() uint32 {
 	return u.numChunks
+}
+
+func (u *appendBlobUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 func (u *appendBlobUploader) RemoteFileExists() (bool, error) {
@@ -93,6 +100,8 @@ func (u *appendBlobUploader) Prologue(leadingBytes []byte) {
 		jptm.FailActiveUpload("Creating blob", err)
 		return
 	}
+	// Save headers to re-use, with same values, in epilogue
+	u.creationTimeHeaders = &blobHTTPHeaders
 }
 
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
@@ -132,6 +141,17 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 
 func (u *appendBlobUploader) Epilogue() {
 	jptm := u.jptm
+
+	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
+	if jptm.TransferStatus() > 0 {
+		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
+			epilogueHeaders := *u.creationTimeHeaders
+			epilogueHeaders.ContentMD5 = md5Hash
+			_, err := u.appendBlobUrl.SetHTTPHeaders(jptm.Context(), epilogueHeaders, azblob.BlobAccessConditions{})
+			return err
+		})
+	}
+
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure

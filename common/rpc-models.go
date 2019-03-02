@@ -52,6 +52,8 @@ type CopyJobPartOrderRequest struct {
 	Exclude     map[string]int
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
+	SourceRoot string
+	DestinationRoot string
 	Transfers       []CopyTransfer
 	LogLevel        LogLevel
 	BlobAttributes  BlobTransferAttributes
@@ -69,31 +71,6 @@ type CredentialInfo struct {
 	OAuthTokenInfo OAuthTokenInfo
 }
 
-type SyncJobPartOrderRequest struct {
-	JobID            JobID
-	FromTo           FromTo
-	PartNumber       PartNumber
-	LogLevel         LogLevel
-	Include          map[string]int
-	Exclude          map[string]int
-	BlockSizeInBytes uint32
-	SourceSAS        string
-	DestinationSAS   string
-	CopyJobRequest   CopyJobPartOrderRequest
-	DeleteJobRequest CopyJobPartOrderRequest
-	// FilesDeletedLocally is used to keep track of the file that are deleted locally
-	// Since local files to delete are not sent as transfer to STE
-	// the count of the local files deletion is tracked using it.
-	FilesToDeleteLocally []string
-	// commandString hold the user given command which is logged to the Job log file
-	CommandString  string
-	CredentialInfo CredentialInfo
-
-	SourceFiles map[string]time.Time
-
-	SourceFilesToExclude map[string]time.Time
-}
-
 type CopyJobPartOrderResponse struct {
 	ErrorMsg   string
 	JobStarted bool
@@ -108,14 +85,15 @@ type ListRequest struct {
 
 // This struct represents the optional attribute for blob request header
 type BlobTransferAttributes struct {
-	BlobType                 BlobType      // The type of a blob - BlockBlob, PageBlob, AppendBlob
-	ContentType              string        //The content type specified for the blob.
-	ContentEncoding          string        //Specifies which content encodings have been applied to the blob.
-	BlockBlobTier            BlockBlobTier // Specifies the tier to set on the block blobs.
-	PageBlobTier             PageBlobTier  // Specifies the tier to set on the page blobs.
-	Metadata                 string        //User-defined Name-value pairs associated with the blob
-	NoGuessMimeType          bool          // represents user decision to interpret the content-encoding from source file
-	PreserveLastModifiedTime bool          // when downloading, tell engine to set file's timestamp to timestamp of blob
+	BlobType                 BlobType             // The type of a blob - BlockBlob, PageBlob, AppendBlob
+	ContentType              string               //The content type specified for the blob.
+	ContentEncoding          string               //Specifies which content encodings have been applied to the blob.
+	BlockBlobTier            BlockBlobTier        // Specifies the tier to set on the block blobs.
+	PageBlobTier             PageBlobTier         // Specifies the tier to set on the page blobs.
+	Metadata                 string               //User-defined Name-value pairs associated with the blob
+	NoGuessMimeType          bool                 // represents user decision to interpret the content-encoding from source file
+	PreserveLastModifiedTime bool                 // when downloading, tell engine to set file's timestamp to timestamp of blob
+	MD5ValidationOption      HashValidationOption // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes         uint32
 }
 
@@ -139,8 +117,8 @@ type ListContainerResponse struct {
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListJobSummaryResponse struct {
 	ErrorMsg  string
-	Timestamp time.Time
-	JobID     JobID
+	Timestamp time.Time `json:"-"`
+	JobID     JobID     `json:"-"`
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
@@ -157,13 +135,15 @@ type ListJobSummaryResponse struct {
 	TotalBytesEnumerated uint64
 	FailedTransfers      []TransferDetail
 	SkippedTransfers     []TransferDetail
+	IsDiskConstrained    bool
+	PerfStrings          []string `json:"-"`
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
 type ListSyncJobSummaryResponse struct {
 	ErrorMsg  string
-	Timestamp time.Time
-	JobID     JobID
+	Timestamp time.Time `json:"-"`
+	JobID     JobID     `json:"-"`
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
@@ -177,6 +157,12 @@ type ListSyncJobSummaryResponse struct {
 	DeleteTransfersCompleted uint32
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
+	IsDiskConstrained        bool
+	PerfStrings              []string `json:"-"`
+	// sum of the size of transfer completed successfully so far.
+	TotalBytesTransferred uint64
+	// sum of the total transfer enumerated so far.
+	TotalBytesEnumerated uint64
 }
 
 type ListJobTransfersRequest struct {

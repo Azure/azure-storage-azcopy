@@ -45,7 +45,9 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcBlobURL.Download(jptm.Context(), id.OffsetInFile, length, azblob.BlobAccessConditions{}, false)
+		get, err := srcBlobURL.Download(jptm.Context(), id.OffsetInFile, length,
+			azblob.BlobAccessConditions{ModifiedAccessConditions:
+				azblob.ModifiedAccessConditions{IfUnmodifiedSince:jptm.LastModifiedTime()}}, false)
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
@@ -54,13 +56,12 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		//TODO: retryReader, retryForcer := get.BodyWithForceableRetry(azblob.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
-		retryReader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: destWriter.MaxRetryPerDownloadBody()})
-		retryForcer := func() {}
-		// TODO: replace the above with real retry forcer
-
+		retryReader := get.Body(azblob.RetryReaderOptions{
+			MaxRetryRequests: destWriter.MaxRetryPerDownloadBody(),
+			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newLiteResponseBodyPacer(retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

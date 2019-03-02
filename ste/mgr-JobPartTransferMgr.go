@@ -21,7 +21,9 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
+	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
+	MD5ValidationOption() common.HashValidationOption
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
@@ -29,7 +31,8 @@ type IJobPartTransferMgr interface {
 	CacheLimiter() common.CacheLimiter
 	StartJobXfer()
 	IsForceWriteTrue() bool
-	ReportChunkDone() (lastChunk bool, chunksDone uint32)
+	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
+	UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32)
 	TransferStatus() common.TransferStatus
 	SetStatus(status common.TransferStatus)
 	SetErrorCode(errorCode int32)
@@ -54,6 +57,7 @@ type IJobPartTransferMgr interface {
 	LogError(resource, context string, err error)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	common.ILogger
 }
 
@@ -98,6 +102,9 @@ type jobPartTransferMgr struct {
 	// which are either completed or failed.
 	// NumberOfChunksDone determines the final cancellation or completion of a transfer
 	atomicChunksDone uint32
+
+	// used defensively to protect against accidental double counting
+	atomicCompletionIndicator uint32
 
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
@@ -211,14 +218,23 @@ func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfi
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
 }
 
+// TODO refactor into something like jptm.IsLastModifiedTimeEqual() so that there is NO LastModifiedTime method and people therefore CAN'T do it wrong due to time zone
+func (jptm *jobPartTransferMgr) LastModifiedTime() time.Time {
+	return time.Unix(0, jptm.jobPartPlanTransfer.ModifiedTime)
+}
+
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
 // If PreserveLastModifiedTime is set to true, it returns the lastModifiedTime of the source.
 func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
-	if preserveLastModifiedTime := jptm.jobPartMgr.(*jobPartMgr).localDstData(); preserveLastModifiedTime {
+	if preserveLastModifiedTime := jptm.jobPartMgr.(*jobPartMgr).localDstData().PreserveLastModifiedTime; preserveLastModifiedTime {
 		lastModifiedTime := jptm.jobPartPlanTransfer.ModifiedTime
 		return time.Unix(0, lastModifiedTime), true
 	}
 	return time.Time{}, false
+}
+
+func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {
+	return jptm.jobPartMgr.(*jobPartMgr).localDstData().MD5VerificationOption
 }
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
@@ -234,13 +250,26 @@ func (jptm *jobPartTransferMgr) SetActionAfterLastChunk(f func()) {
 }
 
 // Call Done when a chunk has completed its transfer; this method returns the number of chunks completed so far
-func (jptm *jobPartTransferMgr) ReportChunkDone() (lastChunk bool, chunksDone uint32) {
+func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32) {
+
+	// Tell the id to remember that we (the jptm) have been told about its completion
+	// Will panic if we've already been told about its completion before.
+	// Why? As defensive programming, since if we accidentally counted one chunk twice, we'd complete
+	// before another was finish. Which would be bad
+	id.SetCompletionNotificationSent()
+
+	// Do our actual processing
 	chunksDone = atomic.AddUint32(&jptm.atomicChunksDone, 1)
 	lastChunk = chunksDone == jptm.numChunks
 	if lastChunk {
 		jptm.runActionAfterLastChunk()
 	}
 	return lastChunk, chunksDone
+}
+
+// TODO: phase this method out.  It's just here to support parts of the codebase that don't yet have chunk IDs
+func (jptm *jobPartTransferMgr) UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32) {
+	return jptm.ReportChunkDone(common.NewChunkID("", 0))
 }
 
 // If an automatic action has been specified for after the last chunk, run it now
@@ -332,14 +361,16 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
-		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, msg+" when "+descriptionOfWhereErrorOccurred, status)
+		requestID := ErrorEx{err}.MSRequestID()
+		fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, descriptionOfWhereErrorOccurred, requestID) // trailing \n to separate it better from any later, unrelated, log lines
+		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
 		jptm.SetStatus(failureStatus)
 		jptm.SetErrorCode(int32(status)) // TODO: what are the rules about when this needs to be set, and doesn't need to be (e.g. for earlier failures)?
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if status == http.StatusForbidden {
 			// TODO: should this really exit??? why not just log like everything else does???  We've Failed the transfer anyway....
-			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 		}
 	}
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
@@ -379,7 +410,17 @@ const (
 	transferErrorCodeCopyFailed     transferErrorCode = "COPYFAILED"
 )
 
+func (jptm *jobPartTransferMgr) LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string) {
+	// order of log elements here is mirrored, with some more added, in logTransferError
+	fullMsg := common.URLStringExtension(jptm.Info().Source).RedactSigQueryParamForLogging() + " " +
+		msg +
+		" Dst: " + common.URLStringExtension(jptm.Info().Destination).RedactSigQueryParamForLogging()
+
+	jptm.Log(level, fullMsg)
+}
+
 func (jptm *jobPartTransferMgr) logTransferError(errorCode transferErrorCode, source, destination, errorMsg string, status int) {
+	// order of log elements here is mirrored, in subset, in LogForCurrentTransfer
 	msg := fmt.Sprintf("%v: ", errorCode) + common.URLStringExtension(source).RedactSigQueryParamForLogging() +
 		fmt.Sprintf(" : %03d : %s\n   Dst: ", status, errorMsg) + common.URLStringExtension(destination).RedactSigQueryParamForLogging()
 	jptm.Log(pipeline.LogError, msg)
@@ -402,8 +443,9 @@ func (jptm *jobPartTransferMgr) LogS2SCopyError(source, destination, errorMsg st
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
 	status, msg := ErrorEx{err}.ErrorCodeAndString()
+	MSRequestID := ErrorEx{err}.MSRequestID()
 	jptm.Log(pipeline.LogError,
-		fmt.Sprintf("%s: %d: %s-%s", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg))
+		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSigQueryParamForLogging(), status, context, msg, MSRequestID))
 }
 
 func (jptm *jobPartTransferMgr) LogTransferStart(source, destination, description string) {
@@ -418,10 +460,20 @@ func (jptm *jobPartTransferMgr) Panic(err error) { jptm.jobPartMgr.Panic(err) }
 
 // Call ReportTransferDone to report when a Transfer for this Job Part has completed
 // TODO: I feel like this should take the status & we kill SetStatus
-// TODO: also, it looks like if we accidentally call this twice, on the one jptm, it just treats that as TWO successful transfers, which is a bug
 func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	// In case of context leak in job part transfer manager.
 	jptm.Cancel()
+
+	// defensive programming check, to make sure this method is not called twice for the same transfer
+	// (since if it was, job would count us as TWO completions, and maybe miss another transfer that
+	// should have been counted but wasn't)
+	// TODO: it would be nice if this protection was actually in jobPartMgr.ReportTransferDone,
+	//    but that's harder to implement (would imply need for a threadsafe map there, to track
+	//    status by transfer). So for now we are going with the check here. This is the only call
+	//    to the jobPartManager anyway (as it Feb 2019)
+	if atomic.SwapUint32(&jptm.atomicCompletionIndicator, 1) != 0 {
+		panic("cannot report the same transfer done twice")
+	}
 
 	return jptm.jobPartMgr.ReportTransferDone()
 }

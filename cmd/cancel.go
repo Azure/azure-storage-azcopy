@@ -28,6 +28,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TODO should this command be removed? Previously AzCopy was supposed to have an independent backend (out of proc)
+// TODO but that's not the plan anymore
 type rawCancelCmdArgs struct {
 	jobID string
 }
@@ -81,15 +83,15 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Exit("failed to parse user input due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("failed to parse user input due to error " + err.Error())
 			}
 
 			err = cooked.process()
 			if err != nil {
-				glcm.Exit("failed to perform copy command due to error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("failed to perform copy command due to error " + err.Error())
 			}
 
-			glcm.Exit("", common.EExitCode.Success())
+			glcm.Exit(nil, common.EExitCode.Success())
 		},
 		// hide features not relevant to BFS
 		// TODO remove after preview release.

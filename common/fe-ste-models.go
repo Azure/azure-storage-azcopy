@@ -98,6 +98,26 @@ type Status uint32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+type DeleteDestination uint32
+
+var EDeleteDestination = DeleteDestination(0)
+
+func (DeleteDestination) False() DeleteDestination  { return DeleteDestination(0) }
+func (DeleteDestination) Prompt() DeleteDestination { return DeleteDestination(1) }
+func (DeleteDestination) True() DeleteDestination   { return DeleteDestination(2) }
+
+func (dd *DeleteDestination) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(dd), s, true)
+	if err == nil {
+		*dd = val.(DeleteDestination)
+	}
+	return err
+}
+
+func (dd DeleteDestination) String() string {
+	return enum.StringInt(dd, reflect.TypeOf(dd))
+}
+
 type OutputFormat uint32
 
 var EOutputFormat = OutputFormat(0)
@@ -112,6 +132,10 @@ func (of *OutputFormat) Parse(s string) error {
 		*of = val.(OutputFormat)
 	}
 	return err
+}
+
+func (of OutputFormat) String() string {
+	return enum.StringInt(of, reflect.TypeOf(of))
 }
 
 var EExitCode = ExitCode(0)
@@ -218,11 +242,37 @@ func (j *JobStatus) AtomicStore(newJobStatus JobStatus) {
 	atomic.StoreUint32((*uint32)(j), uint32(newJobStatus))
 }
 
-func (JobStatus) InProgress() JobStatus { return JobStatus(0) }
-func (JobStatus) Paused() JobStatus     { return JobStatus(1) }
-func (JobStatus) Cancelling() JobStatus { return JobStatus(2) }
-func (JobStatus) Cancelled() JobStatus  { return JobStatus(3) }
-func (JobStatus) Completed() JobStatus  { return JobStatus(4) }
+func (j *JobStatus) EnhanceJobStatusInfo(skippedTransfers, failedTransfers, successfulTransfers bool) JobStatus {
+	if failedTransfers && skippedTransfers {
+		return EJobStatus.CompletedWithErrorsAndSkipped()
+	} else if failedTransfers {
+		if successfulTransfers {
+			return EJobStatus.CompletedWithErrors()
+		} else {
+			return EJobStatus.Failed()
+		}
+	} else if skippedTransfers {
+		return EJobStatus.CompletedWithSkipped()
+	} else {
+		return EJobStatus.Completed()
+	}
+}
+
+func (j *JobStatus) IsJobDone() bool {
+	return *j == EJobStatus.Completed() || *j == EJobStatus.Cancelled() || *j == EJobStatus.CompletedWithSkipped() ||
+		*j == EJobStatus.CompletedWithErrors() || *j == EJobStatus.CompletedWithErrorsAndSkipped() ||
+		*j == EJobStatus.Failed()
+}
+
+func (JobStatus) InProgress() JobStatus                    { return JobStatus(0) }
+func (JobStatus) Paused() JobStatus                        { return JobStatus(1) }
+func (JobStatus) Cancelling() JobStatus                    { return JobStatus(2) }
+func (JobStatus) Cancelled() JobStatus                     { return JobStatus(3) }
+func (JobStatus) Completed() JobStatus                     { return JobStatus(4) }
+func (JobStatus) CompletedWithErrors() JobStatus           { return JobStatus(5) }
+func (JobStatus) CompletedWithSkipped() JobStatus          { return JobStatus(6) }
+func (JobStatus) CompletedWithErrorsAndSkipped() JobStatus { return JobStatus(7) }
+func (JobStatus) Failed() JobStatus                        { return JobStatus(8) }
 func (js JobStatus) String() string {
 	return enum.StringInt(js, reflect.TypeOf(js))
 }
@@ -249,6 +299,19 @@ func (l Location) String() string {
 // value, first 8 bits represents from location
 func fromToValue(from Location, to Location) FromTo {
 	return FromTo((FromTo(from) << 8) | FromTo(to))
+}
+
+func (l Location) IsRemote() bool {
+	switch l {
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File():
+		return true
+	case ELocation.Local(), ELocation.Pipe():
+		return false
+	default:
+		panic("unexpected location, please specify if it is remote")
+	}
+
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -522,6 +585,55 @@ func (ct *CredentialType) Parse(s string) error {
 		*ct = val.(CredentialType)
 	}
 	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EHashValidationOption = HashValidationOption(0)
+
+var DefaultHashValidationOption = EHashValidationOption.FailIfDifferent()
+
+type HashValidationOption uint8
+
+// FailIfDifferent says fail if hashes different, but NOT fail if saved hash is
+// totally missing. This is a balance of convenience (for cases where no hash is saved) vs strictness
+// (to validate strictly when one is present)
+func (HashValidationOption) FailIfDifferent() HashValidationOption { return HashValidationOption(0) }
+
+// Do not check hashes at download time at all
+func (HashValidationOption) NoCheck() HashValidationOption { return HashValidationOption(1) }
+
+// LogOnly means only log if missing or different, don't fail the transfer
+func (HashValidationOption) LogOnly() HashValidationOption { return HashValidationOption(2) }
+
+// FailIfDifferentOrMissing is the strictest option, and useful for testing or validation in cases when
+// we _know_ there should be a hash
+func (HashValidationOption) FailIfDifferentOrMissing() HashValidationOption {
+	return HashValidationOption(3)
+}
+
+func (hvo HashValidationOption) String() string {
+	return enum.StringInt(hvo, reflect.TypeOf(hvo))
+}
+
+func (hvo *HashValidationOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(hvo), s, true, true)
+	if err == nil {
+		*hvo = val.(HashValidationOption)
+	}
+	return err
+}
+
+func (hvo HashValidationOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(hvo.String())
+}
+
+func (hvo *HashValidationOption) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return hvo.Parse(s)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

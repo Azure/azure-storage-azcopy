@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -36,7 +35,6 @@ import (
 
 func init() {
 	var sourcePath = ""
-	var outputRaw = ""
 	// listContainerCmd represents the list container command
 	// listContainer list the blobs inside the container or virtual directory inside the container
 	listContainerCmd := &cobra.Command{
@@ -61,26 +59,23 @@ func init() {
 			// verifying the location type
 			location := inferArgumentLocation(sourcePath)
 			if location != location.Blob() {
-				glcm.Exit("invalid path passed for listing. given source is of type "+location.String()+" while expect is container / container path ", common.EExitCode.Error())
+				glcm.Error("invalid path passed for listing. given source is of type " + location.String() + " while expect is container / container path ")
 			}
 
-			var output common.OutputFormat
-			output.Parse(outputRaw)
-			err := HandleListContainerCommand(sourcePath, output)
+			err := HandleListContainerCommand(sourcePath)
 			if err == nil {
-				glcm.Exit("", common.EExitCode.Success())
+				glcm.Exit(nil, common.EExitCode.Success())
 			} else {
-				glcm.Exit(err.Error(), common.EExitCode.Error())
+				glcm.Error(err.Error())
 			}
 
 		},
 	}
 	rootCmd.AddCommand(listContainerCmd)
-	listContainerCmd.PersistentFlags().StringVar(&outputRaw, "outputRaw", "text", "format of the command's outputRaw, the choices include: text, json")
 }
 
 // HandleListContainerCommand handles the list container command
-func HandleListContainerCommand(source string, outputFormat common.OutputFormat) (err error) {
+func HandleListContainerCommand(source string) (err error) {
 	// TODO: Temporarily use context.TODO(), this should be replaced with a root context from main.
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
@@ -152,27 +147,19 @@ func HandleListContainerCommand(source string, outputFormat common.OutputFormat)
 			summary.Blobs = append(summary.Blobs, blobName)
 		}
 		marker = listBlob.NextMarker
-		printListContainerResponse(&summary, outputFormat)
+		printListContainerResponse(&summary)
 	}
 	return nil
 }
 
 // printListContainerResponse prints the list container response
-func printListContainerResponse(lsResponse *common.ListContainerResponse, outputFormat common.OutputFormat) {
+func printListContainerResponse(lsResponse *common.ListContainerResponse) {
 	if len(lsResponse.Blobs) == 0 {
 		return
 	}
-	if outputFormat == common.EOutputFormat.Json() {
-		//marshaledData, err := json.MarshalIndent(lsResponse, "", " ")
-		marshaledData, err := json.Marshal(lsResponse)
-		if err != nil {
-			panic(fmt.Errorf("error listing the source. Failed with error %s", err))
-		}
-		glcm.Info(string(marshaledData))
-	} else {
-		for index := 0; index < len(lsResponse.Blobs); index++ {
-			glcm.Info(lsResponse.Blobs[index])
-		}
+	// TODO determine what's the best way to display the blobs in JSON
+	// TODO no partner team needs this functionality right now so the blobs are just outputted as info
+	for index := 0; index < len(lsResponse.Blobs); index++ {
+		glcm.Info(lsResponse.Blobs[index])
 	}
-	lsResponse.Blobs = nil
 }

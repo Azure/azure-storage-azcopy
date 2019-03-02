@@ -18,7 +18,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
             dest_validate = util.get_resource_from_oauth_container_validate(file_name)
 
         result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").add_flags("blobType","PageBlob").execute_azcopy_copy_command()
+            add_flags("block-size", "4194304").add_flags("blob-type","PageBlob").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
@@ -46,7 +46,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         # execute azcopy page blob upload.
         destination_sas = util.get_resource_sas(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").add_flags("blobType","PageBlob").execute_azcopy_copy_command()
+            add_flags("block-size", "4194304").add_flags("blob-type","PageBlob").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
@@ -66,7 +66,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         # execute azcopy pageblob upload.
         destination_sas = util.get_resource_sas(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").add_flags("blobType","PageBlob").execute_azcopy_copy_command()
+            add_flags("block-size", "4194304").add_flags("blob-type","PageBlob").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # number of page range for partial sparse created above will be (size/2)
@@ -85,7 +85,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
 
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P10").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P10").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.
@@ -99,7 +99,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 100 * 1024)
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P20").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P20").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.
@@ -113,7 +113,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 100 * 1024)
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P30").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P30").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.
@@ -127,7 +127,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 100 * 1024)
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P4").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.
@@ -141,7 +141,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 100 * 1024)
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P40").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P40").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.
@@ -155,7 +155,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 100 * 1024)
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P50").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P50").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.
@@ -169,7 +169,7 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
         file_path = util.create_test_file(filename, 100 * 1024)
         destination_sas = util.get_resource_sas_from_premium_container_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas). \
-            add_flags("log-level", "info").add_flags("blobType","PageBlob").add_flags("page-blob-tier", "P6").execute_azcopy_copy_command()
+            add_flags("log-level", "info").add_flags("blob-type","PageBlob").add_flags("page-blob-tier", "P6").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute azcopy validate order.

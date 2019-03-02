@@ -130,10 +130,12 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// TODO: make ram usage configurable, with the following as just the default
 	// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
 	// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
-	const gbToUsePerCpu = 0.6  // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
+	// Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
+	// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
+	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
 	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
-	if gbToUse > 8 {
-		gbToUse = 8     // cap it. We don't need more than this. Even 6 is enough at 10 Gbps with standard chunk sizes, but allow a little extra here to help if larger blob block sizes are selected by user
+	if gbToUse > 10 {
+		gbToUse = 10 // cap it. Even 6 is enough at 10 Gbps with standard chunk sizes, but allow a little extra here to help if larger blob block sizes are selected by user
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
@@ -164,6 +166,9 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
 
 	JobsAdmin = ja
+
+	// Spin up slice pool pruner
+	go ja.slicePoolPruneLoop()
 
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
@@ -212,7 +217,7 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 		// We check for suicides first to shrink goroutine pool
 		// Then, we check chunks: normal & low priority
 		select {
-		case <-ja.xferChannels.suicideCh:   // note: as at Dec 2018, this channel is not (yet) used
+		case <-ja.xferChannels.suicideCh: // note: as at Dec 2018, this channel is not (yet) used
 			return
 		default:
 			select {
@@ -224,10 +229,10 @@ func (ja *jobsAdmin) chunkProcessor(workerID int) {
 					chunkFunc(workerID)
 				default:
 					time.Sleep(100 * time.Millisecond) // Sleep before looping around
-					                                   // TODO: Question: In order to safely support high goroutine counts,
-					                                   // do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
-					                                   // For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
-					                                   // the wake-ups.
+					// TODO: Question: In order to safely support high goroutine counts,
+					// do we need to review sleep duration, or find an approach that does not require waking every x milliseconds
+					// For now, duration has been increased substantially from the previous 1 ms, to reduce cost of
+					// the wake-ups.
 				}
 			}
 		}
@@ -282,7 +287,7 @@ type jobsAdmin struct {
 	xferChannels        XferChannels
 	appCtx              context.Context
 	pacer               *pacer
-	slicePool 			common.ByteSlicePooler
+	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 }
 
@@ -477,6 +482,23 @@ func (ja *jobsAdmin) ShouldLog(level pipeline.LogLevel) bool  { return ja.logger
 func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(level, msg) }
 func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
 func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
+
+func (ja *jobsAdmin) slicePoolPruneLoop() {
+	// if something in the pool has been unused for this long, we probably don't need it
+	const pruneInterval = 5 * time.Second
+
+	ticker := time.NewTicker(pruneInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			ja.slicePool.Prune()
+		case <-ja.appCtx.Done():
+			break
+		}
+	}
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

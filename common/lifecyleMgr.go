@@ -19,6 +19,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		msgQueue:      make(chan outputMessage, 1000),
 		progressCache: "",
 		cancelChannel: make(chan os.Signal, 1),
+		outputFormat:  EOutputFormat.Text(), // output text by default
 	}
 
 	// kick off the single routine that processes output
@@ -33,37 +34,20 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Progress(string)                                   // print on the same line over and over again, not allowed to float up
+	Init(OutputBuilder)                                // let the user know the job has started and initial information like log location
+	Progress(OutputBuilder)                            // print on the same line over and over again, not allowed to float up
+	Exit(OutputBuilder, ExitCode)                      // indicates successful execution exit after printing, allow user to specify exit code
 	Info(string)                                       // simple print, allowed to float up
+	Error(string)                                      // indicates fatal error, exit after printing, exit code is always Failed (1)
 	Prompt(string) string                              // ask the user a question(after erasing the progress), then return the response
-	Exit(string, ExitCode)                             // exit after printing
-	Error(string)                                      // print to stderr
 	SurrenderControl()                                 // give up control, this should never return
 	InitiateProgressReporting(WorkController, bool)    // start writing progress with another routine
 	GetEnvironmentVariable(EnvironmentVariable) string // get the environment variable or its default value
+	SetOutputFormat(OutputFormat)                      // change the output format of the entire application
 }
 
 func GetLifecycleMgr() LifecycleMgr {
 	return lcm
-}
-
-var eMessageType = outputMessageType(0)
-
-// outputMessageType defines the nature of the output, ex: progress report, job summary, or error
-type outputMessageType uint8
-
-func (outputMessageType) Progress() outputMessageType { return outputMessageType(0) } // should be printed on the same line over and over again, not allowed to float up
-func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
-func (outputMessageType) Exit() outputMessageType     { return outputMessageType(2) } // exit after printing
-func (outputMessageType) Prompt() outputMessageType   { return outputMessageType(3) } // ask the user a question after erasing the progress
-func (outputMessageType) Error() outputMessageType    { return outputMessageType(4) } // print to stderr
-
-// defines the output and how it should be handled
-type outputMessage struct {
-	msgContent   string
-	msgType      outputMessageType
-	exitCode     ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
-	inputChannel chan<- string // support getting a response from the user
 }
 
 // single point of control for all outputs
@@ -72,6 +56,11 @@ type lifecycleMgr struct {
 	progressCache  string // useful for keeping job progress on the last line
 	cancelChannel  chan os.Signal
 	waitEverCalled int32
+	outputFormat   OutputFormat
+}
+
+func (lcm *lifecycleMgr) SetOutputFormat(format OutputFormat) {
+	lcm.outputFormat = format
 }
 
 func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
@@ -84,10 +73,10 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
 		if err != nil {
-			lcm.Exit(fmt.Sprintf("Fail to create file for CPU profiling, %v", err), EExitCode.Error())
+			lcm.Error(fmt.Sprintf("Fail to create file for CPU profiling, %v", err))
 		}
 		if err := pprof.StartCPUProfile(f); err != nil {
-			lcm.Exit(fmt.Sprintf("Fail to start CPU profiling, %v", err), EExitCode.Error())
+			lcm.Error(fmt.Sprintf("Fail to start CPU profiling, %v", err))
 		}
 	}
 }
@@ -107,11 +96,11 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)
 		if err != nil {
-			lcm.Exit(fmt.Sprintf("Fail to create file for memory profiling, %v", err), EExitCode.Error())
+			lcm.Error(fmt.Sprintf("Fail to create file for memory profiling, %v", err))
 		}
 		runtime.GC()
 		if err := pprof.WriteHeapProfile(f); err != nil {
-			lcm.Exit(fmt.Sprintf("Fail to start memory profiling, %v", err), EExitCode.Error())
+			lcm.Error(fmt.Sprintf("Fail to start memory profiling, %v", err))
 		}
 		if err := f.Close(); err != nil {
 			lcm.Info(fmt.Sprintf("Fail to close memory profiling file, %v", err))
@@ -119,24 +108,29 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	}
 }
 
-func (lcm *lifecycleMgr) Progress(msg string) {
+func (lcm *lifecycleMgr) Init(o OutputBuilder) {
 	lcm.msgQueue <- outputMessage{
-		msgContent: msg,
-		msgType:    eMessageType.Progress(),
+		msgContent: o(lcm.outputFormat),
+		msgType:    eOutputMessageType.Init(),
+	}
+}
+
+func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
+	messageContent := ""
+	if o != nil {
+		messageContent = o(lcm.outputFormat)
+	}
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: messageContent,
+		msgType:    eOutputMessageType.Progress(),
 	}
 }
 
 func (lcm *lifecycleMgr) Info(msg string) {
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
-		msgType:    eMessageType.Info(),
-	}
-}
-
-func (lcm *lifecycleMgr) Error(msg string) {
-	lcm.msgQueue <- outputMessage{
-		msgContent: msg,
-		msgType:    eMessageType.Error(),
+		msgType:    eOutputMessageType.Info(),
 	}
 }
 
@@ -144,7 +138,7 @@ func (lcm *lifecycleMgr) Prompt(msg string) string {
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
 		msgContent:   msg,
-		msgType:      eMessageType.Prompt(),
+		msgType:      eOutputMessageType.Prompt(),
 		inputChannel: expectedInputChannel,
 	}
 
@@ -152,7 +146,8 @@ func (lcm *lifecycleMgr) Prompt(msg string) string {
 	return <-expectedInputChannel
 }
 
-func (lcm *lifecycleMgr) Exit(msg string, exitCode ExitCode) {
+// TODO minor: consider merging with Exit
+func (lcm *lifecycleMgr) Error(msg string) {
 	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
 	lcm.checkAndTriggerMemoryProfiling()
 
@@ -161,7 +156,29 @@ func (lcm *lifecycleMgr) Exit(msg string, exitCode ExitCode) {
 
 	lcm.msgQueue <- outputMessage{
 		msgContent: msg,
-		msgType:    eMessageType.Exit(),
+		msgType:    eOutputMessageType.Error(),
+		exitCode:   EExitCode.Error(),
+	}
+
+	// stall forever until the success message is printed and program exits
+	lcm.SurrenderControl()
+}
+
+func (lcm *lifecycleMgr) Exit(o OutputBuilder, exitCode ExitCode) {
+	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
+	lcm.checkAndTriggerMemoryProfiling()
+
+	// Check if there is ongoing CPU profiling, and stop CPU profiling.
+	lcm.checkAndStopCPUProfiling()
+
+	messageContent := ""
+	if o != nil {
+		messageContent = o(lcm.outputFormat)
+	}
+
+	lcm.msgQueue <- outputMessage{
+		msgContent: messageContent,
+		msgType:    eOutputMessageType.Exit(),
 		exitCode:   exitCode,
 	}
 
@@ -176,6 +193,54 @@ func (lcm *lifecycleMgr) SurrenderControl() {
 }
 
 func (lcm *lifecycleMgr) processOutputMessage() {
+	// this function constantly pulls out message to output
+	// and pass them onto the right handler based on the output format
+	for {
+		switch msgToPrint := <-lcm.msgQueue; lcm.outputFormat {
+		case EOutputFormat.Json():
+			lcm.processJSONOutput(msgToPrint)
+		case EOutputFormat.Text():
+			lcm.processTextOutput(msgToPrint)
+		case EOutputFormat.None():
+			lcm.processNoneOutput(msgToPrint)
+		default:
+			panic("unimplemented output format")
+		}
+	}
+}
+
+func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
+	if msgToOutput.msgType == eOutputMessageType.Exit() {
+		os.Exit(int(msgToOutput.exitCode))
+	} else if msgToOutput.msgType == eOutputMessageType.Error() {
+		os.Exit(int(EExitCode.Error()))
+	}
+
+	// ignore all other outputs
+	return
+}
+
+func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
+	msgType := msgToOutput.msgType
+
+	// right now, we return nothing so that the default behavior is triggered for the part that intended to get response
+	if msgType == eOutputMessageType.Prompt() {
+		// TODO determine how prompts work with JSON output
+		msgToOutput.inputChannel <- ""
+		return
+	}
+
+	// simply output the json message
+	// we assume the msgContent is already formatted correctly
+	fmt.Println(GetJsonStringFromTemplate(newJsonOutputTemplate(msgType, msgToOutput.msgContent)))
+
+	// exit if needed
+	if msgType == eOutputMessageType.Exit() || msgType == eOutputMessageType.Error() {
+		os.Exit(int(msgToOutput.exitCode))
+	}
+}
+
+func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 	// when a new line needs to overwrite the current line completely
 	// we need to make sure that if the new line is shorter, we properly erase everything from the current line
 	var matchLengthWithSpaces = func(curLineLength, newLineLength int) {
@@ -186,80 +251,57 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 		}
 	}
 
-	// NOTE: fmt.printf is being avoided on purpose (for memory optimization)
-	for {
-		switch msgToPrint := <-lcm.msgQueue; msgToPrint.msgType {
-		case eMessageType.Exit():
-			// simply print and quit
-			// if no message is intended, avoid adding new lines
-			if msgToPrint.msgContent != "" {
-				fmt.Println("\n" + msgToPrint.msgContent)
-			}
-			os.Exit(int(msgToPrint.exitCode))
-
-		case eMessageType.Progress():
-			fmt.Print("\r")                  // return carriage back to start
-			fmt.Print(msgToPrint.msgContent) // print new progress
-
-			// it is possible that the new progress status is somehow shorter than the previous one
-			// in this case we must erase the left over characters from the previous progress
-			matchLengthWithSpaces(len(lcm.progressCache), len(msgToPrint.msgContent))
-
-			lcm.progressCache = msgToPrint.msgContent
-
-		case eMessageType.Info():
-			if lcm.progressCache != "" { // a progress status is already on the last line
-				// print the info from the beginning on current line
-				fmt.Print("\r")
-				fmt.Print(msgToPrint.msgContent)
-
-				// it is possible that the info is shorter than the progress status
-				// in this case we must erase the left over characters from the progress status
-				matchLengthWithSpaces(len(lcm.progressCache), len(msgToPrint.msgContent))
-
-				// print the previous progress status again, so that it's on the last line
-				fmt.Print("\n")
-				fmt.Print(lcm.progressCache)
-			} else {
-				fmt.Println(msgToPrint.msgContent)
-			}
-
-		case eMessageType.Error():
-			// we need to print to stderr but it's mostly likely that both stdout and stderr are directed to the terminal
-			// in case we are already printing progress to stdout, we need to make sure that the content from
-			// stderr gets displayed properly on its own line
-			if lcm.progressCache != "" { // a progress status is already on the last line
-				// erase the progress status
-				fmt.Print("\r")
-				matchLengthWithSpaces(len(lcm.progressCache), 0)
-				fmt.Print("\r")
-
-				os.Stderr.WriteString(msgToPrint.msgContent)
-
-				// print the previous progress status again, so that it's on the last line
-				fmt.Print("\n")
-				fmt.Print(lcm.progressCache)
-			} else {
-				os.Stderr.WriteString(msgToPrint.msgContent)
-			}
-
-		case eMessageType.Prompt():
-			if lcm.progressCache != "" { // a progress status is already on the last line
-				// print the prompt from the beginning on current line
-				fmt.Print("\r")
-				fmt.Print(msgToPrint.msgContent)
-
-				// it is possible that the prompt is shorter than the progress status
-				// in this case we must erase the left over characters from the progress status
-				matchLengthWithSpaces(len(lcm.progressCache), len(msgToPrint.msgContent))
-
-			} else {
-				fmt.Print(msgToPrint.msgContent)
-			}
-
-			// read the response to the prompt and send it back through the channel
-			msgToPrint.inputChannel <- lcm.readInCleanLineFromStdIn()
+	switch msgToOutput.msgType {
+	case eOutputMessageType.Error(), eOutputMessageType.Exit():
+		// simply print and quit
+		// if no message is intended, avoid adding new lines
+		if msgToOutput.msgContent != "" {
+			fmt.Println("\n" + msgToOutput.msgContent)
 		}
+		os.Exit(int(msgToOutput.exitCode))
+
+	case eOutputMessageType.Progress():
+		fmt.Print("\r")                   // return carriage back to start
+		fmt.Print(msgToOutput.msgContent) // print new progress
+
+		// it is possible that the new progress status is somehow shorter than the previous one
+		// in this case we must erase the left over characters from the previous progress
+		matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
+
+		lcm.progressCache = msgToOutput.msgContent
+
+	case eOutputMessageType.Init(), eOutputMessageType.Info():
+		if lcm.progressCache != "" { // a progress status is already on the last line
+			// print the info from the beginning on current line
+			fmt.Print("\r")
+			fmt.Print(msgToOutput.msgContent)
+
+			// it is possible that the info is shorter than the progress status
+			// in this case we must erase the left over characters from the progress status
+			matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
+
+			// print the previous progress status again, so that it's on the last line
+			fmt.Print("\n")
+			fmt.Print(lcm.progressCache)
+		} else {
+			fmt.Println(msgToOutput.msgContent)
+		}
+	case eOutputMessageType.Prompt():
+		if lcm.progressCache != "" { // a progress status is already on the last line
+			// print the prompt from the beginning on current line
+			fmt.Print("\r")
+			fmt.Print(msgToOutput.msgContent)
+
+			// it is possible that the prompt is shorter than the progress status
+			// in this case we must erase the left over characters from the progress status
+			matchLengthWithSpaces(len(lcm.progressCache), len(msgToOutput.msgContent))
+
+		} else {
+			fmt.Print(msgToOutput.msgContent)
+		}
+
+		// read the response to the prompt and send it back through the channel
+		msgToOutput.inputChannel <- lcm.readInCleanLineFromStdIn()
 	}
 }
 

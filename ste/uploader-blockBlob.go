@@ -44,6 +44,7 @@ type blockBlobUploader struct {
 	leadingBytes     []byte      // no lock because is written before first chunk-func go routine is scheduled
 	mu               *sync.Mutex // protects the fields below
 	blockIds         []string
+	md5Channel       chan []byte
 }
 
 func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
@@ -74,6 +75,7 @@ func newBlockBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeli
 		pacer:        pacer,
 		mu:           &sync.Mutex{},
 		blockIds:     make([]string, numChunks),
+		md5Channel:   newMd5Channel(),
 	}, nil
 }
 
@@ -83,6 +85,10 @@ func (u *blockBlobUploader) ChunkSize() uint32 {
 
 func (u *blockBlobUploader) NumChunks() uint32 {
 	return u.numChunks
+}
+
+func (u *blockBlobUploader) Md5Channel() chan<- []byte {
+	return u.md5Channel
 }
 
 func (u *blockBlobUploader) SetLeadingBytes(leadingBytes []byte) {
@@ -151,8 +157,21 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		var err error
 		if jptm.Info().SourceSize == 0 {
+			// Empty file
 			_, err = u.blockBlobUrl.Upload(jptm.Context(), bytes.NewReader(nil), blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+
 		} else {
+			// File with content
+
+			// Get the MD5 that was computed as we read the file
+			md5Hash, ok := <-u.md5Channel
+			if !ok {
+				jptm.FailActiveUpload("Getting hash", errNoHash)
+				return
+			}
+			blobHttpHeader.ContentMD5 = md5Hash
+
+			// Upload the file
 			body := newLiteRequestBodyPacer(reader, u.pacer)
 			_, err = u.blockBlobUrl.Upload(jptm.Context(), body, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
 		}
@@ -172,7 +191,7 @@ func (u *blockBlobUploader) Epilogue() {
 	blockIds := u.blockIds
 	u.mu.Unlock()
 	shouldPutBlockList := getPutListNeed(&u.putListIndicator)
-	if shouldPutBlockList == putListNeedUnknown {
+	if shouldPutBlockList == putListNeedUnknown && !jptm.WasCanceled() {
 		panic("'put list' need flag was never set")
 	}
 
@@ -182,13 +201,20 @@ func (u *blockBlobUploader) Epilogue() {
 	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIds))
 
-		// fetching the blob http headers with content-type, content-encoding attributes
-		// fetching the metadata passed with the JobPartOrder
-		blobHttpHeader, metaData := jptm.BlobDstData(u.leadingBytes)
+		md5Hash, ok := <-u.md5Channel
+		if ok {
+			// fetching the blob http headers with content-type, content-encoding attributes
+			// fetching the metadata passed with the JobPartOrder
+			blobHttpHeader, metaData := jptm.BlobDstData(u.leadingBytes)
+			blobHttpHeader.ContentMD5 = md5Hash
 
-		_, err := u.blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
-		if err != nil {
-			jptm.FailActiveUpload("Committing block list", err)
+			_, err := u.blockBlobUrl.CommitBlockList(jptm.Context(), blockIds, blobHttpHeader, metaData, azblob.BlobAccessConditions{})
+			if err != nil {
+				jptm.FailActiveUpload("Committing block list", err)
+				// don't return, since need cleanup below
+			}
+		} else {
+			jptm.FailActiveUpload("Getting hash", errNoHash)
 			// don't return, since need cleanup below
 		}
 	}

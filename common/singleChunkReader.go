@@ -21,9 +21,15 @@
 package common
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"hash"
 	"io"
+	"math"
+	"runtime"
+	"sync/atomic"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -42,11 +48,8 @@ type SingleChunkReader interface {
 	// Closer is needed to clean up resources
 	io.Closer
 
-	// TryBlockingPrefetch tries to read the full contents of the chunk into RAM. Returns true if succeeded for false if failed,
-	// although callers do not have to check the return value (and there is no error object returned). Why?
-	// Because its OK to keep using this object even if the prefetch fails, since in that case
-	// any subsequent Read will just retry the same read as we do here, and if it fails at that time then Read will return an error.
-	TryBlockingPrefetch(fileReader io.ReaderAt) bool
+	// BlockingPrefetch tries to read the full contents of the chunk into RAM.
+	BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error
 
 	// CaptureLeadingBytes is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
 	// on the first chunk in each file (since there's no point in calling it on others)
@@ -61,6 +64,10 @@ type SingleChunkReader interface {
 	// In the rare edge case where this returns false due to the prefetch having failed (rather than the contents being non-zero),
 	// we'll just treat it as a non-zero chunk. That's simpler (to code, to review and to test) than having this code force a prefetch.
 	HasPrefetchedEntirelyZeros() bool
+
+	// WriteBufferTo writes the entire contents of the prefetched buffer to h
+	// Panics if the internal buffer has not been prefetched (or if its been discarded after a complete Read)
+	WriteBufferTo(h hash.Hash)
 }
 
 // Simple aggregation of existing io interfaces
@@ -73,6 +80,9 @@ type CloseableReaderAt interface {
 type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
 
 type singleChunkReader struct {
+	// for diagnostics for issue https://github.com/Azure/azure-storage-azcopy/issues/191
+	atomicUseIndicator int32
+
 	// context used to allow cancellation of blocking operations
 	// (Yes, ideally contexts are not stored in structs, but we need it inside Read, and there's no way for it to be passed in there)
 	ctx context.Context
@@ -85,6 +95,9 @@ type singleChunkReader struct {
 
 	// for logging chunk state transitions
 	chunkLogger ChunkStatusLogger
+
+	// general-purpose logger
+	generalLogger ILogger
 
 	// A factory to get hold of the file, in case we need to re-read any of it
 	sourceFactory ChunkReaderSourceFactory
@@ -103,13 +116,14 @@ type singleChunkReader struct {
 	// TODO: pooling of buffers to reduce pressure on GC?
 }
 
-func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
+func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
 	if length <= 0 {
 		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
 		ctx:           ctx,
 		chunkLogger:   chunkLogger,
+		generalLogger: generalLogger,
 		slicePool:     slicePool,
 		cacheLimiter:  cacheLimiter,
 		sourceFactory: sourceFactory,
@@ -118,21 +132,28 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 	}
 }
 
-// Prefetch, and ignore any errors (just leave in not-prefetch-yet state, if there was an error)
-// If we leave it in the not-prefetched state here, then when Read happens that will trigger another read attempt,
-// and that one WILL return any error that happens
-func (cr *singleChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
-	err := cr.blockingPrefetch(fileReader, false)
-	if err != nil {
-		cr.returnBuffer() // if there was an error, be sure to put us back into a valid "not-yet-prefetched" state
-		return false
+// Use and un-use are temporary, for identifying the root cause of
+// https://github.com/Azure/azure-storage-azcopy/issues/191
+// They may be removed after that.
+// For now, they are used to wrap every Public method
+func (cr *singleChunkReader) use() {
+	if atomic.SwapInt32(&cr.atomicUseIndicator, 1) != 0 {
+		panic("trying to use chunk reader when already in use")
 	}
-	return true
+}
+
+func (cr *singleChunkReader) unuse() {
+	if atomic.SwapInt32(&cr.atomicUseIndicator, 0) != 1 {
+		panic("ending use when chunk reader was not actually IN use")
+	}
 }
 
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
+	cr.use()
+	defer cr.unuse()
+
 	if cr.buffer == nil {
-		return false // not prefetched  (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
+		return false // not prefetched (and, to simply error handling in teh caller, we don't call retryBlockingPrefetchIfNecessary here)
 	}
 
 	for _, b := range cr.buffer {
@@ -147,6 +168,13 @@ func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
 	//       and (b) some sources seem to imply that the middle of it should be &rangeBytes[0] instead of just &rangeBytes, so we'd want to
 	//       check out the pros and cons of using the [0] before using it.
 	//       and (c) we would want to check whether it really did offer meaningful real-world performance gain, before introducing use of unsafe.
+}
+
+func (cr *singleChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+	cr.use()
+	defer cr.unuse()
+
+	return cr.blockingPrefetch(fileReader, isRetry)
 }
 
 // Prefetch the data in this chunk, using a file reader that is provided to us.
@@ -169,10 +197,10 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	}
 
 	// get buffer from pool
-	cr.buffer = cr.slicePool.RentSlice(uint32(cr.length))
+	cr.buffer = cr.slicePool.RentSlice(uint32Checked(cr.length))
 
 	// read bytes into the buffer
-	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.Disk())
+	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
 	totalBytesRead, err := fileReader.ReadAt(cr.buffer, cr.chunkId.OffsetInFile)
 	if err != nil && err != io.EOF {
 		return err
@@ -204,6 +232,8 @@ func (cr *singleChunkReader) retryBlockingPrefetchIfNecessary() error {
 // Seeks within this chunk
 // Seeking is used for retries, and also by some code to get length (by seeking to end)
 func (cr *singleChunkReader) Seek(offset int64, whence int) (int64, error) {
+	cr.use()
+	defer cr.unuse()
 
 	newPosition := cr.positionInChunk
 
@@ -229,6 +259,9 @@ func (cr *singleChunkReader) Seek(offset int64, whence int) (int64, error) {
 
 // Reads from within this chunk
 func (cr *singleChunkReader) Read(p []byte) (n int, err error) {
+	cr.use()
+	defer cr.unuse()
+
 	// This is a normal read, so free the prefetch buffer when hit EOF (i.e. end of this chunk).
 	// We do so on the assumption that if we've read to the end we don't need the prefetched data any longer.
 	// (If later, there's a retry that forces seek back to start and re-read, we'll automatically trigger a re-fetch at that time)
@@ -248,6 +281,17 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	err = cr.retryBlockingPrefetchIfNecessary()
 	if err != nil {
 		return 0, err
+	}
+
+	// extra checks until we find root cause of https://github.com/Azure/azure-storage-azcopy/issues/191
+	if cr.buffer == nil {
+		panic("unexpected nil buffer")
+	}
+	if cr.positionInChunk >= cr.length {
+		panic("unexpected EOF")
+	}
+	if cr.length != int64(len(cr.buffer)) {
+		panic("unexpected buffer length discrepancy")
 	}
 
 	// Copy the data across
@@ -276,6 +320,9 @@ func (cr *singleChunkReader) returnBuffer() {
 }
 
 func (cr *singleChunkReader) Length() int64 {
+	cr.use()
+	defer cr.unuse()
+
 	return cr.length
 }
 
@@ -285,6 +332,26 @@ func (cr *singleChunkReader) Length() int64 {
 // Without this close, if something failed part way through, we would keep counting this object's bytes in cacheLimiter
 // "for ever", even after the object is gone.
 func (cr *singleChunkReader) Close() error {
+	// first, check and log early closes (before we do use(), since the situation we are trying
+	// to log is suspected to be one when use() will panic)
+	if cr.positionInChunk < cr.length {
+		// this is an "early close". Adjust logging verbosity depending on whether context is still active
+		var extraMessage string
+		if cr.ctx.Err() == nil {
+			b := &bytes.Buffer{}
+			b.Write(stack())
+			extraMessage = "context active so logging full callstack, as follows: " + b.String()
+		} else {
+			extraMessage = "context cancelled so no callstack logged"
+		}
+		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader: "+extraMessage)
+	}
+
+	// after logging callstack, do normal use()
+	cr.use()
+	defer cr.unuse()
+
+	// do the real work
 	cr.returnBuffer()
 	return nil
 }
@@ -293,17 +360,55 @@ func (cr *singleChunkReader) Close() error {
 // (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
 // reads as much as possible)
 func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
+	cr.use()
+	// can't defer unuse here. See explict calls (plural) below
+
 	const mimeRecgonitionLen = 512
 	leadingBytes := make([]byte, mimeRecgonitionLen)
 	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
 	if err != nil && err != io.EOF {
+		cr.unuse()
 		return nil // we just can't sniff the mime type
 	}
 	if n < len(leadingBytes) {
 		// truncate if we read less than expected (very small file, so err was EOF above)
 		leadingBytes = leadingBytes[:n]
 	}
+	// unuse before Seek, since Seek is public
+	cr.unuse()
 	// MUST re-wind, so that the bytes we read will get transferred too!
 	cr.Seek(0, io.SeekStart)
 	return leadingBytes
+}
+
+func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {
+	cr.use()
+	defer cr.unuse()
+
+	if cr.buffer == nil {
+		panic("invalid state. No prefetch buffer is present")
+	}
+	_, err := h.Write(cr.buffer)
+	if err != nil {
+		panic("documentation of hash.Hash.Write says it will never return an error")
+	}
+}
+
+func stack() []byte {
+	buf := make([]byte, 2048)
+	for {
+		n := runtime.Stack(buf, false)
+		if n < len(buf) {
+			return buf[:n]
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+}
+
+// while we never expect any out of range errors, due to chunk sizes fitting easily into uint32, here we make sure
+func uint32Checked(i int64) uint32 {
+	if i > math.MaxUint32 {
+		panic("int64 out of range for cast to uint32")
+	}
+	return uint32(i)
 }

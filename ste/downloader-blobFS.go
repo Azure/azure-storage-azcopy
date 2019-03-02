@@ -21,10 +21,12 @@
 package ste
 
 import (
+	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+	"time"
 )
 
 type blobFSDownloader struct{}
@@ -52,17 +54,26 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 			return
 		}
 
+		// parse the remote lmt, there shouldn't be any error, unless the service returned a new format
+		remoteLastModified, err := time.Parse(time.RFC1123, get.LastModified())
+		common.PanicIfErr(err)
+		remoteLmtLocation := remoteLastModified.Location()
+
+		// Verify that the file has not been changed via a client side LMT check
+		if !remoteLastModified.Equal(jptm.LastModifiedTime().In(remoteLmtLocation)) {
+			jptm.FailActiveDownload("BFS File modified during transfer",
+				errors.New("BFS File modified during transfer"))
+		}
+
 		// step 2: Enqueue the response body to be written out to disk
 		// The retryReader encapsulates any retries that may be necessary while downloading the body
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		retryReader := get.Body(azbfs.RetryReaderOptions{MaxRetryRequests: MaxRetryPerDownloadBody})
+		retryReader := get.Body(azbfs.RetryReaderOptions{
+			MaxRetryRequests: MaxRetryPerDownloadBody,
+			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
+		})
 		defer retryReader.Close()
-		retryForcer := func() {
-			// TODO: implement this, or implement GetBodyWithForceableRetry above
-			// for now, this "retry forcer" does nothing
-			//fmt.Printf("\nForcing retry\n")
-		}
-		err = destWriter.EnqueueChunk(jptm.Context(), retryForcer, id, length, newLiteResponseBodyPacer(retryReader, pacer))
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newLiteResponseBodyPacer(retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

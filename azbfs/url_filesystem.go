@@ -7,11 +7,9 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
-const fileSystemResourceName = "filesystem" // constant value for the resource query parameter
-
 // A FileSystemURL represents a URL to the Azure Storage Blob File System allowing you to manipulate its directories and files.
 type FileSystemURL struct {
-	fileSystemClient managementClient
+	fileSystemClient filesystemClient
 	name             string
 }
 
@@ -20,7 +18,7 @@ func NewFileSystemURL(url url.URL, p pipeline.Pipeline) FileSystemURL {
 	if p == nil {
 		panic("p can't be nil")
 	}
-	fileSystemClient := newManagementClient(url, p)
+	fileSystemClient := newFilesystemClient(url, p)
 
 	urlParts := NewBfsURLParts(url)
 	return FileSystemURL{fileSystemClient: fileSystemClient, name: urlParts.FileSystemName}
@@ -62,17 +60,17 @@ func (s FileSystemURL) NewRootDirectoryURL() DirectoryURL {
 
 // Create creates a new file system within a storage account. If a file system with the same name already exists, the operation fails.
 // quotaInGB specifies the maximum size of the file system in gigabytes, 0 means you accept service's default quota.
-func (s FileSystemURL) Create(ctx context.Context) (*CreateFilesystemResponse, error) {
-	return s.fileSystemClient.CreateFilesystem(ctx, s.name, fileSystemResourceName, nil, nil, nil, nil)
+func (s FileSystemURL) Create(ctx context.Context) (*FilesystemCreateResponse, error) {
+	return s.fileSystemClient.Create(ctx, s.name, nil, nil, nil, nil)
 }
 
 // Delete marks the specified file system for deletion.
 // The file system and any files contained within it are later deleted during garbage collection.
-func (s FileSystemURL) Delete(ctx context.Context) (*DeleteFilesystemResponse, error) {
-	return s.fileSystemClient.DeleteFilesystem(ctx, s.name, fileSystemResourceName, nil, nil, nil, nil, nil)
+func (s FileSystemURL) Delete(ctx context.Context) (*FilesystemDeleteResponse, error) {
+	return s.fileSystemClient.Delete(ctx, s.name, nil, nil, nil, nil, nil)
 }
 
 // GetProperties returns all user-defined metadata and system properties for the specified file system or file system snapshot.
-func (s FileSystemURL) GetProperties(ctx context.Context) (*GetFilesystemPropertiesResponse, error) {
-	return s.fileSystemClient.GetFilesystemProperties(ctx, s.name, fileSystemResourceName, nil, nil, nil)
+func (s FileSystemURL) GetProperties(ctx context.Context) (*FilesystemGetPropertiesResponse, error) {
+	return s.fileSystemClient.GetProperties(ctx, s.name, nil, nil, nil)
 }

@@ -22,6 +22,7 @@ package common
 
 import (
 	"errors"
+	"hash"
 	"io"
 )
 
@@ -29,8 +30,8 @@ import (
 type emptyChunkReader struct {
 }
 
-func (cr *emptyChunkReader) TryBlockingPrefetch(fileReader io.ReaderAt) bool {
-	return true
+func (cr *emptyChunkReader) BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error {
+	return nil
 }
 
 func (cr *emptyChunkReader) Seek(offset int64, whence int) (int64, error) {
@@ -58,4 +59,8 @@ func (cr *emptyChunkReader) HasPrefetchedEntirelyZeros() bool {
 
 func (cr *emptyChunkReader) Length() int64 {
 	return 0
+}
+
+func (cr *emptyChunkReader) WriteBufferTo(h hash.Hash) {
+	return // no content to write
 }

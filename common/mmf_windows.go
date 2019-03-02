@@ -28,6 +28,8 @@ import (
 	"unsafe"
 )
 
+const lineEnding = "\r\n"
+
 type MMF struct {
 	// slice represents the actual memory mapped buffer
 	slice []byte

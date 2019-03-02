@@ -246,7 +246,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 	default:
 		credentialType = common.ECredentialType.Anonymous()
 		// Log the FromTo types which getCredentialType hasn't solved, in case of miss-use.
-		glcm.Info(fmt.Sprintf("Use anonymous credential by default for FromTo '%v'", raw.fromTo))
+		glcm.Info(fmt.Sprintf("Use anonymous credential by default for from-to '%v'", raw.fromTo))
 	}
 
 	return credentialType, nil

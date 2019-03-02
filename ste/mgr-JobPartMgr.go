@@ -421,16 +421,16 @@ func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
 				},
 				jpm.pacer)
 		default:
-			panic(fmt.Errorf("Unrecognized FromTo: %q", fromTo.String()))
+			panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 		}
 	}
 }
 
-func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler{
+func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
 	return jpm.slicePool
 }
 
-func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter{
+func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter {
 	return jpm.cacheLimiter
 }
 
@@ -473,9 +473,8 @@ func (jpm *jobPartMgr) SAS() (string, string) {
 	return jpm.sourceSAS, jpm.destinationSAS
 }
 
-func (jpm *jobPartMgr) localDstData() (preserveLastModifiedTime bool) {
-	dstData := &jpm.Plan().DstLocalData
-	return dstData.PreserveLastModifiedTime
+func (jpm *jobPartMgr) localDstData() *JobPartPlanDstLocal {
+	return &jpm.Plan().DstLocalData
 }
 
 // Call Done when a transfer has completed its epilog; this method returns the number of transfers completed so far
@@ -521,10 +520,9 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
-func (jpm *jobPartMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason){
+func (jpm *jobPartMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
 	jpm.jobMgr.LogChunkStatus(id, reason)
 }
-
 
 // TODO: Can we delete this method?
 // numberOfTransfersDone returns the numberOfTransfersDone_doNotUse of JobPartPlanInfo

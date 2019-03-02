@@ -114,7 +114,7 @@ func URLToBlob(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
 				// If the status code was 403, it means there was an authentication error and we exit.
 				// User can resume the job if completely ordered with a new sas.
 				if status == http.StatusForbidden {
-					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 				}
 			}
 		} else {
@@ -229,7 +229,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 			if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 				bbc.jptm.Log(pipeline.LogDebug, fmt.Sprintf("Transfer cancelled. not picking up chunk %d", chunkId))
 			}
-			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
+			if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
@@ -262,11 +262,11 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				// If the status code was 403, it means there was an authentication error and we exit.
 				// User can resume the job if completely ordered with a new sas.
 				if status == http.StatusForbidden {
-					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 				}
 			}
 
-			if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
+			if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 				if bbc.jptm.ShouldLog(pipeline.LogDebug) {
 					bbc.jptm.Log(pipeline.LogDebug, "Finalizing transfer cancellation")
 				}
@@ -276,7 +276,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 		}
 
 		// step 4: check if this is the last chunk
-		if lastChunk, _ := bbc.jptm.ReportChunkDone(); lastChunk {
+		if lastChunk, _ := bbc.jptm.UnsafeReportChunkDone(); lastChunk {
 			// If the transfer gets cancelled before the putblock list
 			if bbc.jptm.WasCanceled() {
 				transferDone()
@@ -299,7 +299,7 @@ func (bbc *blockBlobCopy) generateCopyURLToBlockBlobFunc(chunkId int32, startInd
 				// If the status code was 403, it means there was an authentication error and we exit.
 				// User can resume the job if completely ordered with a new sas.
 				if status == http.StatusForbidden {
-					common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+					common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 				}
 				return
 			}

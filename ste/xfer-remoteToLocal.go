@@ -81,7 +81,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if err != nil {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		epilogueWithCleanupDownload(jptm, nil, nil)
+		epilogueWithCleanupDownload(jptm, nil, nil) // use standard epilogue for consistency
 		return
 	}
 	// TODO: Question: do we need to Stat the file, to check its size, after explicitly making it with the desired size?
@@ -118,7 +118,8 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		chunkLogger,
 		dstFile,
 		numChunks,
-		MaxRetryPerDownloadBody)
+		MaxRetryPerDownloadBody,
+		jptm.MD5ValidationOption())
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
@@ -135,7 +136,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	chunkCount := uint32(0)
 	for startIndex := int64(0); startIndex < fileSize; startIndex += downloadChunkSize {
-		id := common.ChunkID{Name: info.Destination, OffsetInFile: startIndex}
+		id := common.NewChunkID(info.Destination, startIndex)
 		adjustedChunkSize := downloadChunkSize
 
 		// compute exact size of the chunk
@@ -170,22 +171,30 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
-	if activeDstFile != nil {
-		// wait until all received chunks are flushed out
-		_, flushError := cw.Flush(jptm.Context()) // todo: use, and check the MD5 hash returned here
+	haveNonEmptyFile := activeDstFile != nil
+	if haveNonEmptyFile {
 
-		// Close file
-		fileCloseErr := activeDstFile.Close() // always try to close if, even if flush failed
-		if (flushError != nil || fileCloseErr != nil) && !jptm.TransferStatus().DidFail() {
-			// it WAS successful up to now, but the file flush/closing failed.
-			message := ""
-			if flushError != nil {
-				message = "File Flush Error " + flushError.Error()
-			} else {
-				message = "File Closure Error " + fileCloseErr.Error()
+		// wait until all received chunks are flushed out
+		md5OfFileAsWritten, flushError := cw.Flush(jptm.Context())
+		closeErr := activeDstFile.Close() // always try to close if, even if flush failed
+		if flushError != nil {
+			jptm.FailActiveDownload("Flushing file", flushError)
+		}
+		if closeErr != nil {
+			jptm.FailActiveDownload("Closing file", closeErr)
+		}
+
+		// Check MD5 (but only if file was fully flushed and saved - else no point and may not have actualAsSaved hash anyway)
+		if !jptm.TransferStatus().DidFail() {
+			comparison := md5Comparer{
+				expected:         info.SrcHTTPHeaders.ContentMD5, // the MD5 that came back from Service when we enumerated the source
+				actualAsSaved:    md5OfFileAsWritten,
+				validationOption: jptm.MD5ValidationOption(),
+				logger:           jptm}
+			err := comparison.Check()
+			if err != nil {
+				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
-			jptm.LogDownloadError(info.Source, info.Destination, message, 0)
-			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
 	}
 
@@ -199,9 +208,8 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 			err := os.Chtimes(jptm.Info().Destination, lastModifiedTime, lastModifiedTime)
 			if err != nil {
 				jptm.LogError(info.Destination, "Changing Modified Time ", err)
-				return
-			}
-			if jptm.ShouldLog(pipeline.LogInfo) {
+				// do NOT return, since final status and cleanup logging still to come
+			} else {
 				jptm.Log(pipeline.LogInfo, fmt.Sprintf(" Preserved Modified Time for %s", info.Destination))
 			}
 		}

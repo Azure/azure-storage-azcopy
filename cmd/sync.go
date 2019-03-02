@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"time"
 
 	"net/url"
@@ -35,10 +36,10 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
+// a max is set because we cannot buffer infinite amount of destination file info in memory
 const MaxNumberOfFilesAllowedInSync = 10000000
 
 type rawSyncCmdArgs struct {
@@ -46,80 +47,109 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize      uint32
-	logVerbosity   string
-	include        string
-	exclude        string
-	followSymlinks bool
-	output         string
-	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
-	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
-	// deleting the flag.
-	force bool
+	blockSize           uint32
+	logVerbosity        string
+	include             string
+	exclude             string
+	followSymlinks      bool
+	md5ValidationOption string
+	// this flag indicates the user agreement with respect to deleting the extra files at the destination
+	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
+	// otherwise the user is prompted to make a decision
+	deleteDestination string
+}
+
+func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
+	cookedPatterns = make([]string, 0)
+	rawPatterns := strings.Split(pattern, ";")
+	for _, pattern := range rawPatterns {
+
+		// skip the empty patterns
+		if len(pattern) != 0 {
+			cookedPatterns = append(cookedPatterns, pattern)
+		}
+	}
+
+	return
+}
+
+// given a valid URL, parse out the SAS portion
+func (raw *rawSyncCmdArgs) separateSasFromURL(rawURL string) (cleanURL string, sas string) {
+	fromUrl, _ := url.Parse(rawURL)
+
+	// TODO add support for other service URLs
+	blobParts := azblob.NewBlobURLParts(*fromUrl)
+	sas = blobParts.SAS.Encode()
+
+	// get clean URL without SAS and trailing / in the path
+	blobParts.SAS = azblob.SASQueryParameters{}
+	bUrl := blobParts.URL()
+	bUrl.Path = strings.TrimSuffix(bUrl.Path, common.AZCOPY_PATH_SEPARATOR_STRING)
+	cleanURL = bUrl.String()
+
+	return
+}
+
+func (raw *rawSyncCmdArgs) cleanLocalPath(rawPath string) (cleanPath string) {
+	// if the path separator is '\\', it means
+	// local path is a windows path
+	// to avoid path separator check and handling the windows
+	// path differently, replace the path separator with the
+	// the linux path separator '/'
+	if os.PathSeparator == '\\' {
+		cleanPath = strings.Replace(rawPath, common.OS_PATH_SEPARATOR, "/", -1)
+	}
+	cleanPath = path.Clean(rawPath)
+	return
 }
 
 // validates and transform raw input into cooked input
-func (raw rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
+func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
-	fromTo := inferFromTo(raw.src, raw.dst)
-	if fromTo == common.EFromTo.Unknown() {
+	cooked.fromTo = inferFromTo(raw.src, raw.dst)
+	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
+	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
+		cooked.source = raw.cleanLocalPath(raw.src)
+		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
+	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
+		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
+		cooked.destination = raw.cleanLocalPath(raw.dst)
+	} else {
+		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}
-	if fromTo != common.EFromTo.LocalBlob() &&
-		fromTo != common.EFromTo.BlobLocal() {
-		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, fromTo)
-	}
-	cooked.source = raw.src
-	cooked.destination = raw.dst
 
-	cooked.fromTo = fromTo
+	// generate a new job ID
+	cooked.jobID = common.NewJobID()
 
 	cooked.blockSize = raw.blockSize
-
 	cooked.followSymlinks = raw.followSymlinks
+	cooked.recursive = raw.recursive
 
-	err := cooked.logVerbosity.Parse(raw.logVerbosity)
+	// determine whether we should prompt the user to delete extra files
+	err := cooked.deleteDestination.Parse(raw.deleteDestination)
 	if err != nil {
 		return cooked, err
 	}
 
-	// initialize the include map which contains the list of files to be included
-	// parse the string passed in include flag
-	// more than one file are expected to be separated by ';'
-	cooked.include = make(map[string]int)
-	if len(raw.include) > 0 {
-		files := strings.Split(raw.include, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
-			}
-			cooked.include[files[index]] = index
-		}
+	// parse the filter patterns
+	cooked.include = raw.parsePatterns(raw.include)
+	cooked.exclude = raw.parsePatterns(raw.exclude)
+
+	err = cooked.logVerbosity.Parse(raw.logVerbosity)
+	if err != nil {
+		return cooked, err
 	}
 
-	// initialize the exclude map which contains the list of files to be excluded
-	// parse the string passed in exclude flag
-	// more than one file are expected to be separated by ';'
-	cooked.exclude = make(map[string]int)
-	if len(raw.exclude) > 0 {
-		files := strings.Split(raw.exclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
-			}
-			cooked.exclude[files[index]] = index
-		}
+	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
+	if err != nil {
+		return cooked, err
+	}
+	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
+		return cooked, err
 	}
 
-	cooked.recursive = raw.recursive
-	cooked.output.Parse(raw.output)
-	cooked.jobID = common.NewJobID()
-	cooked.force = raw.force
 	return cooked, nil
 }
 
@@ -129,14 +159,19 @@ type cookedSyncCmdArgs struct {
 	destination    string
 	destinationSAS string
 	fromTo         common.FromTo
+	credentialInfo common.CredentialInfo
+
+	// filters
 	recursive      bool
 	followSymlinks bool
-	// options from flags
-	include      map[string]int
-	exclude      map[string]int
-	blockSize    uint32
-	logVerbosity common.LogLevel
-	output       common.OutputFormat
+	include        []string
+	exclude        []string
+
+	// options
+	md5ValidationOption common.HashValidationOption
+	blockSize           uint32
+	logVerbosity        common.LogLevel
+
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -155,6 +190,7 @@ type cookedSyncCmdArgs struct {
 
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
+	// this is set to true once the final part has been dispatched
 	isEnumerationComplete bool
 
 	// defines the scanning status of the sync operation.
@@ -167,10 +203,22 @@ type cookedSyncCmdArgs struct {
 	atomicSourceFilesScanned uint64
 	// defines the number of files listed at the destination and compared.
 	atomicDestinationFilesScanned uint64
-	// this flag predefines the user-agreement to delete the files in case sync found some files at destination
-	// which doesn't exists at source. With this flag turned on, user will not be asked for permission before
-	// deleting the flag.
-	force bool
+
+	// deletion count keeps track of how many extra files from the destination were removed
+	atomicDeletionCount uint32
+
+	// this flag indicates the user agreement with respect to deleting the extra files at the destination
+	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
+	// otherwise the user is prompted to make a decision
+	deleteDestination common.DeleteDestination
+}
+
+func (cca *cookedSyncCmdArgs) incrementDeletionCount() {
+	atomic.AddUint32(&cca.atomicDeletionCount, 1)
+}
+
+func (cca *cookedSyncCmdArgs) getDeletionCount() uint32 {
+	return atomic.LoadUint32(&cca.atomicDeletionCount)
 }
 
 // setFirstPartOrdered sets the value of atomicFirstPartOrdered to 1
@@ -198,8 +246,7 @@ func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Info("\nJob " + cca.jobID.String() + " has started\n")
-	glcm.Info(fmt.Sprintf("Log file is located at: %s/%s.log", azcopyLogPathFolder, cca.jobID))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -217,10 +264,8 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	// prompt for confirmation, except when:
-	// 1. output is in json format
-	// 2. enumeration is complete
-	if !(cca.output == common.EOutputFormat.Json() || cca.isEnumerationComplete) {
+	// prompt for confirmation, except when enumeration is complete
+	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
 
 		// read a line from stdin, if the answer is not yes, then abort cancel by returning
@@ -231,119 +276,155 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 
 	err := cookedCancelCmdArgs{jobID: cca.jobID}.process()
 	if err != nil {
-		lcm.Exit("error occurred while cancelling the job "+cca.jobID.String()+". Failed with error "+err.Error(), common.EExitCode.Error())
+		lcm.Error("error occurred while cancelling the job " + cca.jobID.String() + ". Failed with error " + err.Error())
 	}
 }
 
-func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+type scanningProgressJsonTemplate struct {
+	FilesScannedAtSource      uint64
+	FilesScannedAtDestination uint64
+}
 
-	if !cca.scanningComplete() {
-		lcm.Progress(fmt.Sprintf("%v File Scanned at Source, %v Files Scanned at Destination",
-			atomic.LoadUint64(&cca.atomicSourceFilesScanned), atomic.LoadUint64(&cca.atomicDestinationFilesScanned)))
-		return
-	}
-	// If the first part isn't ordered yet, no need to fetch the progress summary.
-	if !cca.firstPartOrdered() {
-		return
-	}
-	// fetch a job status
-	var summary common.ListSyncJobSummaryResponse
-	Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
-	jobDone := summary.JobStatus == common.EJobStatus.Completed() || summary.JobStatus == common.EJobStatus.Cancelled()
+func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, throughput float64) {
 
-	// if json output is desired, simply marshal and return
-	// note that if job is already done, we simply exit
-	if cca.output == common.EOutputFormat.Json() {
-		//jsonOutput, err := json.MarshalIndent(summary, "", "  ")
-		jsonOutput, err := json.Marshal(summary)
-		common.PanicIfErr(err)
+	lcm.Progress(func(format common.OutputFormat) string {
+		srcScanned := atomic.LoadUint64(&cca.atomicSourceFilesScanned)
+		dstScanned := atomic.LoadUint64(&cca.atomicDestinationFilesScanned)
 
-		if jobDone {
-			exitCode := common.EExitCode.Success()
-			if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
-				exitCode = common.EExitCode.Error()
+		if format == common.EOutputFormat.Json() {
+			jsonOutputTemplate := scanningProgressJsonTemplate{
+				FilesScannedAtSource:      srcScanned,
+				FilesScannedAtDestination: dstScanned,
 			}
-			lcm.Exit(string(jsonOutput), exitCode)
-		} else {
-			lcm.Info(string(jsonOutput))
-			return
+			outputString, err := json.Marshal(jsonOutputTemplate)
+			common.PanicIfErr(err)
+			return string(outputString)
 		}
+
+		// text output
+		throughputString := ""
+		if cca.firstPartOrdered() {
+			throughputString = fmt.Sprintf(", 2-sec Throughput (Mb/s): %v", ste.ToFixed(throughput, 4))
+		}
+		return fmt.Sprintf("%v Files Scanned at Source, %v Files Scanned at Destination%s",
+			srcScanned, dstScanned, throughputString)
+	})
+}
+
+func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListSyncJobSummaryResponse) string {
+	// TODO figure out if deletions should be done by the enumeration engine or not
+	// TODO if not, remove this so that we get the proper number from the ste
+	summary.DeleteTotalTransfers = cca.getDeletionCount()
+	summary.DeleteTransfersCompleted = cca.getDeletionCount()
+	jsonOutput, err := json.Marshal(summary)
+	common.PanicIfErr(err)
+	return string(jsonOutput)
+}
+
+func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
+	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
+	var summary common.ListSyncJobSummaryResponse
+	var throughput float64
+	var jobDone bool
+
+	// fetch a job status and compute throughput if the first part was dispatched
+	if cca.firstPartOrdered() {
+		Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
+		jobDone = summary.JobStatus.IsJobDone()
+
+		// compute the average throughput for the last time interval
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
+		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
+		throughput = common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
+
+		// reset the interval timer and byte count
+		cca.intervalStartTime = time.Now()
+		cca.intervalBytesTransferred = summary.BytesOverWire
 	}
 
-	// if json is not desired, and job is done, then we generate a special end message to conclude the job
+	// first part not dispatched, and we are still scanning
+	// so a special message is outputted to notice the user that we are not stalling
+	if !cca.scanningComplete() {
+		cca.reportScanningProgress(lcm, throughput)
+		return
+	}
+
 	if jobDone {
-		duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 		exitCode := common.EExitCode.Success()
 		if summary.CopyTransfersFailed+summary.DeleteTransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
-		lcm.Exit(fmt.Sprintf(
-			"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Copy Transfers: %v\nTotal Number Of Delete Transfers: %v\nNumber of Copy Transfers Completed: %v\nNumber of Copy Transfers Failed: %v\nNumber of Delete Transfers Completed: %v\nNumber of Delete Transfers Failed: %v\nFinal Job Status: %v\n",
-			summary.JobID.String(),
-			ste.ToFixed(duration.Minutes(), 4),
-			summary.CopyTotalTransfers,
-			summary.DeleteTotalTransfers,
-			summary.CopyTransfersCompleted,
-			summary.CopyTransfersFailed,
-			summary.DeleteTransfersCompleted,
-			summary.DeleteTransfersFailed,
-			summary.JobStatus), exitCode)
+
+		lcm.Exit(func(format common.OutputFormat) string {
+			if format == common.EOutputFormat.Json() {
+				return cca.getJsonOfSyncJobSummary(summary)
+			}
+
+			return fmt.Sprintf(
+				`
+Job %s Summary
+Files Scanned at Source: %v
+Files Scanned at Destination: %v
+Elapsed Time (Minutes): %v
+Total Number Of Copy Transfers: %v
+Number of Copy Transfers Completed: %v
+Number of Copy Transfers Failed: %v
+Number of Deletions at Destination: %v
+Total Number of Bytes Transferred: %v
+Total Number of Bytes Enumerated: %v
+Final Job Status: %v
+`,
+				summary.JobID.String(),
+				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
+				atomic.LoadUint64(&cca.atomicDestinationFilesScanned),
+				ste.ToFixed(duration.Minutes(), 4),
+				summary.CopyTotalTransfers,
+				summary.CopyTransfersCompleted,
+				summary.CopyTransfersFailed,
+				cca.atomicDeletionCount,
+				summary.TotalBytesTransferred,
+				summary.TotalBytesEnumerated,
+				summary.JobStatus)
+
+		}, exitCode)
 	}
 
-	// if json is not needed, and job is not done, then we generate a message that goes nicely on the same line
-	// display a scanning keyword if the job is not completely ordered
-	var scanningString = ""
-	if !summary.CompleteJobOrdered {
-		scanningString = "(scanning...)"
-	}
+	lcm.Progress(func(format common.OutputFormat) string {
+		if format == common.EOutputFormat.Json() {
+			return cca.getJsonOfSyncJobSummary(summary)
+		}
 
-	// compute the average throughput for the last time interval
-	bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
-	timeElapsed := time.Since(cca.intervalStartTime).Seconds()
-	throughPut := common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
+		// indicate whether constrained by disk or not
+		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
 
-	// reset the interval timer and byte count
-	cca.intervalStartTime = time.Now()
-	cca.intervalBytesTransferred = summary.BytesOverWire
-
-	lcm.Progress(fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v",
-		summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
-		summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
-		summary.CopyTotalTransfers+summary.DeleteTotalTransfers, scanningString, ste.ToFixed(throughPut, 4)))
+		return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+			summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
+			summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
+			summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
+			summary.CopyTotalTransfers+summary.DeleteTotalTransfers, perfString, ste.ToFixed(throughput, 4), diskString)
+	})
 }
 
 func (cca *cookedSyncCmdArgs) process() (err error) {
-	// initialize the fields that are constant across all job part orders
-	jobPartOrder := common.SyncJobPartOrderRequest{
-		JobID:            cca.jobID,
-		FromTo:           cca.fromTo,
-		LogLevel:         cca.logVerbosity,
-		BlockSizeInBytes: cca.blockSize,
-		Include:          cca.include,
-		Exclude:          cca.exclude,
-		CommandString:    cca.commandString,
-		SourceSAS:        cca.sourceSAS,
-		DestinationSAS:   cca.destinationSAS,
-		CredentialInfo:   common.CredentialInfo{},
-	}
-
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// verifies credential type and initializes credential info.
 	// For sync, only one side need credential.
-	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+	cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
 		source:         cca.source,
 		destination:    cca.destination,
 		sourceSAS:      cca.sourceSAS,
 		destinationSAS: cca.destinationSAS,
-	}); err != nil {
+	})
+
+	if err != nil {
 		return err
 	}
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Using OAuth token for authentication.")
@@ -353,96 +434,34 @@ func (cca *cookedSyncCmdArgs) process() (err error) {
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
-			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
 	}
 
-	from := cca.fromTo.From()
-	to := cca.fromTo.To()
-	switch from {
-	case common.ELocation.Blob():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*fromUrl)
-		cca.sourceSAS = blobParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.source = bUrl.String()
-	case common.ELocation.File():
-		fromUrl, err := url.Parse(cca.source)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*fromUrl)
-		cca.sourceSAS = fileParts.SAS.Encode()
-		jobPartOrder.SourceSAS = cca.sourceSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.source = fUrl.String()
-	}
-
-	switch to {
-	case common.ELocation.Blob():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		blobParts := azblob.NewBlobURLParts(*toUrl)
-		cca.destinationSAS = blobParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		blobParts.SAS = azblob.SASQueryParameters{}
-		bUrl := blobParts.URL()
-		cca.destination = bUrl.String()
-	case common.ELocation.File():
-		toUrl, err := url.Parse(cca.destination)
-		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
-		}
-		fileParts := azfile.NewFileURLParts(*toUrl)
-		cca.destinationSAS = fileParts.SAS.Encode()
-		jobPartOrder.DestinationSAS = cca.destinationSAS
-		fileParts.SAS = azfile.SASQueryParameters{}
-		fUrl := fileParts.URL()
-		cca.destination = fUrl.String()
-	}
-
-	if from == common.ELocation.Local() {
-		// If the path separator is '\\', it means
-		// local path is a windows path
-		// To avoid path separator check and handling the windows
-		// path differently, replace the path separator with the
-		// the linux path separator '/'
-		if os.PathSeparator == '\\' {
-			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, "/", -1)
-		}
-	}
-
-	if to == common.ELocation.Local() {
-		// If the path separator is '\\', it means
-		// local path is a windows path
-		// To avoid path separator check and handling the windows
-		// path differently, replace the path separator with the
-		// the linux path separator '/'
-		if os.PathSeparator == '\\' {
-			cca.destination = strings.Replace(cca.destination, common.OS_PATH_SEPARATOR, "/", -1)
-		}
-	}
+	var enumerator *syncEnumerator
 
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob():
-		e := syncUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
+		enumerator, err = newSyncUploadEnumerator(cca)
+		if err != nil {
+			return err
+		}
 	case common.EFromTo.BlobLocal():
-		e := syncDownloadEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
+		enumerator, err = newSyncDownloadEnumerator(cca)
+		if err != nil {
+			return err
+		}
 	default:
-		return fmt.Errorf("from to destination not supported")
+		return fmt.Errorf("the given source/destination pair is currently not supported")
 	}
+
+	// trigger the progress reporting
+	cca.waitUntilJobCompletion(false)
+
+	// trigger the enumeration
+	err = enumerator.enumerate()
 	if err != nil {
-		return fmt.Errorf("error starting the sync between source %s and destination %s. Failed with error %s", cca.source, cca.destination, err.Error())
+		return err
 	}
 	return nil
 }
@@ -455,6 +474,7 @@ func init() {
 		Aliases: []string{"sc", "s"},
 		Short:   syncCmdShortDescription,
 		Long:    syncCmdLongDescription,
+		Example: syncCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("2 arguments source and destination are required for this command. Number of commands passed %d", len(args))
@@ -466,12 +486,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Exit("error parsing the input given by the user. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("error parsing the input given by the user. Failed with error " + err.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Exit("error performing the sync between source and destination. Failed with error "+err.Error(), common.EExitCode.Error())
+				glcm.Error("Cannot perform sync due to error: " + err.Error())
 			}
 
 			glcm.SurrenderControl()
@@ -479,17 +499,18 @@ func init() {
 	}
 
 	rootCmd.AddCommand(syncCmd)
-	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when syncing destination to source.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "Use this block size when source to Azure Storage or from Azure Storage.")
-	// hidden filters
-	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "Filter: only include these files when copying. "+
-		"Support use of *. More than one file are separated by ';'")
-	syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "Filter: Follow symbolic links when performing sync from local file system.")
-	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "Filter: Exclude these files when copying. Support use of *.")
-	syncCmd.PersistentFlags().StringVar(&raw.output, "output", "text", "format of the command's output, the choices include: text, json")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	syncCmd.PersistentFlags().BoolVar(&raw.force, "force", false, "defines user's decision to delete extra files at the destination that are not present at the source. "+
-		"If false, user will be prompted with a question while scheduling files/blobs for deletion.")
+	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
+	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
+	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
+		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
+	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
+	// TODO: should the previous line list the allowable values?
+
+	// TODO follow sym link is not implemented, clarify behavior first
+	//syncCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when performing sync from local file system.")
 
 	// TODO sync does not support any BlobAttributes, this functionality should be added
 }

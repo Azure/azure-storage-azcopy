@@ -16,12 +16,17 @@ import (
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
 func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	// Remove the source and destination roots from the path to save space in the plan files
+	transfer.Source = strings.TrimPrefix(transfer.Source, e.SourceRoot)
+	transfer.Destination = strings.TrimPrefix(transfer.Destination, e.DestinationRoot)
+
 	// dispatch the transfers once the number reaches NumOfFilesPerDispatchJobPart
 	// we do this so that in the case of large transfer, the transfer engine can get started
 	// while the frontend is still gathering more transfers
 	if len(e.Transfers) == NumOfFilesPerDispatchJobPart {
 		shuffleTransfers(e.Transfers)
 		resp := common.CopyJobPartOrderResponse{}
+
 		Rpc(common.ERpcCmd.CopyJobPartOrder(), (*common.CopyJobPartOrderRequest)(e), &resp)
 
 		if !resp.JobStarted {
@@ -35,6 +40,8 @@ func addTransfer(e *common.CopyJobPartOrderRequest, transfer common.CopyTransfer
 		e.PartNum++
 	}
 
+	// only append the transfer after we've checked and dispatched a part
+	// so that there is at least one transfer for the final part
 	e.Transfers = append(e.Transfers, transfer)
 
 	return nil
@@ -219,8 +226,8 @@ func enumerateDirectoriesAndFilesInShare(ctx context.Context, srcDirURL azfile.D
 //////////////////////////////////////////////////////////////////////////////////////////
 // enumerateFilesInADLSGen2Directory enumerates files in ADLS Gen2 directory.
 func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.DirectoryURL,
-	filter func(fileItem azbfs.ListEntrySchema) bool,
-	callback func(fileItem azbfs.ListEntrySchema) error) error {
+	filter func(fileItem azbfs.Path) bool,
+	callback func(fileItem azbfs.Path) error) error {
 	marker := ""
 	for {
 		listDirResp, err := directoryURL.ListDirectorySegment(ctx, &marker, true)

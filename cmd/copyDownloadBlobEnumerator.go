@@ -72,6 +72,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			Destination:      blobLocalPath,
 			LastModifiedTime: blobProperties.LastModified(),
 			SourceSize:       blobProperties.ContentLength(),
+			ContentMD5:       blobProperties.ContentMD5(),
 		}, cca)
 		// only one transfer for this Job, dispatch the JobPart
 		err := e.dispatchFinalPart(cca)
@@ -150,7 +151,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobPath)).String(),
 					Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
 					LastModifiedTime: blobProperties.LastModified(),
-					SourceSize:       blobProperties.ContentLength()}, cca)
+					SourceSize:       blobProperties.ContentLength(),
+					ContentMD5:       blobProperties.ContentMD5(),
+				}, cca)
 				continue
 			}
 			if !cca.recursive {
@@ -201,14 +204,16 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
 						Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
 						LastModifiedTime: blobInfo.Properties.LastModified,
-						SourceSize:       *blobInfo.Properties.ContentLength}, cca)
+						SourceSize:       *blobInfo.Properties.ContentLength,
+						ContentMD5:       blobInfo.Properties.ContentMD5,
+					}, cca)
 				}
 				marker = listBlob.NextMarker
 			}
 		}
 		// If there are no transfer to queue up, exit with message
 		if len(e.Transfers) == 0 {
-			glcm.Exit(fmt.Sprintf("no transfer queued for copying data from %s to %s", cca.source, cca.destination), 1)
+			glcm.Error(fmt.Sprintf("no transfer queued for copying data from %s to %s", cca.source, cca.destination))
 			return nil
 		}
 		// dispatch the JobPart as Final Part of the Job
@@ -290,7 +295,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
 				Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
 				LastModifiedTime: blobInfo.Properties.LastModified,
-				SourceSize:       *blobInfo.Properties.ContentLength}, cca)
+				SourceSize:       *blobInfo.Properties.ContentLength,
+				ContentMD5:       blobInfo.Properties.ContentMD5,
+			}, cca)
 		}
 		marker = listBlob.NextMarker
 	}
