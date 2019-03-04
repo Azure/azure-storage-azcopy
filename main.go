@@ -56,12 +56,7 @@ func main() {
 	}
 
 	concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
-
-	// Set a concurrent files limit such that we'll have enough handles left, after using
-	// some of our max handle count (concurrentConnections of them to be precise) as network handles
-	// TODO: add environment var to optionally allow bringing concurrentFiles down lower
-	//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
-	concurrentFilesLimit := maxFileAndSocketHandles - concurrentConnections
+	concurrentFilesLimit := computeConcurrentFilesLimit(maxFileAndSocketHandles, concurrentConnections)
 
 	err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, 2400, azcopyAppPathFolder, azcopyLogPathFolder)
 	common.PanicIfErr(err)
@@ -78,4 +73,22 @@ func configureGC() {
 		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
 		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default
 	}()
+}
+
+// ComputeConcurrentFilesLimit finds a number of concurrently-openable files
+// such that we'll have enough handles left, after using some as network handles
+// TODO: add environment var to optionally allow bringing concurrentFiles down lower
+//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
+//    (update logging
+func computeConcurrentFilesLimit(maxFileAndSocketHandles int, concurrentConnections int) int {
+
+	concurrentConnections = int(float32(concurrentConnections) * 1.2)      // add a buffer to allow a little extra safety margin
+	possibleMaxTotalConcurrentHttpConnections := concurrentConnections * 2 // * because as at Mar 2019, each job part has its own set of connections, and there can be moments when one is winding down while the next is already active
+
+	concurrentFilesLimit := maxFileAndSocketHandles - possibleMaxTotalConcurrentHttpConnections
+
+	if concurrentFilesLimit < ste.NumTransferInitiationRoutines {
+		concurrentFilesLimit = ste.NumTransferInitiationRoutines // Set sensible floor, so we don't get negative or zero values if maxFileAndSocketHandles is low
+	}
+	return concurrentFilesLimit
 }
