@@ -10,7 +10,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 * Copy block blobs between two Azure Storage accounts
 * Sync a directory in local file system to Azure Blob, or vice versa
 * List/Remove files and blobs in a given path
-* Supports glob patterns in path, --include and --exclude flags
+* Supports glob patterns in path, and --exclude flags
 * Resillient: retries automatically after a failure, and supports resuming after a failed job
 
 ## What's new in v10 ? 
@@ -20,7 +20,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 * Supports copying an entire account (Blob service only) to another account. Use `azcopy cp https://myaccount.blob.core.windows.net https://myotheraccount.blob.core.windows.net` which will enumerate all Blob containers and copy to the destination account
 * Account to account copy is now using the new Put from URL APIs that will copy the data directly from one storage account to another. No data transfer is needed down to the client where AzCopy runs. Therefore it is significantly faster!
 * List/Remove files and blobs in a given path
-* Supports glob patterns in path, --include and --exclude flags
+* Supports glob patterns in path, and --exclude flags
 * Every AzCopy run will create a job order, and a related log file. You can view and restart previous jobs using `azcopy jobs` command.
 * Improved performance all around!
 
@@ -54,8 +54,8 @@ cd .\azcopy_windows_amd64_10.0.4
 ### Authenticating with Azure Storage
 
 AzCopy supports two types of authentication. See the table below to see which type you need to use.
-* **Pre-signed URLs** (URLs with Shared Access Signature aka. **SAS tokens**): Simply generate a SAS token from the Azure Portal, Storage Explorer, or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path).
-* **Azure Active Directory Authentication** : Add your user to the **'Blob Data Contributor'** role in the Azure Portal, and log on to AzCopy using `azcopy login`. You can then simply use AzCopy commands without any SAS token appended to the path. e.g. `azcopy cp https://myaccount.blob.core.windows.net/container/data /mydata --recursive`
+* **Pre-signed URLs** (URLs with Shared Access Signature aka. **SAS tokens**): Simply generate a SAS token from the Azure Portal, Storage Explorer, or one of the other Azure tools and append to the Blob path (container/virtual directory/blob path). 
+* **Azure Active Directory Authentication** : Add your user to the **'Blob Data Contributor'** role in the Azure Portal, and log on to AzCopy using `azcopy login`. To authenticate with MSI, use `azcopy login --identity`. Once logged in, you can  simply use AzCopy commands without any SAS token appended to the path. e.g. `azcopy cp https://myaccount.blob.core.windows.net/container/data /mydata --recursive`
 
 | Azure Storage service  | Supported authentication methods |
 | ------------- | ------------- |
@@ -179,6 +179,10 @@ export https_proxy=<user>:<pass>@<proxy IP>:<proxy port>
 # or with a domain:
 export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
 ```
+
+### Configure log location
+
+Set the environment variable 'AZCOPY_LOG_LOCATION' to a directory of your choice where there is plenty of disk space as logs for large data transfers may use up Gigabytes of space depending on the chosen log level.
 
 ## Troubleshooting and Reporting Issues
 
