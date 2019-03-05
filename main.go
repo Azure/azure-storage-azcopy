@@ -82,8 +82,13 @@ func configureGC() {
 //    (update logging
 func computeConcurrentFilesLimit(maxFileAndSocketHandles int, concurrentConnections int) int {
 
-	concurrentConnections = int(float32(concurrentConnections) * 1.2)      // add a buffer to allow a little extra safety margin
-	possibleMaxTotalConcurrentHttpConnections := concurrentConnections * 2 // * because as at Mar 2019, each job part has its own set of connections, and there can be moments when one is winding down while the next is already active
+	allowanceForOnGoingEnumeration := 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
+
+	// Compute a very conservative estimate for total number of connections that we may have
+	// To get a conservative estimate we pessimistically assume that the pool of idle conns is full,
+	// but all the ones we are actually using are (by some fluke of timing) not in the pool.
+	// TODO: consider actually SETTING AzCopyMaxIdleConnsPerHost to say, max(0.3 * FileAndSocketHandles, 1000), instead of using the hard-coded value we currently have
+	possibleMaxTotalConcurrentHttpConnections := concurrentConnections + ste.AzCopyMaxIdleConnsPerHost + allowanceForOnGoingEnumeration
 
 	concurrentFilesLimit := maxFileAndSocketHandles - possibleMaxTotalConcurrentHttpConnections
 
