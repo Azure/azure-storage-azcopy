@@ -45,8 +45,8 @@ type scenarioHelper struct{}
 var specialNames = []string{
 	"打麻将.txt",
 	"wow such space so much space",
-	//"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy",
-	" ",
+	"打%%#%@#%麻将.txt",
+	//"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy", // TODO this breaks on windows, figure out a way to add it only for tests on Unix
 	"coração",
 	"আপনার নাম কি",
 	"%4509%4254$85140&",
