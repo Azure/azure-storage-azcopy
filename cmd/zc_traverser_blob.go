@@ -23,11 +23,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"net/url"
-	"strings"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -106,7 +107,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				continue
 			}
 
-			relativePath := strings.Replace(blobInfo.Name, searchPrefix, "", 1)
+			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
 
 			// if recursive
 			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {

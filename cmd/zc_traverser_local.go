@@ -22,11 +22,13 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type localTraverser struct {
@@ -66,9 +68,15 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				}
 
 				t.incrementEnumerationCounter()
-				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(),
-					strings.Replace(replacePathSeparators(filePath), t.fullPath+common.AZCOPY_PATH_SEPARATOR_STRING,
-						"", 1), fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
+
+				// the relative path needs to be computed from the full path
+				computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), t.fullPath)
+
+				// leading path separators are trimmed away
+				computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
+					fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
 			})
 
 			return
@@ -122,8 +130,20 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 
 func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCounter func()) *localTraverser {
 	traverser := localTraverser{
-		fullPath:                    replacePathSeparators(fullPath),
+		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		incrementEnumerationCounter: incrementEnumerationCounter}
 	return &traverser
+}
+
+func cleanLocalPath(localPath string) string {
+	normalizedPath := path.Clean(replacePathSeparators(localPath))
+
+	// detect if we are targeting a network share
+	if strings.HasPrefix(localPath, "//") || strings.HasPrefix(localPath, `\\`) {
+		// if yes, we have trimmed away one of the leading slashes, so add it back
+		normalizedPath = common.AZCOPY_PATH_SEPARATOR_STRING + normalizedPath
+	}
+
+	return normalizedPath
 }
