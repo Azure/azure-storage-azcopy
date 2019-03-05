@@ -123,11 +123,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:c1600b962fa91e71025876fb838b8f94700b529d1c5f19f85d4c67ba13e2edf0"
+  digest = "1:579e7d6716d34fb47b8648bf837295af67d6c6ad545ac3bddab01d9ef4e4a6e4"
   name = "github.com/jiacfan/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = "UT"
-  revision = "678a91f8a4a7508f2a7bd43b0489d83a1b2ed498"
+  revision = "b295c708d94f6a5d778dd9aacf927ee97ba16669"
 
 [[projects]]
   digest = "1:ea6f6666dafd73ffad2f95feb9bca34ab09bc6942e2766a30dd603ebdde2ad70"

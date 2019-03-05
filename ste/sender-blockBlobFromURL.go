@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"bytes"
 	"context"
 	"net/url"
 
@@ -63,26 +62,29 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 
 // Returns a chunk-func for blob copies
 func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
-	// TODO: use sync version of copy blob from URL, when the blob size is small enough.
-	if blockIndex == 0 && adjustedChunkSize == 0 {
+	if chunkIsWholeFile {
+		if blockIndex > 0 {
+			panic("chunk cannot be whole file where there is more than one chunk")
+		}
 		setPutListNeed(&c.putListIndicator, putListNotNeeded)
-		return c.generateCreateEmptyBlob(id)
+		return c.generateSyncCopyBlob(id)
+	} else {
+		setPutListNeed(&c.putListIndicator, putListNeeded)
+		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 	}
-
-	setPutListNeed(&c.putListIndicator, putListNeeded)
-	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 }
 
-// generateCreateEmptyBlob generates a func to create empty blob in destination.
-// This could be replaced by sync version of copy blob from URL.
-func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkFunc {
+// generateSyncCopyBlob generates a func to sync copy entire blob to destination.
+func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 		jptm := c.jptm
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		// Create blob and finish.
-		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
-			jptm.FailActiveSend("Creating empty blob", err)
+
+		// Set the latest service version from sdk as service version in the context, to use SyncCopyFromURL API
+		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		if _, err := c.destBlockBlobURL.SyncCopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}); err != nil {
+			jptm.FailActiveSend("Sync copy entire blob", err)
 			return
 		}
 	})
