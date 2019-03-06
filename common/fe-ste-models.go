@@ -707,10 +707,19 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	return result, nil
 }
 
+// TODO: invalid Metadata handling discussion is ongoing, and need be further optimized later.
 func isValidMetadataKey(key string) bool {
 	for i := 0; i < len(key); i++ {
-		if !isValidMetadataKeyChar(key[i]) {
-			return false
+		if i != 0 { // Most of case i != 0
+			if !isValidMetadataKeyChar(key[i]) {
+				return false
+			}
+			// Coming key is valid
+		} else { // i == 0
+			if !isValidMetadataKeyFirstChar(key[i]) {
+				return false
+			}
+			// First key is valid
 		}
 	}
 
@@ -719,6 +728,13 @@ func isValidMetadataKey(key string) bool {
 
 func isValidMetadataKeyChar(c byte) bool {
 	if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' {
+		return true
+	}
+	return false
+}
+
+func isValidMetadataKeyFirstChar(c byte) bool {
+	if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' {
 		return true
 	}
 	return false
