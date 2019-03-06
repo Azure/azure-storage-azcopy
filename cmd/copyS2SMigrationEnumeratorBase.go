@@ -101,3 +101,25 @@ func (e *copyS2SMigrationEnumeratorBase) validateDestIsService(ctx context.Conte
 
 	return nil
 }
+
+// ifDestCouldBeService check if destination could be a service level URL through URL parsing.
+func (e *copyS2SMigrationEnumeratorBase) ifDestCouldBeService() bool {
+	switch e.FromTo {
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+		dsue := blobURLPartsExtension{BlobURLParts: azblob.NewBlobURLParts(*e.destURL)}
+		return dsue.ifCouldBeServiceURL()
+	}
+
+	return false
+}
+
+// ifDestCouldBeService check if destination could be a bucket/container/share level URL through URL parsing.
+func (e *copyS2SMigrationEnumeratorBase) ifDestCouldBeBucket() bool {
+	switch e.FromTo {
+	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+		dsue := blobURLPartsExtension{BlobURLParts: azblob.NewBlobURLParts(*e.destURL)}
+		return dsue.ifCouldBeContainerURL()
+	}
+
+	return false
+}

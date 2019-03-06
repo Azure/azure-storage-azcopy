@@ -827,8 +827,12 @@ func (parts blobURLPartsExtension) getServiceURL() url.URL {
 	return parts.URL()
 }
 
-func (parts blobURLPartsExtension) isContainerURL() bool {
-	return parts.ContainerName != "" && parts.BlobName == ""
+func (parts blobURLPartsExtension) ifCouldBeContainerURL() bool {
+	return parts.Host != "" && parts.ContainerName != "" && parts.BlobName == ""
+}
+
+func (parts blobURLPartsExtension) ifCouldBeServiceURL() bool {
+	return parts.Host != "" && parts.ContainerName == "" && parts.BlobName == ""
 }
 
 // Get the source path without the wildcards
