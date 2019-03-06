@@ -119,11 +119,13 @@ func init() {
 				case EResourceType.Bucket():
 					createBucket(resourceURL)
 				case EResourceType.SingleFile():
+					// For S3, no content-MD5 will be returned during HEAD, i.e. no content-MD5 will be preserved during copy.
+					// And content-MD5 header is not set during upload. E.g. in S3 management portal, no property content-MD5 can be set.
+					// So here create object without content-MD5 as common practice.
 					createObject(
 						resourceURL,
 						blobSize,
 						minio.PutObjectOptions{
-							// TODO MD5, should be in customized metadata?
 							ContentType:        contentType,
 							ContentDisposition: contentDisposition,
 							ContentEncoding:    contentEncoding,
@@ -212,7 +214,7 @@ func createContainer(container string) {
 	containerURL := azblob.NewContainerURL(*u, p)
 	_, err = containerURL.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
 
-	if handleCreateRemoteAzureResource(err) != nil {
+	if ignoreStorageConflictStatus(err) != nil {
 		fmt.Println("fail to create container, ", err)
 		os.Exit(1)
 	}
@@ -265,7 +267,7 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 		// This is a share
 		shareURL := azfile.NewShareURL(*u, p)
 		_, err := shareURL.Create(context.Background(), azfile.Metadata{}, 0)
-		if handleCreateRemoteAzureResource(err) != nil {
+		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create share, ", err)
 			os.Exit(1)
 		}
@@ -274,7 +276,7 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
 	if !isShare {
 		_, err := dirURL.Create(context.Background(), azfile.Metadata{})
-		if handleCreateRemoteAzureResource(err) != nil {
+		if ignoreStorageConflictStatus(err) != nil {
 			fmt.Println("fail to create directory, ", err)
 			os.Exit(1)
 		}

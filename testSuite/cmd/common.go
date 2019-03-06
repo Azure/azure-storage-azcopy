@@ -39,7 +39,7 @@ func createS3ClientWithMinio(o createS3ResOptions) *minio.Client {
 	return s3Client
 }
 
-func handleCreateRemoteAzureResource(err error) error {
+func ignoreStorageConflictStatus(err error) error {
 	if err != nil {
 		// Skip the error, when resource already exists.
 		if stgErr, ok := err.(azblob.StorageError); !ok ||
