@@ -67,7 +67,7 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
 		setPutListNeed(&c.putListIndicator, putListNotNeeded)
-		return c.generateSyncCopyBlob(id)
+		return c.generateSyncCopyBlob(id, adjustedChunkSize)
 	} else {
 		setPutListNeed(&c.putListIndicator, putListNeeded)
 		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
@@ -75,11 +75,12 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 }
 
 // generateSyncCopyBlob generates a func to sync copy entire blob to destination.
-func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID) chunkFunc {
+func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID, adjustedChunkSize int64) chunkFunc {
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 		jptm := c.jptm
 
 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+		s2sPacer := newS2SPacer(c.pacer)
 
 		// Set the latest service version from sdk as service version in the context, to use SyncCopyFromURL API
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
@@ -87,6 +88,7 @@ func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID) chunkFunc
 			jptm.FailActiveSend("Sync copy entire blob", err)
 			return
 		}
+		s2sPacer.Done(adjustedChunkSize)
 	})
 }
 
