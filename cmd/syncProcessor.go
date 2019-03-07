@@ -50,6 +50,7 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
 			PreserveLastModifiedTime: true, // must be true for sync so that future syncs have this information available
+			SuppressUploadMd5:        cca.suppressUploadMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
 		ForceWrite: true, // once we decide to transfer for a sync operation, we overwrite the destination regardless

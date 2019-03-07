@@ -156,6 +156,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
 			ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
 			ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
+			SuppressUploadMd5:     order.BlobAttributes.SuppressUploadMd5, // here because it relates to uploads (blob destination)
 			BlockBlobTier:         order.BlobAttributes.BlockBlobTier,
 			PageBlobTier:          order.BlobAttributes.PageBlobTier,
 			MetadataLength:        uint16(len(order.BlobAttributes.Metadata)),
@@ -163,7 +164,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
-			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption,
+			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption, // here because it relates to downloads (file destination)
 		},
 		// For S2S copy, per JobPartPlan info
 		S2SGetS3PropertiesInBackend: order.S2SGetS3PropertiesInBackend,

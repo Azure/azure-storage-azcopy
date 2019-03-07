@@ -20,8 +20,14 @@
 
 package common
 
+import "hash"
+
 // A hash.Hash implementation that does nothing
 type nullHasher struct{}
+
+func NewNullHasher() hash.Hash {
+	return &nullHasher{}
+}
 
 func (*nullHasher) Write(p []byte) (n int, err error) {
 	// noop

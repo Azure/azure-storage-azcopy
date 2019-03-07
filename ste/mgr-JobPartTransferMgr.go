@@ -23,6 +23,7 @@ type IJobPartTransferMgr interface {
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
+	ShouldSuppressUploadMd5() bool
 	MD5ValidationOption() common.HashValidationOption
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
@@ -256,6 +257,10 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 		return time.Unix(0, lastModifiedTime), true
 	}
 	return time.Time{}, false
+}
+
+func (jptm *jobPartTransferMgr) ShouldSuppressUploadMd5() bool {
+	return jptm.jobPartMgr.ShouldSuppressUploadMd5()
 }
 
 func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {

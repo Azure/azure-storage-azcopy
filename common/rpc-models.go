@@ -104,6 +104,7 @@ type BlobTransferAttributes struct {
 	Metadata                 string               //User-defined Name-value pairs associated with the blob
 	NoGuessMimeType          bool                 // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool                 // when downloading, tell engine to set file's timestamp to timestamp of blob
+	SuppressUploadMd5        bool                 // when uploading, should we create and PUT MD5 hashes
 	MD5ValidationOption      HashValidationOption // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes         uint32
 }
