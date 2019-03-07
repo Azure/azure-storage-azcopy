@@ -21,7 +21,7 @@ const copyCmdShortDescription = "Copies source data to a destination location"
 const copyCmdLongDescription = `
 Copies source data to a destination location. The supported pairs are:
   - local <-> Azure Blob (SAS or OAuth authentication)
-  - local <-> Azure File (SAS authentication)
+  - local <-> Azure File (Share/directory SAS authentication)
   - local <-> ADLS Gen 2 (OAuth or SharedKey authentication)
   - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
 
