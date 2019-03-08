@@ -70,14 +70,20 @@ func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 // createJobPartPlanFile creates the memory map JobPartPlanHeader using the given JobPartOrder and JobPartPlanBlobData
 func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	// Validate that the passed-in strings can fit in their respective fields
+	if len(order.SourceRoot) > len(JobPartPlanHeader{}.SourceRoot) {
+		panic(fmt.Errorf("source root string is too large: %q", order.SourceRoot))
+	}
+	if len(order.DestinationRoot) > len(JobPartPlanHeader{}.DestinationRoot) {
+		panic(fmt.Errorf("destination root string is too large: %q", order.DestinationRoot))
+	}
 	if len(order.BlobAttributes.ContentType) > len(JobPartPlanDstBlob{}.ContentType) {
-		panic(fmt.Errorf("content type string it too large: %q", order.BlobAttributes.ContentType))
+		panic(fmt.Errorf("content type string is too large: %q", order.BlobAttributes.ContentType))
 	}
 	if len(order.BlobAttributes.ContentEncoding) > len(JobPartPlanDstBlob{}.ContentEncoding) {
-		panic(fmt.Errorf("content encoding string it too large: %q", order.BlobAttributes.ContentEncoding))
+		panic(fmt.Errorf("content encoding string is too large: %q", order.BlobAttributes.ContentEncoding))
 	}
 	if len(order.BlobAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
-		panic(fmt.Errorf("metadata string it too large: %q", order.BlobAttributes.Metadata))
+		panic(fmt.Errorf("metadata string is too large: %q", order.BlobAttributes.Metadata))
 	}
 
 	// This nested function writes a structure value to an io.Writer & returns the number of bytes written
@@ -131,18 +137,20 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	//}
 	// Initialize the Job Part's Plan header
 	jpph := JobPartPlanHeader{
-		Version:             DataSchemaVersion,
-		StartTime:           time.Now().UnixNano(),
-		JobID:               order.JobID,
-		PartNum:             order.PartNum,
-		IsFinalPart:         order.IsFinalPart,
-		ForceWrite:          order.ForceWrite,
-		Priority:            order.Priority,
-		TTLAfterCompletion:  uint32(time.Time{}.Nanosecond()),
-		FromTo:              order.FromTo,
-		CommandStringLength: uint32(len(order.CommandString)),
-		NumTransfers:        uint32(len(order.Transfers)),
-		LogLevel:            order.LogLevel,
+		Version:               DataSchemaVersion,
+		StartTime:             time.Now().UnixNano(),
+		JobID:                 order.JobID,
+		PartNum:               order.PartNum,
+		SourceRootLength:      uint16(len(order.SourceRoot)),
+		DestinationRootLength: uint16(len(order.DestinationRoot)),
+		IsFinalPart:           order.IsFinalPart,
+		ForceWrite:            order.ForceWrite,
+		Priority:              order.Priority,
+		TTLAfterCompletion:    uint32(time.Time{}.Nanosecond()),
+		FromTo:                order.FromTo,
+		CommandStringLength:   uint32(len(order.CommandString)),
+		NumTransfers:          uint32(len(order.Transfers)),
+		LogLevel:              order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
 			BlobType:              order.BlobAttributes.BlobType,
 			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
@@ -161,6 +169,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	}
 
 	// Copy any strings into their respective fields
+	copy(jpph.SourceRoot[:], order.SourceRoot)
+	copy(jpph.DestinationRoot[:], order.DestinationRoot)
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
@@ -212,6 +222,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
 			S2SGetS3PropertiesInBackend: order.Transfers[t].S2SGetS3PropertiesInBackend,
+			S2SSourceChangeValidation:   order.Transfers[t].S2SSourceChangeValidation,
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
@@ -227,7 +238,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength)
 	}
 
-	// All the transfers were written; now write each each transfer's src/dst strings
+	// All the transfers were written; now write each transfer's src/dst strings
 	for t := range order.Transfers {
 		// Sanity check: Verify that we are were we think we are and that no bug has occurred
 		if eof != srcDstStringsOffset[t] {

@@ -206,7 +206,8 @@ func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.C
 			}
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
-			if cca.s2sPreserveProperties {
+			// As changing source validation need LMT which is not returned during list, enforce to get property if s2sSourceChangeValidation is enabled.
+			if cca.s2sPreserveProperties || cca.s2sSourceChangeValidation {
 				p, err := fileURL.GetProperties(ctx)
 				if err != nil {
 					return err
@@ -240,7 +241,8 @@ func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer(srcURL, destURL url.
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
 		ContentMD5:         properties.ContentMD5(),
-		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata())},
+		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+		S2SSourceChangeValidation: cca.s2sSourceChangeValidation},
 		cca)
 }
 
@@ -249,7 +251,8 @@ func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer2(srcURL, destURL url
 	return e.addTransfer(common.CopyTransfer{
 		Source:      gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
 		Destination: gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
-		SourceSize:  properties.ContentLength},
+		SourceSize:  properties.ContentLength,
+		S2SSourceChangeValidation: cca.s2sSourceChangeValidation},
 		cca)
 }
 

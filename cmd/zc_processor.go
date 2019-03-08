@@ -23,7 +23,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
+	"net/url"
 )
 
 type copyTransferProcessor struct {
@@ -32,20 +32,27 @@ type copyTransferProcessor struct {
 	source                string
 	destination           string
 
+	// specify whether source/destination object names need to be URL encoded before dispatching
+	shouldEscapeSourceObjectName      bool
+	shouldEscapeDestinationObjectName bool
+
 	// handles for progress tracking
 	reportFirstPartDispatched func()
 	reportFinalPartDispatched func()
 }
 
 func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, numOfTransfersPerPart int,
-	source string, destination string, reportFirstPartDispatched func(), reportFinalPartDispatched func()) *copyTransferProcessor {
+	source string, destination string, shouldEscapeSourceObjectName bool, shouldEscapeDestinationObjectName bool,
+	reportFirstPartDispatched func(), reportFinalPartDispatched func()) *copyTransferProcessor {
 	return &copyTransferProcessor{
-		numOfTransfersPerPart:     numOfTransfersPerPart,
-		copyJobTemplate:           copyJobTemplate,
-		source:                    source,
-		destination:               destination,
-		reportFirstPartDispatched: reportFirstPartDispatched,
-		reportFinalPartDispatched: reportFinalPartDispatched,
+		numOfTransfersPerPart:             numOfTransfersPerPart,
+		copyJobTemplate:                   copyJobTemplate,
+		source:                            source,
+		destination:                       destination,
+		shouldEscapeSourceObjectName:      shouldEscapeSourceObjectName,
+		shouldEscapeDestinationObjectName: shouldEscapeDestinationObjectName,
+		reportFirstPartDispatched:         reportFirstPartDispatched,
+		reportFinalPartDispatched:         reportFinalPartDispatched,
 	}
 }
 
@@ -64,8 +71,8 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 	// only append the transfer after we've checked and dispatched a part
 	// so that there is at least one transfer for the final part
 	s.copyJobTemplate.Transfers = append(s.copyJobTemplate.Transfers, common.CopyTransfer{
-		Source:           s.appendObjectPathToResourcePath(storedObject.relativePath, s.source),
-		Destination:      s.appendObjectPathToResourcePath(storedObject.relativePath, s.destination),
+		Source:           s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeSourceObjectName),
+		Destination:      s.escapeIfNecessary(storedObject.relativePath, s.shouldEscapeDestinationObjectName),
 		SourceSize:       storedObject.size,
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
@@ -73,12 +80,12 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 	return nil
 }
 
-func (s *copyTransferProcessor) appendObjectPathToResourcePath(storedObjectPath, parentPath string) string {
-	if storedObjectPath == "" {
-		return parentPath
+func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool) string {
+	if shouldEscape {
+		return url.PathEscape(path)
 	}
 
-	return strings.Join([]string{parentPath, storedObjectPath}, common.AZCOPY_PATH_SEPARATOR_STRING)
+	return path
 }
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {

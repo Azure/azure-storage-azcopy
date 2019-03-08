@@ -21,6 +21,7 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
+	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	MD5ValidationOption() common.HashValidationOption
 	BlobTypeOverride() common.BlobType
@@ -47,6 +48,7 @@ type IJobPartTransferMgr interface {
 	OccupyAConnection()
 	// TODO: added for debugging purpose. remove later
 	ReleaseAConnection()
+	SourceProviderPipeline() pipeline.Pipeline
 	FailActiveUpload(where string, err error)
 	FailActiveDownload(where string, err error)
 	FailActiveUploadWithStatus(where string, err error, failureStatus common.TransferStatus)
@@ -77,6 +79,7 @@ type TransferInfo struct {
 	// Transfer info for S2S copy
 	SrcProperties
 	S2SGetS3PropertiesInBackend bool
+	S2SSourceChangeValidation   bool
 
 	// Blob
 	S2SSrcBlobType azblob.BlobType
@@ -143,7 +146,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetS3PropertiesInBackend := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetS3PropertiesInBackend, s2sSourceChangeValidation := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
@@ -199,6 +202,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		SourceSize:                  sourceSize,
 		Destination:                 dst,
 		S2SGetS3PropertiesInBackend: s2sGetS3PropertiesInBackend,
+		S2SSourceChangeValidation:   s2sSourceChangeValidation,
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,
@@ -234,6 +238,11 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer []byte) (headers azbl
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
+}
+
+// TODO refactor into something like jptm.IsLastModifiedTimeEqual() so that there is NO LastModifiedTime method and people therefore CAN'T do it wrong due to time zone
+func (jptm *jobPartTransferMgr) LastModifiedTime() time.Time {
+	return time.Unix(0, jptm.jobPartPlanTransfer.ModifiedTime)
 }
 
 // PreserveLastModifiedTime checks for the PreserveLastModifiedTime flag in JobPartPlan of a transfer.
@@ -432,7 +441,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		// User can resume the job if completely ordered with a new sas.
 		if status == http.StatusForbidden {
 			// TODO: should this really exit??? why not just log like everything else does???  We've Failed the transfer anyway....
-			common.GetLifecycleMgr().Exit(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()), 1)
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
 		}
 	}
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
@@ -556,4 +565,8 @@ func (jptm *jobPartTransferMgr) ReportTransferDone() uint32 {
 	}
 
 	return jptm.jobPartMgr.ReportTransferDone()
+}
+
+func (jptm *jobPartTransferMgr) SourceProviderPipeline() pipeline.Pipeline {
+	return jptm.jobPartMgr.SourceProviderPipeline()
 }

@@ -20,7 +20,12 @@
 
 package ste
 
-import "github.com/Azure/azure-storage-azcopy/common"
+import (
+	"os"
+	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+)
 
 // Source info provider for local files
 type localFileSourceInfoProvider struct {
@@ -49,4 +54,12 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 
 func (f localFileSourceInfoProvider) IsLocal() bool {
 	return true
+}
+
+func (f localFileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+	i, err := os.Stat(f.jptm.Info().Source)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return i.ModTime(), nil
 }

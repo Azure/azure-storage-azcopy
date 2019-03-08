@@ -22,6 +22,7 @@ package ste
 
 import (
 	"net/url"
+	"time"
 
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
@@ -30,6 +31,9 @@ import (
 type ISourceInfoProvider interface {
 	// Properties returns source's properties.
 	Properties() (*SrcProperties, error)
+
+	// GetLastModifiedTime return source's latest last modified time.
+	GetLastModifiedTime() (time.Time, error)
 
 	IsLocal() bool
 }
@@ -100,4 +104,8 @@ func (p *defaultRemoteSourceInfoProvider) SourceSize() int64 {
 
 func (p *defaultRemoteSourceInfoProvider) RawSource() string {
 	return p.transferInfo.Source
+}
+
+func (p *defaultRemoteSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+	return p.jptm.LastModifiedTime(), nil
 }

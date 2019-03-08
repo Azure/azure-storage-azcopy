@@ -9,12 +9,14 @@ from test_blobfs_upload_oauth import *
 from test_blobfs_download_sharedkey import *
 from test_blobfs_download_oauth import *
 from test_blob_piping import *
+from test_blob_sync import *
 from test_service_to_service_copy import *
 import glob, os
 import configparser
 import platform
 import sys
 import unittest
+
 
 def parse_config_file_set_env():
     config = configparser.RawConfigParser()
@@ -174,6 +176,7 @@ def main():
     init()
 
     test_class_to_run = [BlobPipingTests,
+                         Blob_Sync_User_Scenario,
                          Block_Upload_User_Scenarios,
                          Blob_Download_User_Scenario,
                          PageBlob_Upload_User_Scenarios,

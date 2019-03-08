@@ -21,7 +21,9 @@
 package ste
 
 import (
+	"errors"
 	"net/url"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -51,6 +53,17 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
+		}
+
+		// parse the remote lmt, there shouldn't be any error, unless the service returned a new format
+		remoteLastModified, err := time.Parse(time.RFC1123, get.LastModified())
+		common.PanicIfErr(err)
+		remoteLmtLocation := remoteLastModified.Location()
+
+		// Verify that the file has not been changed via a client side LMT check
+		if !remoteLastModified.Equal(jptm.LastModifiedTime().In(remoteLmtLocation)) {
+			jptm.FailActiveDownload("BFS File modified during transfer",
+				errors.New("BFS File modified during transfer"))
 		}
 
 		// step 2: Enqueue the response body to be written out to disk

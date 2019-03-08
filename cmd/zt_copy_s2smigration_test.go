@@ -40,6 +40,7 @@ const (
 	defaultS2SPreserveProperties       = true
 	defaultS2SPreserveAccessTier       = true
 	defaultS2SGetS3PropertiesInBackend = true
+	defaultS2SSourceChangeValidation = true
 )
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
@@ -56,6 +57,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sGetS3PropertiesInBackend: defaultS2SGetS3PropertiesInBackend,
 		s2sPreserveAccessTier:       defaultS2SPreserveAccessTier,
 		s2sPreserveProperties:       defaultS2SPreserveProperties,
+		s2sSourceChangeValidation: defaultS2SSourceChangeValidation,
 	}
 }
 

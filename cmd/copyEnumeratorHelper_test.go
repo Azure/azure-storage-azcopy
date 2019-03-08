@@ -18,49 +18,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package cmd
 
 import (
-	"time"
-
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-azcopy/common"
+	chk "gopkg.in/check.v1"
 )
 
-// Source info provider for Azure blob
-type blobSourceInfoProvider struct {
-	defaultRemoteSourceInfoProvider
-}
+type copyEnumeratorHelperTestSuite struct{}
 
-func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	b, err := newDefaultRemoteSourceInfoProvider(jptm)
-	if err != nil {
-		return nil, err
+var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
+
+func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
+	// setup
+	request := common.CopyJobPartOrderRequest{
+		SourceRoot: "a/b/",
+		DestinationRoot: "y/z/",
 	}
 
-	base, _ := b.(*defaultRemoteSourceInfoProvider)
-
-	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
-}
-
-func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
-	return p.transferInfo.S2SSrcBlobTier
-}
-
-func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
-	return p.transferInfo.S2SSrcBlobType
-}
-
-func (p *blobSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
-	presignedURL, err := p.PreSignedSourceURL()
-	if err != nil {
-		return time.Time{}, err
+	transfer := common.CopyTransfer{
+		Source: "a/b/c.txt",
+		Destination: "y/z/c.txt",
 	}
 
-	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{})
-	if err != nil {
-		return time.Time{}, err
-	}
+	// execute
+	err := addTransfer(&request, transfer, &cookedCopyCmdArgs{})
 
-	return properties.LastModified(), nil
+	// assert
+	c.Assert(err, chk.IsNil)
+	c.Assert(request.Transfers[0].Source, chk.Equals, "c.txt")
+	c.Assert(request.Transfers[0].Destination, chk.Equals, "c.txt")
 }

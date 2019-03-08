@@ -34,11 +34,13 @@ import (
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
+func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int, isSingleFileSync bool) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
-		JobID:         cca.jobID,
-		CommandString: cca.commandString,
-		FromTo:        cca.fromTo,
+		JobID:           cca.jobID,
+		CommandString:   cca.commandString,
+		FromTo:          cca.fromTo,
+		SourceRoot:      replacePathSeparators(cca.source),
+		DestinationRoot: replacePathSeparators(cca.destination),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,
@@ -54,12 +56,21 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 		LogLevel:   cca.logVerbosity,
 	}
 
+	if !isSingleFileSync {
+		copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
+		copyJobTemplate.DestinationRoot += common.AZCOPY_PATH_SEPARATOR_STRING
+	}
+
 	reportFirstPart := func() { cca.setFirstPartOrdered() }
 	reportFinalPart := func() { cca.isEnumerationComplete = true }
 
+	shouldEncodeSource := cca.fromTo.From().IsRemote()
+	shouldEncodeDestination := cca.fromTo.To().IsRemote()
+
 	// note that the source and destination, along with the template are given to the generic processor's constructor
 	// this means that given an object with a relative path, this processor already knows how to schedule the right kind of transfers
-	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination, reportFirstPart, reportFinalPart)
+	return newCopyTransferProcessor(copyJobTemplate, numOfTransfersPerPart, cca.source, cca.destination,
+		shouldEncodeSource, shouldEncodeDestination, reportFirstPart, reportFinalPart)
 }
 
 // base for delete processors targeting different resources

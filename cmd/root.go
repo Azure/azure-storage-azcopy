@@ -34,6 +34,8 @@ import (
 
 var azcopyAppPathFolder string
 var azcopyLogPathFolder string
+var outputFormatRaw string
+var azcopyOutputFormat common.OutputFormat
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -41,13 +43,20 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		err := azcopyOutputFormat.Parse(outputFormatRaw)
+		glcm.SetOutputFormat(azcopyOutputFormat)
+		if err != nil {
+			return err
+		}
+
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
 		// however if this takes too long the message won't get printed
 		// Note: this function is only triggered for non-help commands
 		go detectNewVersion()
 
+		return nil
 	},
 }
 
@@ -61,14 +70,18 @@ func Execute(azsAppPathFolder, logPathFolder string) {
 	azcopyLogPathFolder = logPathFolder
 
 	if err := rootCmd.Execute(); err != nil {
-		glcm.Exit(err.Error(), common.EExitCode.Error())
+		glcm.Error(err.Error())
 	} else {
 		// our commands all control their own life explicitly with the lifecycle manager
 		// only help commands reach this point
 		// execute synchronously before exiting
 		detectNewVersion()
-		glcm.Exit("", common.EExitCode.Success())
+		glcm.Exit(nil, common.EExitCode.Success())
 	}
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output", "text", "format of the command's output, the choices include: text, json.")
 }
 
 func detectNewVersion() {
@@ -132,7 +145,8 @@ func detectNewVersion() {
 	if v1.OlderThan(*v2) {
 		executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
 		executableName := executablePathSegments[len(executablePathSegments)-1]
-		// print to stderr instead of stdout, in case the output is in other formats
-		glcm.Error(executableName + ": A newer version " + remoteVersion + " is available to download\n")
+
+		// output in info mode instead of stderr, as it was crashing CI jobs of some people
+		glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
 	}
 }

@@ -22,6 +22,7 @@ package ste
 
 import (
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"os"
 
@@ -103,6 +104,26 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 		defer srcFile.Close() // we read all the chunks in this routine, so can close the file at the end
 	}
 
+	// Do LMT verfication before transfer, when:
+	// 1) Source is local, so get source file's LMT is free.
+	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
+	if copier, isS2SCopier := srcInfoProvider.(s2sCopier); srcInfoProvider.IsLocal() ||
+		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
+		lmt, err := srcInfoProvider.GetLastModifiedTime()
+		if err != nil {
+			jptm.LogSendError(info.Source, info.Destination, "Couldn't get source's last modified time-"+err.Error(), 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+		if lmt != jptm.LastModifiedTime() {
+			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
+			jptm.SetStatus(common.ETransferStatus.Failed())
+			jptm.ReportTransferDone()
+			return
+		}
+	}
+
 	// *****
 	// Error-handling rules change here.
 	// ABOVE this point, we end the transfer using the code as shown above
@@ -117,7 +138,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 
 	// step 5: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupSendToRemote(jptm, s, srcInfoProvider) })
 
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
@@ -236,7 +257,19 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 }
 
 // Complete epilogue. Handles both success and failure.
-func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase) {
+func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
+	if jptm.TransferStatus() > 0 {
+		if _, isS2SCopier := sip.(s2sCopier); sip.IsLocal() || (isS2SCopier && jptm.Info().S2SSourceChangeValidation) {
+			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
+			lmt, err := sip.GetLastModifiedTime()
+			if err != nil {
+				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
+			}
+			if lmt != jptm.LastModifiedTime() {
+				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+			}
+		}
+	}
 
 	s.Epilogue()
 

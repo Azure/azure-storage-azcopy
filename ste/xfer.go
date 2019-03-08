@@ -36,6 +36,8 @@ const UploadMaxRetryDelay = time.Second * 60
 
 // download related
 const MaxRetryPerDownloadBody = 5
+
+// TODO: consider to unify the retry options.
 const DownloadTryTimeout = time.Minute * 15
 const DownloadRetryDelay = time.Second * 1
 const DownloadMaxRetryDelay = time.Second * 60

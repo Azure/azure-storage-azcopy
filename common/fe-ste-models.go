@@ -134,6 +134,10 @@ func (of *OutputFormat) Parse(s string) error {
 	return err
 }
 
+func (of OutputFormat) String() string {
+	return enum.StringInt(of, reflect.TypeOf(of))
+}
+
 var EExitCode = ExitCode(0)
 
 type ExitCode uint32
@@ -299,7 +303,16 @@ func fromToValue(from Location, to Location) FromTo {
 }
 
 func (l Location) IsRemote() bool {
-	return l == ELocation.BlobFS() || l == ELocation.Blob() || l == ELocation.File() || l == ELocation.S3()
+	switch l {
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
+		return true
+	case ELocation.Local(), ELocation.Pipe():
+		return false
+	default:
+		panic("unexpected location, please specify if it is remote")
+	}
+
+	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -657,6 +670,7 @@ type CopyTransfer struct {
 	BlobType                    azblob.BlobType
 	BlobTier                    azblob.AccessTierType
 	S2SGetS3PropertiesInBackend bool
+	S2SSourceChangeValidation   bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

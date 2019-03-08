@@ -116,7 +116,7 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.Blob()
 			case strings.Contains(host, ".file"):
 				return common.ELocation.File()
-			case strings.Contains(host, ".dfs.core.windows.net"):
+			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
 			}
 

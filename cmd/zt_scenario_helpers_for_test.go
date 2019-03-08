@@ -31,6 +31,10 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	chk "gopkg.in/check.v1"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
@@ -289,8 +293,31 @@ func validateS2SCopyTransfersAreScheduled(c *chk.C, srcDirName string, dstDirNam
 	validateTransfersAreScheduledToMerge(c, srcDirName, true, dstDirName, true, expectedTransfers, mockedRPC)
 }
 
-// TODO: merge with encoding CR http://codeflow/extensions/launcher.html?server=https:%2f%2fmsazure.visualstudio.com%2fdefaultcollection&projectId=b32aa71e-8ed2-41b2-9d77-5bc261222004&reviewId=1676647&projectshortname=One
-func validateTransfersAreScheduledToMerge(c *chk.C, srcDirName string, isSrcEncoded bool, dstDirName string, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
+func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
+	// the simulated user input should parse properly
+	cooked, err := raw.cook()
+	c.Assert(err, chk.IsNil)
+
+	// the enumeration ends when process() returns
+	err = cooked.process()
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
+}
+
+func validateUploadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
+	validateTransfersAreScheduled(c, srcDirName, false, dstDirName, true, expectedTransfers, mockedRPC)
+}
+
+func validateDownloadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
+	validateTransfersAreScheduled(c, srcDirName, true, dstDirName, false, expectedTransfers, mockedRPC)
+}
+
+func validateS2SCopyTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
+	validateTransfersAreScheduled(c, srcDirName, true, dstDirName, true, expectedTransfers, mockedRPC)
+}
+
+func validateTransfersAreScheduled(c *chk.C, srcDirName string, isSrcEncoded bool, dstDirName string, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
 
@@ -318,5 +345,18 @@ func validateTransfersAreScheduledToMerge(c *chk.C, srcDirName string, isSrcEnco
 		// look up the destination from the expected transfers, make sure it exists
 		_, dstExist := lookupMap[dstRelativeFilePath]
 		c.Assert(dstExist, chk.Equals, true)
+	}
+}
+
+func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
+	deleteDestination := common.EDeleteDestination.True()
+
+	return rawSyncCmdArgs{
+		src:                 src,
+		dst:                 dst,
+		recursive:           true,
+		logVerbosity:        defaultLogVerbosityForSync,
+		deleteDestination:   deleteDestination.String(),
+		md5ValidationOption: common.DefaultHashValidationOption.String(),
 	}
 }

@@ -23,15 +23,15 @@ package ste
 import (
 	"time"
 
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 // Source info provider for Azure blob
-type blobSourceInfoProvider struct {
+type fileSourceInfoProvider struct {
 	defaultRemoteSourceInfoProvider
 }
 
-func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
+func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
 	b, err := newDefaultRemoteSourceInfoProvider(jptm)
 	if err != nil {
 		return nil, err
@@ -39,25 +39,17 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	base, _ := b.(*defaultRemoteSourceInfoProvider)
 
-	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }
 
-func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
-	return p.transferInfo.S2SSrcBlobTier
-}
-
-func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
-	return p.transferInfo.S2SSrcBlobType
-}
-
-func (p *blobSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
+func (p *fileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
 	presignedURL, err := p.PreSignedSourceURL()
 	if err != nil {
 		return time.Time{}, err
 	}
 
-	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{})
+	fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
+	properties, err := fileURL.GetProperties(p.jptm.Context())
 	if err != nil {
 		return time.Time{}, err
 	}

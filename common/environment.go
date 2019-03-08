@@ -26,11 +26,13 @@ type EnvironmentVariable struct {
 	Description  string
 }
 
+// This array needs to be updated when a new public environment variable is added
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.LogLocation(),
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
+	EEnvironmentVariable.ShowPerfStates(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}

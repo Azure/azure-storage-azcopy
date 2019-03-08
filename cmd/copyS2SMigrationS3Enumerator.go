@@ -336,7 +336,8 @@ func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.
 		CacheControl:                oie.CacheControl(),
 		ContentMD5:                  oie.ContentMD5(),
 		Metadata:                    oie.NewCommonMetadata(),
-		S2SGetS3PropertiesInBackend: getS3PropertiesInBackend}
+		S2SGetS3PropertiesInBackend: getS3PropertiesInBackend,
+		S2SSourceChangeValidation: cca.s2sSourceChangeValidation}
 
 	return e.addTransfer(copyTransfer, cca)
 }

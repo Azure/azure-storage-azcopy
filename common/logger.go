@@ -25,9 +25,9 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"runtime"
-
 	"path"
+	"runtime"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -131,7 +131,7 @@ func (jl *jobLogger) OpenLog() {
 	jl.file = file
 	jl.logger = log.New(jl.file, "", log.LstdFlags|log.LUTC)
 	// Log the Azcopy Version
-	jl.logger.Println("AzcopVersion ", AzcopyVersion)
+	jl.logger.Println("AzcopyVersion ", AzcopyVersion)
 	// Log the OS Environment and OS Architecture
 	jl.logger.Println("OS-Environment ", runtime.GOOS)
 	jl.logger.Println("OS-Architecture ", runtime.GOARCH)
@@ -157,6 +157,12 @@ func (jl *jobLogger) CloseLog() {
 func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// If the logger for Job is not initialized i.e file is not open
 	// or logger instance is not initialized, then initialize it
+
+	// Go, and therefore the sdk, defaults to \n for line endings, so if the platform has a different line ending,
+	// we should replace them to ensure readability on the given platform.
+	if lineEnding != "\n" {
+		msg = strings.Replace(msg, "\n", lineEnding, -1)
+	}
 	if jl.ShouldLog(loglevel) {
 		jl.logger.Println(msg)
 	}

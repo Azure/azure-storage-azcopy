@@ -8,6 +8,7 @@ import uuid
 import random
 import json
 from pathlib import Path
+from collections import namedtuple
 
 
 # Command Class is used to create azcopy commands and validator commands.
@@ -692,7 +693,9 @@ def parseAzcopyOutput(s):
             final_output = final_output + '\n' + line
         else:
             final_output = line
-    return final_output
+
+    x = json.loads(final_output, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
+    return x.MessageContent
 
 def get_resource_name(prefix=''):
     return prefix + str(uuid.uuid4()).replace('-', '')
