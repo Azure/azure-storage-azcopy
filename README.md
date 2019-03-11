@@ -49,6 +49,32 @@ cd .\azcopy_windows_amd64_10.0.8
 .\azcopy.exe
 ```
 
+### Installation for repeatable scripts
+
+The version of `azcopy` available at `https://aka.ms/downloadazcopy-v10-linux` will be updated over time. If you plan on using `azcopy` as part of a script it's best to pin to a known version so future updates don't affect your scripts. 
+
+To pin to a version of `azcopy`
+
+1. Run `curl -v https://aka.ms/downloadazcopy-v10-linux` and review the output to locate the current version URL. Here is an example output from `curl` showing the `301 Moved Permanently` response.
+
+```
+...
+< HTTP/1.1 301 Moved Permanently
+< Location: https://azcopyvnext.azureedge.net/release20190301/azcopy_linux_amd64_10.0.8.tar.gz
+...
+```
+
+2. Now in your scripts download the version from this URL, unpack it and use as before. 
+
+```
+
+wget -O azcopyv10.tar https://azcopyvnext.azureedge.net/release20190301/azcopy_linux_amd64_10.0.8.tar.gz
+tar -xf azcopyv10.tar --strip-components=1
+./azcopy
+```
+
+> Note: `--strip-components=1` on the `tar` command removes the top level folder containing the version name and instead extracts the binary directly into the current folder. This allows the script to be updated with a new version of `azcopy` by only updating the `wget` URL.
+
 ## Manual
 
 ### Authenticating with Azure Storage
