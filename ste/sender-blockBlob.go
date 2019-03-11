@@ -50,11 +50,9 @@ type blockBlobSenderBase struct {
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
 
-	putListIndicator int32       // accessed via sync.atomic
-	mu               *sync.Mutex // protects the fields below
+	atomicPutListIndicator int32
+	muBlockIDs             *sync.Mutex
 }
-
-type putBlockFunc = func(encodedBlockID string)
 
 func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
 	transferInfo := jptm.Info()
@@ -97,7 +95,7 @@ func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipe
 		headersToApply:   props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply:  props.SrcMetadata.ToAzBlobMetadata(),
 		destBlobTier:     destBlobTier,
-		mu:               &sync.Mutex{}}, nil
+		muBlockIDs:       &sync.Mutex{}}, nil
 }
 
 func (s *blockBlobSenderBase) ChunkSize() uint32 {
@@ -121,15 +119,15 @@ func (s *blockBlobSenderBase) Prologue(ps common.PrologueState) {
 }
 
 func (s *blockBlobSenderBase) Epilogue() {
-	s.mu.Lock()
-	blockIDs := s.blockIDs
-	s.mu.Unlock()
-	shouldPutBlockList := getPutListNeed(&s.putListIndicator)
-	if shouldPutBlockList == putListNeedUnknown {
-		s.jptm.Panic(errors.New("'put list' need flag was never set"))
-	}
-
 	jptm := s.jptm
+
+	s.muBlockIDs.Lock()
+	blockIDs := s.blockIDs
+	s.muBlockIDs.Unlock()
+	shouldPutBlockList := getPutListNeed(&s.atomicPutListIndicator)
+	if shouldPutBlockList == putListNeedUnknown && !jptm.WasCanceled() {
+		panic(errors.New("'put list' need flag was never set"))
+	}
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
 	// commit block list if necessary
@@ -177,10 +175,10 @@ func (s *blockBlobSenderBase) Epilogue() {
 }
 
 func (s *blockBlobSenderBase) setBlockID(index int32, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.muBlockIDs.Lock()
+	defer s.muBlockIDs.Unlock()
 	if len(s.blockIDs[index]) > 0 {
-		s.jptm.Panic(errors.New("block id set twice for one block"))
+		panic(errors.New("block id set twice for one block"))
 	}
 	s.blockIDs[index] = value
 }

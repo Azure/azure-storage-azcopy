@@ -211,6 +211,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
 			SourceSize:     order.Transfers[t].SourceSize,
 			CompletionTime: 0,
+			// For S2S copy, per JobPartPlan info
+			S2SGetS3PropertiesInBackend: order.Transfers[t].S2SGetS3PropertiesInBackend,
+			S2SSourceChangeValidation:   order.Transfers[t].S2SSourceChangeValidation,
 			// For S2S copy, per Transfer source's properties
 			SrcContentTypeLength:        int16(len(order.Transfers[t].ContentType)),
 			SrcContentEncodingLength:    int16(len(order.Transfers[t].ContentEncoding)),
@@ -221,8 +224,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcMetadataLength:           int16(srcMetadataLength),
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
 			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
-			S2SGetS3PropertiesInBackend: order.Transfers[t].S2SGetS3PropertiesInBackend,
-			S2SSourceChangeValidation:   order.Transfers[t].S2SSourceChangeValidation,
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),

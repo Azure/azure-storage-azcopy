@@ -72,7 +72,7 @@ func newS3SourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, err
 		common.CredentialOpOptions{
 			LogInfo:  func(str string) { p.jptm.Log(pipeline.LogInfo, str) },
 			LogError: func(str string) { p.jptm.Log(pipeline.LogError, str) },
-			Panic:    p.jptm.Panic,
+			Panic:    func(err error) { panic(err) },
 		})
 	if err != nil {
 		return nil, err

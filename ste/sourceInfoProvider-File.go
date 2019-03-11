@@ -37,7 +37,7 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	base, _ := b.(*defaultRemoteSourceInfoProvider)
+	base := b.(*defaultRemoteSourceInfoProvider)
 
 	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }

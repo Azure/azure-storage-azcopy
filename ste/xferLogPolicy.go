@@ -14,6 +14,11 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+// This file is copied and extended from Azure Storage Blob Go SDK.
+// Because V10 SDK supports flexibility for injecting customized logging policy,
+// and considering redact x-amz-signature's request header for logging is not a general demand for Azure Storage Blob Go SDK.
+// TODO: Further discuss whether to add callback into RequestLogOptions for Azure Storage Blob Go SDK.
+
 // RequestLogOptions configures the retry policy's behavior.
 type RequestLogOptions struct {
 	// LogWarningIfTryOverThreshold logs a warning if a tried operation takes longer than the specified
@@ -113,7 +118,7 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 func prepareRequestForLogging(request pipeline.Request) *http.Request {
 	req := request
 	rawQuery := req.URL.RawQuery
-	sigRedacted, rawQuery := common.RedactSigQueryParam(rawQuery, "sig")
+	sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, "sig")
 
 	if sigRedacted {
 		// Make copy so we don't destroy the query parameters we actually need to send in the request
@@ -141,13 +146,18 @@ func stack() []byte {
 ///////////////////////////////////////////////////////////////////////////////////////
 func prepareRequestForServiceLogging(request pipeline.Request) *http.Request {
 	req := request
+
+	// As CopyBlob https://docs.microsoft.com/en-us/rest/api/storageservices/copy-blob and
+	// PutBlockFromURL/PutPageFromURL/AppendBlobFromURL https://docs.microsoft.com/en-us/rest/api/storageservices/put-block-from-url
+	// contains header x-ms-copy-source which could contains secrets for authentication.
+	// Prepare the headers for logging, with redact secrets in x-ms-copy-source header.
 	if exist, key := doesHeaderExistCaseInsensitive(req.Header, xMsCopySourceHeader); exist {
 		req = request.Copy()
 		url, err := url.Parse(req.Header.Get(key))
 		if err == nil {
 			rawQuery := url.RawQuery
-			sigRedacted, rawQuery := common.RedactSigQueryParam(rawQuery, "sig")
-			xAmzSignatureRedacted, rawQuery := common.RedactSigQueryParam(rawQuery, "x-amz-signature")
+			sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, "sig")
+			xAmzSignatureRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, "x-amz-signature")
 
 			if sigRedacted || xAmzSignatureRedacted {
 				url.RawQuery = rawQuery

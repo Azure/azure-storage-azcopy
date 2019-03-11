@@ -37,7 +37,7 @@ func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 		return nil, err
 	}
 
-	base, _ := b.(*defaultRemoteSourceInfoProvider)
+	base := b.(*defaultRemoteSourceInfoProvider)
 
 	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
 }

@@ -361,6 +361,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	fromTo := jpm.planMMF.Plan().FromTo
 	credInfo := jpm.jobMgr.getInMemoryTransitJobState().credentialInfo
 	userAgent := common.UserAgent
+	if fromTo.From() == common.ELocation.S3() {
+		userAgent = common.S3ImportUserAgent
+	}
+
 	credOption := common.CredentialOpOptions{
 		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
 		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
@@ -376,6 +380,7 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
+	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() {
 		jpm.sourceProviderPipeline = NewBlobPipeline(
 			azblob.NewAnonymousCredential(),
@@ -407,13 +412,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			jpm.pacer)
 	}
 
+	// Create pipeline for data transfer.
 	switch fromTo {
-	// For S2S copy, only support Anonymous Credential for source
-	case common.EFromTo.S3Blob():
-		userAgent = common.S3ImportUserAgent
-		fallthrough
 	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
-		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 		jpm.pipeline = NewBlobPipeline(

@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 3
+const DataSchemaVersion common.Version = 5
 
 const (
 	ContentTypeMaxBytes     = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
@@ -253,6 +253,11 @@ type JobPartPlanTransfer struct {
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
 
+	// S2SGetS3PropertiesInBackend represents whether to enable get S3 objects properties during s2s copy in backend.
+	S2SGetS3PropertiesInBackend bool
+	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
+	S2SSourceChangeValidation bool
+
 	// For S2S copy, per Transfer source's properties
 	// TODO: ensure the length is enough
 	SrcContentTypeLength        int16
@@ -264,8 +269,6 @@ type JobPartPlanTransfer struct {
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
 	SrcBlobTierLength           int16
-	S2SGetS3PropertiesInBackend bool
-	S2SSourceChangeValidation   bool
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

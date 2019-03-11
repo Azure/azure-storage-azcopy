@@ -55,34 +55,38 @@ type S3URLParts struct {
 	// TODO: Other S3 compatible service which might be with IP endpoint style
 }
 
-const s3HostPattern = "^(?P<bucketname>.+\\.)?s3[.-](?P<dualstackorregionorawsdomain>[a-z0-9-]+)\\.(?P<regionorawsdomain>[a-z0-9-]+)"
-const invalidS3URLErrorMessage = "Invalid S3 URL. Support standard virtual-hosted-style or path-style URL defined by AWS, E.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
+const s3HostPattern = "^(?P<bucketName>.+\\.)?s3[.-](?P<dualStackOrRegionOrAWSDomain>[a-z0-9-]+)\\.(?P<regionOrAWSDomainOrCom>[a-z0-9-]+)"
+const invalidS3URLErrorMessage = "Invalid S3 URL. AzCopy supports standard virtual-hosted-style or path-style URLs defined by AWS, E.g: https://bucket.s3.amazonaws.com or https://s3.amazonaws.com/bucket"
 const versionQueryParamKey = "versionId"
-const s3AWSDomain = "amazonaws"
-const s3DualStack = "dualstack"
+const s3KeywordAmazonAWS = "amazonaws"
+const s3KeywordDualStack = "dualstack"
+const s3EssentialHostPart = "amazonaws.com"
+
+var s3HostRegex = regexp.MustCompile(s3HostPattern)
 
 // IsS3URL verfies if a given URL points to S3 URL supported by AzCopy-v10
 func IsS3URL(u url.URL) bool {
-	if match, _ := regexp.MatchString(s3HostPattern, strings.ToLower(u.Host)); match {
+	if _, isS3URL := findS3URLMatches(strings.ToLower(u.Host)); isS3URL {
 		return true
 	}
 	return false
 }
 
+func findS3URLMatches(host string) (matches []string, isS3Host bool) {
+	matchSlices := s3HostRegex.FindStringSubmatch(host) // If match the first element would be entire host, and then follows the sub match strings.
+	if matchSlices == nil || !strings.Contains(host, s3EssentialHostPart) {
+		return nil, false
+	}
+	return matchSlices, true
+}
+
 // NewS3URLParts parses a URL initializing S3URLParts' fields. This method overwrites all fields in the S3URLParts object.
 func NewS3URLParts(u url.URL) (S3URLParts, error) {
-	// Check if it's S3URL, and get essential info from URL's host
-	r, err := regexp.Compile(s3HostPattern)
-	if err != nil {
-		return S3URLParts{}, err
-	}
-
 	// S3's bucket name should be in lower case
 	host := strings.ToLower(u.Host)
 
-	matchSlices := r.FindStringSubmatch(host) // If match the first element would be entire host, and then follows the sub match strings.
-	// If matchSlices equals nil, means no match found
-	if matchSlices == nil {
+	matchSlices, isS3URL := findS3URLMatches(host)
+	if !isS3URL {
 		return S3URLParts{}, errors.New(invalidS3URLErrorMessage)
 	}
 
@@ -118,12 +122,12 @@ func NewS3URLParts(u url.URL) (S3URLParts, error) {
 		up.Endpoint = host
 	}
 	// Check if dualstack is contained in host name
-	if matchSlices[2] == s3DualStack {
+	if matchSlices[2] == s3KeywordDualStack {
 		up.isDualStack = true
-		if matchSlices[3] != s3AWSDomain {
+		if matchSlices[3] != s3KeywordAmazonAWS {
 			up.Region = matchSlices[3]
 		}
-	} else if matchSlices[2] != s3AWSDomain {
+	} else if matchSlices[2] != s3KeywordAmazonAWS {
 		up.Region = matchSlices[2]
 	}
 

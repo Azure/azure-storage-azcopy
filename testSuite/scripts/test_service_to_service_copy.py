@@ -775,25 +775,35 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         srcType,
         dstAccountURL,
         dstType,
-        bucketName):
+        bucketNamePrefix):
+        # More enumerating scenarios could be covered with integration testing.
+        bucketName1 = bucketNamePrefix + "1"
+        bucketName2 = bucketNamePrefix + "2"
         if srcType == "S3":
-            src_bucket_url = util.get_object_without_sas(srcAccountURL, bucketName)
+            src_bucket_url1 = util.get_object_without_sas(srcAccountURL, bucketName1)
+            src_bucket_url2 = util.get_object_without_sas(srcAccountURL, bucketName2)
         else:
-            src_bucket_url = util.get_object_sas(srcAccountURL, bucketName)
-
-        validate_dst_container_url = util.get_object_sas(dstAccountURL, bucketName)
+            src_bucket_url1 = util.get_object_sas(srcAccountURL, bucketName1)
+            src_bucket_url2 = util.get_object_sas(srcAccountURL, bucketName2)
 
         # create source bucket
-        result = util.Command("create").add_arguments(src_bucket_url).add_flags("serviceType", srcType). \
+        createBucketResult1 = util.Command("create").add_arguments(src_bucket_url1).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
-        self.assertTrue(result)
+        self.assertTrue(createBucketResult1)
+
+        createBucketResult2 = util.Command("create").add_arguments(src_bucket_url2).add_flags("serviceType", srcType). \
+            add_flags("resourceType", "Bucket").execute_azcopy_create()
+        self.assertTrue(createBucketResult2)
 
         # create files of size n KBs.
-        src_dir_name = "copy_files_from_%s_account_to_%s_account" % (srcType, dstType)
-        src_dir_path = util.create_test_n_files(1*1024, 100, src_dir_name)
+        src_dir_name1 = "copy_files_from_%s_account_to_%s_account_1" % (srcType, dstType)
+        src_dir_path1 = util.create_test_n_files(1*1024, 100, src_dir_name1)
+        src_dir_name2 = "copy_files_from_%s_account_to_%s_account_2" % (srcType, dstType)
+        src_dir_path2 = util.create_test_n_files(1, 2, src_dir_name2)
 
         # Upload file.
-        self.util_upload_to_src(src_dir_path, srcType, src_bucket_url, True)
+        self.util_upload_to_src(src_dir_path1, srcType, src_bucket_url1, True)
+        self.util_upload_to_src(src_dir_path2, srcType, src_bucket_url2, True)
 
         # Copy files using azcopy from srcURL to destURL
         result = util.Command("copy").add_arguments(srcAccountURL).add_arguments(dstAccountURL). \
@@ -801,16 +811,26 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         # Downloading the copied files for validation
-        validate_dir_name = "validate_copy_files_from_%s_account_to_%s_account" % (srcType, dstType)
-        local_validate_dest = util.create_test_dir(validate_dir_name)
-        dst_container_url = util.get_object_sas(dstAccountURL, bucketName)
-        dst_directory_url = util.get_object_sas(dst_container_url, src_dir_name)
-        result = util.Command("copy").add_arguments(dst_directory_url).add_arguments(local_validate_dest). \
+        validate_dir_name1 = "validate_copy_files_from_%s_account_to_%s_account_1" % (srcType, dstType)
+        local_validate_dest1 = util.create_test_dir(validate_dir_name1)    
+        dst_container_url1 = util.get_object_sas(dstAccountURL, bucketName1)
+        dst_directory_url1 = util.get_object_sas(dst_container_url1, src_dir_name1)
+        result = util.Command("copy").add_arguments(dst_directory_url1).add_arguments(local_validate_dest1). \
             add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
+         # Verifying the downloaded blob
+        result = self.util_are_dir_trees_equal(src_dir_path1, os.path.join(local_validate_dest1, src_dir_name1))
+        self.assertTrue(result)
 
+        validate_dir_name2 = "validate_copy_files_from_%s_account_to_%s_account_2" % (srcType, dstType)
+        local_validate_dest2 = util.create_test_dir(validate_dir_name2)    
+        dst_container_url2 = util.get_object_sas(dstAccountURL, bucketName2)
+        dst_directory_url2 = util.get_object_sas(dst_container_url2, src_dir_name2)
+        result = util.Command("copy").add_arguments(dst_directory_url2).add_arguments(local_validate_dest2). \
+            add_flags("log-level", "info").add_flags("recursive", "true").execute_azcopy_copy_command()
+        self.assertTrue(result)
         # Verifying the downloaded blob
-        result = self.util_are_dir_trees_equal(src_dir_path, os.path.join(local_validate_dest, src_dir_name))
+        result = self.util_are_dir_trees_equal(src_dir_path2, os.path.join(local_validate_dest2, src_dir_name2))
         self.assertTrue(result)
 
         # clean up both source and destination bucket

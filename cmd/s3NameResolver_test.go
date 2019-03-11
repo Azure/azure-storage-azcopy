@@ -23,6 +23,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
 )
 
@@ -67,7 +68,8 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipl
 	r := NewS3BucketNameToAzureResourcesResolver(
 		[]string{"bucket.name", "bucket-name", "bucket-name-2", "bucket-name-3",
 			"bucket---name", "bucket-s--s---s", "abcdefghijklmnopqrstuvwxyz-s--s---s-s0123456789",
-			"bucket--name", "bucket-2-name", "bucket-2-name-3", "bucket.compose----name.1---hello"})
+			"bucket--name", "bucket-2-name", "bucket-2-name-3", "bucket.compose----name.1---hello",
+			"a-b---c", "a.b---c"})
 	// Need resolve
 	resolvedName, err := r.ResolveName("bucket---name")
 	c.Assert(err, chk.IsNil)
@@ -114,6 +116,14 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverMultipl
 	resolvedName, err = r.ResolveName("bucket.compose----name.1---hello")
 	c.Assert(err, chk.IsNil)
 	c.Assert(resolvedName, chk.Equals, "bucket-compose-4-name-1-3-hello")
+
+	resolvedNameCollision1, err := r.ResolveName("a.b---c")
+	c.Assert(err, chk.IsNil)
+	resolvedNameCollision2, err := r.ResolveName("a-b---c")
+	c.Assert(err, chk.IsNil)
+
+	c.Assert(common.Iffint8(resolvedNameCollision1 == "a-b-3-c", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c", 1, 0), chk.Equals, int8(1))
+	c.Assert(common.Iffint8(resolvedNameCollision1 == "a-b-3-c-2", 1, 0)^common.Iffint8(resolvedNameCollision2 == "a-b-3-c-2", 1, 0), chk.Equals, int8(1))
 }
 
 func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegative(c *chk.C) {

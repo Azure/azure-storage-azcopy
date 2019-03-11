@@ -43,7 +43,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	var userFromTo common.FromTo
 	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
-		return common.EFromTo.Unknown(), fmt.Errorf("invalid --FromTo value specified: %q", userSpecifiedFromTo)
+		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q", userSpecifiedFromTo)
 	}
 	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
 		userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash() {
@@ -52,7 +52,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 		return userFromTo, nil
 	}
 	// inferredFromTo != raw.fromTo: What we inferred doesn't match what the user specified
-	return common.EFromTo.Unknown(), errors.New("the specified --FromTo switch is inconsistent with the specified source/destination combination")
+	return common.EFromTo.Unknown(), errors.New("the specified --from-to switch is inconsistent with the specified source/destination combination")
 }
 
 func inferFromTo(src, dst string) common.FromTo {
@@ -61,7 +61,7 @@ func inferFromTo(src, dst string) common.FromTo {
 	if srcLocation == srcLocation.Unknown() {
 		glcm.Info("Cannot infer source location of " +
 			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
-			". Please specify the --FromTo switch")
+			". Please specify the --from-to switch")
 		return common.EFromTo.Unknown()
 	}
 
@@ -69,7 +69,7 @@ func inferFromTo(src, dst string) common.FromTo {
 	if dstLocation == dstLocation.Unknown() {
 		glcm.Info("Cannot infer destination location of " +
 			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
-			". Please specify the --FromTo switch")
+			". Please specify the --from-to switch")
 		return common.EFromTo.Unknown()
 	}
 

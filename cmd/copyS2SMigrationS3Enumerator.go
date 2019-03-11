@@ -121,8 +121,8 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		// Check if destination is point to an Azure service.
 		// If destination is an Azure service, azcopy tries to create a bucket(container, share or etc) with source's bucket name,
 		// and then copy from source bucket to created destination bucket(container, share or etc).
-		// Otherwise, if source is a bucket/virtual directory and destination is a bucket/virtual directory,
-		// azcopy do copy from source bucket/virtual directory to destination bucket/virtual directory.
+		// Otherwise, if destination is not service level resource, AzCopy will keep it as a bucket level resource or directory level resource,
+		// and directly copy from source to destination.
 		if err := e.validateDestIsService(ctx, *e.destURL); err == nil {
 			// name resolver is used only when the target URL is inferred from source URL.
 			s3BucketNameResolver := NewS3BucketNameToAzureResourcesResolver([]string{e.s3URLParts.BucketName})
@@ -130,7 +130,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			if err != nil {
 				glcm.Error(err.Error())
 				return errors.New("fail to add transfer, the source bucket has invalid name for Azure. " +
-					"Please copy from bucket to Azure with customized container/share/filesystem name.")
+					"Please include the destination container/share/filesystem name in the destination URL.")
 			}
 
 			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(resolvedBucketName)
@@ -337,7 +337,7 @@ func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.
 		ContentMD5:                  oie.ContentMD5(),
 		Metadata:                    oie.NewCommonMetadata(),
 		S2SGetS3PropertiesInBackend: getS3PropertiesInBackend,
-		S2SSourceChangeValidation: cca.s2sSourceChangeValidation}
+		S2SSourceChangeValidation:   cca.s2sSourceChangeValidation}
 
 	return e.addTransfer(copyTransfer, cca)
 }

@@ -94,7 +94,8 @@ Copy a single object from S3 with access key to blob with SAS:
 
 Copy an entire directory from S3 with access key to blob virtual directory with SAS:
   - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
-  - azcopy cp "https://s3.amazonaws.com/[bucket]/[object-as-virtual-directory]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+  - azcopy cp "https://s3.amazonaws.com/[bucket]/[folder]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+  - Please refer to https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html for what [folder] means for S3.
 
 Copy all buckets in S3 service with access key to blob account with SAS:
   - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.

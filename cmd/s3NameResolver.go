@@ -50,6 +50,9 @@ type S3BucketNameToAzureResourcesResolver struct {
 	// S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number.
 	// Considering this limitation and the REST API to get bucket info is in unsegmented pattern, we assume AzCopy can always get all the bucket name with one request easily.
 	bucketNameResolvingMap map[string]string
+
+	// collisionDetectionMap is acutally used as a set to save resolved new keys, to avoid new key collisions.
+	collisionDetectionMap map[string]struct{}
 }
 
 const s3BucketNameMaxLength = 63
@@ -67,6 +70,7 @@ var s3BucketNameResolveError = "fail to resolve s3 bucket name"
 func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNameToAzureResourcesResolver {
 	s3Resolver := S3BucketNameToAzureResourcesResolver{
 		bucketNameResolvingMap: make(map[string]string),
+		collisionDetectionMap:  make(map[string]struct{}),
 	}
 
 	for _, bucketName := range s3BucketNames {
@@ -83,7 +87,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) ResolveName(bucketName s
 	if resolvedName, ok := s3Resolver.bucketNameResolvingMap[bucketName]; !ok {
 		return "", fmt.Errorf("%s: invalid state, cannot find resolved bucket name for %q", s3BucketNameResolveError, bucketName) // This should not happen logically
 	} else if resolvedName == failToResolveMapValue {
-		return "", fmt.Errorf("%s: s3 bucket name %q is invalid for Azure container/share/filesystem, and azcopy failed to resolve it automatically", s3BucketNameResolveError, bucketName)
+		return "", fmt.Errorf("%s: s3 bucket name %q is invalid for Azure container/share/filesystem, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
 	} else {
 		return resolvedName, nil
 	}
@@ -150,7 +154,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 	}
 
 	// 3. If there is naming collision, try to add suffix.
-	if _, hasCollision := s3Resolver.bucketNameResolvingMap[resolvedName]; hasCollision {
+	if s3Resolver.hasCollision(resolvedName) {
 		resolvedName = s3Resolver.addSuffix(resolvedName)
 	}
 
@@ -161,6 +165,15 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveNewBucketNameInte
 
 	// Save the resolved name's value
 	s3Resolver.bucketNameResolvingMap[orgBucketName] = resolvedName
+	s3Resolver.collisionDetectionMap[resolvedName] = struct{}{}
+}
+
+// hasCollision checkes if the given name will cause collision to existing bucket names.
+func (s3Resolver *S3BucketNameToAzureResourcesResolver) hasCollision(name string) bool {
+	_, hasCollisionToOrgNames := s3Resolver.bucketNameResolvingMap[name]
+	_, hasCollisionToNewNames := s3Resolver.collisionDetectionMap[name]
+
+	return hasCollisionToOrgNames || hasCollisionToNewNames
 }
 
 func validateResolvedName(name string) bool {
@@ -179,13 +192,13 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) addSuffix(name string) s
 	// S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number,
 	// so the loop should finish soon.
 	for {
-		if _, hasCollision := s3Resolver.bucketNameResolvingMap[resolvedName]; !hasCollision {
+		if !s3Resolver.hasCollision(resolvedName) {
 			break
 		}
 
 		if count > 999 {
 			// Currently, S3 has 100 for buckets' number per S3 account by default.
-			// Considering S3's further extension, adding this defensive logic,
+			// Considering S3's further extension, adding this defensive logic.
 			resolvedName = failToResolveMapValue
 			break
 		}

@@ -184,12 +184,12 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 		if srcInfoProvider.IsLocal() {
 			// create reader and prefetch the data into it
 			chunkReader = createPopulatedChunkReader(jptm, sourceFileFactory, id, adjustedChunkSize, srcFile)
-			ps = chunkReader.GetPrologueState()
 
 			// Wait until we have enough RAM, and when we do, prefetch the data for this chunk.
 			prefetchErr = chunkReader.BlockingPrefetch(srcFile, false)
 			if prefetchErr == nil {
 				chunkReader.WriteBufferTo(md5Hasher)
+				ps = chunkReader.GetPrologueState()
 			} else {
 				safeToUseHash = false // because we've missed a chunk
 			}

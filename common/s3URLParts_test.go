@@ -194,4 +194,14 @@ func (s *s3URLPartsTestSuite) TestS3URLParseNegative(c *chk.C) {
 	_, err := NewS3URLParts(*u)
 	c.Assert(err, chk.NotNil)
 	c.Assert(strings.Contains(err.Error(), invalidS3URLErrorMessage), chk.Equals, true)
+
+	u, _ = url.Parse("http://bucket.s3.amazonawstypo.com")
+	_, err = NewS3URLParts(*u)
+	c.Assert(err, chk.NotNil)
+	c.Assert(strings.Contains(err.Error(), invalidS3URLErrorMessage), chk.Equals, true)
+
+	u, _ = url.Parse("http://s3-test.blob.core.windows.net")
+	_, err = NewS3URLParts(*u)
+	c.Assert(err, chk.NotNil)
+	c.Assert(strings.Contains(err.Error(), invalidS3URLErrorMessage), chk.Equals, true)
 }

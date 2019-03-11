@@ -53,10 +53,10 @@ func (u *blockBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int
 		if blockIndex > 0 {
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
-		setPutListNeed(&u.putListIndicator, putListNotNeeded)
+		setPutListNeed(&u.atomicPutListIndicator, putListNotNeeded)
 		return u.generatePutWholeBlob(id, blockIndex, reader)
 	} else {
-		setPutListNeed(&u.putListIndicator, putListNeeded)
+		setPutListNeed(&u.atomicPutListIndicator, putListNeeded)
 		return u.generatePutBlock(id, blockIndex, reader)
 	}
 }
@@ -119,9 +119,8 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 func (u *blockBlobUploader) Epilogue() {
 	jptm := u.jptm
 
-	shouldPutBlockList := getPutListNeed(&u.putListIndicator)
+	shouldPutBlockList := getPutListNeed(&u.atomicPutListIndicator)
 
-	// commit the blocks, if necessary
 	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
 
 		md5Hash, ok := <-u.md5Channel

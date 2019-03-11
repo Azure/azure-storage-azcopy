@@ -305,6 +305,15 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
 	c.Assert(err, chk.IsNil)
 }
 
+func cleanS3Account(c *chk.C, client *minio.Client) {
+	buckets, err := client.ListBuckets()
+	c.Assert(err, chk.IsNil)
+
+	for _, bucket := range buckets {
+		deleteBucket(c, client, bucket.Name)
+	}
+}
+
 func getFSU() (azfile.ServiceURL, error) {
 	accountName, accountKey := os.Getenv("ACCOUNT_NAME"), os.Getenv("ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {

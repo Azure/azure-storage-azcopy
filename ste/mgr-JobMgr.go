@@ -130,7 +130,7 @@ type jobMgr struct {
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
-	transferDirection                  common.TransferDirection
+	atomicTransferDirection            common.TransferDirection
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -171,10 +171,10 @@ func (jm *jobMgr) ActiveConnections() int64 {
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
 func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool) {
-	transferDirection := jm.transferDirection.AtomicLoad()
+	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction
-	chunkStateCounts := jm.chunkStatusLogger.GetCounts(transferDirection)
+	chunkStateCounts := jm.chunkStatusLogger.GetCounts(atomicTransferDirection)
 
 	// convert the counts to simple strings for consumption by callers
 	const format = "%c: %2d"
@@ -186,7 +186,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool
 	}
 	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
 
-	diskCon := jm.chunkStatusLogger.IsDiskConstrained(transferDirection)
+	diskCon := jm.chunkStatusLogger.IsDiskConstrained(atomicTransferDirection)
 
 	// logging from here is a bit of a hack
 	// TODO: can we find a better way to get this info into the log?  The caller is at app level,
@@ -242,13 +242,13 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 	isS2SCopy := fromTo.From().IsRemote() && fromTo.To().IsRemote()
 
 	if isUpload {
-		jm.transferDirection.AtomicStore(common.ETransferDirection.Upload())
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Upload())
 	}
 	if isDownload {
-		jm.transferDirection.AtomicStore(common.ETransferDirection.Download())
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Download())
 	}
 	if isS2SCopy {
-		jm.transferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
 	}
 }
 

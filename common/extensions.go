@@ -36,31 +36,19 @@ func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
 
 func (u URLExtension) RedactSecretQueryParamForLogging() string {
 	// redact sig= in Azure
-	u = u.RedactSigQueryParamForLogging()
+	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, "sig"); ok {
+		u.RawQuery = rawQuery
+	}
 
 	// rediact x-amx-signature in S3
-	u = u.RedactAmzSignatureQueryParamForLogging()
+	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, "x-amz-signature"); ok {
+		u.RawQuery = rawQuery
+	}
 
 	return u.String()
 }
 
-func (u URLExtension) RedactSigQueryParamForLogging() URLExtension {
-	if ok, rawQuery := RedactSigQueryParam(u.RawQuery, "sig"); ok {
-		u.RawQuery = rawQuery
-	}
-
-	return u
-}
-
-func (u URLExtension) RedactAmzSignatureQueryParamForLogging() URLExtension {
-	if ok, rawQuery := RedactSigQueryParam(u.RawQuery, "x-amz-signature"); ok {
-		u.RawQuery = rawQuery
-	}
-
-	return u
-}
-
-func RedactSigQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
+func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?[queryKeyNeedRedact] and &[queryKeyNeedRedact]=
 	sigFound := strings.Contains(rawQuery, "?"+queryKeyNeedRedact+"=")
 	if !sigFound {

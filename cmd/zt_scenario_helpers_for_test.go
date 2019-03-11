@@ -31,14 +31,10 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	chk "gopkg.in/check.v1"
-
-	"github.com/Azure/azure-storage-azcopy/common"
-
 	"github.com/jiacfan/azure-storage-blob-go/azblob"
-	minio "github.com/minio/minio-go"
 	chk "gopkg.in/check.v1"
+
+	minio "github.com/minio/minio-go"
 )
 
 const defaultFileSize = 1024
@@ -182,7 +178,7 @@ func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName
 // 10 of them in sub dir "sub2"
 // 10 of them in deeper sub dir "sub1/sub3/sub5"
 // 10 of them with special characters
-func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.Client, bucketName string, prefix string) (objectList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.Client, bucketName string, prefix string, returnObjectListWithBucketName bool) (objectList []string) {
 	objectList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
@@ -192,11 +188,16 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 		objectName4 := createNewObject(c, client, bucketName, prefix+"sub1/sub3/sub5/")
 		objectName5 := createNewObject(c, client, bucketName, prefix+specialNames[i])
 
-		objectList[5*i] = objectName1
-		objectList[5*i+1] = objectName2
-		objectList[5*i+2] = objectName3
-		objectList[5*i+3] = objectName4
-		objectList[5*i+4] = objectName5
+		bucketPath := ""
+		if returnObjectListWithBucketName {
+			bucketPath = common.AZCOPY_PATH_SEPARATOR_STRING + bucketName + common.AZCOPY_PATH_SEPARATOR_STRING
+		}
+
+		objectList[5*i] = bucketPath + objectName1
+		objectList[5*i+1] = bucketPath + objectName2
+		objectList[5*i+2] = bucketPath + objectName3
+		objectList[5*i+3] = bucketPath + objectName4
+		objectList[5*i+4] = bucketPath + objectName5
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -255,7 +256,7 @@ func (s scenarioHelper) getContainerURL(c *chk.C, containerName string) azblob.C
 }
 
 func (scenarioHelper) getRawS3AccountURL(c *chk.C, region string) url.URL {
-	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/", common.IffString(region == "", "", "-"+region))
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com", common.IffString(region == "", "", "-"+region))
 
 	fullURL, err := url.Parse(rawURL)
 	c.Assert(err, chk.IsNil)
@@ -287,10 +288,6 @@ func (scenarioHelper) containerExists(containerURL azblob.ContainerURL) bool {
 		return true
 	}
 	return false
-}
-
-func validateS2SCopyTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
-	validateTransfersAreScheduledToMerge(c, srcDirName, true, dstDirName, true, expectedTransfers, mockedRPC)
 }
 
 func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {

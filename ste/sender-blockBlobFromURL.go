@@ -66,10 +66,10 @@ func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex in
 		if blockIndex > 0 {
 			panic("chunk cannot be whole file where there is more than one chunk")
 		}
-		setPutListNeed(&c.putListIndicator, putListNotNeeded)
+		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
 		return c.generateSyncCopyBlob(id, adjustedChunkSize)
 	} else {
-		setPutListNeed(&c.putListIndicator, putListNeeded)
+		setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
 		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
 	}
 }

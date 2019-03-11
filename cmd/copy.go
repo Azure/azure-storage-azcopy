@@ -264,75 +264,75 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2sPreserveProperties is set to true while uploading")
+			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while uploading")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2sPreserveAccessTier is set to true while uploading")
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while uploading to Azure File")
+			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2sPreserveProperties is set to true while uploading")
+			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while uploading")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2sPreserveAccessTier is set to true while uploading")
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while downloading")
+			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while downloading")
+			return cooked, fmt.Errorf("blob-tier is not supported while downloading")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while downloading")
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while downloading")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while downloading")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2sPreserveProperties is set to true while downloading")
+			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while downloading")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2sPreserveAccessTier is set to true while downloading")
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
 		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from service to service")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from service to service")
+			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while copying from sevice to service")
+			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
 		}
 		// Disabling blob type override.
 		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
 		// and when file and s3 is source, only block blob destination is supported.
 		if cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blob-type is set while coping from service to service")
+			return cooked, fmt.Errorf("blob-type is not supported while coping from service to service")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from service to service")
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from service to service")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while copying from service to service")
 		}
 	}
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {

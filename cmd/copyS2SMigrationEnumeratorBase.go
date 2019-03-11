@@ -55,6 +55,8 @@ func (e *copyS2SMigrationEnumeratorBase) initDestPipeline(ctx context.Context) e
 			return err
 		}
 		e.destBlobPipeline = p
+	default:
+		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}
 	return nil
 }
@@ -81,6 +83,8 @@ func (e *copyS2SMigrationEnumeratorBase) createDestBucket(ctx context.Context, d
 			}
 			// the case error is container already exists
 		}
+	default:
+		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}
 	return nil
 }
@@ -95,8 +99,10 @@ func (e *copyS2SMigrationEnumeratorBase) validateDestIsService(ctx context.Conte
 		destServiceURL := azblob.NewServiceURL(destURL, e.destBlobPipeline)
 		if _, err := destServiceURL.GetProperties(ctx); err != nil {
 			return fmt.Errorf("invalid source and destination combination for service to service copy: "+
-				"destination must point to service account in current scenario, %v", err)
+				"destination must point to service account in current scenario, error when checking destination properties, %v", err)
 		}
+	default:
+		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}
 
 	return nil
@@ -108,9 +114,9 @@ func (e *copyS2SMigrationEnumeratorBase) ifDestCouldBeService() bool {
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		dsue := blobURLPartsExtension{BlobURLParts: azblob.NewBlobURLParts(*e.destURL)}
 		return dsue.ifCouldBeServiceURL()
+	default:
+		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}
-
-	return false
 }
 
 // ifDestCouldBeService check if destination could be a bucket/container/share level URL through URL parsing.
@@ -119,7 +125,7 @@ func (e *copyS2SMigrationEnumeratorBase) ifDestCouldBeBucket() bool {
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		dsue := blobURLPartsExtension{BlobURLParts: azblob.NewBlobURLParts(*e.destURL)}
 		return dsue.ifCouldBeContainerURL()
+	default:
+		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}
-
-	return false
 }
