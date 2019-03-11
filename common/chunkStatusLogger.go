@@ -83,18 +83,19 @@ type WaitReason struct {
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
 func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
 func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{3, "Head"} }               // waiting to finish downloading the HEAD
-func (WaitReason) Body() WaitReason                 { return WaitReason{4, "Body"} }               // waiting to finish sending/receiving the BODY
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{5, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{6, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) Sorting() WaitReason              { return WaitReason{7, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason{8, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
-func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{9, "Queue"} }              // prior chunk has arrived, but is not yet written out to disk
-func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "DiskIO"} }            // waiting on disk read/write to complete
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
-func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
-// extra status used only by S2S copy
-func (WaitReason) S2SCopyOnWire() WaitReason { return WaitReason{13, "S2SCopyOnWire"} } // waiting for S2S copy on wire get finished
+func (WaitReason) FilePacer() WaitReason            { return WaitReason{3, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{4, "Head"} }               // waiting to finish downloading the HEAD
+func (WaitReason) Body() WaitReason                 { return WaitReason{5, "Body"} }               // waiting to finish sending/receiving the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{6, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{7, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) Sorting() WaitReason              { return WaitReason{8, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason{9, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
+func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
+func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
+func (WaitReason) Cancelled() WaitReason            { return WaitReason{14, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
+
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -117,6 +118,9 @@ var uploadWaitReasons = []WaitReason{
 	// Chunks in this state are effectively a queue of work waiting to be sent over the network
 	EWaitReason.WorkerGR(),
 
+	// Waiting until the per-file pacer (if any applies to this upload) says we can proceed
+	EWaitReason.FilePacer(),
+
 	// This is the actual network activity
 	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
@@ -131,6 +135,9 @@ var downloadWaitReasons = []WaitReason{
 	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.
 	// Chunks in this state are effectively a queue of work, waiting for their network downloads to be initiated
 	EWaitReason.WorkerGR(),
+
+	// Waiting until the per-file pacer (if any applies to this download) says we can proceed
+	EWaitReason.FilePacer(),
 
 	// These next ones are the actual network activity
 	EWaitReason.HeaderResponse(),
@@ -202,7 +209,7 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.S2SCopyOnWire().index + 1 // assume this is the last wait reason
+	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
 }
 
 type chunkStatusCount struct {

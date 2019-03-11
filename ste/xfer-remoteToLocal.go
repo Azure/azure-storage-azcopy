@@ -70,7 +70,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
-		epilogueWithCleanupDownload(jptm, nil, false, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		epilogueWithCleanupDownload(jptm, dl, nil, false, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
 
@@ -89,7 +89,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
 		// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
-		epilogueWithCleanupDownload(jptm, nil, forceReleaseFileCount, nil)
+		epilogueWithCleanupDownload(jptm, dl, nil, forceReleaseFileCount, nil)
 	}
 	// block until we can safely use a file handle	// TODO: it might be nice if this happened inside chunkedFileWriter, when first chunk needs to be saved,
 	err := jptm.FileCountLimiter().WaitUntilAdd(jptm.Context(), 1, func() bool { return true })
@@ -150,9 +150,12 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		jptm.MD5ValidationOption(),
 		sourceMd5Exists)
 
-	// step 5c: tell jptm what to expect, and how to clean up at the end
+	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
+	dl.Prologue(jptm)
+
+	// step 5d: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dstFile, false, dstWriter) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dl, dstFile, false, dstWriter) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -197,7 +200,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	haveNonEmptyFile := activeDstFile != nil
@@ -230,6 +233,10 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile io.Writ
 		if forceReleaseFileCount {
 			jptm.FileCountLimiter().Remove(1) // special case, for we we failed after adding it to count, but before making an actual file
 		}
+	}
+
+	if dl != nil {
+		dl.Epilogue() // it can release resources here
 	}
 
 	// Preserve modified time

@@ -36,6 +36,14 @@ func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
 }
 
+func (bd *blobFSDownloader) Prologue(_ IJobPartTransferMgr) {
+	// noop
+}
+
+func (bd *blobFSDownloader) Epilogue() {
+	//noop
+}
+
 // Returns a chunk-func for ADLS gen2 downloads
 
 func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
