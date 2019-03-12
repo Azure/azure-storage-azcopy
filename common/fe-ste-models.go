@@ -667,8 +667,6 @@ type CopyTransfer struct {
 	// Properties for S2S blob copy
 	BlobType                    azblob.BlobType
 	BlobTier                    azblob.AccessTierType
-	S2SGetS3PropertiesInBackend bool
-	S2SSourceChangeValidation   bool
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -62,6 +62,9 @@ type CopyJobPartOrderRequest struct {
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
+
+	S2SGetS3PropertiesInBackend bool
+	S2SSourceChangeValidation   bool
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

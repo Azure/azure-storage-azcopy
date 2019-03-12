@@ -100,6 +100,10 @@ Copy an entire directory from S3 with access key to blob virtual directory with 
 Copy all buckets in S3 service with access key to blob account with SAS:
   - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
   - azcopy cp "https://s3.amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
+Copy all buckets in a S3 region with access key to blob account with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3-[region].amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 `
 
 // ===================================== ENV COMMAND ===================================== //

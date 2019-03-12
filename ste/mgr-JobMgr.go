@@ -233,6 +233,7 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 // It actually remembers the direction that our most recently-added job PART is running in,
 // because that's where the fromTo information can be found,
 // but we assume taht all the job parts are running in the same direction
+// TODO: Optimize this when it's necessary for delete.
 func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 	fromIsLocal := fromTo.From() == common.ELocation.Local()
 	toIsLocal := fromTo.To() == common.ELocation.Local()

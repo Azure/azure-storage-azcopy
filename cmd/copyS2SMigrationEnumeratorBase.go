@@ -41,6 +41,8 @@ func (e *copyS2SMigrationEnumeratorBase) initEnumeratorCommon(ctx context.Contex
 		return err
 	}
 
+	e.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
+
 	return nil
 }
 

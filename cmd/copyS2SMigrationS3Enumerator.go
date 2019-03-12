@@ -53,6 +53,8 @@ func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *
 		return err
 	}
 
+	e.S2SGetS3PropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetS3PropertiesInBackend
+
 	return
 }
 
@@ -79,7 +81,9 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				return err
 			}
 
-			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, false, cca); err != nil {
+			// Disable get properties in backend, as StatObject already get full properties.
+			e.S2SGetS3PropertiesInBackend = false
+			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, cca); err != nil {
 				return err
 			}
 
@@ -299,7 +303,6 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 			tmpS3URLPart.URL(),
 			urlExtension{URL: destBaseURL}.generateObjectPath(objectRelativePath),
 			&objectInfo,
-			cca.s2sPreserveProperties && cca.s2sGetS3PropertiesInBackend,
 			cca)
 	}
 
@@ -317,24 +320,22 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 	return nil
 }
 
-func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo, getS3PropertiesInBackend bool,
+func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo,
 	cca *cookedCopyCmdArgs) error {
 	oie := common.ObjectInfoExtension{ObjectInfo: *objectInfo}
 
 	copyTransfer := common.CopyTransfer{
-		Source:                      srcURL.String(),
-		Destination:                 gCopyUtil.stripSASFromBlobUrl(destURL).String(),
-		LastModifiedTime:            objectInfo.LastModified,
-		SourceSize:                  objectInfo.Size,
-		ContentType:                 objectInfo.ContentType,
-		ContentEncoding:             oie.ContentEncoding(),
-		ContentDisposition:          oie.ContentDisposition(),
-		ContentLanguage:             oie.ContentLanguage(),
-		CacheControl:                oie.CacheControl(),
-		ContentMD5:                  oie.ContentMD5(),
-		Metadata:                    oie.NewCommonMetadata(),
-		S2SGetS3PropertiesInBackend: getS3PropertiesInBackend,
-		S2SSourceChangeValidation:   cca.s2sSourceChangeValidation}
+		Source:             srcURL.String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(),
+		LastModifiedTime:   objectInfo.LastModified,
+		SourceSize:         objectInfo.Size,
+		ContentType:        objectInfo.ContentType,
+		ContentEncoding:    oie.ContentEncoding(),
+		ContentDisposition: oie.ContentDisposition(),
+		ContentLanguage:    oie.ContentLanguage(),
+		CacheControl:       oie.CacheControl(),
+		ContentMD5:         oie.ContentMD5(),
+		Metadata:           oie.NewCommonMetadata()}
 
 	return e.addTransfer(copyTransfer, cca)
 }

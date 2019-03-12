@@ -58,6 +58,11 @@ type JobPartPlanHeader struct {
 	DstBlobData           JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData          JobPartPlanDstLocal // Additional data for local destinations
 
+	// S2SGetS3PropertiesInBackend represents whether to enable get S3 objects properties during s2s copy in backend.
+	S2SGetS3PropertiesInBackend bool
+	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
+	S2SSourceChangeValidation bool
+
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
 
@@ -137,8 +142,8 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 	var err error
 	t := jpph.Transfer(transferIndex)
 
-	s2sGetS3PropertiesInBackend = t.S2SGetS3PropertiesInBackend
-	s2sSourceChangeValidation = t.S2SSourceChangeValidation
+	s2sGetS3PropertiesInBackend = jpph.S2SGetS3PropertiesInBackend
+	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 
@@ -252,11 +257,6 @@ type JobPartPlanTransfer struct {
 	SourceSize int64
 	// CompletionTime represents the time at which transfer was completed
 	CompletionTime uint64
-
-	// S2SGetS3PropertiesInBackend represents whether to enable get S3 objects properties during s2s copy in backend.
-	S2SGetS3PropertiesInBackend bool
-	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
-	S2SSourceChangeValidation bool
 
 	// For S2S copy, per Transfer source's properties
 	// TODO: ensure the length is enough

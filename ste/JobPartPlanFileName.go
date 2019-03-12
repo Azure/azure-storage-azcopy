@@ -165,7 +165,10 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption,
 		},
-		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
+		// For S2S copy, per JobPartPlan info
+		S2SGetS3PropertiesInBackend: order.S2SGetS3PropertiesInBackend,
+		S2SSourceChangeValidation:   order.S2SSourceChangeValidation,
+		atomicJobStatus:             common.EJobStatus.InProgress(), // We default to InProgress
 	}
 
 	// Copy any strings into their respective fields
@@ -211,9 +214,6 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			ModifiedTime:   order.Transfers[t].LastModifiedTime.UnixNano(),
 			SourceSize:     order.Transfers[t].SourceSize,
 			CompletionTime: 0,
-			// For S2S copy, per JobPartPlan info
-			S2SGetS3PropertiesInBackend: order.Transfers[t].S2SGetS3PropertiesInBackend,
-			S2SSourceChangeValidation:   order.Transfers[t].S2SSourceChangeValidation,
 			// For S2S copy, per Transfer source's properties
 			SrcContentTypeLength:        int16(len(order.Transfers[t].ContentType)),
 			SrcContentEncodingLength:    int16(len(order.Transfers[t].ContentEncoding)),

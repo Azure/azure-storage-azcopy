@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"bytes"
 	"context"
 	"net/url"
 
@@ -62,16 +63,43 @@ func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pip
 
 // Returns a chunk-func for blob copies
 func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
-	if chunkIsWholeFile {
-		if blockIndex > 0 {
-			panic("chunk cannot be whole file where there is more than one chunk")
-		}
+	if blockIndex == 0 && adjustedChunkSize == 0 {
 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
-		return c.generateSyncCopyBlob(id, adjustedChunkSize)
-	} else {
-		setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
-		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
+		return c.generateCreateEmptyBlob(id)
 	}
+
+	setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
+	return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
+}
+
+// Version with Sync CopyBlob
+// TODO: Consider to use sync version of copy blob from URL later.
+// func (c *urlToBlockBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
+// 	if chunkIsWholeFile {
+// 		if blockIndex > 0 {
+// 			panic("chunk cannot be whole file where there is more than one chunk")
+// 		}
+// 		setPutListNeed(&c.atomicPutListIndicator, putListNotNeeded)
+// 		return c.generateSyncCopyBlob(id, adjustedChunkSize)
+// 	} else {
+// 		setPutListNeed(&c.atomicPutListIndicator, putListNeeded)
+// 		return c.generatePutBlockFromURL(id, blockIndex, adjustedChunkSize)
+// 	}
+// }
+
+// generateCreateEmptyBlob generates a func to create empty blob in destination.
+// This could be replaced by sync version of copy blob from URL.
+func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkFunc {
+	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+		jptm := c.jptm
+
+		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+		// Create blob and finish.
+		if _, err := c.destBlockBlobURL.Upload(c.jptm.Context(), bytes.NewReader(nil), c.headersToApply, c.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
+			jptm.FailActiveSend("Creating empty blob", err)
+			return
+		}
+	})
 }
 
 // generateSyncCopyBlob generates a func to sync copy entire blob to destination.
