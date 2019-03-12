@@ -256,6 +256,7 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 		if !exists {
 			return nil //its not there yet. That's OK.
 		}
+		delete(unsavedChunksByFileOffset, *nextOffsetToSave)      // remove it
 		*nextOffsetToSave += int64(len(nextChunkInSequence.data)) // update immediately so we won't forget!
 
 		// Add it to the hash (must do so sequentially for MD5)
