@@ -107,7 +107,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 	// Do LMT verfication before transfer, when:
 	// 1) Source is local, so get source file's LMT is free.
 	// 2) Source is remote, i.e. S2S copy case. And source's size is larger than one chunk. So verification can possibly save transfer's cost.
-	if copier, isS2SCopier := srcInfoProvider.(s2sCopier); srcInfoProvider.IsLocal() ||
+	if copier, isS2SCopier := s.(s2sCopier); srcInfoProvider.IsLocal() ||
 		(isS2SCopier && info.S2SSourceChangeValidation && srcSize > int64(copier.ChunkSize())) {
 		lmt, err := srcInfoProvider.GetLastModifiedTime()
 		if err != nil {
@@ -116,7 +116,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 			jptm.ReportTransferDone()
 			return
 		}
-		if lmt != jptm.LastModifiedTime() {
+		if lmt.UTC() != jptm.LastModifiedTime().UTC() {
 			jptm.LogSendError(info.Source, info.Destination, "File modified since transfer scheduled", 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 			jptm.ReportTransferDone()
@@ -259,13 +259,13 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 // Complete epilogue. Handles both success and failure.
 func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
 	if jptm.TransferStatus() > 0 {
-		if _, isS2SCopier := sip.(s2sCopier); sip.IsLocal() || (isS2SCopier && jptm.Info().S2SSourceChangeValidation) {
+		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && jptm.Info().S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetLastModifiedTime()
 			if err != nil {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
 			}
-			if lmt != jptm.LastModifiedTime() {
+			if lmt.UTC() != jptm.LastModifiedTime().UTC() {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
 			}
 		}
