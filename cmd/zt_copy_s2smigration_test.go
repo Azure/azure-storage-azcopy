@@ -42,6 +42,7 @@ const (
 	defaultS2SPreserveAccessTier       = true
 	defaultS2SGetS3PropertiesInBackend = true
 	defaultS2SSourceChangeValidation   = true
+	debugMode                          = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
@@ -74,15 +75,38 @@ func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	verifier(err)
 }
 
-func validateS2SAccountTransfersAreScheduled(c *chk.C, expectedTransfers []string, mockedRPC interceptor) {
+func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+
+	if debugMode {
+		fmt.Println("expectedTransfers: ")
+		printTransfers(expectedTransfers)
+		fmt.Println("srcDirName: ", srcDirName)
+		fmt.Println("dstDirName: ", dstDirName)
+	}
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
+		if debugMode {
+			fmt.Println("transfer.Source: ", transfer.Source)
+			fmt.Println("transfer.Destination: ", transfer.Destination)
+		}
+
 		srcRelativeFilePath, _ := url.PathUnescape(transfer.Source)
 		dstRelativeFilePath, _ := url.PathUnescape(transfer.Destination)
+
+		unescapedSrcDir, _ := url.PathUnescape(srcDirName)
+		unescapedDstDir, _ := url.PathUnescape(dstDirName)
+
+		srcRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedSrcDir, "", 1)
+		dstRelativeFilePath = strings.Replace(srcRelativeFilePath, unescapedDstDir, "", 1)
+
+		if debugMode {
+			fmt.Println("srcRelativeFilePath: ", srcRelativeFilePath)
+			fmt.Println("dstRelativeFilePath: ", dstRelativeFilePath)
+		}
 
 		// the relative paths should be equal
 		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
@@ -90,6 +114,12 @@ func validateS2SAccountTransfersAreScheduled(c *chk.C, expectedTransfers []strin
 		// look up the transfer is expected
 		_, dstExist := lookupMap[dstRelativeFilePath]
 		c.Assert(dstExist, chk.Equals, true)
+	}
+}
+
+func printTransfers(ts []string) {
+	for _, t := range ts {
+		fmt.Println(t)
 	}
 }
 
@@ -125,13 +155,21 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
 
+		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
 		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
 		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
 		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
 		defer deleteContainer(c, containerURL)
 
-		validateS2SCopyTransfersAreScheduled(c, rawSrcS3BucketURL.String(), containerURL.String(), objectList, mockedRPC)
+		// Check correct entry are scheduled.
+		// Example:
+		// sourceURL pass to azcopy:  https://s3.amazonaws.com/invalid---bucketname.for---azures2scopyfroms3toblobwithbucketna
+		// destURL pass to azcopy:  https://jiacstgcanary01.blob.core.windows.net
+		// transfer.Source by design be scheduled:  /tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
+		// transfer.Destination by design be scheduled:  /invalid-3-bucketname-for-3-azures2scopyfroms3toblobwithbucketna/tops3objects2scopyfroms3toblobwithbucketnameneedberesolved4243293354900
+		// Nothing should be replaced during matching for source, and resolved bucket name should be replaced for destination.
+		validateS2STransfersAreScheduled(c, "", common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
 }
 
@@ -170,13 +208,21 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(objectList))
 
+		// Check container with resolved name has been created
 		resolvedBucketName := strings.Replace(bucketName, invalidPrefix, resolvedPrefix, 1)
 		blobServiceURL := scenarioHelper{}.getBlobServiceURL(c)
 		containerURL := blobServiceURL.NewContainerURL(resolvedBucketName)
 		c.Assert(scenarioHelper{}.containerExists(containerURL), chk.Equals, true)
 		defer deleteContainer(c, containerURL)
 
-		validateS2SCopyTransfersAreScheduled(c, rawSrcS3BucketURL.String(), containerURL.String(), objectList, mockedRPC)
+		// Check correct entry are scheduled.
+		// Example:
+		// sourceURL pass to azcopy:  https://s3.amazonaws.com/invalid*s2scopyfroms3toblobwithwildcardi
+		// destURL pass to azcopy:  https://jiacstgcanary01.blob.core.windows.net
+		// transfer.Source by design be scheduled:  /invalid----bucketname.for-azures2scopyfroms3toblobwithwildcardi/sub1/sub3/sub5/s3objects2scopyfroms3toblobwithwildcardinsrcandbucketnameneedberesolved435110281300
+		// transfer.Destination by design be scheduled:  /invalid-4-bucketname-for-azures2scopyfroms3toblobwithwildcardi/sub1/sub3/sub5/s3objects2scopyfroms3toblobwithwildcardinsrcandbucketnameneedberesolved435110281300
+		// org bucket name should be replaced during matching for source, and resolved bucket name should be replaced for destination.
+		validateS2STransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING+bucketName, common.AZCOPY_PATH_SEPARATOR_STRING+resolvedBucketName, objectList, mockedRPC)
 	})
 }
 
@@ -210,7 +256,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
-		// TODO: possibly check detailed error messages
+		c.Assert(strings.Contains(err.Error(), "the source bucket has invalid name for Azure"), chk.Equals, true)
 	})
 }
 
@@ -246,14 +292,15 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c 
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
-
-		containerURL := scenarioHelper{}.getContainerURL(c, dstContainerName)
-		// Note: for copy if recursive is turned on, source dir will be created in destination, so use bucket URL as base for comparison.
-		validateS2SCopyTransfersAreScheduled(c, rawSrcS3BucketURL.String(), containerURL.String(), objectList, mockedRPC)
+		// common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+		// The destination is URL encoded, as go's URL method do the encoding.
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/space%20dir/space%20object")
 	})
 }
 
 // Copy from virtual directory to container, with special encoding ' ' to '+' by S3 management portal.
+// '+' is handled in copy.go before extract the SourceRoot.
+// The scheduled transfer would be URL encoded no matter what's the raw source/destination provided by user.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
@@ -285,10 +332,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus
 
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
-
-		containerURL := scenarioHelper{}.getContainerURL(c, dstContainerName)
-		// Note: for copy if recursive is turned on, source dir will be created in destination, so use bucket URL as base for comparison.
-		validateS2SCopyTransfersAreScheduled(c, rawSrcS3BucketURL.String(), containerURL.String(), objectList, mockedRPC)
+		// common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
+		// The destination is URL encoded, as go's URL method do the encoding.
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/space%20dir/space%20object")
 	})
 }
 
@@ -307,7 +353,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 	objectList := []string{"fileConsiderdAsDirectory/", "file", "sub1/file"}
 	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
 
-	validateObjectList := []string{"file", "sub1/file"}
+	validateObjectList := []string{"/file", "/sub1/file"} // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -326,8 +372,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(validateObjectList))
 
-		containerURL := scenarioHelper{}.getContainerURL(c, dstContainerName)
-		validateS2SCopyTransfersAreScheduled(c, rawSrcS3BucketURL.String(), containerURL.String(), validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(c, "", "", validateObjectList, mockedRPC)
 	})
 }
 
@@ -370,7 +415,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		validateS2SAccountTransfersAreScheduled(c, validateObjectList, mockedRPC)
+		validateS2STransfersAreScheduled(c, "", "", validateObjectList, mockedRPC)
 	})
 }
 
@@ -411,7 +456,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		validateS2SAccountTransfersAreScheduled(c, objectList2, mockedRPC)
+		validateS2STransfersAreScheduled(c, "", "", objectList2, mockedRPC)
 	})
 }
 
@@ -444,8 +489,8 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTie
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		validateS2SCopyTransfersAreScheduled(c,
-			srcContainerURL.String(), dstContainerURL.String(), []string{blobName}, mockedRPC)
+		validateS2STransfersAreScheduled(c,
+			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierCool)
 	})
@@ -481,8 +526,8 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		validateS2SCopyTransfersAreScheduled(c,
-			srcContainerURL.String(), dstContainerURL.String(), []string{blobName}, mockedRPC)
+		validateS2STransfersAreScheduled(c,
+			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierNone)
 	})

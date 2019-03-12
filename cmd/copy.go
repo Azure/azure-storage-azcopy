@@ -674,6 +674,21 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 
+	case common.ELocation.S3():
+		fromURL, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromURL.String(), err.Error())
+		}
+
+		// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
+		// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
+		*fromURL = common.URLExtension{URL: *fromURL}.URLWithPlusDecodedInPath()
+		cca.source = fromURL.String()
+
+		// set the clean source root
+		fromURL.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fromURL.Path)
+		jobPartOrder.SourceRoot = fromURL.String()
+
 	default:
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 	}

@@ -27,9 +27,6 @@ func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *
 		return err
 	}
 
-	// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
-	// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
-	*e.sourceURL = common.URLExtension{URL: *e.sourceURL}.URLWithPlusDecodedInPath()
 	e.destURL = gCopyUtil.appendQueryParamToUrl(e.destURL, cca.destinationSAS)
 
 	// Check whether the source URL is a valid S3 URL, and parse URL parts.

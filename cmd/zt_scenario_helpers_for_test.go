@@ -188,16 +188,20 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 		objectName4 := createNewObject(c, client, bucketName, prefix+"sub1/sub3/sub5/")
 		objectName5 := createNewObject(c, client, bucketName, prefix+specialNames[i])
 
+		// Note: common.AZCOPY_PATH_SEPARATOR_STRING is added before bucket or objectName, as in the change minimize JobPartPlan file size,
+		// transfer.Source & transfer.Destination(after trimed the SourceRoot and DestinationRoot) are with AZCOPY_PATH_SEPARATOR_STRING suffix,
+		// when user provided source & destination are without / suffix, which is the case for scenarioHelper generated URL.
+
 		bucketPath := ""
 		if returnObjectListWithBucketName {
-			bucketPath = common.AZCOPY_PATH_SEPARATOR_STRING + bucketName + common.AZCOPY_PATH_SEPARATOR_STRING
+			bucketPath = common.AZCOPY_PATH_SEPARATOR_STRING + bucketName
 		}
 
-		objectList[5*i] = bucketPath + objectName1
-		objectList[5*i+1] = bucketPath + objectName2
-		objectList[5*i+2] = bucketPath + objectName3
-		objectList[5*i+3] = bucketPath + objectName4
-		objectList[5*i+4] = bucketPath + objectName5
+		objectList[5*i] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName1
+		objectList[5*i+1] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName2
+		objectList[5*i+2] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName3
+		objectList[5*i+3] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName4
+		objectList[5*i+4] = bucketPath + common.AZCOPY_PATH_SEPARATOR_STRING + objectName5
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -308,10 +312,6 @@ func validateUploadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName
 
 func validateDownloadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
 	validateTransfersAreScheduled(c, srcDirName, true, dstDirName, false, expectedTransfers, mockedRPC)
-}
-
-func validateS2SCopyTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
-	validateTransfersAreScheduled(c, srcDirName, true, dstDirName, true, expectedTransfers, mockedRPC)
 }
 
 func validateTransfersAreScheduled(c *chk.C, srcDirName string, isSrcEncoded bool, dstDirName string, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
