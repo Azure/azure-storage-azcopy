@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"fmt"
 	"net/url"
 	"time"
 
@@ -98,8 +99,6 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 			return nil, err
 		}
 		oie := common.ObjectInfoExtension{ObjectInfo: objectInfo}
-		metadata := oie.NewCommonMetadata()
-		resolvedMetadata, _ := metadata.ResolveInvalidKey() // TODO: ensure how to handle invalid key
 
 		srcProperties = SrcProperties{
 			SrcHTTPHeaders: common.ResourceHTTPHeaders{
@@ -110,11 +109,47 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 				CacheControl:       oie.CacheControl(),
 				ContentMD5:         oie.ContentMD5(),
 			},
-			SrcMetadata: resolvedMetadata,
+			SrcMetadata: oie.NewCommonMetadata(),
 		}
 	}
 
+	// Handle invalid metadata
+	resolvedMetadata, err := p.handleInvalidMetadataKey(srcProperties.SrcMetadata)
+	if err != nil {
+		return nil, err
+	}
+	srcProperties.SrcMetadata = resolvedMetadata
+
 	return &srcProperties, nil
+}
+
+// handleInvalidMetadataKey handles invalid metadata for S3 source.
+func (p *s3SourceInfoProvider) handleInvalidMetadataKey(m common.Metadata) (common.Metadata, error) {
+	if m == nil {
+		return m, nil
+	}
+
+	switch p.transferInfo.S2SInvalidMetadataHandleOption {
+	case common.EInvalidMetadataHandleOption.ExcludeIfInvalid():
+		reservedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
+		if invalidKeyExists && p.jptm.ShouldLog(pipeline.LogWarning) {
+			p.jptm.Log(pipeline.LogWarning,
+				fmt.Sprintf("METADATAWARNING: For source %q, invaild metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
+		}
+		return reservedMetadata, nil
+
+	case common.EInvalidMetadataHandleOption.FailIfInvalid():
+		_, invalidMetdata, invalidKeyExists := m.ExcludeInvalidKey()
+		if invalidKeyExists {
+			return nil, fmt.Errorf("metadata with keys %s in source is invalid", invalidMetdata.ConcatenatedKeys())
+		}
+		return m, nil
+
+	case common.EInvalidMetadataHandleOption.RenameIfInvalid():
+		return m.ResolveInvalidKey()
+	}
+
+	return m, nil
 }
 
 func (p *s3SourceInfoProvider) SourceSize() int64 {

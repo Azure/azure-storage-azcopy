@@ -89,7 +89,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     def test_copy_file_from_blob_container_to_blob_container_propertyandmetadata(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadataself(
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
             src_container_url, 
             "Blob", 
             dst_container_url, 
@@ -193,7 +193,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     def test_copy_file_from_file_share_to_blob_container_propertyandmetadata(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadataself(
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
             src_share_url, 
             "File", 
             dst_container_url, 
@@ -202,7 +202,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     def test_copy_file_from_file_share_to_blob_container_no_preserve_propertyandmetadata(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadataself(
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
             src_share_url, 
             "File", 
             dst_container_url, 
@@ -321,7 +321,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     def test_copy_file_from_s3_bucket_to_blob_container_propertyandmetadata(self):
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadataself(
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
             src_bucket_url, 
             "S3", 
             dst_container_url, 
@@ -330,7 +330,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     def test_copy_file_from_s3_bucket_to_blob_container_no_preserve_propertyandmetadata(self):
         src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadataself(
+        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
             src_bucket_url, 
             "S3", 
             dst_container_url, 
@@ -370,6 +370,74 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             1,
             False,
             "%252F") #encoded name for %2F, as path will be decoded
+
+    def test_copy_single_file_from_s3_to_blob_excludeinvalidmetadata(self):
+        self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
+            "", # By default it should be ExcludeIfInvalid
+            "1abc=jiac;$%^=width;description=test file",
+            "description=test file"
+        )
+
+    def test_copy_single_file_from_s3_to_blob_renameinvalidmetadata(self):
+        self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
+            "RenameIfInvalid", # By default it should be ExcludeIfInvalid
+            "1abc=jiac;$%^=width;description=test file",
+            "rename_1abc=jiac;rename_key_1abc=1abc;description=test file;rename____=width;rename_key____=$%^"
+        )
+
+    # Test invalid metadata handling
+    def util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
+        self, 
+        invalidMetadataHandleOption,
+        srcS3Metadata, 
+        expectResolvedMetadata):
+        srcBucketURL = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+        dstBucketURL = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+        srcType = "S3"
+
+        # create bucket and create file with metadata and properties
+        result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
+            add_flags("resourceType", "Bucket").execute_azcopy_create()
+        self.assertTrue(result)
+
+        fileName = "test_copy_single_file_from_s3_to_blob_handleinvalidmetadata_%s" % invalidMetadataHandleOption
+
+        srcFileURL = util.get_object_without_sas(srcBucketURL, fileName)
+
+        dstFileURL = util.get_object_sas(dstBucketURL, fileName)
+        result = util.Command("create").add_arguments(srcFileURL).add_flags("serviceType", srcType). \
+            add_flags("resourceType", "SingleFile"). \
+            add_flags("metadata", srcS3Metadata). \
+            execute_azcopy_create()
+        self.assertTrue(result)
+
+        # Copy file using azcopy from srcURL to destURL
+        cpCmd = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
+            add_flags("log-level", "info")
+        if invalidMetadataHandleOption == "" or invalidMetadataHandleOption == "ExcludeIfInvalid":
+            cpCmd.add_flags("s2s-invalid-metadata-handle", "ExcludeIfInvalid")
+        if invalidMetadataHandleOption == "FailIfInvalid":
+            cpCmd.add_flags("s2s-invalid-metadata-handle", "FailIfInvalid")
+        if invalidMetadataHandleOption == "RenameIfInvalid":
+            cpCmd.add_flags("s2s-invalid-metadata-handle", "RenameIfInvalid")
+
+        result = cpCmd.execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # Downloading the copied file for validation
+        validate_dir_name = "validate_copy_single_file_from_s3_to_blob_handleinvalidmetadata_%s" % invalidMetadataHandleOption
+        local_validate_dest_dir = util.create_test_dir(validate_dir_name)
+        local_validate_dest = local_validate_dest_dir + fileName
+        result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
+            add_flags("log-level", "info").execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        validateCmd = util.Command("testBlob").add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true"). \
+            add_flags("metadata", expectResolvedMetadata)
+
+        result = validateCmd.execute_azcopy_verify()
+        self.assertTrue(result)
+
 
     # Test oauth support for service to service copy, where source is authenticated with access key for S3
     # and destination is authenticated with OAuth token.
@@ -911,7 +979,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         result = validateCmd.execute_azcopy_verify()
         self.assertTrue(result)
 
-    def util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadataself(
+    def util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
         self,
         srcBucketURL,
         srcType,

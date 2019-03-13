@@ -89,3 +89,87 @@ func (s *feSteModelsTestSuite) TestIsJobDone(c *chk.C) {
 	status = status.Failed()
 	c.Assert(status.IsJobDone(), chk.Equals, true)
 }
+
+func getInvalidMetadataSample() common.Metadata {
+	m := make(map[string]string)
+
+	// number could not be first char for azure metadata key.
+	m["1abc"] = "v:1abc"
+
+	// special char
+	m["a!@#"] = "v:a!@#"
+	m["a-metadata-samplE"] = "v:a-metadata-samplE"
+
+	// valid metadata
+	m["abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_"] = "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_"
+	m["Am"] = "v:Am"
+	m["_123"] = "v:_123"
+
+	return m
+}
+
+func getValidMetadataSample() common.Metadata {
+	m := make(map[string]string)
+	m["Key"] = "value"
+
+	return m
+}
+
+func validateMapEqual(c *chk.C, m1 map[string]string, m2 map[string]string) {
+	c.Assert(len(m1), chk.Equals, len(m2))
+
+	for k1, v1 := range m1 {
+		c.Assert(m2[k1], chk.Equals, v1)
+	}
+}
+
+func (s *feSteModelsTestSuite) TestMetadataExcludeInvalidKey(c *chk.C) {
+	mInvalid := getInvalidMetadataSample()
+	mValid := getValidMetadataSample()
+
+	reservedMetadata, excludedMetadata, invalidKeyExists := mInvalid.ExcludeInvalidKey()
+	c.Assert(invalidKeyExists, chk.Equals, true)
+	validateMapEqual(c, reservedMetadata,
+		map[string]string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_": "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_",
+			"Am": "v:Am", "_123": "v:_123"})
+	validateMapEqual(c, excludedMetadata,
+		map[string]string{"1abc": "v:1abc", "a!@#": "v:a!@#", "a-metadata-samplE": "v:a-metadata-samplE"})
+
+	reservedMetadata, excludedMetadata, invalidKeyExists = mValid.ExcludeInvalidKey()
+	c.Assert(invalidKeyExists, chk.Equals, false)
+	validateMapEqual(c, reservedMetadata, map[string]string{"Key": "value"})
+	c.Assert(len(excludedMetadata), chk.Equals, 0)
+	c.Assert(reservedMetadata.ConcatenatedKeys(), chk.Equals, "'Key' ")
+}
+
+func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKey(c *chk.C) {
+	mInvalid := getInvalidMetadataSample()
+	mValid := getValidMetadataSample()
+
+	resolvedMetadata, err := mInvalid.ResolveInvalidKey()
+	c.Assert(err, chk.IsNil)
+	validateMapEqual(c, resolvedMetadata,
+		map[string]string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_": "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_",
+			"Am": "v:Am", "_123": "v:_123", "rename_1abc": "v:1abc", "rename_key_1abc": "1abc", "rename_a___": "v:a!@#", "rename_key_a___": "a!@#",
+			"rename_a_metadata_samplE": "v:a-metadata-samplE", "rename_key_a_metadata_samplE": "a-metadata-samplE"})
+
+	resolvedMetadata, err = mValid.ResolveInvalidKey()
+	c.Assert(err, chk.IsNil)
+	validateMapEqual(c, resolvedMetadata, map[string]string{"Key": "value"})
+}
+
+// In this phase we keep the resolve logic easy, and whenever there is key resolving collision found, error reported.
+func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKeyNegative(c *chk.C) {
+	mNegative1 := common.Metadata(map[string]string{"!": "!", "*": "*"})
+	mNegative2 := common.Metadata(map[string]string{"!": "!", "rename__": "rename__"})
+	mNegative3 := common.Metadata(map[string]string{"!": "!", "rename_key__": "rename_key__"})
+
+	_, err := mNegative1.ResolveInvalidKey()
+	c.Assert(err, chk.NotNil)
+
+	_, err = mNegative2.ResolveInvalidKey()
+	c.Assert(err, chk.NotNil)
+
+	_, err = mNegative3.ResolveInvalidKey()
+	c.Assert(err, chk.NotNil)
+}

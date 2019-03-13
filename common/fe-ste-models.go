@@ -21,9 +21,11 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"reflect"
+	"regexp"
 	"sync/atomic"
 	"time"
 
@@ -639,6 +641,53 @@ func (hvo *HashValidationOption) UnmarshalJSON(b []byte) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EInvalidMetadataHandleOption = InvalidMetadataHandleOption(0)
+
+var DefaultInvalidMetadataHandleOption = EInvalidMetadataHandleOption.ExcludeIfInvalid()
+
+type InvalidMetadataHandleOption uint8
+
+// ExcludeIfInvalid indicates whenever invalid metadata key is found, exclude the specific metadata with WARNING logged.
+func (InvalidMetadataHandleOption) ExcludeIfInvalid() InvalidMetadataHandleOption {
+	return InvalidMetadataHandleOption(0)
+}
+
+// FailIfInvalid indicates whenever invalid metadata key is found, directly fail the transfer.
+func (InvalidMetadataHandleOption) FailIfInvalid() InvalidMetadataHandleOption {
+	return InvalidMetadataHandleOption(1)
+}
+
+// RenameIfInvalid indicates whenever invalid metadata key is found, rename the metadata key and save the metadata with renamed key.
+func (InvalidMetadataHandleOption) RenameIfInvalid() InvalidMetadataHandleOption {
+	return InvalidMetadataHandleOption(2)
+}
+
+func (i InvalidMetadataHandleOption) String() string {
+	return enum.StringInt(i, reflect.TypeOf(i))
+}
+
+func (i *InvalidMetadataHandleOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(i), s, true, true)
+	if err == nil {
+		*i = val.(InvalidMetadataHandleOption)
+	}
+	return err
+}
+
+func (i InvalidMetadataHandleOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(i.String())
+}
+
+func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return i.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
@@ -665,8 +714,8 @@ type CopyTransfer struct {
 	Metadata           Metadata
 
 	// Properties for S2S blob copy
-	BlobType                    azblob.BlobType
-	BlobTier                    azblob.AccessTierType
+	BlobType azblob.BlobType
+	BlobTier azblob.AccessTierType
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -717,7 +766,6 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	return result, nil
 }
 
-// TODO: invalid Metadata handling discussion is ongoing, and need be further optimized later.
 func isValidMetadataKey(key string) bool {
 	for i := 0; i < len(key); i++ {
 		if i != 0 { // Most of case i != 0
@@ -750,31 +798,76 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 	return false
 }
 
-const metadataKeyRenameHeader = "rename_"
-
-// var metadataRegExp = regexp.MustCompile("\\W")
-
-func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, isValid bool) {
-	if m == nil {
-		return
-	}
-
-	resolvedMetadata = make(map[string]string)
-	isValid = true
+func (m Metadata) ExcludeInvalidKey() (reservedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
+	reservedMetadata = make(map[string]string)
+	excludedMetadata = make(map[string]string)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
-			resolvedMetadata[k] = v
+			reservedMetadata[k] = v
+		} else {
+			invalidKeyExists = true
+			excludedMetadata[k] = v
 		}
-		// else {
-		// 	isValid = false
-		// 	validKey := metadataRegExp.ReplaceAllString(k, "_")
-		// 	validKey = metadataKeyRenameHeader + validKey
-		// 	resolvedMetadata[validKey] = v
-		// }
-
 	}
 
-	return resolvedMetadata, isValid
+	return
+}
+
+const metadataRenamedKeyPrefix = "rename_"
+const metadataKeyForRenamedOriginalKeyPrefix = "rename_key_"
+
+var metadataRegExp = regexp.MustCompile("\\W")
+var metadataKeyRenameErrStr = "fail to rename invalid metadata key %q"
+
+// ResolveInvalidKey resolves invalid metadata key with following steps:
+// 1. replace all invalid char(i.e. ASCII chars expect [0-9A-Za-z_]) with '_'
+// 2. add 'rename_' as prefix for the new valid key, this key will be used to save original metadata's value.
+// 3. add 'rename_key_' as prefix for the new valid key, this key will be used to save original metadata's invalid key.
+// Example, given invalid metadata for Azure: '123-invalid':'content', it will be resolved as two new k:v pairs:
+// 'rename_123_invalid':'content'
+// 'rename_key_123_invalid':'123-invalid'
+// So user can try to recover the metadata in Azure side.
+// Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
+// This can be further improved once any user feedback get.
+func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
+	resolvedMetadata = make(map[string]string)
+
+	hasCollision := func(name string) bool {
+		_, hasCollisionToOrgNames := m[name]
+		_, hasCollisionToNewNames := resolvedMetadata[name]
+
+		return hasCollisionToOrgNames || hasCollisionToNewNames
+	}
+
+	for k, v := range m {
+		if !isValidMetadataKey(k) {
+			validKey := metadataRegExp.ReplaceAllString(k, "_")
+			renamedKey := metadataRenamedKeyPrefix + validKey
+			keyForRenamedOriginalKey := metadataKeyForRenamedOriginalKeyPrefix + validKey
+			if hasCollision(renamedKey) || hasCollision(keyForRenamedOriginalKey) {
+				return nil, fmt.Errorf(metadataKeyRenameErrStr, k)
+			}
+
+			resolvedMetadata[renamedKey] = v
+			resolvedMetadata[keyForRenamedOriginalKey] = k
+		} else {
+			resolvedMetadata[k] = v
+		}
+	}
+
+	return resolvedMetadata, nil
+}
+
+func (m Metadata) ConcatenatedKeys() string {
+	buf := bytes.Buffer{}
+
+	for k := range m {
+		buf.WriteString("'")
+		buf.WriteString(k)
+		buf.WriteString("' ")
+	}
+
+	return buf.String()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

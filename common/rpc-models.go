@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 var ERpcCmd = RpcCmd("")
@@ -52,7 +52,7 @@ type CopyJobPartOrderRequest struct {
 	Exclude     map[string]int
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
-	SourceRoot string
+	SourceRoot      string
 	DestinationRoot string
 	Transfers       []CopyTransfer
 	LogLevel        LogLevel
@@ -63,8 +63,9 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string
 	CredentialInfo CredentialInfo
 
-	S2SGetS3PropertiesInBackend bool
-	S2SSourceChangeValidation   bool
+	S2SGetS3PropertiesInBackend    bool
+	S2SSourceChangeValidation      bool
+	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,

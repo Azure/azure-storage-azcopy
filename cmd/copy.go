@@ -110,6 +110,8 @@ type rawCopyCmdArgs struct {
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
+	// specify how user wants to handle invalid metadata.
+	s2sInvalidMetadataHandleOption string
 }
 
 // validates and transform raw input into cooked input
@@ -358,6 +360,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
 	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
+	err = cooked.s2sInvalidMetadataHandleOption.Parse(raw.s2sInvalidMetadataHandleOption)
+	if err != nil {
+		return cooked, err
+	}
+
 	return cooked, nil
 }
 
@@ -439,6 +446,8 @@ type cookedCopyCmdArgs struct {
 	// whether user wants to check if source has changed after enumerating, the default value is true.
 	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
 	s2sSourceChangeValidation bool
+	// specify how user wants to handle invalid metadata.
+	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1060,6 +1069,7 @@ func init() {
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-source-change-validation", true, "check if source has changed after enumerating. "+
 		"For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs. ")
+	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-invalid-metadata-handle", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
 
 	// s2sGetS3PropertiesInBackend is an optional flag for controlling whether S3 object's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).

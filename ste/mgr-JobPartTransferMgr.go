@@ -78,8 +78,9 @@ type TransferInfo struct {
 
 	// Transfer info for S2S copy
 	SrcProperties
-	S2SGetS3PropertiesInBackend bool
-	S2SSourceChangeValidation   bool
+	S2SGetS3PropertiesInBackend    bool
+	S2SSourceChangeValidation      bool
+	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Blob
 	S2SSrcBlobType azblob.BlobType
@@ -146,7 +147,8 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetS3PropertiesInBackend, s2sSourceChangeValidation := plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetS3PropertiesInBackend, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
+		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
 	// it means the destination is remote url and destination SAS
@@ -197,12 +199,13 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	blockSize = common.Iffuint32(blockSize > common.MaxBlockBlobBlockSize, common.MaxBlockBlobBlockSize, blockSize)
 
 	return TransferInfo{
-		BlockSize:                   blockSize,
-		Source:                      src,
-		SourceSize:                  sourceSize,
-		Destination:                 dst,
-		S2SGetS3PropertiesInBackend: s2sGetS3PropertiesInBackend,
-		S2SSourceChangeValidation:   s2sSourceChangeValidation,
+		BlockSize:                      blockSize,
+		Source:                         src,
+		SourceSize:                     sourceSize,
+		Destination:                    dst,
+		S2SGetS3PropertiesInBackend:    s2sGetS3PropertiesInBackend,
+		S2SSourceChangeValidation:      s2sSourceChangeValidation,
+		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,

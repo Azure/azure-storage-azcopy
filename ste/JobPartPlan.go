@@ -62,6 +62,8 @@ type JobPartPlanHeader struct {
 	S2SGetS3PropertiesInBackend bool
 	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
 	S2SSourceChangeValidation bool
+	// S2SInvalidMetadataHandleOption represents how user wants to handle invalid metadata.
+	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
@@ -138,12 +140,14 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType, s2sGetS3PropertiesInBackend bool, s2sSourceChangeValidation bool) {
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
+	s2sGetS3PropertiesInBackend bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
 	var err error
 	t := jpph.Transfer(transferIndex)
 
 	s2sGetS3PropertiesInBackend = jpph.S2SGetS3PropertiesInBackend
 	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
+	s2sInvalidMetadataHandleOption = jpph.S2SInvalidMetadataHandleOption
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 

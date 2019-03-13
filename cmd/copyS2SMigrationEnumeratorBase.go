@@ -42,6 +42,7 @@ func (e *copyS2SMigrationEnumeratorBase) initEnumeratorCommon(ctx context.Contex
 	}
 
 	e.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
+	e.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 
 	return nil
 }
