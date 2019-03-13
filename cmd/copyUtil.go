@@ -827,11 +827,11 @@ func (parts blobURLPartsExtension) getServiceURL() url.URL {
 	return parts.URL()
 }
 
-func (parts blobURLPartsExtension) ifCouldBeContainerURL() bool {
+func (parts blobURLPartsExtension) isContainerSyntactically() bool {
 	return parts.Host != "" && parts.ContainerName != "" && parts.BlobName == ""
 }
 
-func (parts blobURLPartsExtension) ifCouldBeServiceURL() bool {
+func (parts blobURLPartsExtension) isServiceSyntactically() bool {
 	return parts.Host != "" && parts.ContainerName == "" && parts.BlobName == ""
 }
 

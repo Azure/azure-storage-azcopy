@@ -76,16 +76,16 @@ Download a set of files with a SAS using wildcards:
 Download files and directories with a SAS using wildcards:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
 
-Copy a single blob with SAS to blob with SAS:
+Copy a single blob with SAS to another blob with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy a single blob with SAS to blob with OAuth token. Please use 'azcopy login' command first if you aren't logged in yet. Note that the OAuth token is used to access the destination storage account:
+Copy a single blob with SAS to another blob with OAuth token. Please use 'azcopy login' command first if you aren't logged in yet. Note that the OAuth token is used to access the destination storage account:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
 
-Copy an entire directory from blob virtual directory with SAS to blob virtual directory with SAS:
+Copy an entire directory from blob virtual directory with SAS to another blob virtual directory with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Copy an entire account data from blob account with SAS to blob account with SAS:
+Copy an entire account data from blob account with SAS to another blob account with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
 Copy a single object from S3 with access key to blob with SAS:

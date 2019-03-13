@@ -77,13 +77,28 @@ func (e *copyS2SMigrationEnumeratorBase) createDestBucket(ctx context.Context, d
 		// Create the container, in case of it doesn't exist.
 		_, err := containerURL.Create(ctx, metadata.ToAzBlobMetadata(), azblob.PublicAccessNone)
 		if err != nil {
-			// Skip the error, when container already exists, or hasn't permission to create container(container might already exists).
-			if stgErr, ok := err.(azblob.StorageError); !ok ||
-				(stgErr.ServiceCode() != azblob.ServiceCodeContainerAlreadyExists &&
-					stgErr.Response().StatusCode != http.StatusForbidden) {
-				return fmt.Errorf("fail to create container, %v", err)
+			// Skip the error, when container already exists.
+			stgErr, isStgErr := err.(azblob.StorageError)
+			if isStgErr && stgErr.ServiceCode() == azblob.ServiceCodeContainerAlreadyExists {
+				return nil
 			}
-			// the case error is container already exists
+
+			// Skip the error, when azcopy doesn't have permission to create container, and fail to get the info whether container exists.
+			// As when it's destination with WRITE only permission, azcopy should try to suppose container already exists and continue transfer.
+			if isStgErr && stgErr.Response().StatusCode == http.StatusForbidden { // In this case, we don't know if the container already exists.
+				if _, getErr := containerURL.GetProperties(ctx, azblob.LeaseAccessConditions{}); getErr == nil {
+					// The container already exists, ignore the create error
+					return nil
+				} else {
+					// Cannot get the info whether container exists.
+					stgErr, isStgErr := getErr.(azblob.StorageError)
+					if !isStgErr || stgErr.Response().StatusCode != http.StatusNotFound {
+						return nil
+					}
+				}
+			}
+
+			return fmt.Errorf("fail to create container, %v", err)
 		}
 	default:
 		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
@@ -110,23 +125,23 @@ func (e *copyS2SMigrationEnumeratorBase) validateDestIsService(ctx context.Conte
 	return nil
 }
 
-// ifDestCouldBeService check if destination could be a service level URL through URL parsing.
-func (e *copyS2SMigrationEnumeratorBase) ifDestCouldBeService() bool {
+// isDestServiceSyntactically check if destination could be a service level URL through URL parsing.
+func (e *copyS2SMigrationEnumeratorBase) isDestServiceSyntactically() bool {
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		dsue := blobURLPartsExtension{BlobURLParts: azblob.NewBlobURLParts(*e.destURL)}
-		return dsue.ifCouldBeServiceURL()
+		return dsue.isServiceSyntactically()
 	default:
 		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}
 }
 
-// ifDestCouldBeService check if destination could be a bucket/container/share level URL through URL parsing.
-func (e *copyS2SMigrationEnumeratorBase) ifDestCouldBeBucket() bool {
+// isDestServiceSyntactically check if destination could be a bucket/container/share level URL through URL parsing.
+func (e *copyS2SMigrationEnumeratorBase) isDestBucketSyntactically() bool {
 	switch e.FromTo {
 	case common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		dsue := blobURLPartsExtension{BlobURLParts: azblob.NewBlobURLParts(*e.destURL)}
-		return dsue.ifCouldBeContainerURL()
+		return dsue.isContainerSyntactically()
 	default:
 		panic(fmt.Errorf("invalid from-to pair, %v", e.FromTo))
 	}

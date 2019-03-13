@@ -58,7 +58,7 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Verify if source is a single file
 	// Note: Currently only support single to single, and not support single to directory.
 	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.ifDestCouldBeBucket() || e.ifDestCouldBeService() {
+		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
 			return errors.New("invalid source and destination combination for service to service copy: " +
 				"destination must point to a single file, when source is a single file")
 		}
