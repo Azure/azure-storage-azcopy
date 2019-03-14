@@ -259,11 +259,8 @@ func (w *chunkedFileWriter) sequentiallyProcessAvailableChunks(unsavedChunksByFi
 		delete(unsavedChunksByFileOffset, *nextOffsetToSave)      // remove it
 		*nextOffsetToSave += int64(len(nextChunkInSequence.data)) // update immediately so we won't forget!
 
-		// Add it to the hash (must do so sequentially for MD5)
-		md5Hasher.Write(nextChunkInSequence.data)
-
-		// Save it
-		err := w.saveOneChunk(nextChunkInSequence)
+		// Save it (hashing exactly what we save)
+		err := w.saveOneChunk(nextChunkInSequence, md5Hasher)
 		if err != nil {
 			return err
 		}
@@ -284,7 +281,7 @@ func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksB
 }
 
 // Saves one chunk to its destination
-func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
+func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk, md5Hasher hash.Hash) error {
 	defer func() {
 		w.cacheLimiter.Remove(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
@@ -292,11 +289,22 @@ func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 		w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
 	}()
 
+	const maxWriteSize = 1024 * 1024
+
 	w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.DiskIO())
-	_, err := w.file.Write(chunk.data) // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
-	if err != nil {
-		return err
+
+	// in some cases, e.g. Storage Spaces in Azure VMs, chopping up the writes helps perf. TODO: look into the reasons why it helps
+	for i := 0; i < len(chunk.data); i += maxWriteSize {
+		slice := chunk.data[i:][:maxWriteSize]
+
+		// always hash exactly what we save
+		md5Hasher.Write(slice)
+		_, err := w.file.Write(slice) // unlike Read, Write must process ALL the data, or have an error.  It can't return "early".
+		if err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
