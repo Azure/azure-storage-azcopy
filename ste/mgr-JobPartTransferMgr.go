@@ -26,6 +26,7 @@ type IJobPartTransferMgr interface {
 	MD5ValidationOption() common.HashValidationOption
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
+	JobHasLowFileCount() bool
 	//ScheduleChunk(chunkFunc chunkFunc)
 	Context() context.Context
 	SlicePool() common.ByteSlicePooler
@@ -273,6 +274,17 @@ func (jptm *jobPartTransferMgr) BlobTypeOverride() common.BlobType {
 
 func (jptm *jobPartTransferMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jptm.jobPartMgr.BlobTiers()
+}
+
+// JobHasLowFileCount returns an estimate of whether we only have a very small number of files in the overall job
+// (An "estimate" because it actually only looks at the current job part)
+func (jptm *jobPartTransferMgr) JobHasLowFileCount() bool {
+	// TODO: review this guestimated threshold
+	// Threshold is chosen because for a single large file (in Windows-based test configuration with approx 9.5 Gps disks)
+	// one file gets between 2 or 5 Gbps (depending on other factors), but we really want at least 4 times that throughput.
+	// So a minimal threshold would be 4.
+	const lowFileCountThreshold = 4
+	return jptm.jobPartMgr.Plan().NumTransfers < lowFileCountThreshold
 }
 
 func (jptm *jobPartTransferMgr) SetNumberOfChunks(numChunks uint32) {
