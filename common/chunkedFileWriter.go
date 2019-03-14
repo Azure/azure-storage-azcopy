@@ -295,7 +295,10 @@ func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk, md5Hasher hash.Hash) e
 
 	// in some cases, e.g. Storage Spaces in Azure VMs, chopping up the writes helps perf. TODO: look into the reasons why it helps
 	for i := 0; i < len(chunk.data); i += maxWriteSize {
-		slice := chunk.data[i:][:maxWriteSize]
+		slice := chunk.data[i:]
+		if len(slice) > maxWriteSize {
+			slice = slice[:maxWriteSize]
+		}
 
 		// always hash exactly what we save
 		md5Hasher.Write(slice)
