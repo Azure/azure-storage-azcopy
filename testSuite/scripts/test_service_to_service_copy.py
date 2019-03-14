@@ -128,108 +128,108 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test from file to blob copy.
     ##################################
-    def test_copy_single_1kb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 1)
+    # def test_copy_single_1kb_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 1)
 
-    def test_copy_single_0kb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 0)
+    # def test_copy_single_0kb_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 0)
 
-    def test_copy_single_63mb_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 63 * 1024 * 1024)
+    # def test_copy_single_63mb_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 63 * 1024 * 1024)
 
-    def test_copy_10_files_from_file_share_to_blob_container(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_share_url, "File", dst_container_url, "Blob")
+    # def test_copy_10_files_from_file_share_to_blob_container(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_share_url, "File", dst_container_url, "Blob")
 
-    def test_copy_file_from_file_share_to_blob_container_wildcard_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
+    # def test_copy_file_from_file_share_to_blob_container_wildcard_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
 
-    def test_copy_file_from_file_share_to_blob_container_wildcard_non_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
+    # def test_copy_file_from_file_share_to_blob_container_wildcard_non_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
     
-    def test_copy_n_files_from_file_dir_to_blob_dir(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir(src_share_url, "File", dst_container_url, "Blob")
+    # def test_copy_n_files_from_file_dir_to_blob_dir(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir(src_share_url, "File", dst_container_url, "Blob")
 
-    def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
+    # def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", True)
 
-    def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_non_recursive(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
+    # def test_copy_n_files_from_file_dir_to_blob_dir_wildcard_non_recursive(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_share_url, "File", dst_container_url, "Blob", False)
 
-    def test_copy_files_from_file_account_to_blob_account(self):
-        self.util_test_copy_files_from_x_account_to_x_account(
-            util.test_s2s_src_file_account_url, 
-            "File", 
-            util.test_s2s_dst_blob_account_url, 
-            "Blob",
-            self.bucket_name_file_blob)
+    # def test_copy_files_from_file_account_to_blob_account(self):
+    #     self.util_test_copy_files_from_x_account_to_x_account(
+    #         util.test_s2s_src_file_account_url, 
+    #         "File", 
+    #         util.test_s2s_dst_blob_account_url, 
+    #         "Blob",
+    #         self.bucket_name_file_blob)
 
-    def test_copy_single_file_from_file_to_blob_propertyandmetadata(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob")
+    # def test_copy_single_file_from_file_to_blob_propertyandmetadata(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
+    #         src_share_url, 
+    #         "File", 
+    #         dst_container_url, 
+    #         "Blob")
 
-    def test_copy_file_from_file_share_to_blob_container_propertyandmetadata(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob")
+    # def test_copy_file_from_file_share_to_blob_container_propertyandmetadata(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
+    #         src_share_url, 
+    #         "File", 
+    #         dst_container_url, 
+    #         "Blob")
     
-    def test_copy_file_from_file_share_to_blob_container_no_preserve_propertyandmetadata(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob",
-            False)
+    # def test_copy_file_from_file_share_to_blob_container_no_preserve_propertyandmetadata(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
+    #         src_share_url, 
+    #         "File", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False)
 
-    def test_overwrite_copy_single_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob",
-            False,
-            True)
+    # def test_overwrite_copy_single_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_overwrite_copy_single_file_from_x_to_x(
+    #         src_share_url, 
+    #         "File", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False,
+    #         True)
 
-    def test_non_overwrite_copy_single_file_from_file_to_blob(self):
-        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_share_url, 
-            "File", 
-            dst_container_url, 
-            "Blob",
-            False,
-            False)
+    # def test_non_overwrite_copy_single_file_from_file_to_blob(self):
+    #     src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
+    #     self.util_test_overwrite_copy_single_file_from_x_to_x(
+    #         src_share_url, 
+    #         "File", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False,
+    #         False)
 
     # Test oauth support for service to service copy, where source is authenticated with SAS
     # and destination is authenticated with OAuth token.
@@ -242,201 +242,201 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test from S3 to blob copy.
     ##################################
-    def test_copy_single_1kb_file_from_s3_to_blob(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 1)
+    # def test_copy_single_1kb_file_from_s3_to_blob(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 1)
 
-    def test_copy_single_0kb_file_from_s3_to_blob(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 0)
+    # def test_copy_single_0kb_file_from_s3_to_blob(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 0)
 
-    def test_copy_single_63mb_file_from_s3_to_blob(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 63 * 1024 * 1024)
+    # def test_copy_single_63mb_file_from_s3_to_blob(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(src_bucket_url, "S3", dst_container_url, "Blob", 63 * 1024 * 1024)
 
-    def test_copy_10_files_from_s3_bucket_to_blob_container(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_bucket_url, "S3", dst_container_url, "Blob")
+    # def test_copy_10_files_from_s3_bucket_to_blob_container(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_n_files_from_x_bucket_to_x_bucket(src_bucket_url, "S3", dst_container_url, "Blob")
 
-    def test_copy_10_files_from_s3_bucket_to_blob_account(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_s3_bucket_to_blob_account(src_bucket_url, util.test_s2s_dst_blob_account_url)
+    # def test_copy_10_files_from_s3_bucket_to_blob_account(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_n_files_from_s3_bucket_to_blob_account(src_bucket_url, util.test_s2s_dst_blob_account_url)
 
-    def test_copy_file_from_s3_bucket_to_blob_container_wildcard_recursive(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", True)
+    # def test_copy_file_from_s3_bucket_to_blob_container_wildcard_recursive(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", True)
 
-    def test_copy_file_from_s3_bucket_to_blob_container_wildcard_non_recursive(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", False)
+    # def test_copy_file_from_s3_bucket_to_blob_container_wildcard_non_recursive(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", False)
     
-    def test_copy_n_files_from_s3_dir_to_blob_dir(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir(src_bucket_url, "S3", dst_container_url, "Blob")
+    # def test_copy_n_files_from_s3_dir_to_blob_dir(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir(src_bucket_url, "S3", dst_container_url, "Blob")
 
-    def test_copy_n_files_from_s3_dir_to_blob_dir_wildcard_recursive(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", True)
+    # def test_copy_n_files_from_s3_dir_to_blob_dir_wildcard_recursive(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", True)
 
-    def test_copy_n_files_from_s3_dir_to_blob_dir_wildcard_non_recursive(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", False)
+    # def test_copy_n_files_from_s3_dir_to_blob_dir_wildcard_non_recursive(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_n_files_from_x_dir_to_x_dir_wildcard(src_bucket_url, "S3", dst_container_url, "Blob", False)
 
-    def test_copy_files_from_s3_service_to_blob_account(self):
-        self.util_test_copy_files_from_x_account_to_x_account(
-            util.test_s2s_src_s3_service_url, 
-            "S3", 
-            util.test_s2s_dst_blob_account_url, 
-            "Blob",
-            self.bucket_name_s3_blob)
+    # def test_copy_files_from_s3_service_to_blob_account(self):
+    #     self.util_test_copy_files_from_x_account_to_x_account(
+    #         util.test_s2s_src_s3_service_url, 
+    #         "S3", 
+    #         util.test_s2s_dst_blob_account_url, 
+    #         "Blob",
+    #         self.bucket_name_s3_blob)
 
-    def test_copy_single_file_from_s3_to_blob_propertyandmetadata(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob")
+    # def test_copy_single_file_from_s3_to_blob_propertyandmetadata(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob")
 
-    def test_copy_single_file_from_s3_to_blob_no_preserve_propertyandmetadata(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob",
-            False)
+    # def test_copy_single_file_from_s3_to_blob_no_preserve_propertyandmetadata(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False)
     
-    def test_copy_file_from_s3_bucket_to_blob_container_propertyandmetadata(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob")
+    # def test_copy_file_from_s3_bucket_to_blob_container_propertyandmetadata(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob")
 
-    def test_copy_file_from_s3_bucket_to_blob_container_no_preserve_propertyandmetadata(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob",
-            False)
+    # def test_copy_file_from_s3_bucket_to_blob_container_no_preserve_propertyandmetadata(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_file_from_x_bucket_to_x_bucket_propertyandmetadata(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False)
 
-    def test_overwrite_copy_single_file_from_s3_to_blob(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob",
-            False,
-            True)
+    # def test_overwrite_copy_single_file_from_s3_to_blob(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_overwrite_copy_single_file_from_x_to_x(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False,
+    #         True)
 
-    def test_non_overwrite_copy_single_file_from_s3_to_blob(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_overwrite_copy_single_file_from_x_to_x(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob",
-            False,
-            False)
+    # def test_non_overwrite_copy_single_file_from_s3_to_blob(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_overwrite_copy_single_file_from_x_to_x(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         False,
+    #         False)
 
-    def test_copy_single_file_from_s3_to_blob_with_url_encoded_slash_as_filename(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        self.util_test_copy_single_file_from_x_to_x(
-            src_bucket_url, 
-            "S3", 
-            dst_container_url, 
-            "Blob",
-            1,
-            False,
-            "%252F") #encoded name for %2F, as path will be decoded
+    # def test_copy_single_file_from_s3_to_blob_with_url_encoded_slash_as_filename(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     self.util_test_copy_single_file_from_x_to_x(
+    #         src_bucket_url, 
+    #         "S3", 
+    #         dst_container_url, 
+    #         "Blob",
+    #         1,
+    #         False,
+    #         "%252F") #encoded name for %2F, as path will be decoded
 
-    def test_copy_single_file_from_s3_to_blob_excludeinvalidmetadata(self):
-        self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
-            "", # By default it should be ExcludeIfInvalid
-            "1abc=jiac;$%^=width;description=test file",
-            "description=test file"
-        )
+    # def test_copy_single_file_from_s3_to_blob_excludeinvalidmetadata(self):
+    #     self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
+    #         "", # By default it should be ExcludeIfInvalid
+    #         "1abc=jiac;$%^=width;description=test file",
+    #         "description=test file"
+    #     )
 
-    def test_copy_single_file_from_s3_to_blob_renameinvalidmetadata(self):
-        self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
-            "RenameIfInvalid", # By default it should be ExcludeIfInvalid
-            "1abc=jiac;$%^=width;description=test file",
-            "rename_1abc=jiac;rename_key_1abc=1abc;description=test file;rename____=width;rename_key____=$%^"
-        )
+    # def test_copy_single_file_from_s3_to_blob_renameinvalidmetadata(self):
+    #     self.util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
+    #         "RenameIfInvalid", # By default it should be ExcludeIfInvalid
+    #         "1abc=jiac;$%^=width;description=test file",
+    #         "rename_1abc=jiac;rename_key_1abc=1abc;description=test file;rename____=width;rename_key____=$%^"
+    #     )
 
-    # Test invalid metadata handling
-    def util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
-        self, 
-        invalidMetadataHandleOption,
-        srcS3Metadata, 
-        expectResolvedMetadata):
-        srcBucketURL = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
-        dstBucketURL = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
-        srcType = "S3"
+    # # Test invalid metadata handling
+    # def util_test_copy_single_file_from_s3_to_blob_handleinvalidmetadata(
+    #     self, 
+    #     invalidMetadataHandleOption,
+    #     srcS3Metadata, 
+    #     expectResolvedMetadata):
+    #     srcBucketURL = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_s3_blob)
+    #     dstBucketURL = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_s3_blob)
+    #     srcType = "S3"
 
-        # create bucket and create file with metadata and properties
-        result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
-            add_flags("resourceType", "Bucket").execute_azcopy_create()
-        self.assertTrue(result)
+    #     # create bucket and create file with metadata and properties
+    #     result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
+    #         add_flags("resourceType", "Bucket").execute_azcopy_create()
+    #     self.assertTrue(result)
 
-        fileName = "test_copy_single_file_from_s3_to_blob_handleinvalidmetadata_%s" % invalidMetadataHandleOption
+    #     fileName = "test_copy_single_file_from_s3_to_blob_handleinvalidmetadata_%s" % invalidMetadataHandleOption
 
-        srcFileURL = util.get_object_without_sas(srcBucketURL, fileName)
+    #     srcFileURL = util.get_object_without_sas(srcBucketURL, fileName)
 
-        dstFileURL = util.get_object_sas(dstBucketURL, fileName)
-        result = util.Command("create").add_arguments(srcFileURL).add_flags("serviceType", srcType). \
-            add_flags("resourceType", "SingleFile"). \
-            add_flags("metadata", srcS3Metadata). \
-            execute_azcopy_create()
-        self.assertTrue(result)
+    #     dstFileURL = util.get_object_sas(dstBucketURL, fileName)
+    #     result = util.Command("create").add_arguments(srcFileURL).add_flags("serviceType", srcType). \
+    #         add_flags("resourceType", "SingleFile"). \
+    #         add_flags("metadata", srcS3Metadata). \
+    #         execute_azcopy_create()
+    #     self.assertTrue(result)
 
-        # Copy file using azcopy from srcURL to destURL
-        cpCmd = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
-            add_flags("log-level", "info")
-        if invalidMetadataHandleOption == "" or invalidMetadataHandleOption == "ExcludeIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "ExcludeIfInvalid")
-        if invalidMetadataHandleOption == "FailIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "FailIfInvalid")
-        if invalidMetadataHandleOption == "RenameIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "RenameIfInvalid")
+    #     # Copy file using azcopy from srcURL to destURL
+    #     cpCmd = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
+    #         add_flags("log-level", "info")
+    #     if invalidMetadataHandleOption == "" or invalidMetadataHandleOption == "ExcludeIfInvalid":
+    #         cpCmd.add_flags("s2s-invalid-metadata-handle", "ExcludeIfInvalid")
+    #     if invalidMetadataHandleOption == "FailIfInvalid":
+    #         cpCmd.add_flags("s2s-invalid-metadata-handle", "FailIfInvalid")
+    #     if invalidMetadataHandleOption == "RenameIfInvalid":
+    #         cpCmd.add_flags("s2s-invalid-metadata-handle", "RenameIfInvalid")
 
-        result = cpCmd.execute_azcopy_copy_command()
-        self.assertTrue(result)
+    #     result = cpCmd.execute_azcopy_copy_command()
+    #     self.assertTrue(result)
 
-        # Downloading the copied file for validation
-        validate_dir_name = "validate_copy_single_file_from_s3_to_blob_handleinvalidmetadata_%s" % invalidMetadataHandleOption
-        local_validate_dest_dir = util.create_test_dir(validate_dir_name)
-        local_validate_dest = local_validate_dest_dir + fileName
-        result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
-            add_flags("log-level", "info").execute_azcopy_copy_command()
-        self.assertTrue(result)
+    #     # Downloading the copied file for validation
+    #     validate_dir_name = "validate_copy_single_file_from_s3_to_blob_handleinvalidmetadata_%s" % invalidMetadataHandleOption
+    #     local_validate_dest_dir = util.create_test_dir(validate_dir_name)
+    #     local_validate_dest = local_validate_dest_dir + fileName
+    #     result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
+    #         add_flags("log-level", "info").execute_azcopy_copy_command()
+    #     self.assertTrue(result)
 
-        validateCmd = util.Command("testBlob").add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true"). \
-            add_flags("metadata", expectResolvedMetadata)
+    #     validateCmd = util.Command("testBlob").add_arguments(local_validate_dest).add_arguments(dstFileURL).add_flags("no-guess-mime-type", "true"). \
+    #         add_flags("metadata", expectResolvedMetadata)
 
-        result = validateCmd.execute_azcopy_verify()
-        self.assertTrue(result)
+    #     result = validateCmd.execute_azcopy_verify()
+    #     self.assertTrue(result)
 
 
     # Test oauth support for service to service copy, where source is authenticated with access key for S3
@@ -450,47 +450,47 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test scenarios related to blob type and blob tier.
     ##################################
-    def test_copy_single_file_from_blockblob_to_blockblob_with_blobtier_from_source(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size)
+    # def test_copy_single_file_from_blockblob_to_blockblob_with_blobtier_from_source(self):
+    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+    #     blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
+    #     for size in blob_sizes:
+    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+    #             src_bucket_url, "Blob", dst_container_url, "Blob", size)
 
-        self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", 8*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Cool")
+    #     self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+    #             src_bucket_url, "Blob", dst_container_url, "Blob", 8*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Cool")
 
-    def test_copy_single_file_from_blockblob_to_blockblob_with_no_preserve_blobtier(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+    # def test_copy_single_file_from_blockblob_to_blockblob_with_no_preserve_blobtier(self):
+    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
 
-        self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", 4*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Hot", False)
+    #     self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+    #             src_bucket_url, "Blob", dst_container_url, "Blob", 4*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Hot", False)
 
-    def test_copy_single_file_from_pageblob_to_pageblob_with_blobtier_from_source(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 512, 1024, 4*1024*1024]
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob")
+    # def test_copy_single_file_from_pageblob_to_pageblob_with_blobtier_from_source(self):
+    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+    #     blob_sizes = [0, 512, 1024, 4*1024*1024]
+    #     for size in blob_sizes:
+    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+    #             src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob")
 
-    def test_copy_single_file_from_appendblob_to_appendblob_from_source(self):
-        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024, 8*1024*1024+1]
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob")    
+    # def test_copy_single_file_from_appendblob_to_appendblob_from_source(self):
+    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+    #     blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024, 8*1024*1024+1]
+    #     for size in blob_sizes:
+    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+    #             src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob")    
 
-    def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
-        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
-        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
-        for size in blob_sizes:
-            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-                src_bucket_url, "S3", dst_container_url, "Blob", size)
+    # def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
+    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
+    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+    #     blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
+    #     for size in blob_sizes:
+    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+    #             src_bucket_url, "S3", dst_container_url, "Blob", size)
 
     @unittest.skip("override blob tier not enabled")
     def test_copy_single_file_from_s3_object_to_blockblob_with_specified_blobtier(self):
