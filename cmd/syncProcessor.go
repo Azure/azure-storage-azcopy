@@ -92,7 +92,7 @@ type interactiveDeleteProcessor struct {
 	shouldDelete bool
 
 	// used for prompt message
-	// examples: "blobs", "local files", etc.
+	// examples: "blob", "local file", etc.
 	objectTypeToDisplay string
 
 	// used for prompt message
@@ -105,8 +105,7 @@ type interactiveDeleteProcessor struct {
 
 func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err error) {
 	if d.shouldPromptUser {
-		d.shouldDelete = d.promptForConfirmation() // note down the user's decision
-		d.shouldPromptUser = false                 // only prompt the first time that this function is called
+		d.shouldDelete, d.shouldPromptUser = d.promptForConfirmation(object) // note down the user's decision
 	}
 
 	if !d.shouldDelete {
@@ -124,18 +123,29 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 	return
 }
 
-func (d *interactiveDeleteProcessor) promptForConfirmation() (shouldDelete bool) {
-	shouldDelete = false
+func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) (shouldDelete bool, keepPrompting bool) {
+	answer := glcm.Prompt(fmt.Sprintf("Sync has discovered a %s(%s) that is not present at the source, "+
+		"would you like to delete it from the destination(%s)? "+
+		"Please confirm with y/n/y!/n! (default: n, add ! to choose the same answer for all future prompts): ",
+		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay))
 
-	answer := glcm.Prompt(fmt.Sprintf("Sync has discovered %s that are not present at the source, would you like to delete them from the destination(%s)? Please confirm with y/n (default: n): ",
-		d.objectTypeToDisplay, d.objectLocationToDisplay))
-	if answer == "y" || answer == "yes" {
-		shouldDelete = true
-		glcm.Info(fmt.Sprintf("Confirmed. The extra %s will be deleted:", d.objectTypeToDisplay))
-	} else {
-		glcm.Info("No deletions will happen.")
+	switch answer {
+	case "y":
+		// print nothing, since the deleter is expected to log the message when the delete happens
+		return true, true
+	case "y!":
+		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
+		return true, false
+	case "n":
+		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
+		return false, true
+	case "n!":
+		glcm.Info("No deletions will happen from now onwards.")
+		return false, false
+	default:
+		glcm.Info(fmt.Sprintf("Unrecognizable answer, keeping extra %s: %s.", d.objectTypeToDisplay, object.relativePath))
+		return false, true
 	}
-	return
 }
 
 func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination common.DeleteDestination,
@@ -153,7 +163,7 @@ func newInteractiveDeleteProcessor(deleter objectProcessor, deleteDestination co
 
 func newSyncLocalDeleteProcessor(cca *cookedSyncCmdArgs) *interactiveDeleteProcessor {
 	localDeleter := localFileDeleter{rootPath: cca.destination}
-	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local files", cca.destination, cca.incrementDeletionCount)
+	return newInteractiveDeleteProcessor(localDeleter.deleteFile, cca.deleteDestination, "local file", cca.destination, cca.incrementDeletionCount)
 }
 
 type localFileDeleter struct {
@@ -180,7 +190,7 @@ func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProce
 	}
 
 	return newInteractiveDeleteProcessor(newBlobDeleter(rawURL, p, ctx).deleteBlob,
-		cca.deleteDestination, "blobs", cca.destination, cca.incrementDeletionCount), nil
+		cca.deleteDestination, "blob", cca.destination, cca.incrementDeletionCount), nil
 }
 
 type blobDeleter struct {
