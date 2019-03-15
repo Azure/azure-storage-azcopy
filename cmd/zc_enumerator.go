@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"strings"
 	"time"
 )
@@ -37,24 +38,30 @@ type storedObject struct {
 	lastModifiedTime time.Time
 	size             int64
 	md5              []byte
+	blobType         azblob.BlobType // will be "None" when unknown or not applicable
 
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
 	relativePath string
 }
 
+const (
+	blobTypeNA = azblob.BlobNone // some things, e.g. local files, aren't blobs so they don't have their own blob type so we use this "not applicable" constant
+)
+
 func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) bool {
 	return storedObject.lastModifiedTime.After(storedObject2.lastModifiedTime)
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
-func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte) storedObject {
+func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType) storedObject {
 	return storedObject{
 		name:             name,
 		relativePath:     relativePath,
 		lastModifiedTime: lmt,
 		size:             size,
 		md5:              md5,
+		blobType:         blobType,
 	}
 }
 

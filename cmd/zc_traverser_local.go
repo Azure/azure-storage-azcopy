@@ -49,7 +49,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 		t.incrementEnumerationCounter()
 		err = processIfPassedFilters(filters, newStoredObject(singleFileInfo.Name(),
 			"", // relative path makes no sense when the full path already points to the file
-			singleFileInfo.ModTime(), singleFileInfo.Size(), nil), processor)
+			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA), processor)
 		return
 
 	} else {
@@ -67,7 +67,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				t.incrementEnumerationCounter()
 				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(),
 					strings.Replace(replacePathSeparators(filePath), t.fullPath+common.AZCOPY_PATH_SEPARATOR_STRING,
-						"", 1), fileInfo.ModTime(), fileInfo.Size(), nil), processor)
+						"", 1), fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
 			})
 
 			return
@@ -85,7 +85,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				}
 
 				t.incrementEnumerationCounter()
-				err = processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil), processor)
+				err = processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
 
 				if err != nil {
 					return err
