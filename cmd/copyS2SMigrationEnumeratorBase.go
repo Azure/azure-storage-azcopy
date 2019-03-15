@@ -9,7 +9,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // copyS2SMigrationEnumeratorBase is the base of other service to service copy enumerators,

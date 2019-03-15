@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
 )
 

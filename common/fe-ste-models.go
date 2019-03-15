@@ -34,9 +34,9 @@ import (
 	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
 )
 
 const (
@@ -308,7 +308,7 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
 		return true
-	case ELocation.Local(), ELocation.Pipe():
+	case ELocation.Local(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")

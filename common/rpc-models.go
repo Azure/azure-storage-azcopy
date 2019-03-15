@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/JeffreyRichter/enum/enum"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var ERpcCmd = RpcCmd("")

@@ -26,7 +26,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	chk "gopkg.in/check.v1"
 )
 

@@ -27,7 +27,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type urlToBlockBlobCopier struct {
@@ -103,22 +103,22 @@ func (c *urlToBlockBlobCopier) generateCreateEmptyBlob(id common.ChunkID) chunkF
 }
 
 // generateSyncCopyBlob generates a func to sync copy entire blob to destination.
-func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID, adjustedChunkSize int64) chunkFunc {
-	return createSendToRemoteChunkFunc(c.jptm, id, func() {
-		jptm := c.jptm
+// func (c *urlToBlockBlobCopier) generateSyncCopyBlob(id common.ChunkID, adjustedChunkSize int64) chunkFunc {
+// 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
+// 		jptm := c.jptm
 
-		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		s2sPacer := newS2SPacer(c.pacer)
+// 		jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+// 		s2sPacer := newS2SPacer(c.pacer)
 
-		// Set the latest service version from sdk as service version in the context, to use SyncCopyFromURL API
-		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-		if _, err := c.destBlockBlobURL.SyncCopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}); err != nil {
-			jptm.FailActiveSend("Sync copy entire blob", err)
-			return
-		}
-		s2sPacer.Done(adjustedChunkSize)
-	})
-}
+// 		// Set the latest service version from sdk as service version in the context, to use SyncCopyFromURL API
+// 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+// 		if _, err := c.destBlockBlobURL.SyncCopyFromURL(ctxWithLatestServiceVersion, c.srcURL, c.metadataToApply, azblob.ModifiedAccessConditions{}, azblob.BlobAccessConditions{}); err != nil {
+// 			jptm.FailActiveSend("Sync copy entire blob", err)
+// 			return
+// 		}
+// 		s2sPacer.Done(adjustedChunkSize)
+// 	})
+// }
 
 // generatePutBlockFromURL generates a func to copy the block of src data from given startIndex till the given chunkSize.
 func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockIndex int32, adjustedChunkSize int64) chunkFunc {

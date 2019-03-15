@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // dataSchemaVersion defines the data schema version of JobPart order files supported by

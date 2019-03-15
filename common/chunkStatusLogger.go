@@ -296,8 +296,6 @@ func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount
 		allReasons = downloadWaitReasons
 	case ETransferDirection.S2SCopy():
 		allReasons = s2sCopyWaitReasons
-	default:
-		panic("invalid state: GetCounts should be used for Upload/Download/S2SCopy")
 	}
 
 	result := make([]chunkStatusCount, len(allReasons))

@@ -38,7 +38,7 @@ import (
 	"math/rand"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	minio "github.com/minio/minio-go"
 )
 
@@ -84,9 +84,20 @@ func generateName(prefix string) string {
 	return name
 }
 
+func getNameWithMaxLength(name string, maxLen int) string {
+	if maxLen < 1 {
+		panic("invalid state: maxLen should >= 1")
+	}
+
+	if name != "" && len(name) > maxLen {
+		return name[0:maxLen]
+	}
+	return name
+}
+
 func generateContainerName() string {
 	name := generateName(containerPrefix)
-	return name[0:63]
+	return getNameWithMaxLength(name, 63)
 }
 
 func generateBlobName() string {
@@ -95,12 +106,12 @@ func generateBlobName() string {
 
 func generateBucketName() string {
 	name := generateName(bucketPrefix)
-	return name[0:63]
+	return getNameWithMaxLength(name, 63)
 }
 
 func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
 	name := generateName(customizedPrefix)
-	return name[0:63]
+	return getNameWithMaxLength(name, 63)
 }
 
 func generateObjectName() string {

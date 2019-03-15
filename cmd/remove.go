@@ -55,6 +55,7 @@ func init() {
 			// else parsing the arguments will fail.
 			raw.blobType = common.EBlobType.None().String()
 			raw.md5ValidationOption = common.DefaultHashValidationOption.String()
+			raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {

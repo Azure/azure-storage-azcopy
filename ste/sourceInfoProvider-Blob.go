@@ -23,7 +23,7 @@ package ste
 import (
 	"time"
 
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // Source info provider for Azure blob

@@ -21,7 +21,7 @@
 package common
 
 import (
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 type cutdownJptm interface {

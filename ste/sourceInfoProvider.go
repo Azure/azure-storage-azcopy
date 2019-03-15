@@ -24,7 +24,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/jiacfan/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 // ISourceInfoProvider is the abstraction of generic source info provider which provides source's properties.

@@ -23,7 +23,7 @@ dep: docker-build #
 setup: clean docker-build dep ## setup environment for development
 
 test: setup ## run go tests
-	ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) $(call with_docker,go test -race -short -cover ./cmd ./common ./ste ./azbfs, -e ACCOUNT_NAME -e ACCOUNT_KEY)
+	ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) $(call with_docker,go test -race -short -cover ./cmd ./common ./ste ./azbfs, -e ACCOUNT_NAME -e ACCOUNT_KEY -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
 
 build: setup ## build binaries for the project
     # the environment variables need to be passed into the container explicitly
