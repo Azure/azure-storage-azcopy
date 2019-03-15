@@ -130,7 +130,8 @@ func (o XferRetryOptions) calcDelay(try int32) time.Duration { // try is >=1; ne
 	}
 
 	// Introduce some jitter:  [0.0, 1.0) / 2 = [0.0, 0.5) + 0.8 = [0.8, 1.3)
-	delay = time.Duration(int64(float32(delay.Nanoseconds())*rand.Float32()/2 + 0.8)) // NOTE: We want math/rand; not crypto/rand
+	// For casts and rounding - be careful, as per https://github.com/golang/go/issues/20757
+	delay = time.Duration(float32(delay) * (rand.Float32()/2 + 0.8) ) // NOTE: We want math/rand; not crypto/rand
 	if delay > o.MaxRetryDelay {
 		delay = o.MaxRetryDelay
 	}
@@ -168,7 +169,8 @@ func NewBFSXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					logf("Primary try=%d, Delay=%v\n", primaryTry, delay)
 					time.Sleep(delay) // The 1st try returns 0 delay
 				} else {
-					delay := time.Second * time.Duration(rand.Float32()/2+0.8)
+					// For casts and rounding - be careful, as per https://github.com/golang/go/issues/20757
+					delay := time.Duration(float32(time.Second) * (rand.Float32()/2 + 0.8))
 					logf("Secondary try=%d, Delay=%v\n", try-primaryTry, delay)
 					time.Sleep(delay) // Delay with some jitter before trying secondary
 				}
@@ -320,7 +322,8 @@ func NewBlobXferRetryPolicyFactory(o XferRetryOptions) pipeline.Factory {
 					logf("Primary try=%d, Delay=%v\n", primaryTry, delay)
 					time.Sleep(delay) // The 1st try returns 0 delay
 				} else {
-					delay := time.Second * time.Duration(rand.Float32()/2+0.8)
+					// For casts and rounding - be careful, as per https://github.com/golang/go/issues/20757
+					delay := time.Duration(float32(time.Second) * (rand.Float32()/2 + 0.8))
 					logf("Secondary try=%d, Delay=%v\n", try-primaryTry, delay)
 					time.Sleep(delay) // Delay with some jitter before trying secondary
 				}
