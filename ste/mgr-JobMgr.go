@@ -345,6 +345,9 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	case common.EJobStatus.InProgress():
 		part0Plan.SetJobStatus((common.EJobStatus).Completed())
 	}
+
+	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
+
 	return partsDone
 }
 
@@ -371,7 +374,7 @@ func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
 func (jm *jobMgr) Panic(err error) { jm.logger.Panic(err) }
 func (jm *jobMgr) CloseLog() {
 	jm.logger.CloseLog()
-	jm.chunkStatusLogger.CloseLog()
+	jm.chunkStatusLogger.FlushLog()
 }
 
 func (jm *jobMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
