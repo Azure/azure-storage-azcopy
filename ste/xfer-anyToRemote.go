@@ -244,7 +244,7 @@ func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory comm
 		sourceFileFactory,
 		id,
 		adjustedChunkSize,
-		jptm,
+		jptm.ChunkStatusLogger(),
 		jptm,
 		jptm.SlicePool(),
 		jptm.CacheLimiter())

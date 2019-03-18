@@ -72,7 +72,7 @@ type IJobMgr interface {
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
-	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
 
 	common.ILoggerCloser
@@ -377,8 +377,8 @@ func (jm *jobMgr) CloseLog() {
 	jm.chunkStatusLogger.FlushLog()
 }
 
-func (jm *jobMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
-	jm.chunkStatusLogger.LogChunkStatus(id, reason)
+func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
+	return jm.chunkStatusLogger
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed

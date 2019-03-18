@@ -167,6 +167,7 @@ func (wr WaitReason) String() string {
 
 type ChunkStatusLogger interface {
 	LogChunkStatus(id ChunkID, reason WaitReason)
+	IsWaitingOnFinalBodyReads() bool
 }
 
 type ChunkStatusLoggerCloser interface {
@@ -179,10 +180,11 @@ type ChunkStatusLoggerCloser interface {
 // chunkStatusLogger records all chunk state transitions, and makes aggregate data immediately available
 // for performance diagnostics. Also optionally logs every individual transition to a file.
 type chunkStatusLogger struct {
-	counts         []int64
-	outputEnabled  bool
-	unsavedEntries chan *chunkWaitState
-	flushDone      chan struct{}
+	counts                          []int64
+	outputEnabled                   bool
+	unsavedEntries                  chan *chunkWaitState
+	flushDone                       chan struct{}
+	atomicIsWaitingOnFinalBodyReads int32
 }
 
 func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
@@ -366,13 +368,32 @@ func (csl *chunkStatusLogger) isDownloadDiskConstrained() bool {
 	chunksWaitingOnDisk := csl.getCount(EWaitReason.Sorting()) + csl.getCount(EWaitReason.QueueToWrite())
 
 	// i.e. are queued before the actual network states
-	chunksWaitingOnNetwork := csl.getCount(EWaitReason.WorkerGR())
+	chunksQueueBeforeNetwork := csl.getCount(EWaitReason.WorkerGR())
 
 	// if we have way more stuff waiting on disk than on network, we can assume disk is the bottleneck
 	const activeDiskQThreshold = 10
-	const bigDifference = 5                              // TODO: review/tune the arbitrary constant here
-	return chunksWaitingOnDisk > activeDiskQThreshold && // this test is in case both are near zero, as they would be near the end of the job
-		chunksWaitingOnDisk > bigDifference*chunksWaitingOnNetwork
+	const bigDifference = 5                                            // TODO: review/tune the arbitrary constant here
+	isDiskConstrained := chunksWaitingOnDisk > activeDiskQThreshold && // this test is in case both are near zero, as they would be near the end of the job
+		chunksWaitingOnDisk > bigDifference*chunksQueueBeforeNetwork
+
+	// while we are here... set an indicator of whether we are waiting on body reads (only) with nothing more to download
+	// TODO: find a better place for this code
+	const finalBodyReadsThreshold = 50 // an empirically-derived guestimate of a suitable value.  Too high, and we trigger the final waiting logic too soon; too low and we trigger to too late
+	chunksWaitingOnRam := csl.getCount(EWaitReason.RAMToSchedule())
+	chunksWaitingOnHeader := csl.getCount(EWaitReason.HeaderResponse())
+	chunksWaitingOnBody := csl.getCount(EWaitReason.Body())
+	if (chunksWaitingOnRam+chunksQueueBeforeNetwork+chunksWaitingOnHeader) == 0 &&
+		chunksWaitingOnBody > 0 && chunksWaitingOnBody < finalBodyReadsThreshold {
+		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 1)
+	} else {
+		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 0)
+	}
+
+	return isDiskConstrained
+}
+
+func (csl *chunkStatusLogger) IsWaitingOnFinalBodyReads() bool {
+	return atomic.LoadInt32(&csl.atomicIsWaitingOnFinalBodyReads) == 1 // not computed on demand, because there will be LOTS of calls (>= 1 per chunk)
 }
 
 ///////////////////////////////////// Sample LinqPad query for manual analysis of chunklog /////////////////////////////////////
