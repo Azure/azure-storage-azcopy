@@ -23,12 +23,13 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blobFSUploader struct {
@@ -41,7 +42,7 @@ type blobFSUploader struct {
 	md5Channel chan []byte
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 
@@ -103,7 +104,7 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 
 	// compute chunk size and number of chunks
 	chunkSize := info.BlockSize
-	numChunks := getNumUploadChunks(info.SourceSize, chunkSize)
+	numChunks := getNumChunks(info.SourceSize, chunkSize)
 
 	return &blobFSUploader{
 		jptm:       jptm,
@@ -133,7 +134,7 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *blobFSUploader) Prologue(leadingBytes []byte) {
+func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	// Create file with the source size
 	_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
 	if err != nil {
@@ -144,7 +145,7 @@ func (u *blobFSUploader) Prologue(leadingBytes []byte) {
 
 func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
-	return createUploadChunkFunc(u.jptm, id, func() {
+	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
 		if jptm.Info().SourceSize == 0 {

@@ -50,11 +50,11 @@ var fakeTokenInfo = OAuthTokenInfo{
 
 func (s *credCacheTestSuite) TestCredCacheSaveLoadDeleteHas(c *chk.C) {
 	credCache := NewCredCache(CredCacheOptions{
-		DPAPIFilePath: "",
-		KeyName:       "",
-		ServiceName:   "",
-		AccountName:   "",
-	}) // "." state is reserved to be used in Linux and MacOS, and used as path to save token file in Windows.
+		DPAPIFilePath: ".",
+		KeyName:       "AzCopyOAuthTokenCache",
+		ServiceName:   "AzCopyV10",
+		AccountName:   "AzCopyOAuthTokenCache",
+	})
 
 	defer func() {
 		// Cleanup fake token

@@ -18,12 +18,12 @@
   version = "v0.1.8"
 
 [[projects]]
-  digest = "1:435043934aa0a8221e2c660e88dffe588783e9497facf6b517a465a37c58c97b"
+  branch = "dev"
+  digest = "1:53630cef6342c8e902aef6ebf4a12ae186becf985c8f25f0fee841d97c62cf71"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = "UT"
-  revision = "457680cc0804810f6d02958481e0ffdda51d5c60"
-  version = "0.5.0"
+  revision = "94d352293d76ce65c0eff4439ea2e7a0fbce9708"
 
 [[projects]]
   digest = "1:0376b54cf965bdae03b9c2a2734cad87fc3bbaa4066c0374ec86f10f77f03d45"
@@ -34,7 +34,7 @@
   version = "0.4.1"
 
 [[projects]]
-  digest = "1:0467e90f871a8f6e916e874b54fcea2f00d97e6e1affdfe93bbe33ce097d4c4a"
+  digest = "1:ce8580b6e64fb797e2c451c213576a7961ba3483f549ae8b944cf313b48855f5"
   name = "github.com/Azure/go-autorest"
   packages = [
     "autorest/adal",
@@ -42,8 +42,8 @@
     "tracing",
   ]
   pruneopts = "UT"
-  revision = "16ac8fb5da89a244e30e83bc535dfb2c36fc5217"
-  version = "v11.3.1"
+  revision = "f4369d4c79bf40df5e86def1e0f54c7ef261a51c"
+  version = "v11.5.0"
 
 [[projects]]
   branch = "master"
@@ -75,6 +75,14 @@
   version = "v1.0.1"
 
 [[projects]]
+  digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
+  pruneopts = "UT"
+  revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
+  version = "v1.1.1"
+
+[[projects]]
   digest = "1:76dc72490af7174349349838f2fe118996381b31ea83243812a97e5a0fd5ed55"
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
@@ -83,7 +91,23 @@
   version = "v3.2.0"
 
 [[projects]]
-  digest = "1:8f0705fa33e8957018611cc81c65cb373b626c092d39931bb86882489fc4c3f4"
+  digest = "1:6f9339c912bbdda81302633ad7e99a28dfa5a639c864061f1929510a9a64aa74"
+  name = "github.com/dustin/go-humanize"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9f541cc9db5d55bce703bd99987c9d5cb8eea45e"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:d37c61a335d13bc49b3f90e9e13c8686e4548839b69c58549e727afb2245c454"
+  name = "github.com/go-ini/ini"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c85607071cf08ca1adaf48319cd1aa322e81d8c1"
+  version = "v1.42.0"
+
+[[projects]]
+  digest = "1:e1b86a55f22a21007da87160a3e0897a35392af410d33ae82a4f165f1eec13cf"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -94,8 +118,8 @@
     "ptypes/wrappers",
   ]
   pruneopts = "UT"
-  revision = "aa810b61a9c79d51363740d207bb46cf8e620ed5"
-  version = "v1.2.0"
+  revision = "c823c79ea1570fb5ff454033735a8e68575d1d0f"
+  version = "v1.3.0"
 
 [[projects]]
   digest = "1:870d441fe217b8e689d7949fef6e43efbc787e50f200cb1e70dbca9204a1d6be"
@@ -106,6 +130,14 @@
   version = "v1.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:579e7d6716d34fb47b8648bf837295af67d6c6ad545ac3bddab01d9ef4e4a6e4"
+  name = "github.com/jiacfan/azure-storage-blob-go"
+  packages = ["azblob"]
+  pruneopts = "UT"
+  revision = "b295c708d94f6a5d778dd9aacf927ee97ba16669"
+
+[[projects]]
   digest = "1:ea6f6666dafd73ffad2f95feb9bca34ab09bc6942e2766a30dd603ebdde2ad70"
   name = "github.com/jiacfan/keychain"
   packages = ["."]
@@ -114,12 +146,20 @@
   version = "0.2.0"
 
 [[projects]]
-  digest = "1:6e3c5c3cae1a71d36ca570b29af02acdf6e0507a37bd91caf2146b6dc9463ce7"
+  digest = "1:7b426d9f2610f60ff7ff643224124d9b6a0edd6c42a1e62c5803e9f916280a46"
   name = "github.com/jiacfan/keyctl"
   packages = ["."]
   pruneopts = "UT"
-  revision = "988d05162bc59cf7789c35af405be8f1599a87a3"
-  version = "0.1.0"
+  revision = "ff92b17888c68f8fe03f3758754a0aae6f18a7ce"
+  version = "0.2.0"
+
+[[projects]]
+  digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
+  version = "v1.0.2"
 
 [[projects]]
   digest = "1:ca955a9cd5b50b0f43d2cc3aeb35c951473eeca41b34eb67507f1dbcc0542394"
@@ -138,6 +178,45 @@
   version = "v0.1.0"
 
 [[projects]]
+  digest = "1:037939a41d1cbd3e9e0fa81372144cce899fc3895122ff7b52b7a1ea7ead1d10"
+  name = "github.com/minio/minio-go"
+  packages = [
+    ".",
+    "pkg/credentials",
+    "pkg/encrypt",
+    "pkg/s3signer",
+    "pkg/s3utils",
+    "pkg/set",
+  ]
+  pruneopts = "UT"
+  revision = "98eaf5eab6d7935d2bd904c9229596328c90539a"
+  version = "v6.0.12"
+
+[[projects]]
+  digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
+  name = "github.com/mitchellh/go-homedir"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "af06845cf3004701891bf4fdb884bfe4920b3727"
+  version = "v1.1.0"
+
+[[projects]]
+  digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  pruneopts = "UT"
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:87c2e02fb01c27060ccc5ba7c5a407cc91147726f8f40b70cceeedbc52b1f3a8"
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "e1e72e9de974bd926e5c56f83753fba2df402ce5"
+  version = "v1.3.0"
+
+[[projects]]
   digest = "1:645cabccbb4fa8aab25a956cbcbdf6a6845ca736b2c64e197ca7cbb9d210b939"
   name = "github.com/spf13/cobra"
   packages = ["."]
@@ -152,6 +231,27 @@
   pruneopts = "UT"
   revision = "298182f68c66c05229eb03ac171abe6e309ee79a"
   version = "v1.0.3"
+
+[[projects]]
+  digest = "1:ac83cf90d08b63ad5f7e020ef480d319ae890c208f8524622a2f3136e2686b02"
+  name = "github.com/stretchr/objx"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "477a77ecc69700c7cdeb1fa9e129548e1c1c393c"
+  version = "v0.1.1"
+
+[[projects]]
+  digest = "1:79c7e1dc6789fc4329a52a4f502cb71fb5d44eccbc665f6f7907c8cc06e48441"
+  name = "github.com/stretchr/testify"
+  packages = [
+    ".",
+    "assert",
+    "http",
+    "mock",
+  ]
+  pruneopts = "UT"
+  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
+  version = "v1.3.0"
 
 [[projects]]
   digest = "1:2ae8314c44cd413cfdb5b1df082b350116dd8d2fff973e62c01b285b7affd89e"
@@ -179,7 +279,19 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:fc7b6b4384e1e849d99eab58eca4f8c0a76bad4699117d5077a9a5c3c83e289e"
+  digest = "1:0fca977d9fb7ed0e5389fa8dbaeeb4bc30bcc56464e44846a8f03bfad825462b"
+  name = "golang.org/x/crypto"
+  packages = [
+    "argon2",
+    "blake2b",
+    "ssh/terminal",
+  ]
+  pruneopts = "UT"
+  revision = "8dd112bcdc25174059e45e07517d9fc663123347"
+
+[[projects]]
+  branch = "master"
+  digest = "1:acd9bf9ec8ff02347d0acbf223d033616d5d837b31fc5fb1bcb18e439ee02bad"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -188,10 +300,11 @@
     "http2/hpack",
     "idna",
     "internal/timeseries",
+    "publicsuffix",
     "trace",
   ]
   pruneopts = "UT"
-  revision = "ed066c81e75eba56dd9bd2139ade88125b855585"
+  revision = "16b79f2e4e95ea23b2bf9903c9809ff7b013ce85"
 
 [[projects]]
   branch = "master"
@@ -199,18 +312,19 @@
   name = "golang.org/x/sync"
   packages = ["semaphore"]
   pruneopts = "UT"
-  revision = "37e7f081c4d4c64e13b10787722085407fe5d15f"
+  revision = "e225da77a7e68af35c70ccbf71af2b83e6acac3c"
 
 [[projects]]
   branch = "master"
-  digest = "1:43cde116ff48f299eddb7e6515677e6d0a2c915854bb05a333877f07c3bb3033"
+  digest = "1:8c41805cf4d0776e4e4aaedd60cb7b184113a265054433bc39644f289f7c86cc"
   name = "golang.org/x/sys"
   packages = [
+    "cpu",
     "unix",
     "windows",
   ]
   pruneopts = "UT"
-  revision = "11f53e03133963fb11ae0588e08b5e0b85be8be5"
+  revision = "c2f5717e611cf8e89a852a41081355194d80c943"
 
 [[projects]]
   digest = "1:a2ab62866c75542dd18d2b069fec854577a20211d7c0ea6ae746072a1dccdd18"
@@ -249,10 +363,10 @@
   name = "google.golang.org/genproto"
   packages = ["googleapis/rpc/status"]
   pruneopts = "UT"
-  revision = "db91494dd46c1fdcbbde05e5ff5eb56df8f7d79a"
+  revision = "4f5b463f9597cbe0dd13a6a2cd4f85e788d27508"
 
 [[projects]]
-  digest = "1:9ab5a33d8cb5c120602a34d2e985ce17956a4e8c2edce7e6961568f95e40c09a"
+  digest = "1:cbc746de4662c66fd24a037501bd65aa0f8ad0bfca0c92576e0abb88864e3741"
   name = "google.golang.org/grpc"
   packages = [
     ".",
@@ -288,8 +402,8 @@
     "tap",
   ]
   pruneopts = "UT"
-  revision = "a02b0774206b209466313a0b525d2c738fe407eb"
-  version = "v1.18.0"
+  revision = "2fdaae294f38ed9a121193c51ec99fecd3b13eb7"
+  version = "v1.19.0"
 
 [[projects]]
   branch = "v1"
@@ -311,7 +425,11 @@
     "github.com/danieljoos/wincred",
     "github.com/jiacfan/keychain",
     "github.com/jiacfan/keyctl",
+    "github.com/minio/minio-go",
+    "github.com/minio/minio-go/pkg/credentials",
+    "github.com/minio/minio-go/pkg/s3utils",
     "github.com/spf13/cobra",
+    "github.com/stretchr/testify",
     "golang.org/x/sync/semaphore",
     "gopkg.in/check.v1",
   ]

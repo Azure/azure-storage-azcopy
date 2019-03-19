@@ -14,8 +14,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -28,6 +28,7 @@ type IJobPartMgr interface {
 	IsForceWriteTrue() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
+	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
 	SAS() (string, string)
 	//CancelJob()
@@ -40,6 +41,7 @@ type IJobPartMgr interface {
 	CacheLimiter() common.CacheLimiter
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	common.ILogger
+	SourceProviderPipeline() pipeline.Pipeline
 }
 
 type serviceAPIVersionOverride struct{}
@@ -118,7 +120,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		//NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
-		azblob.NewRequestLogPolicyFactory(o.RequestLog),
+		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
@@ -146,8 +148,8 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
 }
 
-// newFilePipeline creates a Pipeline using the specified credentials and options.
-func newFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer) pipeline.Pipeline {
+// NewFilePipeline creates a Pipeline using the specified credentials and options.
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -196,6 +198,8 @@ type jobPartMgr struct {
 	blobMetadata azblob.Metadata
 	fileMetadata azfile.Metadata
 
+	blobTypeOverride common.BlobType // User specified blob type
+
 	preserveLastModifiedTime bool
 
 	newJobXfer newJobXfer // Method used to start the transfer
@@ -209,6 +213,11 @@ type jobPartMgr struct {
 	cacheLimiter common.CacheLimiter
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
+
+	sourceProviderPipeline pipeline.Pipeline
+
+	// used defensively to protect double init
+	atomicPipelinesInitedIndicator uint32
 
 	// numberOfTransfersDone_doNotUse represents the number of transfer of JobPartOrder
 	// which are either completed or failed
@@ -260,11 +269,12 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 
 	jpm.preserveLastModifiedTime = plan.DstLocalData.PreserveLastModifiedTime
 
+	jpm.blobTypeOverride = plan.DstBlobData.BlobType
 	jpm.newJobXfer = computeJobXfer(plan.FromTo, plan.DstBlobData.BlobType)
 
 	jpm.priority = plan.Priority
 
-	jpm.createPipeline(jobCtx) // pipeline is created per job part manager
+	jpm.createPipelines(jobCtx) // pipeline is created per job part manager
 
 	// *** Schedule this job part's transfers ***
 	for t := uint32(0); t < plan.NumTransfers; t++ {
@@ -343,86 +353,116 @@ func (jpm *jobPartMgr) RescheduleTransfer(jptm IJobPartTransferMgr) {
 	JobsAdmin.(*jobsAdmin).ScheduleTransfer(jpm.priority, jptm)
 }
 
-func (jpm *jobPartMgr) createPipeline(ctx context.Context) {
-	if jpm.pipeline == nil {
-		fromTo := jpm.planMMF.Plan().FromTo
-		credInfo := jpm.jobMgr.getInMemoryTransitJobState().credentialInfo
+func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
+	if atomic.SwapUint32(&jpm.atomicPipelinesInitedIndicator, 1) != 0 {
+		panic("init client and pipelines for same jobPartMgr twice")
+	}
 
-		switch fromTo {
-		// Create pipeline for Azure Blob.
-		case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
-			common.EFromTo.BlobBlob(), common.EFromTo.FileBlob():
-			credential := common.CreateBlobCredential(ctx, credInfo, common.CredentialOpOptions{
-				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-				Panic:    jpm.Panic,
-				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-				Cancel:   jpm.jobMgr.Cancel,
-			})
-			jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+	fromTo := jpm.planMMF.Plan().FromTo
+	credInfo := jpm.jobMgr.getInMemoryTransitJobState().credentialInfo
+	userAgent := common.UserAgent
+	if fromTo.From() == common.ELocation.S3() {
+		userAgent = common.S3ImportUserAgent
+	}
 
-			jpm.pipeline = NewBlobPipeline(
-				credential,
-				azblob.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azblob.TelemetryOptions{
-						Value: common.UserAgent,
-					},
-				},
-				XferRetryOptions{
-					Policy:        0,
-					MaxTries:      UploadMaxTries,
-					TryTimeout:    UploadTryTimeout,
-					RetryDelay:    UploadRetryDelay,
-					MaxRetryDelay: UploadMaxRetryDelay},
-				jpm.pacer)
-		// Create pipeline for Azure BlobFS.
-		case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
-			credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{
-				LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
-				LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
-				Panic:    jpm.Panic,
-				CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
-				Cancel:   jpm.jobMgr.Cancel,
-			})
-			jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+	credOption := common.CredentialOpOptions{
+		LogInfo:  func(str string) { jpm.Log(pipeline.LogInfo, str) },
+		LogError: func(str string) { jpm.Log(pipeline.LogError, str) },
+		Panic:    jpm.Panic,
+		CallerID: fmt.Sprintf("JobID=%v, Part#=%d", jpm.Plan().JobID, jpm.Plan().PartNum),
+		Cancel:   jpm.jobMgr.Cancel,
+	}
+	// TODO: Consider to remove XferRetryPolicy and Options?
+	xferRetryOption := XferRetryOptions{
+		Policy:        0,
+		MaxTries:      UploadMaxTries, // TODO: Consider to unify options.
+		TryTimeout:    UploadTryTimeout,
+		RetryDelay:    UploadRetryDelay,
+		MaxRetryDelay: UploadMaxRetryDelay}
 
-			jpm.pipeline = NewBlobFSPipeline(
-				credential,
-				azbfs.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azbfs.TelemetryOptions{
-						Value: common.UserAgent,
-					},
+	// Create source info provider's pipeline for S2S copy.
+	if fromTo == common.EFromTo.BlobBlob() {
+		jpm.sourceProviderPipeline = NewBlobPipeline(
+			azblob.NewAnonymousCredential(),
+			azblob.PipelineOptions{
+				Log: jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azblob.TelemetryOptions{
+					Value: userAgent,
 				},
-				XferRetryOptions{
-					Policy:        0,
-					MaxTries:      UploadMaxTries,
-					TryTimeout:    UploadTryTimeout,
-					RetryDelay:    UploadRetryDelay,
-					MaxRetryDelay: UploadMaxRetryDelay},
-				jpm.pacer)
-		// Create pipeline for Azure File.
-		case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
-			jpm.pipeline = newFilePipeline(
-				azfile.NewAnonymousCredential(),
-				azfile.PipelineOptions{
-					Log: jpm.jobMgr.PipelineLogInfo(),
-					Telemetry: azfile.TelemetryOptions{
-						Value: common.UserAgent,
-					},
+			},
+			xferRetryOption,
+			jpm.pacer)
+	}
+	if fromTo == common.EFromTo.FileBlob() {
+		jpm.sourceProviderPipeline = NewFilePipeline(
+			azfile.NewAnonymousCredential(),
+			azfile.PipelineOptions{
+				Log: jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azfile.TelemetryOptions{
+					Value: userAgent,
 				},
-				azfile.RetryOptions{
-					Policy:        azfile.RetryPolicyExponential,
-					MaxTries:      UploadMaxTries,
-					TryTimeout:    UploadTryTimeout,
-					RetryDelay:    UploadRetryDelay,
-					MaxRetryDelay: UploadMaxRetryDelay,
+			},
+			azfile.RetryOptions{
+				Policy:        azfile.RetryPolicyExponential,
+				MaxTries:      UploadMaxTries,
+				TryTimeout:    UploadTryTimeout,
+				RetryDelay:    UploadRetryDelay,
+				MaxRetryDelay: UploadMaxRetryDelay,
+			},
+			jpm.pacer)
+	}
+
+	// Create pipeline for data transfer.
+	switch fromTo {
+	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
+		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
+		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
+		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+		jpm.pipeline = NewBlobPipeline(
+			credential,
+			azblob.PipelineOptions{
+				Log: jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azblob.TelemetryOptions{
+					Value: userAgent,
 				},
-				jpm.pacer)
-		default:
-			panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
-		}
+			},
+			xferRetryOption,
+			jpm.pacer)
+	// Create pipeline for Azure BlobFS.
+	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
+		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
+
+		jpm.pipeline = NewBlobFSPipeline(
+			credential,
+			azbfs.PipelineOptions{
+				Log: jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azbfs.TelemetryOptions{
+					Value: userAgent,
+				},
+			},
+			xferRetryOption,
+			jpm.pacer)
+	// Create pipeline for Azure File.
+	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
+		jpm.pipeline = NewFilePipeline(
+			azfile.NewAnonymousCredential(),
+			azfile.PipelineOptions{
+				Log: jpm.jobMgr.PipelineLogInfo(),
+				Telemetry: azfile.TelemetryOptions{
+					Value: userAgent,
+				},
+			},
+			azfile.RetryOptions{
+				Policy:        azfile.RetryPolicyExponential,
+				MaxTries:      UploadMaxTries,
+				TryTimeout:    UploadTryTimeout,
+				RetryDelay:    UploadRetryDelay,
+				MaxRetryDelay: UploadMaxRetryDelay,
+			},
+			jpm.pacer)
+	default:
+		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
 }
 
@@ -463,6 +503,10 @@ func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []by
 	}
 
 	return http.DetectContentType(dataFileToXfer)
+}
+
+func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
+	return jpm.blobTypeOverride
 }
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
@@ -522,6 +566,10 @@ func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
 func (jpm *jobPartMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
 	jpm.jobMgr.LogChunkStatus(id, reason)
+}
+
+func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {
+	return jpm.sourceProviderPipeline
 }
 
 // TODO: Can we delete this method?

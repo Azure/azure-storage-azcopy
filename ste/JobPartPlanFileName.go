@@ -165,7 +165,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption,
 		},
-		atomicJobStatus: common.EJobStatus.InProgress(), // We default to InProgress
+		// For S2S copy, per JobPartPlan info
+		S2SGetS3PropertiesInBackend: order.S2SGetS3PropertiesInBackend,
+		S2SSourceChangeValidation:   order.S2SSourceChangeValidation,
+		S2SInvalidMetadataHandleOption: order.S2SInvalidMetadataHandleOption,
+		atomicJobStatus:             common.EJobStatus.InProgress(), // We default to InProgress
 	}
 
 	// Copy any strings into their respective fields
@@ -220,8 +224,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			SrcContentMD5Length:         int16(len(order.Transfers[t].ContentMD5)),
 			SrcMetadataLength:           int16(srcMetadataLength),
 			SrcBlobTypeLength:           int16(len(order.Transfers[t].BlobType)),
-			// SrcBlobTierLength:           uint16(len(order.Transfers[t].BlobTier)),
-			// TODO: + Metadata
+			SrcBlobTierLength:           int16(len(order.Transfers[t].BlobTier)),
 
 			atomicTransferStatus: common.ETransferStatus.Started(), // Default
 			//ChunkNum:                getNumChunks(uint64(order.Transfers[t].SourceSize), uint64(data.BlockSize)),
@@ -233,7 +236,8 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 		currentSrcStringOffset += int64(jppt.SrcLength + jppt.DstLength + jppt.SrcContentTypeLength +
 			jppt.SrcContentEncodingLength + jppt.SrcContentLanguageLength + jppt.SrcContentDispositionLength +
-			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength + jppt.SrcBlobTypeLength)
+			jppt.SrcCacheControlLength + jppt.SrcContentMD5Length + jppt.SrcMetadataLength +
+			jppt.SrcBlobTypeLength + jppt.SrcBlobTierLength)
 	}
 
 	// All the transfers were written; now write each transfer's src/dst strings
@@ -297,13 +301,11 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			common.PanicIfErr(err)
 			eof += int64(bytesWritten)
 		}
-		// if len(order.Transfers[t].BlobTier) != 0 {
-		// 	bytesWritten, err = file.WriteString(order.Transfers[t].BlobTier)
-		// 	if err != nil {
-		// 		panic(err)
-		// 	}
-		// 	eof += int64(bytesWritten)
-		// }
+		if len(order.Transfers[t].BlobTier) != 0 {
+			bytesWritten, err = file.WriteString(string(order.Transfers[t].BlobTier))
+			common.PanicIfErr(err)
+			eof += int64(bytesWritten)
+		}
 	}
 	// the file is closed to due to defer above
 }

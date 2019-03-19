@@ -130,8 +130,7 @@ type jobMgr struct {
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
-	atomicIsUploadIndicator            int32
-	atomicIsDownloadIndicator          int32
+	atomicTransferDirection            common.TransferDirection
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -172,11 +171,10 @@ func (jm *jobMgr) ActiveConnections() int64 {
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
 func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool) {
+	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction
-	isUpload := atomic.LoadInt32(&jm.atomicIsUploadIndicator) == 1
-	isDownload := atomic.LoadInt32(&jm.atomicIsDownloadIndicator) == 1
-	chunkStateCounts := jm.chunkStatusLogger.GetCounts(isDownload)
+	chunkStateCounts := jm.chunkStatusLogger.GetCounts(atomicTransferDirection)
 
 	// convert the counts to simple strings for consumption by callers
 	const format = "%c: %2d"
@@ -188,7 +186,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool
 	}
 	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
 
-	diskCon := jm.chunkStatusLogger.IsDiskConstrained(isUpload, isDownload)
+	diskCon := jm.chunkStatusLogger.IsDiskConstrained(atomicTransferDirection)
 
 	// logging from here is a bit of a hack
 	// TODO: can we find a better way to get this info into the log?  The caller is at app level,
@@ -234,16 +232,25 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 // Remembers which direction we are running in (upload, download or neither (for service to service))
 // It actually remembers the direction that our most recently-added job PART is running in,
 // because that's where the fromTo information can be found,
-// but we assume taht all the job parts are running in the same direction
+// but we assume that all the job parts are running in the same direction.
+// TODO: Optimize this when it's necessary for delete.
 func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 	fromIsLocal := fromTo.From() == common.ELocation.Local()
 	toIsLocal := fromTo.To() == common.ELocation.Local()
 
 	isUpload := fromIsLocal && !toIsLocal
 	isDownload := !fromIsLocal && toIsLocal
+	isS2SCopy := fromTo.From().IsRemote() && fromTo.To().IsRemote()
 
-	atomic.StoreInt32(&jm.atomicIsUploadIndicator, common.Iffint32(isUpload, 1, 0))
-	atomic.StoreInt32(&jm.atomicIsDownloadIndicator, common.Iffint32(isDownload, 1, 0))
+	if isUpload {
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Upload())
+	}
+	if isDownload {
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Download())
+	}
+	if isS2SCopy {
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
+	}
 }
 
 // SetIncludeExclude sets the include / exclude list of transfers

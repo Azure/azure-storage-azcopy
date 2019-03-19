@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
 var ERpcCmd = RpcCmd("")
@@ -52,7 +52,7 @@ type CopyJobPartOrderRequest struct {
 	Exclude     map[string]int
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
-	SourceRoot string
+	SourceRoot      string
 	DestinationRoot string
 	Transfers       []CopyTransfer
 	LogLevel        LogLevel
@@ -62,13 +62,24 @@ type CopyJobPartOrderRequest struct {
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
+
+	S2SGetS3PropertiesInBackend    bool
+	S2SSourceChangeValidation      bool
+	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType CredentialType
-	OAuthTokenInfo OAuthTokenInfo
+	CredentialType   CredentialType
+	OAuthTokenInfo   OAuthTokenInfo
+	S3CredentialInfo S3CredentialInfo
+}
+
+// S3CredentialInfo contains essential credential info which need to build up S3 client.
+type S3CredentialInfo struct {
+	Endpoint string
+	Region   string
 }
 
 type CopyJobPartOrderResponse struct {

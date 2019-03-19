@@ -36,6 +36,8 @@ const UploadMaxRetryDelay = time.Second * 60
 
 // download related
 const MaxRetryPerDownloadBody = 5
+
+// TODO: consider to unify the retry options.
 const DownloadTryTimeout = time.Minute * 15
 const DownloadRetryDelay = time.Second * 1
 const DownloadMaxRetryDelay = time.Second * 60
@@ -50,17 +52,19 @@ type newJobXfer func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer
 
 // same as newJobXfer, but with an extra parameter
 type newJobXferWithDownloaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, df downloaderFactory)
-type newJobXferWithUploaderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, uf uploaderFactory)
+type newJobXferWithSenderFactory = func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer, sf senderFactory, sipf sourceInfoProviderFactory)
 
-// Takes a multi-purpose up/downloader function, and makes it ready to use with a specific type of up/downloader
-func parameterizeUpload(targetFunction newJobXferWithUploaderFactory, uf uploaderFactory) newJobXfer {
-	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
-		targetFunction(jptm, pipeline, pacer, uf)
-	}
-}
+// Takes a multi-purpose download function, and makes it ready to user with a specific type of downloader
 func parameterizeDownload(targetFunction newJobXferWithDownloaderFactory, df downloaderFactory) newJobXfer {
 	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
 		targetFunction(jptm, pipeline, pacer, df)
+	}
+}
+
+// Takes a multi-purpose send function, and makes it ready to use with a specific type of sender
+func parameterizeSend(targetFunction newJobXferWithSenderFactory, sf senderFactory, sipf sourceInfoProviderFactory) newJobXfer {
+	return func(jptm IJobPartTransferMgr, pipeline pipeline.Pipeline, pacer *pacer) {
+		targetFunction(jptm, pipeline, pacer, sf, sipf)
 	}
 }
 
@@ -73,28 +77,30 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch blobType {
 		case common.EBlobType.None(),
 			common.EBlobType.BlockBlob():
-			return parameterizeUpload(localToRemote, newBlockBlobUploader)
+			return parameterizeSend(anyToRemote, newBlockBlobUploader, newLocalSourceInfoProvider)
 		case common.EBlobType.PageBlob():
-			return parameterizeUpload(localToRemote, newPageBlobUploader)
+			return parameterizeSend(anyToRemote, newPageBlobUploader, newLocalSourceInfoProvider)
 		case common.EBlobType.AppendBlob():
-			return parameterizeUpload(localToRemote, newAppendBlobUploader)
+			return parameterizeSend(anyToRemote, newAppendBlobUploader, newLocalSourceInfoProvider)
 		}
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
 		return parameterizeDownload(remoteToLocal, newAzureFilesDownloader)
 	case common.EFromTo.LocalFile(): // upload from local file system to Azure File
-		return parameterizeUpload(localToRemote, newAzureFilesUploader)
+		return parameterizeSend(anyToRemote, newAzureFilesUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.FileTrash():
 		return DeleteFilePrologue
 	case common.EFromTo.LocalBlobFS():
-		return parameterizeUpload(localToRemote, newBlobFSUploader)
+		return parameterizeSend(anyToRemote, newBlobFSUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.BlobFSLocal():
 		return parameterizeDownload(remoteToLocal, newBlobFSDownloader)
 	case common.EFromTo.BlobBlob():
-		fallthrough
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newBlobSourceInfoProvider)
 	case common.EFromTo.FileBlob():
-		return URLToBlob
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newDefaultRemoteSourceInfoProvider)
+	case common.EFromTo.S3Blob():
+		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 }

@@ -36,8 +36,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -96,6 +96,22 @@ type rawCopyCmdArgs struct {
 	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
+	// whether user wants to preserve full properties during service to service copy, the default value is true.
+	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
+	// to preserve full properties AzCopy needs to send one additional request per object/file.
+	s2sPreserveProperties bool
+	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
+	s2sGetS3PropertiesInBackend bool
+	// whether user wants to preserve access tier during service to service copy, the default value is true.
+	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
+	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
+	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	s2sPreserveAccessTier bool
+	// whether user wants to check if source has changed after enumerating, the default value is true.
+	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
+	s2sSourceChangeValidation bool
+	// specify how user wants to handle invalid metadata.
+	s2sInvalidMetadataHandleOption string
 }
 
 // validates and transform raw input into cooked input
@@ -250,48 +266,75 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while downloading")
+			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while downloading")
+			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while downloading")
+			return cooked, fmt.Errorf("blob-tier is not supported while downloading")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while downloading")
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while downloading")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while downloading")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while downloading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob():
+		common.EFromTo.FileBlob(),
+		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from sevice to service")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from sevice to service")
+			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
+		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
+		// For s3 and file, only hot block blob tier is supported.
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while copying from sevice to service")
+			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
+		}
+		// Disabling blob type override.
+		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
+		// and when file and s3 is source, only block blob destination is supported.
+		if cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported while coping from service to service")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from sevice to service")
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from sevice to service")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while copying from service to service")
 		}
 	}
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
@@ -310,6 +353,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			}
 			cooked.excludeBlobType = append(cooked.excludeBlobType, eBlobType.ToAzBlobType())
 		}
+	}
+
+	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
+	cooked.s2sGetS3PropertiesInBackend = raw.s2sGetS3PropertiesInBackend
+	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
+	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
+
+	err = cooked.s2sInvalidMetadataHandleOption.Parse(raw.s2sInvalidMetadataHandleOption)
+	if err != nil {
+		return cooked, err
 	}
 
 	return cooked, nil
@@ -378,15 +431,27 @@ type cookedCopyCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// whether user wants to preserve full properties during service to service copy, the default value is true.
+	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
+	// to preserve full properties AzCopy needs to send one additional request per object/file.
+	s2sPreserveProperties bool
+	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
+	s2sGetS3PropertiesInBackend bool
+	// whether user wants to preserve access tier during service to service copy, the default value is true.
+	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
+	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
+	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	s2sPreserveAccessTier bool
+	// whether user wants to check if source has changed after enumerating, the default value is true.
+	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
+	s2sSourceChangeValidation bool
+	// specify how user wants to handle invalid metadata.
+	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
 	switch cca.fromTo {
-	// File's piping is not supported temporarily.
-	// case common.EFromTo.PipeFile():
-	// 	fallthrough
-	// case common.EFromTo.FilePipe():
-	// 	fallthrough
 	case common.EFromTo.BlobPipe():
 		fallthrough
 	case common.EFromTo.PipeBlob():
@@ -618,6 +683,21 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 
+	case common.ELocation.S3():
+		fromURL, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromURL.String(), err.Error())
+		}
+
+		// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
+		// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
+		*fromURL = common.URLExtension{URL: *fromURL}.URLWithPlusDecodedInPath()
+		cca.source = fromURL.String()
+
+		// set the clean source root
+		fromURL.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fromURL.Path)
+		jobPartOrder.SourceRoot = fromURL.String()
+
 	default:
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 	}
@@ -693,18 +773,29 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobBlob():
-		e := copyBlobToNEnumerator{
-			copyS2SEnumerator: copyS2SEnumerator{
+		e := copyS2SMigrationBlobEnumerator{
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
-	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
-	// case common.EFromTo.FileBlob():
-	// 	e := copyFileToNEnumerator(jobPartOrder)
-	// 	err = e.enumerate(cca)
-	// 	lastPartNumber = e.PartNum
+	case common.EFromTo.FileBlob():
+		e := copyS2SMigrationFileEnumerator{
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
+				CopyJobPartOrderRequest: jobPartOrder,
+			},
+		}
+		err = e.enumerate(cca)
+		lastPartNumber = e.PartNum
+	case common.EFromTo.S3Blob():
+		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
+				CopyJobPartOrderRequest: jobPartOrder,
+			},
+		}
+		err = e.enumerate(cca)
+		lastPartNumber = e.PartNum
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
 	}
@@ -965,6 +1056,25 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
+		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
+		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
+		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-source-change-validation", false, "check if source has changed after enumerating. "+
+		"For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs. ")
+	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-invalid-metadata-handle", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
+
+	// s2sGetS3PropertiesInBackend is an optional flag for controlling whether S3 object's full properties are get during enumerating in frontend or
+	// right before transferring in ste(backend).
+	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
+	// while this could cause big performance issue for S3, where listing doesn't return full properties,
+	// and enumerating logic do fetching properties sequentially!
+	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
+	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
+	// The usage of this hidden flag is to provide fallback to traditional behavior.
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetS3PropertiesInBackend, "s2s-get-s3-properties-in-backend", true, "get S3 objects properties in backend. ")
+
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
 
@@ -974,4 +1084,5 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+	cpCmd.PersistentFlags().MarkHidden("s2s-get-s3-properties-in-backend")
 }

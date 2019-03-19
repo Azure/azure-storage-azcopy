@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	minio "github.com/minio/minio-go"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
@@ -255,5 +256,48 @@ func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.D
 		}
 
 	}
+	return nil
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// S3 service enumerators.
+//////////////////////////////////////////////////////////////////////////////////////////
+// enumerateBucketsInServiceWithMinio is the helper for enumerating buckets in S3 service.
+func enumerateBucketsInServiceWithMinio(bucketInfos []minio.BucketInfo,
+	filter func(bucketInfo minio.BucketInfo) bool,
+	callback func(bucketInfo minio.BucketInfo) error) error {
+
+	for _, bucketInfo := range bucketInfos {
+		if !filter(bucketInfo) {
+			continue
+		}
+
+		if err := callback(bucketInfo); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// enumerateObjectsInBucketWithMinio enumerates objects in bucket.
+func enumerateObjectsInBucketWithMinio(ctx context.Context, s3Client *minio.Client, bucketName, objectNamePrefix string,
+	filter func(objectInfo minio.ObjectInfo) bool,
+	callback func(objectInfo minio.ObjectInfo) error) error {
+
+	for objectInfo := range s3Client.ListObjectsV2(bucketName, objectNamePrefix, true, ctx.Done()) {
+		if objectInfo.Err != nil {
+			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
+		}
+
+		if !filter(objectInfo) {
+			continue
+		}
+
+		if err := callback(objectInfo); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
