@@ -356,24 +356,13 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 	// our timeout here gets very big.  Why? Because, if things really _are_ slow, e.g. on the network,
 	// we don't want to keep forcing very frequent retries. We want to do one early if needed, but if that doesn't
 	// result in fast completion, we want to back our checking frequency off very quickly and basically leave it alone.
+	// Also, we need it to be steep because we are always measuring from "start", not from end of last polling loop
 	initialWaitSeconds := float64(15) // arbitrarily selected, to give minimal impression of waiting, to user (in testing, 30 seconds did occasionally show total throughput drops of a new 10's of percent)
 	base := float64(4)                // a steep exponential backoff
 
 	// set up a conservative timeout threshold based on average throughput so far, but being more aggressive if job is in its final stages
-	var speedTimeout time.Duration
-	var isJobAboutToFinish bool
 	speedTimeoutBackoff := 1
-	recalcSpeedTimeout := func() {
-		isJobAboutToFinish = w.chunkLogger.IsWaitingOnFinalBodyReads()
-		var multiplier int
-		if isJobAboutToFinish {
-			multiplier = 3 // be more aggressive if we are near the end
-		} else {
-			multiplier = 10 // be more conservative, if we're not near the end
-		}
-		speedTimeout = w.averageDurationPerChunk() * time.Duration(multiplier) * time.Duration(speedTimeoutBackoff)
-	}
-	recalcSpeedTimeout()
+	speedTimeout, isJobAboutToFinish := w.calcSpeedTimeout(speedTimeoutBackoff)
 
 	// Run a goroutine to monitor progress and force retries when necessary
 	// Note that the retries are transparent to the main body Read call, due to use of retry reader. I.e.
@@ -381,8 +370,11 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 	go func() {
 		maxConfiguredRetries := w.maxRetryPerDownloadBody
 		maxForcedRetries := maxConfiguredRetries - 1 // leave one retry unused by us, to keep it available for non-forced, REAL, errors (handled by retryReader)
+
 		for try := 0; try < maxForcedRetries; try++ {
+
 			memoryTimeout := time.Second * time.Duration(initialWaitSeconds*math.Pow(base, float64(try)))
+
 			pollDuration := 5 * time.Second // relatively short poll, so that we can update speedTimeout on each poll to reflect latest circumstances
 			if isJobAboutToFinish {
 				pollDuration = 1 * time.Second // poll more vigorously near the end
@@ -392,31 +384,45 @@ func (w *chunkedFileWriter) setupProgressMonitoring(readDone chan struct{}, id C
 				// the read has finished
 				return
 			case <-time.After(pollDuration):
-				if time.Since(start) > memoryTimeout {
-					severalLaterChunksHaveArrived := atomic.LoadInt32(&w.totalReceivedChunkCount) > initialReceivedCount+1
-					if severalLaterChunksHaveArrived && w.haveMemoryPressure(chunkSize) {
-						// We know that later chunks are coming through fine AND we are getting tight on RAM, so force retry of this chunk
-						// (even if still within conservativeTimeout)
-						// This is the primary purpose of this routine: preventing 'stalls' due to too many unsaved chunks in RAM.
-						// It's necessary because we write sequentially to the file.
-						// It does not have to take into account average throughput, because later chucks arriving and RAM running out
-						// is proof enough.
-						w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToMem())
-						retryForcer()
-					}
-				} else {
-					recalcSpeedTimeout() // update it with freshly-computed value (in case we have averages now, or proximity to end of job, that we didn't have before
-					if time.Since(start) > speedTimeout {
-						// This is the secondary purpose of this routine: preventing 'stalls' near the end of the transfer, where
-						// RAM usage is no longer an issue, but slow chunks can cause a long tail in job progress.
-						// Here we do have to take into account average throughput (in the form of conservativeTimeout) because
-						// user may have a very slow network, so timeouts here must be relative to prior performance.
-						w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToSpeed())
-						retryForcer()
-						speedTimeoutBackoff = speedTimeoutBackoff * 5 // ramp this up really quickly, since the last thing we want to do is keep forcing retries on slow things that actually were making useful progress
-					}
+				// continue
+			}
+
+			if time.Since(start) > memoryTimeout {
+				severalLaterChunksHaveArrived := atomic.LoadInt32(&w.totalReceivedChunkCount) > initialReceivedCount+1
+				if severalLaterChunksHaveArrived && w.haveMemoryPressure(chunkSize) {
+					// We know that later chunks are coming through fine AND we are getting tight on RAM, so force retry of this chunk
+					// (even if still within conservativeTimeout)
+					// This is the primary purpose of this routine: preventing 'stalls' due to too many unsaved chunks in RAM.
+					// It's necessary because we write sequentially to the file.
+					// It does not have to take into account average throughput, because later chucks arriving and RAM running out
+					// is proof enough.
+					w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToMem())
+					retryForcer()
+				}
+			} else {
+				speedTimeout, isJobAboutToFinish = w.calcSpeedTimeout(speedTimeoutBackoff) // update with freshly-computed value (in case we have averages now, or proximity to end of job, that we didn't have before
+				if time.Since(start) > speedTimeout {
+					// This is the secondary purpose of this routine: preventing 'stalls' near the end of the transfer, where
+					// RAM usage is no longer an issue, but slow chunks can cause a long tail in job progress.
+					// Here we do have to take into account average throughput (in the form of conservativeTimeout) because
+					// user may have a very slow network, so timeouts here must be relative to prior performance.
+					w.chunkLogger.LogChunkStatus(id, EWaitReason.BodyReReadDueToSpeed())
+					retryForcer()
+					speedTimeoutBackoff = speedTimeoutBackoff * 5 // ramp this up really quickly, since the last thing we want to do is keep forcing retries on slow things that actually were making useful progress
 				}
 			}
 		}
 	}()
+}
+
+func (w *chunkedFileWriter) calcSpeedTimeout(speedTimeoutBackoffFactor int) (speedTimeout time.Duration, isJobAboutToFinish bool) {
+	isJobAboutToFinish = w.chunkLogger.IsWaitingOnFinalBodyReads()
+	var multiplier int
+	if isJobAboutToFinish {
+		multiplier = 3 // be more aggressive if we are near the end
+	} else {
+		multiplier = 10 // be more conservative, if we're not near the end
+	}
+	speedTimeout = w.averageDurationPerChunk() * time.Duration(multiplier) * time.Duration(speedTimeoutBackoffFactor)
+	return
 }

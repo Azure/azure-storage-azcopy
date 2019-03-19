@@ -368,23 +368,22 @@ func (csl *chunkStatusLogger) isDownloadDiskConstrained() bool {
 	chunksWaitingOnDisk := csl.getCount(EWaitReason.Sorting()) + csl.getCount(EWaitReason.QueueToWrite())
 
 	// i.e. are queued before the actual network states
-	chunksQueueBeforeNetwork := csl.getCount(EWaitReason.WorkerGR())
+	chunksQueuedBeforeNetwork := csl.getCount(EWaitReason.WorkerGR())
 
 	// if we have way more stuff waiting on disk than on network, we can assume disk is the bottleneck
 	const activeDiskQThreshold = 10
 	const bigDifference = 5                                            // TODO: review/tune the arbitrary constant here
 	isDiskConstrained := chunksWaitingOnDisk > activeDiskQThreshold && // this test is in case both are near zero, as they would be near the end of the job
-		chunksWaitingOnDisk > bigDifference*chunksQueueBeforeNetwork
+		chunksWaitingOnDisk > bigDifference*chunksQueuedBeforeNetwork
 
 	// while we are here... set an indicator of whether we are waiting on body reads (only) with nothing more to download
 	// TODO: find a better place for this code
 	const finalBodyReadsThreshold = 50 // an empirically-derived guestimate of a suitable value.  Too high, and we trigger the final waiting logic too soon; too low and we trigger to too late
-	chunksWaitingOnRam := csl.getCount(EWaitReason.RAMToSchedule())
-	chunksWaitingOnHeader := csl.getCount(EWaitReason.HeaderResponse())
+	chunksBeforeBody := csl.getCount(EWaitReason.RAMToSchedule()) + chunksQueuedBeforeNetwork + csl.getCount(EWaitReason.HeaderResponse())
 	chunksWaitingOnBody := csl.getCount(EWaitReason.Body())
-	if (chunksWaitingOnRam+chunksQueueBeforeNetwork+chunksWaitingOnHeader) == 0 &&
-		chunksWaitingOnBody > 0 && chunksWaitingOnBody < finalBodyReadsThreshold {
-		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 1)
+	isSmallNumberWaitingOnBody := chunksWaitingOnBody > 0 && chunksWaitingOnBody < finalBodyReadsThreshold
+	if chunksBeforeBody == 0 && isSmallNumberWaitingOnBody {
+		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 1) // there's nothing BEFORE the body stage, so the body stage is the hold-up
 	} else {
 		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 0)
 	}
