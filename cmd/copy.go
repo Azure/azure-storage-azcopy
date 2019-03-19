@@ -781,9 +781,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.FileBlob():
-		if common.IsEnhanceS2SCopyDisabled() {
-			return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
-		}
 		e := copyS2SMigrationFileEnumerator{
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
@@ -792,9 +789,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		err = e.enumerate(cca)
 		lastPartNumber = e.PartNum
 	case common.EFromTo.S3Blob():
-		if common.IsEnhanceS2SCopyDisabled() {
-			return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
-		}
 		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,

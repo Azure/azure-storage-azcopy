@@ -102,8 +102,3 @@ func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
 func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
 }
-
-func IsEnhanceS2SCopyDisabled() bool {
-	// TODO: discuss whether to control with env var.
-	return false
-}
