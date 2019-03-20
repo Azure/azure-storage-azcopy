@@ -131,7 +131,7 @@ const maxDesirableActiveChunks = 20 // TODO: can we find a sensible way to remov
 // from the cache limiter, which is also in this struct.
 func (w *chunkedFileWriter) WaitToScheduleChunk(ctx context.Context, id ChunkID, chunkSize int64) error {
 	w.chunkLogger.LogChunkStatus(id, EWaitReason.RAMToSchedule())
-	err := w.cacheLimiter.WaitUntilAddBytes(ctx, chunkSize, w.shouldUseRelaxedRamThreshold)
+	err := w.cacheLimiter.WaitUntilAdd(ctx, chunkSize, w.shouldUseRelaxedRamThreshold)
 	if err == nil {
 		atomic.AddInt32(&w.activeChunkCount, 1)
 	}
@@ -286,7 +286,7 @@ func (w *chunkedFileWriter) setStatusForContiguousAvailableChunks(unsavedChunksB
 // Saves one chunk to its destination
 func (w *chunkedFileWriter) saveOneChunk(chunk fileChunk) error {
 	defer func() {
-		w.cacheLimiter.RemoveBytes(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
+		w.cacheLimiter.Remove(int64(len(chunk.data))) // remove this from the tally of scheduled-but-unsaved bytes
 		atomic.AddInt32(&w.activeChunkCount, -1)
 		w.slicePool.ReturnSlice(chunk.data)
 		w.chunkLogger.LogChunkStatus(chunk.id, EWaitReason.ChunkDone()) // this chunk is all finished
@@ -311,9 +311,9 @@ func (w *chunkedFileWriter) shouldUseRelaxedRamThreshold() bool {
 
 // Are we currently in a memory-constrained situation?
 func (w *chunkedFileWriter) haveMemoryPressure(chunkSize int64) bool {
-	didAdd := w.cacheLimiter.TryAddBytes(chunkSize, w.shouldUseRelaxedRamThreshold())
+	didAdd := w.cacheLimiter.TryAdd(chunkSize, w.shouldUseRelaxedRamThreshold())
 	if didAdd {
-		w.cacheLimiter.RemoveBytes(chunkSize) // remove immediately, since this was only a test
+		w.cacheLimiter.Remove(chunkSize) // remove immediately, since this was only a test
 	}
 	return !didAdd
 }

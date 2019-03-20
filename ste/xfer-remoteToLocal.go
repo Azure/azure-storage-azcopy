@@ -68,7 +68,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
-		epilogueWithCleanupDownload(jptm, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		epilogueWithCleanupDownload(jptm, nil, false, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
 
@@ -77,11 +77,21 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	if fileSize <= 1*1024*1024 {
 		writeThrough = false // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
 	}
-	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
-	if err != nil {
+	failFileCreation := func(err error, forceReleaseFileCount bool) {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		epilogueWithCleanupDownload(jptm, nil, nil) // use standard epilogue for consistency
+		// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
+		epilogueWithCleanupDownload(jptm, nil, forceReleaseFileCount, nil)
+	}
+	// block until we can safely use a file handle	// TODO: it might be nice if this happened inside chunkedFileWriter, when first chunk needs to be saved,
+	err := jptm.FileCountLimiter().WaitUntilAdd(jptm.Context(), 1, func() bool { return true })
+	if err != nil {
+		failFileCreation(err, false)
+		return
+	}
+	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
+	if err != nil {
+		failFileCreation(err, true)
 		return
 	}
 	// TODO: Question: do we need to Stat the file, to check its size, after explicitly making it with the desired size?
@@ -123,7 +133,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dstFile, dstWriter) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dstFile, false, dstWriter) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -168,7 +178,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.File, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	haveNonEmptyFile := activeDstFile != nil
@@ -177,6 +187,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 		// wait until all received chunks are flushed out
 		md5OfFileAsWritten, flushError := cw.Flush(jptm.Context())
 		closeErr := activeDstFile.Close() // always try to close if, even if flush failed
+		jptm.FileCountLimiter().Remove(1) // always release it from our count, no matter what happened
 		if flushError != nil {
 			jptm.FailActiveDownload("Flushing file", flushError)
 		}
@@ -195,6 +206,10 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 			if err != nil {
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
+		}
+	} else {
+		if forceReleaseFileCount {
+			jptm.FileCountLimiter().Remove(1) // special case, for we we failed after adding it to count, but before making an actual file
 		}
 	}
 

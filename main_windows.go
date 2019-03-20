@@ -21,6 +21,7 @@
 package main
 
 import (
+	"math"
 	"os"
 	"os/exec"
 	"path"
@@ -39,9 +40,14 @@ func osModifyProcessCommand(cmd *exec.Cmd) *exec.Cmd {
 // ProcessOSSpecificInitialization chnages the soft limit for filedescriptor for process
 // return the filedescriptor limit for process. If the function fails with some, it returns
 // the error
-// TODO: this api is implemented for windows as well but not required.
+// TODO: this api is implemented for windows as well but not required because Windows
+// does not default to a precise low limit like Linux does
 func ProcessOSSpecificInitialization() (int, error) {
-	return 0, nil
+
+	// this exaggerates what's possible, but is accurate enough for our purposes, in which our goal is simply to apply no specific limit on Windows
+	const effectivelyUnlimited = math.MaxInt32
+
+	return effectivelyUnlimited, nil
 }
 
 // GetAzCopyAppPath returns the path of Azcopy in local appdata.

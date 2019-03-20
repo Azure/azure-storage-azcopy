@@ -96,7 +96,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -140,14 +140,15 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
 	ja := &jobsAdmin{
-		logger:        common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
-		jobIDToJobMgr: newJobIDToJobMgr(),
-		logDir:        azcopyLogPathFolder,
-		planDir:       planDir,
-		pacer:         newPacer(targetRateInMBps * 1024 * 1024),
-		slicePool:     common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:  common.NewCacheLimiter(maxRamBytesToUse),
-		appCtx:        appCtx,
+		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
+		jobIDToJobMgr:    newJobIDToJobMgr(),
+		logDir:           azcopyLogPathFolder,
+		planDir:          planDir,
+		pacer:            newPacer(targetRateInMBps * 1024 * 1024),
+		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
+		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),
+		appCtx:           appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -181,10 +182,12 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, targetRate
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < 64; cc++ {
+	for cc := 0; cc < NumTransferInitiationRoutines; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }
+
+const NumTransferInitiationRoutines = 64 // TODO make this configurable
 
 // QueueJobParts puts the given JobPartManager into the partChannel
 // from where this JobPartMgr will be picked by a routine and
@@ -289,6 +292,7 @@ type jobsAdmin struct {
 	pacer               *pacer
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
+	fileCountLimiter    common.CacheLimiter
 }
 
 type CoordinatorChannels struct {

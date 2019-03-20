@@ -277,7 +277,8 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
-		nil), nil
+		nil,
+		ste.NewAzcopyHTTPClient()), nil
 }
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {

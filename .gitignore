@@ -318,6 +318,7 @@ __pycache__/
 
 # Project executable
 azure-storage-azcopy.exe
+azure-storage-azcopy
 testSuite/testSuite.exe
 *.exe
 

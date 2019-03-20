@@ -23,6 +23,8 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -71,6 +73,7 @@ type IJobMgr interface {
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	HttpClient() *http.Client
 
 	common.ILoggerCloser
 }
@@ -81,6 +84,7 @@ func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Cont
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+		httpClient:        NewAzcopyHTTPClient(),
 		logger:            common.NewJobLogger(jobID, level, appLogger, logFileFolder),
 		chunkStatusLogger: common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
 		/*Other fields remain zero-value until this job is scheduled */}
@@ -96,11 +100,20 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 	if len(commandString) > 0 {
 		jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Job-Command %s", commandString))
 	}
+	jm.logConcurrencyParameters()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
 	jm.partsDone = 0
 	return jm
+}
+
+func (jm *jobMgr) logConcurrencyParameters() {
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB", float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d", JobsAdmin.(*jobsAdmin).fileCountLimiter.Limit()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d", NumTransferInitiationRoutines))
+	// TODO: find a way to add concurrency value here (i.e. number of chunk func worker go routines)
 }
 
 // jobMgr represents the runtime information for a Job
@@ -110,6 +123,10 @@ type jobMgr struct {
 	jobID             common.JobID // The Job's unique ID
 	ctx               context.Context
 	cancel            context.CancelFunc
+
+	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
+	// its internal connection pool
+	httpClient *http.Client
 
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 	// partsDone keep the count of completed part of the Job.
@@ -212,8 +229,9 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer,
-		slicePool:    JobsAdmin.(*jobsAdmin).slicePool,
-		cacheLimiter: JobsAdmin.(*jobsAdmin).cacheLimiter}
+		slicePool:        JobsAdmin.(*jobsAdmin).slicePool,
+		cacheLimiter:     JobsAdmin.(*jobsAdmin).cacheLimiter,
+		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
@@ -251,6 +269,10 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 	if isS2SCopy {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
 	}
+}
+
+func (jm *jobMgr) HttpClient() *http.Client {
+	return jm.httpClient
 }
 
 // SetIncludeExclude sets the include / exclude list of transfers

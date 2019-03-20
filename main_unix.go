@@ -23,17 +23,19 @@
 package main
 
 import (
+	"math"
 	"os"
 	"path"
 	"syscall"
 )
 
 // ProcessOSSpecificInitialization changes the soft limit for file descriptor for process
-// and returns the file descriptor limit for process. If the function fails with some error
-// it returns the error.
+// and returns the new file descriptor limit for process.
+// We need to do this because the default limits are low on Linux, and we concurrently open lots of files
+// and sockets (both of which count towards this limit).
 // Api gets the hard limit for process file descriptor
-// and sets the soft limit for process file descriptor to above hard limit
-func ProcessOSSpecificInitialization() (uint64, error) {
+// and sets the soft limit for process file descriptor to (hard limit - 1)
+func ProcessOSSpecificInitialization() (int, error) {
 	var rlimit, zero syscall.Rlimit
 	// get the hard limit
 	err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rlimit)
@@ -47,12 +49,15 @@ func ProcessOSSpecificInitialization() (uint64, error) {
 	set := rlimit
 	// set the current limit to one less than max of the rlimit
 	set.Cur = set.Max - 1
-	// set the soft limit to above rlimit
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
 	if err != nil {
 		return 0, err
 	}
-	return set.Max, nil
+	if set.Cur > math.MaxInt32 {
+		return math.MaxInt32, nil
+	} else {
+		return int(set.Cur), nil
+	}
 }
 
 // GetAzCopyAppPath returns the path of Azcopy folder in local appdata.

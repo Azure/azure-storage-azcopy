@@ -29,14 +29,16 @@ import (
 
 type Predicate func() bool
 
-// Used to limit the amount of in-flight data in RAM, to keep it an an acceptable level.
-// For downloads, network is producer and disk is consumer, while for uploads the roles are reversed.
+// Used to limit the amounts of things. E.g. amount of in-flight data in RAM, to keep it an an acceptable level.
+// Also used for number of open files (since that's limited on Linux).
+// In the case of RAM usage, for downloads, network is producer and disk is consumer, while for uploads the roles are reversed.
 // In either case, if the producer is faster than the consumer, this CacheLimiter is necessary
-// prevent unbounded RAM usage
+// prevent unbounded RAM usage.
 type CacheLimiter interface {
-	TryAddBytes(count int64, useRelaxedLimit bool) (added bool)
-	WaitUntilAddBytes(ctx context.Context, count int64, useRelaxedLimit Predicate) error
-	RemoveBytes(count int64)
+	TryAdd(count int64, useRelaxedLimit bool) (added bool)
+	WaitUntilAdd(ctx context.Context, count int64, useRelaxedLimit Predicate) error
+	Remove(count int64)
+	Limit() int64
 }
 
 type cacheLimiter struct {
@@ -49,7 +51,7 @@ func NewCacheLimiter(limit int64) CacheLimiter {
 }
 
 // TryAddBytes tries to add a memory allocation within the limit.  Returns true if it could be (and was) added
-func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added bool) {
+func (c *cacheLimiter) TryAdd(count int64, useRelaxedLimit bool) (added bool) {
 	lim := c.limit
 
 	// Above the "strict" limit, there's a bit of extra room, which we use
@@ -63,6 +65,8 @@ func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added boo
 		// no backlogging of new chunks behind slow ones (i.e. these "good" cases are allowed to proceed without
 		// interruption) and for uploads its used for re-doing the prefetches when we do retries (i.e. so these are
 		// not blocked by other chunks using up RAM).
+		// TODO: now that cacheLimiter is used for multiple purposes, the hard-coding of the distinction between
+		//   relaxed and strict limits is less appropriate. Refactor to make it a configuration param of the instance?
 	}
 
 	if atomic.AddInt64(&c.value, count) <= lim {
@@ -74,10 +78,10 @@ func (c *cacheLimiter) TryAddBytes(count int64, useRelaxedLimit bool) (added boo
 }
 
 /// WaitUntilAddBytes blocks until it completes a successful call to TryAddBytes
-func (c *cacheLimiter) WaitUntilAddBytes(ctx context.Context, count int64, useRelaxedLimit Predicate) error {
+func (c *cacheLimiter) WaitUntilAdd(ctx context.Context, count int64, useRelaxedLimit Predicate) error {
 	for {
 		// Proceed if there's room in the cache
-		if c.TryAddBytes(count, useRelaxedLimit()) {
+		if c.TryAdd(count, useRelaxedLimit()) {
 			return nil
 		}
 
@@ -97,7 +101,11 @@ func (c *cacheLimiter) WaitUntilAddBytes(ctx context.Context, count int64, useRe
 	}
 }
 
-func (c *cacheLimiter) RemoveBytes(count int64) {
+func (c *cacheLimiter) Remove(count int64) {
 	negativeDelta := -count
 	atomic.AddInt64(&c.value, negativeDelta)
+}
+
+func (c *cacheLimiter) Limit() int64 {
+	return c.limit
 }

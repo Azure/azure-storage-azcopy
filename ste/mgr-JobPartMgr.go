@@ -14,8 +14,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 var _ IJobPartMgr = &jobPartMgr{}
@@ -39,6 +39,7 @@ type IJobPartMgr interface {
 	ReleaseAConnection()
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
+	FileCountLimiter() common.CacheLimiter
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
@@ -69,7 +70,23 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-func newAzcopyHTTPClient() *http.Client {
+// Max number of idle connections per host, to be held in the connection pool inside HTTP client.
+// This use to be 1000, but each consumes a handle, and on Linux total file/network handle counts can be
+// tightly constrained, possibly to as low as 1024 in total. So we want a lower figure than 1000.
+// 500 ought to be enough because this figure is about pooling temporarily un-used connections.
+// Our max number of USED connections, at any one moment in time, is set by AZCOPY_CONCURRENCY_VALUE
+// which, as at Mar 2019, defaults to 300.  Because connections are constantly released and use by that pool
+// of 300 goroutines, its reasonable to assume that the total number of momentarily-
+// UNused connections will be much smaller than the number USED, i.e. much less than 300.  So this figure
+// we set here should be MORE than enough.
+const AzCopyMaxIdleConnsPerHost = 500
+
+// NewAzcopyHTTPClient creates a new HTTP client.
+// We must minimize use of this, and instead maximize re-use of the returned client object.
+// Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
+// number of available network sockets on resource-constrained Linux systems. (E.g. when
+// 'ulimit -Hn' is low).
+func NewAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
@@ -80,7 +97,7 @@ func newAzcopyHTTPClient() *http.Client {
 				DualStack: true,
 			}).Dial, /*Context*/
 			MaxIdleConns:           0, // No limit
-			MaxIdleConnsPerHost:    1000,
+			MaxIdleConnsPerHost:    AzCopyMaxIdleConnsPerHost,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
@@ -107,7 +124,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -122,12 +139,12 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
 	}
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -145,11 +162,11 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 		NewPacerPolicyFactory(p),
 		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -164,7 +181,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
-	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(newAzcopyHTTPClient()), Log: o.Log})
+	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -210,7 +227,8 @@ type jobPartMgr struct {
 
 	slicePool common.ByteSlicePooler
 
-	cacheLimiter common.CacheLimiter
+	cacheLimiter     common.CacheLimiter
+	fileCountLimiter common.CacheLimiter
 
 	pipeline pipeline.Pipeline // ordered list of Factory objects and an object implementing the HTTPSender interface
 
@@ -391,7 +409,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				},
 			},
 			xferRetryOption,
-			jpm.pacer)
+			jpm.pacer,
+			jpm.jobMgr.HttpClient())
 	}
 	if fromTo == common.EFromTo.FileBlob() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
@@ -409,7 +428,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				RetryDelay:    UploadRetryDelay,
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
-			jpm.pacer)
+			jpm.pacer,
+			jpm.jobMgr.HttpClient())
 	}
 
 	// Create pipeline for data transfer.
@@ -427,7 +447,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				},
 			},
 			xferRetryOption,
-			jpm.pacer)
+			jpm.pacer,
+			jpm.jobMgr.HttpClient())
 	// Create pipeline for Azure BlobFS.
 	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
@@ -442,7 +463,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				},
 			},
 			xferRetryOption,
-			jpm.pacer)
+			jpm.pacer,
+			jpm.jobMgr.HttpClient())
 	// Create pipeline for Azure File.
 	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
 		jpm.pipeline = NewFilePipeline(
@@ -460,7 +482,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				RetryDelay:    UploadRetryDelay,
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
-			jpm.pacer)
+			jpm.pacer,
+			jpm.jobMgr.HttpClient())
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}
@@ -472,6 +495,10 @@ func (jpm *jobPartMgr) SlicePool() common.ByteSlicePooler {
 
 func (jpm *jobPartMgr) CacheLimiter() common.CacheLimiter {
 	return jpm.cacheLimiter
+}
+
+func (jpm *jobPartMgr) FileCountLimiter() common.CacheLimiter {
+	return jpm.fileCountLimiter
 }
 
 func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
