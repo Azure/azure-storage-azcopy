@@ -132,10 +132,12 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
 	// Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
 	// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
+	// Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
+	// count 100 MB towards this limit, but actually consume 128 MB)
 	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
 	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
-	if gbToUse > 10 {
-		gbToUse = 10 // cap it. Even 6 is enough at 10 Gbps with standard chunk sizes, but allow a little extra here to help if larger blob block sizes are selected by user
+	if gbToUse > 16 {
+		gbToUse = 16 // cap it. Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
