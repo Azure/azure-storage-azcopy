@@ -70,6 +70,15 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
+// Max number of idle connections per host, to be held in the connection pool inside HTTP client.
+// This use to be 1000, but each consumes a handle, and on Linux total file/network handle counts can be
+// tightly constrained, possibly to as low as 1024 in total. So we want a lower figure than 1000.
+// 500 ought to be enough because this figure is about pooling temporarily un-used connections.
+// Our max number of USED connections, at any one moment in time, is set by AZCOPY_CONCURRENCY_VALUE
+// which, as at Mar 2019, defaults to 300.  Because connections are constantly released and use by that pool
+// of 300 goroutines, its reasonable to assume that the total number of momentarily-
+// UNused connections will be much smaller than the number USED, i.e. much less than 300.  So this figure
+// we set here should be MORE than enough.
 const AzCopyMaxIdleConnsPerHost = 500
 
 // NewAzcopyHTTPClient creates a new HTTP client.
