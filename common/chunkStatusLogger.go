@@ -173,7 +173,7 @@ type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
 	GetCounts(td TransferDirection) []chunkStatusCount
 	IsDiskConstrained(td TransferDirection) bool
-	CloseLog()
+	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
 }
 
 // chunkStatusLogger records all chunk state transitions, and makes aggregate data immediately available
@@ -181,14 +181,16 @@ type ChunkStatusLoggerCloser interface {
 type chunkStatusLogger struct {
 	counts         []int64
 	outputEnabled  bool
-	unsavedEntries chan chunkWaitState
+	unsavedEntries chan *chunkWaitState
+	flushDone      chan struct{}
 }
 
 func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
-		unsavedEntries: make(chan chunkWaitState, 1000000),
+		unsavedEntries: make(chan *chunkWaitState, 1000000),
+		flushDone:      make(chan struct{}),
 	}
 	if enableOutput {
 		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
@@ -221,23 +223,20 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 	if !csl.outputEnabled {
 		return
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			// recover panic from writing to closed channel
-			// May happen in early exit of app, when Close is called before last call to this routine
-		}
-	}()
 
-	csl.unsavedEntries <- chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+	csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
 }
 
-func (csl *chunkStatusLogger) CloseLog() {
+func (csl *chunkStatusLogger) FlushLog() {
 	if !csl.outputEnabled {
 		return
 	}
-	close(csl.unsavedEntries)
-	for len(csl.unsavedEntries) > 0 {
-		time.Sleep(100 * time.Millisecond)
+
+	// In order to be idempotent, we don't close any channel here, we just flush it
+
+	csl.unsavedEntries <- nil // tell writer that it it must flush, then wait until it has done so
+	select {
+	case <-csl.flushDone:
 	}
 }
 
@@ -249,12 +248,27 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 	defer func() { _ = f.Close() }()
 
 	w := bufio.NewWriter(f)
-	defer func() { _ = w.Flush() }()
-
 	_, _ = w.WriteString("Name,Offset,State,StateStartTime\n")
 
+	doFlush := func() {
+		_ = w.Flush()
+		_ = f.Sync()
+	}
+	defer doFlush()
+
+	alwaysFlushFromNowOn := false
 	for x := range csl.unsavedEntries {
+		if x == nil {
+			alwaysFlushFromNowOn = true
+			doFlush()
+			csl.flushDone <- struct{}{}
+			continue // TODO can become break (or be moved to later if we close unsaved entries, once we figure out how we got stuff written to us after CloseLog was called)
+		}
 		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
+		if alwaysFlushFromNowOn {
+			// TODO: remove when we figure out how we got stuff written to us after CloseLog was called. For now, this should handle those cases (if they still exist)
+			doFlush()
+		}
 	}
 }
 
