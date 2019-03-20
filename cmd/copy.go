@@ -36,8 +36,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -376,7 +376,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 func validateSuppressUploadMd5(supressUploadMd5 bool, fromTo common.FromTo) error {
 	isUpload := fromTo.From() == common.ELocation.Local()
 	if supressUploadMd5 && !isUpload {
-		return fmt.Errorf("no-upload-md5 is set but the job is not an upload")
+		return fmt.Errorf("no-put-md5 is set but the job is not an upload")
 	}
 	return nil
 }
@@ -1063,7 +1063,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.suppressUploadMd5, "no-upload-md5", false, "prevents AzCopy from creating MD5 hash of each file, and saving the hash as a property of the file at the destination. Only available when uploading.")
+	cpCmd.PersistentFlags().BoolVar(&raw.suppressUploadMd5, "no-put-md5", false, "prevents AzCopy from creating MD5 hash of each file, and saving the hash as a property of the file at the destination. Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+

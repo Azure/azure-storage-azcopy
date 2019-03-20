@@ -514,7 +514,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
-	syncCmd.PersistentFlags().BoolVar(&raw.suppressUploadMd5, "no-upload-md5", false, "prevents AzCopy from creating MD5 hash of each file, and saving the hash as a property of the file at the destination. Only available when uploading.")
+	syncCmd.PersistentFlags().BoolVar(&raw.suppressUploadMd5, "no-put-md5", false, "prevents AzCopy from creating MD5 hash of each file, and saving the hash as a property of the file at the destination. Only available when uploading.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
 	// TODO follow sym link is not implemented, clarify behavior first
