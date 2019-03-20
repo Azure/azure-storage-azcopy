@@ -73,12 +73,16 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 4b: normal file creation when source has content
-	writeThrough := true // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead and possible confusion due to disk throughput appearing different depending on how full the cache is
-	if fileSize <= 1*1024*1024 || jptm.JobHasLowFileCount() {
-		// but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
-		// And also, for very low file counts, we also need it. Presumably for same reasons of queue depth (given our sequential write strategy as at March 2019)
-		writeThrough = false
-	}
+	writeThrough := false
+	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
+	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
+	//      if fileSize <= 1*1024*1024 || jptm.JobHasLowFileCount() || <is a short-running job> {
+	//        // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
+	//        // And also, for very low file counts, we also need it. Presumably for same reasons of queue depth (given our sequential write strategy as at March 2019)
+	//        // And for very short-running jobs, it looks and feels faster for the user to just let the OS cache flush out after the job appears to have finished.
+	//        writeThrough = false
+	//    }
+
 	failFileCreation := func(err error, forceReleaseFileCount bool) {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
