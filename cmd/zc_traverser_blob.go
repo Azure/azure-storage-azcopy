@@ -109,12 +109,13 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				continue
 			}
 
-			storedObject := storedObject{
-				name:             getObjectNameOnly(blobInfo.Name),
-				relativePath:     relativePath,
-				lastModifiedTime: blobInfo.Properties.LastModified,
-				size:             *blobInfo.Properties.ContentLength,
-			}
+			storedObject := newStoredObject(
+				getObjectNameOnly(blobInfo.Name),
+				relativePath,
+				blobInfo.Properties.LastModified,
+				*blobInfo.Properties.ContentLength,
+				blobInfo.Properties.ContentMD5,
+			)
 			t.incrementEnumerationCounter()
 			processErr := processIfPassedFilters(filters, storedObject, processor)
 			if processErr != nil {
