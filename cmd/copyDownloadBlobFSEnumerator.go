@@ -49,7 +49,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		// if the destination is an existing directory, then put the file under it
 		// otherwise assume the user has provided a specific path for the destination file
 		if util.isPathALocalDirectory(cca.destination) {
-			destination = util.generateLocalPath(cca.destination, util.getPossibleFileNameFromURL(fsUrlParts.DirectoryOrFilePath))
+			destination = util.generateLocalPath(cca.destination, util.getFileNameFromPath(fsUrlParts.DirectoryOrFilePath))
 		} else {
 			destination = cca.destination
 		}

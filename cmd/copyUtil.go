@@ -35,8 +35,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 const (
@@ -659,10 +659,10 @@ func endWithSlashOrBackSlash(path string) bool {
 	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, "\\")
 }
 
-// getPossibleFileNameFromURL return the possible file name get from URL.
-func (util copyHandlerUtil) getPossibleFileNameFromURL(path string) string {
+// getFileNameFromPath return the file name from given file path.
+func (util copyHandlerUtil) getFileNameFromPath(path string) string {
 	if path == "" {
-		panic("can not get file name from an empty path")
+		return ""
 	}
 
 	if endWithSlashOrBackSlash(path) {

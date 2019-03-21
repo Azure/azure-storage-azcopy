@@ -72,10 +72,12 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if e.s3URLParts.IsObject() && !e.s3URLParts.IsDirectory() {
 		if objectInfo, err := e.s3Client.StatObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, minio.StatObjectOptions{}); err == nil {
 			// The source is a single object.
-			// Note: Currently only support single to single, and not support single to directory.
-			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
-				return errors.New("invalid source and destination combination for service to service copy: " +
-					"destination must point to a single file, when source is a single file")
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.s3URLParts.ObjectKey)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
 			}
 			if err := e.createDestBucket(ctx, *e.destURL, nil); err != nil {
 				return err

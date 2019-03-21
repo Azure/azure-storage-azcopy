@@ -37,8 +37,8 @@ import (
 
 	"math/rand"
 
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	minio "github.com/minio/minio-go"
 )
 
@@ -58,6 +58,9 @@ const (
 	bucketPrefix      = "s3bucket"
 	objectPrefix      = "s3object"
 	objectDefaultData = "AzCopy default data for S3 object"
+
+	fileDefaultData = "AzCopy Random Test Data"
+	sharePrefix     = "share"
 )
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -116,6 +119,11 @@ func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
 
 func generateObjectName() string {
 	return generateName(objectPrefix)
+}
+
+func generateShareName() string {
+	name := generateName(sharePrefix)
+	return getNameWithMaxLength(name, 63)
 }
 
 func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
@@ -325,6 +333,16 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	}
 }
 
+func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
+	accountNameEnvVar := accountType + "ACCOUNT_NAME"
+	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
+	accountName, accountKey := os.Getenv(accountNameEnvVar), os.Getenv(accountKeyEnvVar)
+	if accountName == "" || accountKey == "" {
+		return nil, errors.New(accountNameEnvVar + " and/or " + accountKeyEnvVar + " environment variables not specified.")
+	}
+	return azfile.NewSharedKeyCredential(accountName, accountKey)
+}
+
 func getFSU() (azfile.ServiceURL, error) {
 	accountName, accountKey := os.Getenv("ACCOUNT_NAME"), os.Getenv("ACCOUNT_KEY")
 	if accountName == "" || accountKey == "" {
@@ -354,6 +372,27 @@ func getAlternateFSU() (azfile.ServiceURL, error) {
 	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{ /*Log: pipeline.NewLogWrapper(pipeline.LogInfo, log.New(os.Stderr, "", log.LstdFlags))*/ })
 
 	return azfile.NewServiceURL(*fsURL, pipeline), nil
+}
+
+func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	name = generateShareName()
+	share = fsu.NewShareURL(name)
+
+	return share, name
+}
+
+func createNewShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	share, name = getShareURL(c, fsu)
+
+	cResp, err := share.Create(ctx, nil, 0)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return share, name
+}
+
+func deleteShare(c *chk.C, share azfile.ShareURL) {
+	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
+	c.Assert(err, chk.IsNil)
 }
 
 // Some tests require setting service properties. It can take up to 30 seconds for the new properties to be reflected across all FEs.
@@ -437,4 +476,27 @@ func getServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblo
 	c.Assert(err, chk.IsNil)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
+func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
+	sasQueryParams, err := azfile.FileSASSignatureValues{
+		Protocol:    azfile.SASProtocolHTTPS,
+		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
+		ShareName:   shareName,
+		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
+		Version:     "2018-03-28",
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
+		credential.AccountName(), shareName, qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	// TODO perhaps we need a global default pipeline
+	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }

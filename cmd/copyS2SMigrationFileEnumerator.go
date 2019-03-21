@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -56,11 +55,13 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Case-1: Source is single file
 	srcFileURL := azfile.NewFileURL(*e.sourceURL, e.srcFilePipeline)
 	// Verify if source is a single file
-	// Note: Currently only support single to single, and not support single to directory.
 	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
-			return errors.New("invalid source and destination combination for service to service copy: " +
-				"destination must point to a single file, when source is a single file")
+		if e.isDestServiceSyntactically() {
+			return errSingleToAccountCopy
+		}
+		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+			fileName := gCopyUtil.getFileNameFromPath(e.srcFileURLPartExtension.DirectoryOrFilePath)
+			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
 		}
 		err := e.createDestBucket(ctx, *e.destURL, nil)
 		if err != nil {

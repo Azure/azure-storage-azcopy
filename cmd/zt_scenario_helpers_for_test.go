@@ -32,6 +32,7 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
 	minio "github.com/minio/minio-go"
@@ -172,6 +173,18 @@ func (scenarioHelper) generateObjects(c *chk.C, client *minio.Client, bucketName
 	}
 }
 
+// create the demanded files
+func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
+	for _, fileName := range fileList {
+		file := shareURL.NewRootDirectoryURL().NewFileURL(fileName)
+		err := azfile.UploadBufferToAzureFile(ctx, []byte(fileDefaultData), file, azfile.UploadToAzureFileOptions{})
+		c.Assert(err, chk.IsNil)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+}
+
 // make 50 objects with random names
 // 10 of them at the top level
 // 10 of them in sub dir "sub1"
@@ -276,6 +289,23 @@ func (scenarioHelper) getRawS3BucketURL(c *chk.C, region string, bucketName stri
 	c.Assert(err, chk.IsNil)
 
 	return *fullURL
+}
+
+func (scenarioHelper) getRawS3ObjectURL(c *chk.C, region string, bucketName string, objectName string) url.URL {
+	rawURL := fmt.Sprintf("https://s3%s.amazonaws.com/%s/%s", common.IffString(region == "", "", "-"+region), bucketName, objectName)
+
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return *fullURL
+}
+
+func (scenarioHelper) getRawFileURLWithSAS(c *chk.C, shareName string, fileName string) url.URL {
+	credential, err := getGenericCredentialForFile("")
+	c.Assert(err, chk.IsNil)
+	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
+	fileURLWithSAS := shareURLWithSAS.NewRootDirectoryURL().NewFileURL(fileName)
+	return fileURLWithSAS.URL()
 }
 
 func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {

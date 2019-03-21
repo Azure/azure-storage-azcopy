@@ -12,6 +12,9 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
+var errSingleToAccountCopy = errors.New("invalid source and destination combination for service to service copy: " +
+	"destination cannot be a service URL, when source is a single file")
+
 // copyS2SMigrationEnumeratorBase is the base of other service to service copy enumerators,
 // which contains common functions and properties.
 type copyS2SMigrationEnumeratorBase struct {

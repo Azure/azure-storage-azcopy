@@ -44,7 +44,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		var singleFileDestinationPath string
 		if gCopyUtil.isPathALocalDirectory(cca.destination) {
 			singleFileDestinationPath = gCopyUtil.generateLocalPath(
-				cca.destination, gCopyUtil.getPossibleFileNameFromURL(sourceURL.Path))
+				cca.destination, gCopyUtil.getFileNameFromPath(sourceURL.Path))
 		} else {
 			singleFileDestinationPath = cca.destination
 		}

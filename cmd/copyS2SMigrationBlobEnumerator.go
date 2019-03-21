@@ -58,11 +58,13 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Case-1: Source is a single blob
 	// Verify if source is a single blob
 	srcBlobURL := azblob.NewBlobURL(*e.sourceURL, e.srcBlobPipeline)
-	// Note: Currently only support single to single, and not support single to directory.
 	if blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
-			return errors.New("invalid source and destination combination for service to service copy: " +
-				"destination must point to a single file, when source is a single file")
+		if e.isDestServiceSyntactically() {
+			return errSingleToAccountCopy
+		}
+		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+			fileName := gCopyUtil.getFileNameFromPath(e.srcBlobURLPartExtension.BlobName)
+			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
 		}
 		err := e.createDestBucket(ctx, *e.destURL, nil)
 		if err != nil {
