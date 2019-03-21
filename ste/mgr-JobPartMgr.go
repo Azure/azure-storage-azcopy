@@ -40,7 +40,7 @@ type IJobPartMgr interface {
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	FileCountLimiter() common.CacheLimiter
-	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 }
@@ -591,8 +591,8 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
-func (jpm *jobPartMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
-	jpm.jobMgr.LogChunkStatus(id, reason)
+func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
+	return jpm.jobMgr.ChunkStatusLogger()
 }
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {

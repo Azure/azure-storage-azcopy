@@ -126,7 +126,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 5b: create destination writer
-	chunkLogger := jptm
+	chunkLogger := jptm.ChunkStatusLogger()
 	dstWriter := common.NewChunkedFileWriter(
 		jptm.Context(),
 		jptm.SlicePool(),

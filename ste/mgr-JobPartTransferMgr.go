@@ -68,6 +68,7 @@ type IJobPartTransferMgr interface {
 	LogTransferInfo(level pipeline.LogLevel, source, destination, msg string)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	common.ILogger
 }
@@ -367,7 +368,11 @@ func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 }
 
 func (jptm *jobPartTransferMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
-	jptm.jobPartMgr.LogChunkStatus(id, reason)
+	jptm.jobPartMgr.ChunkStatusLogger().LogChunkStatus(id, reason)
+}
+
+func (jptm *jobPartTransferMgr) ChunkStatusLogger() common.ChunkStatusLogger {
+	return jptm.jobPartMgr.ChunkStatusLogger()
 }
 
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc
