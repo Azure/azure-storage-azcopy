@@ -150,7 +150,7 @@ func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCreden
 
 	// Token has been refreshed successfully.
 	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed succesfully", time.Now().UTC()))
+	options.logInfo(fmt.Sprintf("%v token refreshed successfully", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
 	return refreshPolicyHalfOfExpiryWithin(newToken, options)
@@ -224,7 +224,7 @@ func refreshBlobFSToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCred
 
 	// Token has been refreshed successfully.
 	tokenCredential.SetToken(newToken.AccessToken)
-	options.logInfo(fmt.Sprintf("%v token refreshed succesfully", time.Now().UTC()))
+	options.logInfo(fmt.Sprintf("%v token refreshed successfully", time.Now().UTC()))
 
 	// Calculate wait duration, and schedule next refresh.
 	return refreshPolicyHalfOfExpiryWithin(newToken, options)

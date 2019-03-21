@@ -113,8 +113,9 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 		}
 	}
 
-	// Handle invalid metadata
-	resolvedMetadata, err := p.handleInvalidMetadataKey(srcProperties.SrcMetadata)
+	// Handle invalid metadata.
+	// Note: Only handle metadata's key, as metadata's value must conform to US-ASCII for both S3 and Azure.
+	resolvedMetadata, err := p.handleInvalidMetadataKeys(srcProperties.SrcMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -123,25 +124,25 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 	return &srcProperties, nil
 }
 
-// handleInvalidMetadataKey handles invalid metadata for S3 source.
-func (p *s3SourceInfoProvider) handleInvalidMetadataKey(m common.Metadata) (common.Metadata, error) {
+// handleInvalidMetadataKeys handles invalid metadata for S3 source.
+func (p *s3SourceInfoProvider) handleInvalidMetadataKeys(m common.Metadata) (common.Metadata, error) {
 	if m == nil {
 		return m, nil
 	}
 
 	switch p.transferInfo.S2SInvalidMetadataHandleOption {
 	case common.EInvalidMetadataHandleOption.ExcludeIfInvalid():
-		reservedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
+		retainedMetadata, excludedMetadata, invalidKeyExists := m.ExcludeInvalidKey()
 		if invalidKeyExists && p.jptm.ShouldLog(pipeline.LogWarning) {
 			p.jptm.Log(pipeline.LogWarning,
-				fmt.Sprintf("METADATAWARNING: For source %q, invaild metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
+				fmt.Sprintf("METADATAWARNING: For source %q, invalid metadata with keys %s are excluded", p.transferInfo.Source, excludedMetadata.ConcatenatedKeys()))
 		}
-		return reservedMetadata, nil
+		return retainedMetadata, nil
 
 	case common.EInvalidMetadataHandleOption.FailIfInvalid():
 		_, invalidMetdata, invalidKeyExists := m.ExcludeInvalidKey()
 		if invalidKeyExists {
-			return nil, fmt.Errorf("metadata with keys %s in source is invalid", invalidMetdata.ConcatenatedKeys())
+			return nil, fmt.Errorf("metadata with keys %s in source is invalid, and application parameters specify that error should be reported when invalid keys are found", invalidMetdata.ConcatenatedKeys())
 		}
 		return m, nil
 

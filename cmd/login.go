@@ -104,7 +104,7 @@ func (lca loginCmdArgs) process() error {
 	}
 
 	uotm := GetUserOAuthTokenManagerInstance()
-	// Persist the token to cache, if login fulfilled succesfully.
+	// Persist the token to cache, if login fulfilled successfully.
 	if lca.identity {
 		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
 			ClientID: lca.identityClientID,

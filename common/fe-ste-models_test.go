@@ -127,19 +127,19 @@ func (s *feSteModelsTestSuite) TestMetadataExcludeInvalidKey(c *chk.C) {
 	mInvalid := getInvalidMetadataSample()
 	mValid := getValidMetadataSample()
 
-	reservedMetadata, excludedMetadata, invalidKeyExists := mInvalid.ExcludeInvalidKey()
+	retainedMetadata, excludedMetadata, invalidKeyExists := mInvalid.ExcludeInvalidKey()
 	c.Assert(invalidKeyExists, chk.Equals, true)
-	validateMapEqual(c, reservedMetadata,
+	validateMapEqual(c, retainedMetadata,
 		map[string]string{"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_": "v:abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRUSTUVWXYZ1234567890_",
 			"Am": "v:Am", "_123": "v:_123"})
 	validateMapEqual(c, excludedMetadata,
 		map[string]string{"1abc": "v:1abc", "a!@#": "v:a!@#", "a-metadata-samplE": "v:a-metadata-samplE"})
 
-	reservedMetadata, excludedMetadata, invalidKeyExists = mValid.ExcludeInvalidKey()
+	retainedMetadata, excludedMetadata, invalidKeyExists = mValid.ExcludeInvalidKey()
 	c.Assert(invalidKeyExists, chk.Equals, false)
-	validateMapEqual(c, reservedMetadata, map[string]string{"Key": "value"})
+	validateMapEqual(c, retainedMetadata, map[string]string{"Key": "value"})
 	c.Assert(len(excludedMetadata), chk.Equals, 0)
-	c.Assert(reservedMetadata.ConcatenatedKeys(), chk.Equals, "'Key' ")
+	c.Assert(retainedMetadata.ConcatenatedKeys(), chk.Equals, "'Key' ")
 }
 
 func (s *feSteModelsTestSuite) TestMetadataResolveInvalidKey(c *chk.C) {
