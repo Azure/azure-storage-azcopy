@@ -165,10 +165,10 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	ps := common.PrologueState{}
 
 	var md5Hasher hash.Hash
-	if jptm.ShouldSuppressUploadMd5() {
-		md5Hasher = common.NewNullHasher()
-	} else {
+	if jptm.ShouldPutMd5() {
 		md5Hasher = md5.New()
+	} else {
+		md5Hasher = common.NewNullHasher()
 	}
 	safeToUseHash := true
 

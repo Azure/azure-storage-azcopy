@@ -53,7 +53,7 @@ type rawSyncCmdArgs struct {
 	include             string
 	exclude             string
 	followSymlinks      bool
-	suppressUploadMd5   bool
+	putMd5              bool
 	md5ValidationOption string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
@@ -144,8 +144,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		return cooked, err
 	}
 
-	cooked.suppressUploadMd5 = raw.suppressUploadMd5
-	if err = validateSuppressUploadMd5(cooked.suppressUploadMd5, cooked.fromTo); err != nil {
+	cooked.putMd5 = raw.putMd5
+	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
 		return cooked, err
 	}
 
@@ -175,7 +175,7 @@ type cookedSyncCmdArgs struct {
 	exclude        []string
 
 	// options
-	suppressUploadMd5   bool
+	putMd5              bool
 	md5ValidationOption common.HashValidationOption
 	blockSize           uint32
 	logVerbosity        common.LogLevel
@@ -514,7 +514,7 @@ func init() {
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
-	syncCmd.PersistentFlags().BoolVar(&raw.suppressUploadMd5, "no-put-md5", false, "prevents AzCopy from creating MD5 hash of each file, and saving the hash as a property of the file at the destination. Only available when uploading.")
+	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "specifies whether AzCopy creates an MD5 hash of each file, and saves the hash as the Content-MD5 property of the destination blob/file. Only available when uploading.")
 	syncCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
 	// TODO follow sym link is not implemented, clarify behavior first

@@ -12,8 +12,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type IJobPartTransferMgr interface {
@@ -23,7 +23,7 @@ type IJobPartTransferMgr interface {
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
-	ShouldSuppressUploadMd5() bool
+	ShouldPutMd5() bool
 	MD5ValidationOption() common.HashValidationOption
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
@@ -259,8 +259,8 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (jptm *jobPartTransferMgr) ShouldSuppressUploadMd5() bool {
-	return jptm.jobPartMgr.ShouldSuppressUploadMd5()
+func (jptm *jobPartTransferMgr) ShouldPutMd5() bool {
+	return jptm.jobPartMgr.ShouldPutMd5()
 }
 
 func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {

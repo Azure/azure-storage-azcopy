@@ -221,8 +221,8 @@ type JobPartPlanDstBlob struct {
 	BlockBlobTier common.BlockBlobTier
 	PageBlobTier  common.PageBlobTier
 
-	// Prevents uploading of MD5 hashes (e.g. if user opts to prevent this, to reduce CPU usage in uploads)
-	SuppressUploadMd5 bool
+	// Controls uploading of MD5 hashes
+	PutMd5 bool
 
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
