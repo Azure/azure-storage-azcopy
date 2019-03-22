@@ -92,7 +92,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// it is either a container or a virtual directory, so it need to be
 	// downloaded to an existing directory
 	// Check if the given destination path is a directory or not.
-	if !util.isPathALocalDirectory(cca.destination) {
+	if !util.isPathALocalDirectory(cca.destination) && !strings.EqualFold(cca.destination, devNull) {
 		return errors.New("the destination must be an existing directory in this download scenario")
 	}
 
@@ -323,6 +323,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 }
 
 func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	// if we are downloading to dev null, we must point to devNull itself, rather than some file under it
+	if strings.EqualFold(e.DestinationRoot, devNull) {
+		transfer.Destination = ""
+	}
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 

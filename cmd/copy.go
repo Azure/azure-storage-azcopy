@@ -58,6 +58,8 @@ const pipingDefaultBlockSize = 8 * 1024 * 1024
 
 const pipeLocation = "~pipe~"
 
+const devNull = "/dev/null"
+
 // represents the raw copy command input from the user
 type rawCopyCmdArgs struct {
 	// from arguments
