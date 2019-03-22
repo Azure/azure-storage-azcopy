@@ -93,8 +93,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 		c.Assert(err, chk.IsNil)
 
 		// assert the right transfers were scheduled
-		validateTransfersAreScheduled(c, containerURL.String(), false, dstDirName, false,
-			processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
+		validateCopyTransfersAreScheduled(c, false, false, processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
 
 		mockedRPC.reset()
 	}
@@ -107,13 +106,13 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 
 	// set up the container with a single blob
 	blobList := []string{"singlefile101"}
-	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
 	c.Assert(containerURL, chk.NotNil)
 
 	// set up the directory with a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	dstFileName := blobList[0]
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -143,6 +142,5 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "")
 
 	// assert the right transfers were scheduled
-	validateTransfersAreScheduled(c, blobURL, false, filepath.Join(dstDirName, dstFileName), false,
-		[]string{""}, mockedRPC)
+	validateCopyTransfersAreScheduled(c, false, false, []string{""}, mockedRPC)
 }

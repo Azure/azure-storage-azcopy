@@ -67,7 +67,10 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),
 		)
-		t.incrementEnumerationCounter()
+
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter()
+		}
 		return processIfPassedFilters(filters, storedObject, processor)
 	}
 
@@ -116,7 +119,11 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				*blobInfo.Properties.ContentLength,
 				blobInfo.Properties.ContentMD5,
 			)
-			t.incrementEnumerationCounter()
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter()
+			}
+
 			processErr := processIfPassedFilters(filters, storedObject, processor)
 			if processErr != nil {
 				return processErr

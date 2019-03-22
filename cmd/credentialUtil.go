@@ -303,6 +303,7 @@ func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (
 		}), nil
 }
 
+// TODO note: ctx and credInfo are ignored at the moment because we only support SAS for Azure File
 func createFilePipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
 	return azfile.NewPipeline(
 		azfile.NewAnonymousCredential(),

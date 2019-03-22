@@ -182,21 +182,3 @@ func (e *removeFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
 }
 
 // TODO: Optimize for resource consumption cases. Can change to DFS with recursive method simply.
-// Temporarily keep this implementation as discussion.
-type directoryStack []azfile.DirectoryURL
-
-func (s *directoryStack) Push(d azfile.DirectoryURL) {
-	*s = append(*s, d)
-}
-
-func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
-	l := len(*s)
-
-	if l == 0 {
-		return nil, false
-	} else {
-		e := (*s)[l-1]
-		*s = (*s)[:l-1]
-		return &e, true
-	}
-}

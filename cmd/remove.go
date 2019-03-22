@@ -42,7 +42,11 @@ func init() {
 			if len(args) != 1 {
 				return fmt.Errorf("remove command only takes 1 arguments. Passed %d arguments", len(args))
 			}
+
+			// the resource to delete is set as the source
 			raw.src = args[0]
+
+			// infer the location of the delete
 			srcLocationType := inferArgumentLocation(raw.src)
 			if srcLocationType == common.ELocation.Blob() {
 				raw.fromTo = common.EFromTo.BlobTrash().String()
@@ -51,6 +55,7 @@ func init() {
 			} else {
 				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
 			}
+
 			// Since remove uses the copy command arguments cook, set the blobType to None and validation option
 			// else parsing the arguments will fail.
 			raw.blobType = common.EBlobType.None().String()
@@ -76,4 +81,6 @@ func init() {
 
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "Filter: Look into sub-directories recursively when deleting from container.")
 	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "WARNING", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
+	deleteCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 }

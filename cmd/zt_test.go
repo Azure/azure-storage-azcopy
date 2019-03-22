@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -59,8 +60,10 @@ const (
 	objectPrefix      = "s3object"
 	objectDefaultData = "AzCopy default data for S3 object"
 
-	fileDefaultData = "AzCopy Random Test Data"
-	sharePrefix     = "share"
+	fileDefaultData             = "AzCopy Random Test Data"
+	sharePrefix                 = "share"
+	azureFilePrefix             = "azfile"
+	defaultAzureFileSizeInBytes = 1000
 )
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -126,6 +129,17 @@ func generateShareName() string {
 	return getNameWithMaxLength(name, 63)
 }
 
+func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	name = generateShareName()
+	share = fsu.NewShareURL(name)
+
+	return share, name
+}
+
+func generateAzureFileName() string {
+	return generateName(azureFilePrefix)
+}
+
 func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	name = generateContainerName()
 	container = bsu.NewContainerURL(name)
@@ -154,6 +168,13 @@ func getPageBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blo
 	return
 }
 
+func getAzureFileURL(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
+	name = generateAzureFileName()
+	fileURL = shareURL.NewDirectoryURL(prefix + name).NewFileURL("")
+
+	return
+}
+
 func getReaderToRandomBytes(n int) *bytes.Reader {
 	r, _ := getRandomDataAndReader(n)
 	return r
@@ -163,6 +184,40 @@ func getRandomDataAndReader(n int) (*bytes.Reader, []byte) {
 	data := make([]byte, n, n)
 	rand.Read(data)
 	return bytes.NewReader(data), data
+}
+
+func getAccountAndKey() (string, string) {
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	if name == "" || key == "" {
+		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
+	}
+
+	return name, key
+}
+
+func getBSU() azblob.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
+
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
+	return azblob.NewServiceURL(*u, pipeline)
+}
+
+func getFSU() azfile.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.file.core.windows.net/", accountName))
+
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{})
+	return azfile.NewServiceURL(*u, pipeline)
 }
 
 func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
@@ -184,6 +239,35 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 	return
+}
+
+func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	share, name = getShareURL(c, fsu)
+
+	cResp, err := share.Create(ctx, nil, 0)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return share, name
+}
+
+func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
+	file, name = getAzureFileURL(c, share, prefix)
+
+	// generate parents first
+	generateParentsForAzureFile(c, file)
+
+	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+	return
+}
+
+func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
+	accountName, accountKey := getAccountAndKey()
+	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
+	err := ste.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}))
+	c.Assert(err, chk.IsNil)
 }
 
 func createNewAppendBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
@@ -210,32 +294,6 @@ func deleteContainer(c *chk.C, container azblob.ContainerURL) {
 	resp, err := container.Delete(ctx, azblob.ContainerAccessConditions{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, 202)
-}
-
-func getGenericCredential(accountType string) (*azblob.SharedKeyCredential, error) {
-	accountNameEnvVar := accountType + "ACCOUNT_NAME"
-	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
-	accountName, accountKey := os.Getenv(accountNameEnvVar), os.Getenv(accountKeyEnvVar)
-	if accountName == "" || accountKey == "" {
-		return nil, errors.New(accountNameEnvVar + " and/or " + accountKeyEnvVar + " environment variables not specified.")
-	}
-	return azblob.NewSharedKeyCredential(accountName, accountKey)
-}
-
-func getGenericBSU(accountType string) (azblob.ServiceURL, error) {
-	credential, err := getGenericCredential(accountType)
-	if err != nil {
-		return azblob.ServiceURL{}, err
-	}
-
-	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
-	blobPrimaryURL, _ := url.Parse("https://" + credential.AccountName() + ".blob.core.windows.net/")
-	return azblob.NewServiceURL(*blobPrimaryURL, pipeline), nil
-}
-
-func getBSU() azblob.ServiceURL {
-	bsu, _ := getGenericBSU("")
-	return bsu
 }
 
 func validateStorageError(c *chk.C, err error, code azblob.ServiceCodeType) {
@@ -343,21 +401,6 @@ func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredentia
 	return azfile.NewSharedKeyCredential(accountName, accountKey)
 }
 
-func getFSU() (azfile.ServiceURL, error) {
-	accountName, accountKey := os.Getenv("ACCOUNT_NAME"), os.Getenv("ACCOUNT_KEY")
-	if accountName == "" || accountKey == "" {
-		return azfile.ServiceURL{}, errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
-	}
-
-	u, _ := url.Parse(fmt.Sprintf("https://%s.file.core.windows.net/", accountName))
-	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
-	if err != nil {
-		return azfile.ServiceURL{}, err
-	}
-	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{})
-	return azfile.NewServiceURL(*u, pipeline), nil
-}
-
 func getAlternateFSU() (azfile.ServiceURL, error) {
 	secondaryAccountName, secondaryAccountKey := os.Getenv("SECONDARY_ACCOUNT_NAME"), os.Getenv("SECONDARY_ACCOUNT_KEY")
 	if secondaryAccountName == "" || secondaryAccountKey == "" {
@@ -372,13 +415,6 @@ func getAlternateFSU() (azfile.ServiceURL, error) {
 	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{ /*Log: pipeline.NewLogWrapper(pipeline.LogInfo, log.New(os.Stderr, "", log.LstdFlags))*/ })
 
 	return azfile.NewServiceURL(*fsURL, pipeline), nil
-}
-
-func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
-	name = generateShareName()
-	share = fsu.NewShareURL(name)
-
-	return share, name
 }
 
 func createNewShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
