@@ -88,6 +88,8 @@ type chunkedFileWriter struct {
 
 	// how will hashes be validated?
 	md5ValidationOption HashValidationOption
+
+	sourceMd5Exists bool
 }
 
 type fileChunk struct {
@@ -95,7 +97,7 @@ type fileChunk struct {
 	data []byte
 }
 
-func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption) ChunkedFileWriter {
+func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheLimiter CacheLimiter, chunkLogger ChunkStatusLogger, file io.WriteCloser, numChunks uint32, maxBodyRetries int, md5ValidationOption HashValidationOption, sourceMd5Exists bool) ChunkedFileWriter {
 	// Set max size for buffered channel. The upper limit here is believed to be generous, given worker routine drains it constantly.
 	// Use num chunks in file if lower than the upper limit, to prevent allocating RAM for lots of large channel buffers when dealing with
 	// very large numbers of very small files.
@@ -111,6 +113,7 @@ func NewChunkedFileWriter(ctx context.Context, slicePool ByteSlicePooler, cacheL
 		newUnorderedChunks:      make(chan fileChunk, chanBufferSize),
 		maxRetryPerDownloadBody: maxBodyRetries,
 		md5ValidationOption:     md5ValidationOption,
+		sourceMd5Exists:         sourceMd5Exists,
 	}
 	go w.workerRoutine(ctx)
 	return w
@@ -210,8 +213,8 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 	nextOffsetToSave := int64(0)
 	unsavedChunksByFileOffset := make(map[int64]fileChunk)
 	md5Hasher := md5.New()
-	if w.md5ValidationOption == EHashValidationOption.NoCheck() {
-		// save CPU time by not even computing a hash, if we are not going to check it
+	if w.md5ValidationOption == EHashValidationOption.NoCheck() || !w.sourceMd5Exists {
+		// save CPU time by not even computing a hash, if we don't want to check it, or have nothing to check it against
 		md5Hasher = &nullHasher{}
 	}
 

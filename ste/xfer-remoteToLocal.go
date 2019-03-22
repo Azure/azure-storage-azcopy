@@ -127,6 +127,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 
 	// step 5b: create destination writer
 	chunkLogger := jptm.ChunkStatusLogger()
+	sourceMd5Exists := len(info.SrcHTTPHeaders.ContentMD5) > 0
 	dstWriter := common.NewChunkedFileWriter(
 		jptm.Context(),
 		jptm.SlicePool(),
@@ -135,7 +136,8 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		dstFile,
 		numChunks,
 		MaxRetryPerDownloadBody,
-		jptm.MD5ValidationOption())
+		jptm.MD5ValidationOption(),
+		sourceMd5Exists)
 
 	// step 5c: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
