@@ -68,6 +68,12 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return e.dispatchFinalPart(cca)
 	}
 
+	if err != nil {
+		handleSingleFileValidationErrorForADLSGen2(err)
+	}
+
+	glcm.Info(infoCopyFromDirectoryListOfFiles)
+
 	// Case-2: Source is a filesystem or directory
 	// In this case, the destination should be a directory.
 	if !gCopyUtil.isPathALocalDirectory(cca.destination) {

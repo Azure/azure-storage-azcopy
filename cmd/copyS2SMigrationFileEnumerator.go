@@ -72,10 +72,13 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 			return err
 		}
 		return e.dispatchFinalPart(cca)
+	} else {
+		handleSingleFileValidationErrorForAzureFile(err)
 	}
 
 	// Case-2: Source is account, currently only support blob destination
 	if isAccountLevel, sharePrefix := e.srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
@@ -94,6 +97,7 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		}
 
 	} else { // Case-3: Source is a file share or directory
+		glcm.Info(infoCopyFromDirectoryListOfFiles) // Share is mapped to root directory
 		searchPrefix, fileNamePattern, isWildcardSearch := e.srcFileURLPartExtension.searchPrefixFromFileURL()
 		if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire share or directory without recursive flag. Please use --recursive flag")

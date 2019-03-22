@@ -54,7 +54,11 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return err
 		}
 		return e.dispatchFinalPart(cca)
+	} else {
+		handleSingleFileValidationErrorForAzureFile(err)
 	}
+
+	glcm.Info(infoCopyFromDirectoryListOfFiles)
 
 	// Case-2: Source is a file share or directory
 	// The destination must be a directory, when source is share or directory.

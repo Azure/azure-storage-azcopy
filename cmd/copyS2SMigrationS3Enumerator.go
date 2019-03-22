@@ -90,11 +90,14 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 
 			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForS3(err)
 		}
 	}
 
 	// Case-2: Source is a service endpoint.
 	if isServiceLevel, bucketPrefix := e.s3URLParts.isServiceLevelSearch(); isServiceLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire S3 service without recursive flag. Please use --recursive flag")
 		}
@@ -111,6 +114,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return err
 		}
 	} else { // Case-3: Source is a bucket or virutal directory.
+		glcm.Info(infoCopyFromBucketDirectoryListOfFiles)
 		// Ensure there is a valid bucket name in this case.
 		if err := s3utils.CheckValidBucketNameStrict(e.s3URLParts.BucketName); err != nil {
 			return err

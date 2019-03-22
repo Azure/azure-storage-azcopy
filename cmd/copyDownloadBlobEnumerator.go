@@ -80,7 +80,11 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return err
 		}
 		return nil
+	} else {
+		handleSingleFileValidationErrorForBlob(err)
 	}
+
+	glcm.Info(infoCopyFromContainerDirectoryListOfFiles)
 	// Since the given source url doesn't represent an existing blob
 	// it is either a container or a virtual directory, so it need to be
 	// downloaded to an existing directory

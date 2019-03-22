@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -76,12 +75,15 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 			return err
 		}
 		return e.dispatchFinalPart(cca)
+	} else {
+		handleSingleFileValidationErrorForBlob(err)
 	}
 
 	// Case-2: Source is account level, e.g.:
 	// a: https://<blob-service>/
 	// b: https://<blob-service>/containerprefix*/vd/blob
 	if isAccountLevel, containerPrefix := e.srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
@@ -99,6 +101,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 			return err
 		}
 	} else { // Case-3: Source is a blob container or directory
+		glcm.Info(infoCopyFromContainerDirectoryListOfFiles)
 		blobPrefix, blobNamePattern, isWildcardSearch := e.srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire container or directory without recursive flag. Please use --recursive flag")
