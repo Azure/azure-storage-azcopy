@@ -374,7 +374,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 }
 
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
-	isUpload := fromTo.From() == common.ELocation.Local()
+	isUpload := fromTo.From() == common.ELocation.Local() && fromTo.To().IsRemote()
 	if putMd5 && !isUpload {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
