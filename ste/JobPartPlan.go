@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 5
+const DataSchemaVersion common.Version = 6
 
 const (
 	ContentTypeMaxBytes     = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
@@ -220,6 +220,9 @@ type JobPartPlanDstBlob struct {
 	// Specifies the tier if this is a block or page blob
 	BlockBlobTier common.BlockBlobTier
 	PageBlobTier  common.PageBlobTier
+
+	// Controls uploading of MD5 hashes
+	PutMd5 bool
 
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte

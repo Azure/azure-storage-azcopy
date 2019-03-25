@@ -17,3 +17,6 @@
   - outputRaw (in "list" command) -> output
   - stdIn-enable (reserved for internal use) -> stdin-enable
 
+## Version 10.0.9:
+
+- For creating MD5 hashes when uploading, version 10.x now has the OPPOSITE default to version AzCopy 8.x. Specifically, in version 10.x, MD5 hashes of content are now only created if you specify `--put-md5` on the command line

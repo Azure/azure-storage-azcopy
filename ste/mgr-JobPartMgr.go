@@ -30,6 +30,7 @@ type IJobPartMgr interface {
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
+	ShouldPutMd5() bool
 	SAS() (string, string)
 	//CancelJob()
 	Close()
@@ -212,6 +213,9 @@ type jobPartMgr struct {
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	pageBlobTier common.PageBlobTier
 
+	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
+	putMd5 bool
+
 	blobMetadata azblob.Metadata
 	fileMetadata azfile.Metadata
 
@@ -261,6 +265,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
+	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
 	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
@@ -538,6 +543,10 @@ func (jpm *jobPartMgr) BlobTypeOverride() common.BlobType {
 
 func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier) {
 	return jpm.blockBlobTier, jpm.pageBlobTier
+}
+
+func (jpm *jobPartMgr) ShouldPutMd5() bool {
+	return jpm.putMd5
 }
 
 func (jpm *jobPartMgr) SAS() (string, string) {

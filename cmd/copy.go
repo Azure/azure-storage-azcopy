@@ -36,8 +36,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -84,6 +84,7 @@ type rawCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	putMd5                   bool
 	md5ValidationOption      string
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
@@ -243,6 +244,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
+	cooked.putMd5 = raw.putMd5
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
@@ -337,6 +339,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while copying from service to service")
 		}
 	}
+	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
+		return cooked, err
+	}
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
 		return cooked, err
 	}
@@ -366,6 +371,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	return cooked, nil
+}
+
+func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
+	isUpload := fromTo.From() == common.ELocation.Local() && fromTo.To().IsRemote()
+	if putMd5 && !isUpload {
+		return fmt.Errorf("put-md5 is set but the job is not an upload")
+	}
+	return nil
 }
 
 func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
@@ -407,6 +420,7 @@ type cookedCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	background               bool
 	acl                      string
@@ -591,7 +605,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			MD5ValidationOption:      cca.md5ValidationOption,
+			PutMd5:              cca.putMd5,
+			MD5ValidationOption: cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -1048,8 +1063,8 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
+	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
-	// TODO: should the previous line list the allowable values?
 
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
