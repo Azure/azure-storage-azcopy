@@ -36,8 +36,8 @@ import (
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 )
 
@@ -100,8 +100,8 @@ type rawCopyCmdArgs struct {
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	s2sPreserveProperties bool
-	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
-	s2sGetS3PropertiesInBackend bool
+	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
+	s2sGetPropertiesInBackend bool
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
 	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
@@ -269,10 +269,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -283,10 +289,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -304,10 +316,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while downloading")
 		}
 		if cooked.s2sPreserveProperties {
-			return cooked, fmt.Errorf("s2sPreserveProperties is not supported while downloading")
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while downloading")
 		}
 		if cooked.s2sPreserveAccessTier {
-			return cooked, fmt.Errorf("s2sPreserveAccessTier is not supported while downloading")
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while downloading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
@@ -356,7 +374,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
-	cooked.s2sGetS3PropertiesInBackend = raw.s2sGetS3PropertiesInBackend
+	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
 	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
 	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
 
@@ -436,8 +454,8 @@ type cookedCopyCmdArgs struct {
 	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
 	// to preserve full properties AzCopy needs to send one additional request per object/file.
 	s2sPreserveProperties bool
-	// useful when preserveS3Properties set to true, enables get S3 objects properties during s2s copy in backend, the default value is true
-	s2sGetS3PropertiesInBackend bool
+	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
+	s2sGetPropertiesInBackend bool
 	// whether user wants to preserve access tier during service to service copy, the default value is true.
 	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
 	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
@@ -1065,15 +1083,15 @@ func init() {
 		"For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs. ")
 	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-invalid-metadata-handle", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
 
-	// s2sGetS3PropertiesInBackend is an optional flag for controlling whether S3 object's full properties are get during enumerating in frontend or
+	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
 	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
-	// while this could cause big performance issue for S3, where listing doesn't return full properties,
+	// while this could cause big performance issue for S3 and Azure file, where listing doesn't return full properties,
 	// and enumerating logic do fetching properties sequentially!
 	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
 	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
-	// The usage of this hidden flag is to provide fallback to traditional behavior.
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetS3PropertiesInBackend, "s2s-get-s3-properties-in-backend", true, "get S3 objects properties in backend. ")
+	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend. ")
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
@@ -1084,5 +1102,5 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
-	cpCmd.PersistentFlags().MarkHidden("s2s-get-s3-properties-in-backend")
+	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 }

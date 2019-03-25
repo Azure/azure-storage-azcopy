@@ -42,6 +42,10 @@ func (e *copyS2SMigrationFileEnumerator) initEnumerator(ctx context.Context, cca
 
 	e.srcFileURLPartExtension = fileURLPartsExtension{azfile.NewFileURLParts(*e.sourceURL)}
 
+	// When need to do changing source validation, must get property(LMT) for Azure file during enumerating, in order to ensure that
+	// files are not changed since enumerating.
+	e.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetPropertiesInBackend && !cca.s2sSourceChangeValidation
+
 	return nil
 }
 
@@ -67,6 +71,9 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		if err != nil {
 			return err
 		}
+		// Disable get properties in backend, as GetProperties already get full properties.
+		e.S2SGetPropertiesInBackend = false
+
 		// directly use destURL as destination
 		if err := e.addFileToNTransfer(srcFileURL.URL(), *e.destURL, fileProperties, cca); err != nil {
 			return err
@@ -212,7 +219,7 @@ func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.C
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
 			// As changing source validation need LMT which is not returned during list, enforce to get property if s2sSourceChangeValidation is enabled.
-			if cca.s2sPreserveProperties || cca.s2sSourceChangeValidation {
+			if (cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) || cca.s2sSourceChangeValidation {
 				p, err := fileURL.GetProperties(ctx)
 				if err != nil {
 					return err

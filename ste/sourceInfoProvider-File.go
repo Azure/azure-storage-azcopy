@@ -23,6 +23,7 @@ package ste
 import (
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
@@ -40,6 +41,41 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 	base := b.(*defaultRemoteSourceInfoProvider)
 
 	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+}
+
+func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
+	srcProperties, err := p.defaultRemoteSourceInfoProvider.Properties()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get properties in backend.
+	if p.transferInfo.S2SGetPropertiesInBackend {
+		presignedURL, err := p.PreSignedSourceURL()
+		if err != nil {
+			return nil, err
+		}
+
+		fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
+		properties, err := fileURL.GetProperties(p.jptm.Context())
+		if err != nil {
+			return nil, err
+		}
+
+		srcProperties = &SrcProperties{
+			SrcHTTPHeaders: common.ResourceHTTPHeaders{
+				ContentType:        properties.ContentType(),
+				ContentEncoding:    properties.ContentEncoding(),
+				ContentDisposition: properties.ContentDisposition(),
+				ContentLanguage:    properties.ContentLanguage(),
+				CacheControl:       properties.CacheControl(),
+				ContentMD5:         properties.ContentMD5(),
+			},
+			SrcMetadata: common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+		}
+	}
+
+	return srcProperties, nil
 }
 
 func (p *fileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {

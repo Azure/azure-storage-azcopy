@@ -33,16 +33,16 @@ import (
 // Additional S2S migration cases, besides E2E smoke testing cases for S3/blob/file source contained in test_service_to_service_copy.py
 
 const (
-	defaultLogVerbosityForCopy         = "WARNING"
-	defaultOutputFormatForCopy         = "text"
-	defaultBlobTypeForCopy             = "None"
-	defaultBlockBlobTierForCopy        = "None"
-	defaultPageBlobTierForCopy         = "None"
-	defaultS2SPreserveProperties       = true
-	defaultS2SPreserveAccessTier       = true
-	defaultS2SGetS3PropertiesInBackend = true
-	defaultS2SSourceChangeValidation   = true
-	debugMode                          = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
+	defaultLogVerbosityForCopy       = "WARNING"
+	defaultOutputFormatForCopy       = "text"
+	defaultBlobTypeForCopy           = "None"
+	defaultBlockBlobTierForCopy      = "None"
+	defaultPageBlobTierForCopy       = "None"
+	defaultS2SPreserveProperties     = true
+	defaultS2SPreserveAccessTier     = true
+	defaultS2SGetPropertiesInBackend = true
+	defaultS2SSourceChangeValidation = true
+	debugMode                        = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
@@ -58,7 +58,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		blockBlobTier:                  defaultBlockBlobTierForCopy,
 		pageBlobTier:                   defaultPageBlobTierForCopy,
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
-		s2sGetS3PropertiesInBackend:    defaultS2SGetS3PropertiesInBackend,
+		s2sGetPropertiesInBackend:      defaultS2SGetPropertiesInBackend,
 		s2sPreserveAccessTier:          defaultS2SPreserveAccessTier,
 		s2sPreserveProperties:          defaultS2SPreserveProperties,
 		s2sSourceChangeValidation:      defaultS2SSourceChangeValidation,

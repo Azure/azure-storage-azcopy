@@ -53,7 +53,7 @@ func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *
 		return err
 	}
 
-	e.S2SGetS3PropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetS3PropertiesInBackend
+	e.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetPropertiesInBackend
 
 	return
 }
@@ -84,7 +84,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 
 			// Disable get properties in backend, as StatObject already get full properties.
-			e.S2SGetS3PropertiesInBackend = false
+			e.S2SGetPropertiesInBackend = false
 			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, cca); err != nil {
 				return err
 			}
@@ -292,7 +292,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 		// S3's list operations doesn't return object's properties, such as: content-encoding and etc.
 		// So azcopy need additional get request to collect these properties.
 		// When get S2S properties in backend is not enabled, get properties during enumerating.
-		if cca.s2sPreserveProperties && !cca.s2sGetS3PropertiesInBackend {
+		if cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend {
 			var err error
 			objectInfo, err = s3Client.StatObject(bucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {

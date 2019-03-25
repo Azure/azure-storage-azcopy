@@ -12,8 +12,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type IJobPartTransferMgr interface {
@@ -80,7 +80,7 @@ type TransferInfo struct {
 
 	// Transfer info for S2S copy
 	SrcProperties
-	S2SGetS3PropertiesInBackend    bool
+	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
@@ -149,7 +149,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetS3PropertiesInBackend, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -205,7 +205,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		Source:                         src,
 		SourceSize:                     sourceSize,
 		Destination:                    dst,
-		S2SGetS3PropertiesInBackend:    s2sGetS3PropertiesInBackend,
+		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
 		SrcProperties: SrcProperties{

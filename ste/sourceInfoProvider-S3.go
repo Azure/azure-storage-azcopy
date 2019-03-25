@@ -93,7 +93,7 @@ func (p *s3SourceInfoProvider) Properties() (*SrcProperties, error) {
 	}
 
 	// Get properties in backend.
-	if p.transferInfo.S2SGetS3PropertiesInBackend {
+	if p.transferInfo.S2SGetPropertiesInBackend {
 		objectInfo, err := p.s3Client.StatObject(p.s3URLPart.BucketName, p.s3URLPart.ObjectKey, minio.StatObjectOptions{})
 		if err != nil {
 			return nil, err
