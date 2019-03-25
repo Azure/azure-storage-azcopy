@@ -92,7 +92,6 @@ func newRemoveFileEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator
 	return newCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
 }
 
-// Temporarily keep this implementation as discussion.
 type directoryStack []azfile.DirectoryURL
 
 func (s *directoryStack) Push(d azfile.DirectoryURL) {
