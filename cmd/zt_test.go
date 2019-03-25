@@ -169,8 +169,8 @@ func getPageBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blo
 }
 
 func getAzureFileURL(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
-	name = generateAzureFileName()
-	fileURL = shareURL.NewDirectoryURL(prefix + name).NewFileURL("")
+	name = prefix + generateAzureFileName()
+	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
 
 	return
 }
