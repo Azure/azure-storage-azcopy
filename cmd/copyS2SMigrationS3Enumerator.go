@@ -69,7 +69,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// Case-1: Source is a single object.
 	// Verify if source is a single object, note that s3URLParts only verifies resource type through parsing URL from syntax aspect.
-	if e.s3URLParts.IsObject() && !e.s3URLParts.IsDirectory() {
+	if e.s3URLParts.IsObjectSyntactically() && !e.s3URLParts.IsDirectorySyntactically() {
 		if objectInfo, err := e.s3Client.StatObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, minio.StatObjectOptions{}); err == nil {
 			// The source is a single object.
 			if e.isDestServiceSyntactically() {

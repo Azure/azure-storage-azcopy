@@ -57,26 +57,28 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Case-1: Source is a single blob
 	// Verify if source is a single blob
 	srcBlobURL := azblob.NewBlobURL(*e.sourceURL, e.srcBlobPipeline)
-	if blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
-		if e.isDestServiceSyntactically() {
-			return errSingleToAccountCopy
-		}
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
-			fileName := gCopyUtil.getFileNameFromPath(e.srcBlobURLPartExtension.BlobName)
-			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
-		}
-		err := e.createDestBucket(ctx, *e.destURL, nil)
-		if err != nil {
-			return err
-		}
+	if e.srcBlobURLPartExtension.isBlobSyntactically() {
+		if blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.srcBlobURLPartExtension.BlobName)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
+			}
+			err := e.createDestBucket(ctx, *e.destURL, nil)
+			if err != nil {
+				return err
+			}
 
-		// directly use destURL as destination
-		if err := e.addBlobToNTransfer2(srcBlobURL.URL(), *e.destURL, blobProperties, cca); err != nil {
-			return err
+			// directly use destURL as destination
+			if err := e.addBlobToNTransfer2(srcBlobURL.URL(), *e.destURL, blobProperties, cca); err != nil {
+				return err
+			}
+			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForBlob(err)
 		}
-		return e.dispatchFinalPart(cca)
-	} else {
-		handleSingleFileValidationErrorForBlob(err)
 	}
 
 	// Case-2: Source is account level, e.g.:

@@ -181,31 +181,31 @@ func (p *S3URLParts) String() string {
 	return u.String()
 }
 
-func (p *S3URLParts) IsServiceURL() bool {
+func (p *S3URLParts) IsServiceSyntactically() bool {
 	if p.Host != "" && p.BucketName == "" {
 		return true
 	}
 	return false
 }
 
-func (p *S3URLParts) IsBucketURL() bool {
+func (p *S3URLParts) IsBucketSyntactically() bool {
 	if p.BucketName != "" && p.ObjectKey == "" {
 		return true
 	}
 	return false
 }
 
-func (p *S3URLParts) IsObject() bool {
+func (p *S3URLParts) IsObjectSyntactically() bool {
 	if p.ObjectKey != "" {
 		return true
 	}
 	return false
 }
 
-// IsDirectory validates if the S3URLParts is indicating a directory.
+// IsDirectorySyntactically validates if the S3URLParts is indicating a directory.
 // Note: directory in S3 is a virtual abstract, and a object as well.
-func (p *S3URLParts) IsDirectory() bool {
-	if p.IsObject() && strings.HasSuffix(p.ObjectKey, "/") {
+func (p *S3URLParts) IsDirectorySyntactically() bool {
+	if p.IsObjectSyntactically() && strings.HasSuffix(p.ObjectKey, "/") {
 		return true
 	}
 	return false

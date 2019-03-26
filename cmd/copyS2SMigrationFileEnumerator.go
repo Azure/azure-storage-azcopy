@@ -59,28 +59,30 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Case-1: Source is single file
 	srcFileURL := azfile.NewFileURL(*e.sourceURL, e.srcFilePipeline)
 	// Verify if source is a single file
-	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
-		if e.isDestServiceSyntactically() {
-			return errSingleToAccountCopy
-		}
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
-			fileName := gCopyUtil.getFileNameFromPath(e.srcFileURLPartExtension.DirectoryOrFilePath)
-			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
-		}
-		err := e.createDestBucket(ctx, *e.destURL, nil)
-		if err != nil {
-			return err
-		}
-		// Disable get properties in backend, as GetProperties already get full properties.
-		e.S2SGetPropertiesInBackend = false
+	if e.srcFileURLPartExtension.isFileSyntactically() {
+		if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.srcFileURLPartExtension.DirectoryOrFilePath)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
+			}
+			err := e.createDestBucket(ctx, *e.destURL, nil)
+			if err != nil {
+				return err
+			}
+			// Disable get properties in backend, as GetProperties already get full properties.
+			e.S2SGetPropertiesInBackend = false
 
-		// directly use destURL as destination
-		if err := e.addFileToNTransfer(srcFileURL.URL(), *e.destURL, fileProperties, cca); err != nil {
-			return err
+			// directly use destURL as destination
+			if err := e.addFileToNTransfer(srcFileURL.URL(), *e.destURL, fileProperties, cca); err != nil {
+				return err
+			}
+			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForAzureFile(err)
 		}
-		return e.dispatchFinalPart(cca)
-	} else {
-		handleSingleFileValidationErrorForAzureFile(err)
 	}
 
 	// Case-2: Source is account, currently only support blob destination

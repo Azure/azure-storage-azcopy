@@ -835,6 +835,10 @@ func (parts blobURLPartsExtension) isServiceSyntactically() bool {
 	return parts.Host != "" && parts.ContainerName == "" && parts.BlobName == ""
 }
 
+func (parts blobURLPartsExtension) isBlobSyntactically() bool {
+	return parts.Host != "" && parts.ContainerName != "" && parts.BlobName != "" && !strings.HasSuffix(parts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+}
+
 // Get the source path without the wildcards
 // This is defined since the files mentioned with exclude flag
 // & include flag are relative to the Source
@@ -992,6 +996,10 @@ func (parts fileURLPartsExtension) getServiceURL() url.URL {
 	return parts.URL()
 }
 
+func (parts fileURLPartsExtension) isFileSyntactically() bool {
+	return parts.Host != "" && parts.ShareName != "" && parts.DirectoryOrFilePath != "" && !strings.HasSuffix(parts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type adlsGen2PathURLPartsExtension struct {
 	azbfs.BfsURLParts
@@ -1071,10 +1079,10 @@ func (p *s3URLPartsExtension) isServiceLevelSearch() (IsServiceLevelSearch bool,
 	// If it's service level URL which need search bucket, there could be two cases:
 	// a. https://<service-endpoint>(/)
 	// b. https://<service-endpoint>/bucketprefix*(/*)
-	if p.IsServiceURL() ||
+	if p.IsServiceSyntactically() ||
 		strings.Contains(p.BucketName, wildCard) {
 		IsServiceLevelSearch = true
-		// Case p.IsServiceURL(), bucket name is empty, search for all buckets.
+		// Case p.IsServiceSyntactically(), bucket name is empty, search for all buckets.
 		if p.BucketName == "" {
 			return
 		}
