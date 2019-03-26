@@ -93,7 +93,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 	srcFile := (common.CloseableReaderAt)(nil)
 	if srcInfoProvider.IsLocal() {
 		sourceFileFactory = func() (common.CloseableReaderAt, error) {
-			return os.Open(info.Source)
+			return openSourceFile(info)
 		}
 		srcFile, err = sourceFileFactory()
 		if err != nil {
@@ -143,6 +143,16 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
+}
+
+func openSourceFile(info TransferInfo) (common.CloseableReaderAt, error) {
+	if common.IsPlaceholderForRandomDataGenerator(info.Source) {
+		// Generate a "file" of random data. Useful for testing when you want really big files, but don't want
+		// to make them yourself
+		return common.NewRandomDataGenerator(info.SourceSize), nil
+	} else {
+		return os.Open(info.Source)
+	}
 }
 
 // Schedule all the send chunks.
