@@ -43,7 +43,7 @@ On Windows, MIME types are extracted from the registry. This feature can be turn
 const copyCmdExample = `Upload a single file using OAuth authentication. Please use 'azcopy login' command first if you aren't logged in yet:
 - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
-Same as above, but this time also compute MD5 hash of the file file content and save it as the blob's Content-MD5 property. 
+Same as above, but this time also compute MD5 hash of the file content and save it as the blob's Content-MD5 property. 
 - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --put-md5
 
 Upload a single file with a SAS:
@@ -222,7 +222,7 @@ const syncCmdExample = `
 Sync a single file:
   - azcopy sync "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
-Same as above, but this time also compute MD5 hash of the file file content and save it as the blob's Content-MD5 property. 
+Same as above, but this time also compute MD5 hash of the file content and save it as the blob's Content-MD5 property. 
   - azcopy sync "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --put-md5
 
 Sync an entire directory including its sub-directories (note that recursive is by default on):
