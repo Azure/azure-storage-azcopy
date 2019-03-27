@@ -38,17 +38,22 @@ func newBlobDownloader() downloader {
 func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
-		// Step 1: Download blob from start Index till startIndex + adjustedChunkSize
 		info := jptm.Info()
 		u, _ := url.Parse(info.Source)
 		srcBlobURL := azblob.NewBlobURL(*u, srcPipeline)
+		isManagedDisk := isInManagedDiskImportExportAccount(*u)
+
+		// set access conditions, to protect against inconsistencies from changes-while-being-read
+		accessConditions := azblob.BlobAccessConditions{ModifiedAccessConditions: azblob.ModifiedAccessConditions{IfUnmodifiedSince: jptm.LastModifiedTime()}}
+		if isManagedDisk {
+			accessConditions = azblob.BlobAccessConditions{} // no access conditions (and therefore no if-modified checks) are supported on managed disk import/export
+		}
+
 		// At this point we create an HTTP(S) request for the desired portion of the blob, and
 		// wait until we get the headers back... but we have not yet read its whole body.
 		// The Download method encapsulates any retries that may be necessary to get to the point of receiving response headers.
 		jptm.LogChunkStatus(id, common.EWaitReason.HeaderResponse())
-		get, err := srcBlobURL.Download(jptm.Context(), id.OffsetInFile, length,
-			azblob.BlobAccessConditions{ModifiedAccessConditions:
-				azblob.ModifiedAccessConditions{IfUnmodifiedSince:jptm.LastModifiedTime()}}, false)
+		get, err := srcBlobURL.Download(jptm.Context(), id.OffsetInFile, length, accessConditions, false)
 		if err != nil {
 			jptm.FailActiveDownload("Downloading response body", err) // cancel entire transfer because this chunk has failed
 			return
