@@ -13,6 +13,7 @@ const (
 	reservedRFC4122   byte = 0x40
 	reservedMicrosoft byte = 0x20
 	reservedFuture    byte = 0x00
+	guidFormat             = "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x"
 )
 
 // A UUID representation compliant with specification in RFC 4122 document.
@@ -41,8 +42,7 @@ func NewUUID() (u UUID) {
 
 // String returns an unparsed version of the generated UUID sequence.
 func (u UUID) String() string {
-	return fmt.Sprintf("%08x-%04x-%04x-%2x%2x-%02x%02x%02x%02x%02x%02x",
-		u.D1, u.D2, u.D3, u.D4[0], u.D4[1], u.D4[2], u.D4[3], u.D4[4], u.D4[5], u.D4[6], u.D4[7])
+	return fmt.Sprintf(guidFormat, u.D1, u.D2, u.D3, u.D4[0], u.D4[1], u.D4[2], u.D4[3], u.D4[4], u.D4[5], u.D4[6], u.D4[7])
 }
 
 // Implementing MarshalJSON() method for type UUID
@@ -72,7 +72,7 @@ func ParseUUID(uuidStr string) (UUID, error) {
 		uuidStr = uuidStr[1:] // Skip over the '{'
 	}
 	uuid := UUID{}
-	_, err := fmt.Sscanf(uuidStr, "%8x-%4x-%4x-%2x%2x-%2x%2x%2x%2x%2x%2x",
+	_, err := fmt.Sscanf(uuidStr, guidFormat,
 		&uuid.D1, &uuid.D2, &uuid.D3,
 		&uuid.D4[0], &uuid.D4[1], &uuid.D4[2], &uuid.D4[3], &uuid.D4[4], &uuid.D4[5], &uuid.D4[6], &uuid.D4[7])
 	if err != nil {
