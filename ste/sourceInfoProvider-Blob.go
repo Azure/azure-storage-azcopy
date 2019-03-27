@@ -47,7 +47,7 @@ func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
 }
 
 func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
-	return p.transferInfo.S2SSrcBlobType
+	return p.transferInfo.SrcBlobType
 }
 
 func (p *blobSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {

@@ -87,7 +87,7 @@ type TransferInfo struct {
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Blob
-	S2SSrcBlobType azblob.BlobType
+	SrcBlobType    azblob.BlobType       // used for both S2S and for downloads to local from blob
 	S2SSrcBlobTier azblob.AccessTierType // AccessTierType (string) is used to accommodate service-side support matrix change.
 
 	// NumChunks is the number of chunks in which transfer will be split into while uploading the transfer.
@@ -214,7 +214,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,
 		},
-		S2SSrcBlobType: srcBlobType,
+		SrcBlobType:    srcBlobType,
 		S2SSrcBlobTier: srcBlobTier,
 	}
 }
