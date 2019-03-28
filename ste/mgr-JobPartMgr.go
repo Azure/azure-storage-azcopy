@@ -30,6 +30,7 @@ type IJobPartMgr interface {
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
+	ShouldPutMd5() bool
 	SAS() (string, string)
 	//CancelJob()
 	Close()
@@ -40,7 +41,7 @@ type IJobPartMgr interface {
 	SlicePool() common.ByteSlicePooler
 	CacheLimiter() common.CacheLimiter
 	FileCountLimiter() common.CacheLimiter
-	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
 }
@@ -212,6 +213,9 @@ type jobPartMgr struct {
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	pageBlobTier common.PageBlobTier
 
+	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
+	putMd5 bool
+
 	blobMetadata azblob.Metadata
 	fileMetadata azfile.Metadata
 
@@ -261,6 +265,7 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 	}
 
+	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
 	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
@@ -540,6 +545,10 @@ func (jpm *jobPartMgr) BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlob
 	return jpm.blockBlobTier, jpm.pageBlobTier
 }
 
+func (jpm *jobPartMgr) ShouldPutMd5() bool {
+	return jpm.putMd5
+}
+
 func (jpm *jobPartMgr) SAS() (string, string) {
 	return jpm.sourceSAS, jpm.destinationSAS
 }
@@ -591,8 +600,8 @@ func (jpm *jobPartMgr) ReleaseAConnection() {
 func (jpm *jobPartMgr) ShouldLog(level pipeline.LogLevel) bool  { return jpm.jobMgr.ShouldLog(level) }
 func (jpm *jobPartMgr) Log(level pipeline.LogLevel, msg string) { jpm.jobMgr.Log(level, msg) }
 func (jpm *jobPartMgr) Panic(err error)                         { jpm.jobMgr.Panic(err) }
-func (jpm *jobPartMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
-	jpm.jobMgr.LogChunkStatus(id, reason)
+func (jpm *jobPartMgr) ChunkStatusLogger() common.ChunkStatusLogger {
+	return jpm.jobMgr.ChunkStatusLogger()
 }
 
 func (jpm *jobPartMgr) SourceProviderPipeline() pipeline.Pipeline {

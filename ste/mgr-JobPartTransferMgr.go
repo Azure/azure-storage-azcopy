@@ -23,6 +23,7 @@ type IJobPartTransferMgr interface {
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
+	ShouldPutMd5() bool
 	MD5ValidationOption() common.HashValidationOption
 	BlobTypeOverride() common.BlobType
 	BlobTiers() (blockBlobTier common.BlockBlobTier, pageBlobTier common.PageBlobTier)
@@ -68,6 +69,7 @@ type IJobPartTransferMgr interface {
 	LogTransferInfo(level pipeline.LogLevel, source, destination, msg string)
 	LogTransferStart(source, destination, description string)
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
 	common.ILogger
 }
@@ -264,6 +266,10 @@ func (jptm *jobPartTransferMgr) PreserveLastModifiedTime() (time.Time, bool) {
 	return time.Time{}, false
 }
 
+func (jptm *jobPartTransferMgr) ShouldPutMd5() bool {
+	return jptm.jobPartMgr.ShouldPutMd5()
+}
+
 func (jptm *jobPartTransferMgr) MD5ValidationOption() common.HashValidationOption {
 	return jptm.jobPartMgr.(*jobPartMgr).localDstData().MD5VerificationOption
 }
@@ -367,7 +373,11 @@ func (jptm *jobPartTransferMgr) ShouldLog(level pipeline.LogLevel) bool {
 }
 
 func (jptm *jobPartTransferMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
-	jptm.jobPartMgr.LogChunkStatus(id, reason)
+	jptm.jobPartMgr.ChunkStatusLogger().LogChunkStatus(id, reason)
+}
+
+func (jptm *jobPartTransferMgr) ChunkStatusLogger() common.ChunkStatusLogger {
+	return jptm.jobPartMgr.ChunkStatusLogger()
 }
 
 // Add 1 to the active number of goroutine performing the transfer or executing the chunkFunc

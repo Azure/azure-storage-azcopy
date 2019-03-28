@@ -24,6 +24,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"hash"
 	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -162,7 +163,13 @@ func scheduleSendChunks(jptm IJobPartTransferMgr, srcPath string, srcFile common
 	var prefetchErr error
 	var chunkReader common.SingleChunkReader
 	ps := common.PrologueState{}
-	md5Hasher := md5.New()
+
+	var md5Hasher hash.Hash
+	if jptm.ShouldPutMd5() {
+		md5Hasher = md5.New()
+	} else {
+		md5Hasher = common.NewNullHasher()
+	}
 	safeToUseHash := true
 
 	if srcInfoProvider.IsLocal() {
@@ -244,7 +251,7 @@ func createPopulatedChunkReader(jptm IJobPartTransferMgr, sourceFileFactory comm
 		sourceFileFactory,
 		id,
 		adjustedChunkSize,
-		jptm,
+		jptm.ChunkStatusLogger(),
 		jptm,
 		jptm.SlicePool(),
 		jptm.CacheLimiter())

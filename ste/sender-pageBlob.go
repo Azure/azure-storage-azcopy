@@ -22,7 +22,9 @@ package ste
 
 import (
 	"context"
+	"errors"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -45,6 +47,14 @@ type pageBlobSenderBase struct {
 	metadataToApply azblob.Metadata
 	destBlobTier    azblob.AccessTierType
 }
+
+const (
+	managedDiskImportExportAccountPrefix = "md-impexp-"
+)
+
+var (
+	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
+)
 
 func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
@@ -81,7 +91,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		destBlobTier = pageBlobTierOverride.ToAccessTierType()
 	}
 
-	return &pageBlobSenderBase{
+	s := &pageBlobSenderBase{
 		jptm:            jptm,
 		destPageBlobURL: destPageBlobURL,
 		srcSize:         srcSize,
@@ -91,7 +101,22 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		headersToApply:  props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply: props.SrcMetadata.ToAzBlobMetadata(),
 		destBlobTier:    destBlobTier,
-	}, nil
+	}
+
+	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {
+		return nil, md5NotSupportedInManagedDiskError
+	}
+
+	return s, nil
+}
+
+// these accounts have special restrictions of which APIs operations they support
+func isInManagedDiskImportExportAccount(u url.URL) bool {
+	return strings.HasPrefix(u.Host, managedDiskImportExportAccountPrefix)
+}
+
+func (s *pageBlobSenderBase) isInManagedDiskImportExportAccount() bool {
+	return isInManagedDiskImportExportAccount(s.destPageBlobURL.URL())
 }
 
 func (s *pageBlobSenderBase) ChunkSize() uint32 {
@@ -107,6 +132,11 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 }
 
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
+	if s.isInManagedDiskImportExportAccount() {
+		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
+		return
+	}
+
 	if ps.CanInferContentType() {
 		// sometimes, specifically when reading local files, we have more info
 		// about the file type at this time than what we had before
@@ -144,11 +174,15 @@ func (s *pageBlobSenderBase) Epilogue() {
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
-		deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancelFunc()
-		_, err := s.destPageBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
-		if err != nil {
-			jptm.LogError(s.destPageBlobURL.String(), "Delete (incomplete) Page Blob ", err)
+		if s.isInManagedDiskImportExportAccount() {
+			// no deletion is possible. User just has to upload it again.
+		} else {
+			deletionContext, cancelFunc := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelFunc()
+			_, err := s.destPageBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			if err != nil {
+				jptm.LogError(s.destPageBlobURL.String(), "Delete (incomplete) Page Blob ", err)
+			}
 		}
 	}
 }
