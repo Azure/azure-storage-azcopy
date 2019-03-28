@@ -74,6 +74,7 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
     def test_blobfs_upload_1Kb_file_with_oauth(self):
         self.util_test_blobfs_upload_1Kb_file()
 
+    @unittest.skip("single file authentication for oauth covered by 1kb case")
     def test_blobfs_upload_64MB_file_with_oauth(self):
         self.util_test_blobfs_upload_64MB_file()
 
