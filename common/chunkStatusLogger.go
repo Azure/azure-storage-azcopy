@@ -96,7 +96,6 @@ func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2S
 func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
 func (WaitReason) Cancelled() WaitReason            { return WaitReason{14, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
-
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
 //     the String method below, on the assumption that it will be called a lot.  Is that a premature optimization?
@@ -163,6 +162,9 @@ var s2sCopyWaitReasons = []WaitReason{
 	// Waiting for a worker Go routine to pick up the scheduled chunk func.
 	// Chunks in this state are effectively a queue of work waiting to be sent over the network
 	EWaitReason.WorkerGR(),
+
+	// Waiting until the per-file pacer (if any applies to this s2sCopy) says we can proceed
+	EWaitReason.FilePacer(),
 
 	// Start to send Put*FromURL, then S2S copy will start in service side, and Azcopy will wait the response which indicates copy get finished.
 	EWaitReason.S2SCopyOnWire(),

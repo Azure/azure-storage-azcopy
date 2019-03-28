@@ -74,7 +74,6 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		}
 
 		// send it
-
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
