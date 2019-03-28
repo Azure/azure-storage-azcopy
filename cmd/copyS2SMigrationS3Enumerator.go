@@ -53,7 +53,7 @@ func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *
 		return err
 	}
 
-	e.S2SGetS3PropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetS3PropertiesInBackend
+	e.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetPropertiesInBackend
 
 	return
 }
@@ -69,30 +69,35 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// Case-1: Source is a single object.
 	// Verify if source is a single object, note that s3URLParts only verifies resource type through parsing URL from syntax aspect.
-	if e.s3URLParts.IsObject() && !e.s3URLParts.IsDirectory() {
+	if e.s3URLParts.IsObjectSyntactically() && !e.s3URLParts.IsDirectorySyntactically() {
 		if objectInfo, err := e.s3Client.StatObject(e.s3URLParts.BucketName, e.s3URLParts.ObjectKey, minio.StatObjectOptions{}); err == nil {
 			// The source is a single object.
-			// Note: Currently only support single to single, and not support single to directory.
-			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
-				return errors.New("invalid source and destination combination for service to service copy: " +
-					"destination must point to a single file, when source is a single file")
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.s3URLParts.ObjectKey)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
 			}
 			if err := e.createDestBucket(ctx, *e.destURL, nil); err != nil {
 				return err
 			}
 
 			// Disable get properties in backend, as StatObject already get full properties.
-			e.S2SGetS3PropertiesInBackend = false
+			e.S2SGetPropertiesInBackend = false
 			if err := e.addObjectToNTransfer(*e.sourceURL, *e.destURL, &objectInfo, cca); err != nil {
 				return err
 			}
 
 			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForS3(err)
 		}
 	}
 
 	// Case-2: Source is a service endpoint.
 	if isServiceLevel, bucketPrefix := e.s3URLParts.isServiceLevelSearch(); isServiceLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire S3 service without recursive flag. Please use --recursive flag")
 		}
@@ -109,6 +114,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return err
 		}
 	} else { // Case-3: Source is a bucket or virutal directory.
+		glcm.Info(infoCopyFromBucketDirectoryListOfFiles)
 		// Ensure there is a valid bucket name in this case.
 		if err := s3utils.CheckValidBucketNameStrict(e.s3URLParts.BucketName); err != nil {
 			return err
@@ -286,7 +292,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 		// S3's list operations doesn't return object's properties, such as: content-encoding and etc.
 		// So azcopy need additional get request to collect these properties.
 		// When get S2S properties in backend is not enabled, get properties during enumerating.
-		if cca.s2sPreserveProperties && !cca.s2sGetS3PropertiesInBackend {
+		if cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend {
 			var err error
 			objectInfo, err = s3Client.StatObject(bucketName, objectInfo.Key, minio.StatObjectOptions{})
 			if err != nil {

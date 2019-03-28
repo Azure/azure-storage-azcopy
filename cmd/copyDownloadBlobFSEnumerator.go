@@ -49,7 +49,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		// if the destination is an existing directory, then put the file under it
 		// otherwise assume the user has provided a specific path for the destination file
 		if util.isPathALocalDirectory(cca.destination) {
-			destination = util.generateLocalPath(cca.destination, util.getPossibleFileNameFromURL(fsUrlParts.DirectoryOrFilePath))
+			destination = util.generateLocalPath(cca.destination, util.getFileNameFromPath(fsUrlParts.DirectoryOrFilePath))
 		} else {
 			destination = cca.destination
 		}
@@ -67,6 +67,12 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 		return e.dispatchFinalPart(cca)
 	}
+
+	if err != nil {
+		handleSingleFileValidationErrorForADLSGen2(err)
+	}
+
+	glcm.Info(infoCopyFromDirectoryListOfFiles)
 
 	// Case-2: Source is a filesystem or directory
 	// In this case, the destination should be a directory.

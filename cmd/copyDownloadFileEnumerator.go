@@ -39,22 +39,26 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// Case-1: Source is single file
 	srcFileURL := azfile.NewFileURL(*sourceURL, srcFilePipeline)
 	// Verify if source is a single file
-	// Note: Currently only support single to single, and not support single to directory.
-	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
-		var singleFileDestinationPath string
-		if gCopyUtil.isPathALocalDirectory(cca.destination) {
-			singleFileDestinationPath = gCopyUtil.generateLocalPath(
-				cca.destination, gCopyUtil.getPossibleFileNameFromURL(sourceURL.Path))
-		} else {
-			singleFileDestinationPath = cca.destination
-		}
-		// TODO: Ensure whether to create share here or in Xfer
+	if srcFileURLPartExtension.isFileSyntactically() {
+		if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
+			var singleFileDestinationPath string
+			if gCopyUtil.isPathALocalDirectory(cca.destination) {
+				singleFileDestinationPath = gCopyUtil.generateLocalPath(
+					cca.destination, gCopyUtil.getFileNameFromPath(sourceURL.Path))
+			} else {
+				singleFileDestinationPath = cca.destination
+			}
 
-		if err := e.addDownloadFileTransfer(srcFileURL.URL(), singleFileDestinationPath, fileProperties, cca); err != nil {
-			return err
+			if err := e.addDownloadFileTransfer(srcFileURL.URL(), singleFileDestinationPath, fileProperties, cca); err != nil {
+				return err
+			}
+			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForAzureFile(err)
 		}
-		return e.dispatchFinalPart(cca)
 	}
+
+	glcm.Info(infoCopyFromDirectoryListOfFiles)
 
 	// Case-2: Source is a file share or directory
 	// The destination must be a directory, when source is share or directory.
@@ -66,7 +70,6 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 		return fmt.Errorf("cannot copy the entire share or directory without recursive flag. Please use --recursive flag")
 	}
-	// TODO: Ensure whether to create share here or in Xfer
 
 	if err := e.addTransfersFromDirectory(ctx,
 		azfile.NewShareURL(srcFileURLPartExtension.getShareURL(), srcFilePipeline).NewRootDirectoryURL(),

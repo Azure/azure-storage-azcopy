@@ -147,6 +147,7 @@ class BlobFs_Download_OAuth_User_Scenarios(unittest.TestCase):
         self.util_test_blobfs_download_1Kb_file()
 
     # Using shared key only when oauth token is not preset
+    @unittest.skip("single file authentication for oauth covered by 1kb case")
     def test_blobfs_download_64MB_file_with_oauth(self):
         self.util_test_blobfs_download_64MB_file()
 

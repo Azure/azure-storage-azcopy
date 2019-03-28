@@ -766,6 +766,10 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	return result, nil
 }
 
+// isValidMetadataKey checks if the given string is a valid metadata key for Azure.
+// For Azure, metadata key must adhere to the naming rules for C# identifiers.
+// As testing, reserved keyworkds for C# identifiers are also valid metadata key. (e.g. this, int)
+// TODO: consider to use "[A-Za-z_]\w*" to replace this implementation, after ensuring the complexity is O(N).
 func isValidMetadataKey(key string) bool {
 	for i := 0; i < len(key); i++ {
 		if i != 0 { // Most of case i != 0
@@ -798,12 +802,12 @@ func isValidMetadataKeyFirstChar(c byte) bool {
 	return false
 }
 
-func (m Metadata) ExcludeInvalidKey() (reservedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
-	reservedMetadata = make(map[string]string)
+func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
+	retainedMetadata = make(map[string]string)
 	excludedMetadata = make(map[string]string)
 	for k, v := range m {
 		if isValidMetadataKey(k) {
-			reservedMetadata[k] = v
+			retainedMetadata[k] = v
 		} else {
 			invalidKeyExists = true
 			excludedMetadata[k] = v
@@ -816,8 +820,8 @@ func (m Metadata) ExcludeInvalidKey() (reservedMetadata Metadata, excludedMetada
 const metadataRenamedKeyPrefix = "rename_"
 const metadataKeyForRenamedOriginalKeyPrefix = "rename_key_"
 
-var metadataRegExp = regexp.MustCompile("\\W")
-var metadataKeyRenameErrStr = "fail to rename invalid metadata key %q"
+var metadataKeyInvalidCharRegex = regexp.MustCompile("\\W")
+var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
 
 // ResolveInvalidKey resolves invalid metadata key with following steps:
 // 1. replace all invalid char(i.e. ASCII chars expect [0-9A-Za-z_]) with '_'
@@ -841,7 +845,7 @@ func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
 
 	for k, v := range m {
 		if !isValidMetadataKey(k) {
-			validKey := metadataRegExp.ReplaceAllString(k, "_")
+			validKey := metadataKeyInvalidCharRegex.ReplaceAllString(k, "_")
 			renamedKey := metadataRenamedKeyPrefix + validKey
 			keyForRenamedOriginalKey := metadataKeyForRenamedOriginalKeyPrefix + validKey
 			if hasCollision(renamedKey) || hasCollision(keyForRenamedOriginalKey) {

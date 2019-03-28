@@ -167,7 +167,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 			MD5VerificationOption:    order.BlobAttributes.MD5ValidationOption, // here because it relates to downloads (file destination)
 		},
 		// For S2S copy, per JobPartPlan info
-		S2SGetS3PropertiesInBackend:    order.S2SGetS3PropertiesInBackend,
+		S2SGetPropertiesInBackend:      order.S2SGetPropertiesInBackend,
 		S2SSourceChangeValidation:      order.S2SSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: order.S2SInvalidMetadataHandleOption,
 		atomicJobStatus:                common.EJobStatus.InProgress(), // We default to InProgress

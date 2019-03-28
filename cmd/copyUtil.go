@@ -35,8 +35,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 const (
@@ -659,10 +659,10 @@ func endWithSlashOrBackSlash(path string) bool {
 	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, "\\")
 }
 
-// getPossibleFileNameFromURL return the possible file name get from URL.
-func (util copyHandlerUtil) getPossibleFileNameFromURL(path string) string {
+// getFileNameFromPath return the file name from given file path.
+func (util copyHandlerUtil) getFileNameFromPath(path string) string {
 	if path == "" {
-		panic("can not get file name from an empty path")
+		return ""
 	}
 
 	if endWithSlashOrBackSlash(path) {
@@ -835,6 +835,10 @@ func (parts blobURLPartsExtension) isServiceSyntactically() bool {
 	return parts.Host != "" && parts.ContainerName == "" && parts.BlobName == ""
 }
 
+func (parts blobURLPartsExtension) isBlobSyntactically() bool {
+	return parts.Host != "" && parts.ContainerName != "" && parts.BlobName != "" && !strings.HasSuffix(parts.BlobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+}
+
 // Get the source path without the wildcards
 // This is defined since the files mentioned with exclude flag
 // & include flag are relative to the Source
@@ -992,6 +996,10 @@ func (parts fileURLPartsExtension) getServiceURL() url.URL {
 	return parts.URL()
 }
 
+func (parts fileURLPartsExtension) isFileSyntactically() bool {
+	return parts.Host != "" && parts.ShareName != "" && parts.DirectoryOrFilePath != "" && !strings.HasSuffix(parts.DirectoryOrFilePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 type adlsGen2PathURLPartsExtension struct {
 	azbfs.BfsURLParts
@@ -1071,10 +1079,10 @@ func (p *s3URLPartsExtension) isServiceLevelSearch() (IsServiceLevelSearch bool,
 	// If it's service level URL which need search bucket, there could be two cases:
 	// a. https://<service-endpoint>(/)
 	// b. https://<service-endpoint>/bucketprefix*(/*)
-	if p.IsServiceURL() ||
+	if p.IsServiceSyntactically() ||
 		strings.Contains(p.BucketName, wildCard) {
 		IsServiceLevelSearch = true
-		// Case p.IsServiceURL(), bucket name is empty, search for all buckets.
+		// Case p.IsServiceSyntactically(), bucket name is empty, search for all buckets.
 		if p.BucketName == "" {
 			return
 		}

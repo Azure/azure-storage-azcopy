@@ -208,27 +208,8 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
             add_flags("recursive", "true")
         self.assertTrue(result)
 
-
-    # test_9mb_file_upload verifies the azcopy upload of 9mb file upload.
-    def test_9mb_file_upload(self):
-        # creating file of 8mb size.
-        filename = "test_9mb_file_upload.txt"
-        file_path = util.create_test_file(filename, 9 * 1024 * 1024)
-
-        # execute azcopy copy upload.
-        dest = util.get_resource_sas(filename)
-        result = util.Command("copy").add_arguments(file_path).add_arguments(dest) \
-            .add_flags("log-level", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
-            execute_azcopy_copy_command()
-        self.assertTrue(result)
-
-        # Verifying the uploaded file
-        # calling the testFile validator to verify whether file has been successfully uploaded or not
-        result = util.Command("testFile").add_arguments(file_path).add_arguments(dest).execute_azcopy_verify()
-        self.assertTrue(result)
-
-
     # test_1G_file_upload verifies the azcopy upload of 1Gb file upload in blocks of 100 Mb
+    @unittest.skip("coverd by stress")
     def test_1GB_file_upload(self):
         # create 1Gb file
         filename = "test_1G_file.txt"

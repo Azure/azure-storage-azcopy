@@ -73,6 +73,58 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 	return nil
 }
 
+var handleSingleFileValidationErrStr = "source is not validated as a single file: %v"
+var infoCopyFromContainerDirectoryListOfFiles = "trying to copy the source as container/directory/list of files"
+var infoCopyFromBucketDirectoryListOfFiles = "trying to copy the source as bucket/folder/list of files"
+var infoCopyFromDirectoryListOfFiles = "trying to copy the source as directory/list of files"
+var infoCopyFromAccount = "trying to copy the source account"
+
+func handleSingleFileValidationErrorForBlob(err error) {
+	errRootCause := err.Error()
+	stgErr, isStgErr := err.(azblob.StorageError)
+	if isStgErr {
+		if stgErr.ServiceCode() == azblob.ServiceCodeAuthenticationFailed {
+			errRootCause = fmt.Sprintf("%s, please check if SAS or OAuth is used properly, or source is a public blob", stgErr.ServiceCode())
+		} else {
+			errRootCause = string(stgErr.ServiceCode())
+		}
+	}
+
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+}
+
+func handleSingleFileValidationErrorForAzureFile(err error) {
+	errRootCause := err.Error()
+	stgErr, isStgErr := err.(azfile.StorageError)
+	if isStgErr {
+		if stgErr.ServiceCode() == azfile.ServiceCodeAuthenticationFailed {
+			errRootCause = fmt.Sprintf("%s, please check if SAS is set properly", stgErr.ServiceCode())
+		} else {
+			errRootCause = string(stgErr.ServiceCode())
+		}
+	}
+
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+}
+
+func handleSingleFileValidationErrorForADLSGen2(err error) {
+	errRootCause := err.Error()
+	stgErr, isStgErr := err.(azbfs.StorageError)
+	if isStgErr {
+		if stgErr.ServiceCode() == azbfs.ServiceCodeAuthenticationFailed {
+			errRootCause = fmt.Sprintf("%s, please check if AccessKey or OAuth is used properly", stgErr.ServiceCode())
+		} else {
+			errRootCause = string(stgErr.ServiceCode())
+		}
+	}
+
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+}
+
+func handleSingleFileValidationErrorForS3(err error) {
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, err.Error()))
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 // Blob service enumerators.
 //////////////////////////////////////////////////////////////////////////////////////////

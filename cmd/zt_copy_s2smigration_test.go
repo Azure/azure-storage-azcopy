@@ -33,16 +33,16 @@ import (
 // Additional S2S migration cases, besides E2E smoke testing cases for S3/blob/file source contained in test_service_to_service_copy.py
 
 const (
-	defaultLogVerbosityForCopy         = "WARNING"
-	defaultOutputFormatForCopy         = "text"
-	defaultBlobTypeForCopy             = "None"
-	defaultBlockBlobTierForCopy        = "None"
-	defaultPageBlobTierForCopy         = "None"
-	defaultS2SPreserveProperties       = true
-	defaultS2SPreserveAccessTier       = true
-	defaultS2SGetS3PropertiesInBackend = true
-	defaultS2SSourceChangeValidation   = true
-	debugMode                          = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
+	defaultLogVerbosityForCopy       = "WARNING"
+	defaultOutputFormatForCopy       = "text"
+	defaultBlobTypeForCopy           = "None"
+	defaultBlockBlobTierForCopy      = "None"
+	defaultPageBlobTierForCopy       = "None"
+	defaultS2SPreserveProperties     = true
+	defaultS2SPreserveAccessTier     = true
+	defaultS2SGetPropertiesInBackend = true
+	defaultS2SSourceChangeValidation = true
+	debugMode                        = false // keep the debugMode temporarily, as merging happens frequently, and this might be useful for solving potential issue.
 )
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
@@ -58,7 +58,7 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		blockBlobTier:                  defaultBlockBlobTierForCopy,
 		pageBlobTier:                   defaultPageBlobTierForCopy,
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
-		s2sGetS3PropertiesInBackend:    defaultS2SGetS3PropertiesInBackend,
+		s2sGetPropertiesInBackend:      defaultS2SGetPropertiesInBackend,
 		s2sPreserveAccessTier:          defaultS2SPreserveAccessTier,
 		s2sPreserveProperties:          defaultS2SPreserveProperties,
 		s2sSourceChangeValidation:      defaultS2SSourceChangeValidation,
@@ -463,6 +463,57 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	})
 }
 
+func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	c.Assert(err, chk.IsNil)
+
+	// Generate source bucket
+	bucketName := generateBucketName()
+	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
+	defer deleteBucket(c, s3Client, bucketName)
+
+	dstContainerName := generateContainerName()
+
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateObjects(c, s3Client, bucketName, objectList)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawSrcS3ObjectURL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "file") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	mockedRPC.reset()
+
+	rawSrcS3ObjectURL = scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcS3ObjectURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
 // Copy from container to container, preserve blob tier.
 func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerPreserveBlobTier(c *chk.C) {
 	bsu := getBSU()
@@ -533,5 +584,92 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 			srcContainerURL.String(), dstContainerURL.String(), []string{common.AZCOPY_PATH_SEPARATOR_STRING + blobName}, mockedRPC) // common.AZCOPY_PATH_SEPARATOR_STRING added for JobPartPlan file change.
 
 		c.Assert(mockedRPC.transfers[0].BlobTier, chk.Equals, azblob.AccessTierNone)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateBlobs(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	mockedRPC.reset()
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2") // Use default region
+	rawDstContainerURLWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *chk.C) {
+	bsu := getBSU()
+	fsu, err := getFSU()
+	c.Assert(err, chk.IsNil)
+
+	srcShareURL, srcShareName := createNewShare(c, fsu)
+	defer deleteShare(c, srcShareURL)
+	c.Assert(srcShareURL, chk.NotNil)
+
+	scenarioHelper{}.generateFlatFiles(c, srcShareURL, []string{"file"})
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawSrcFileURL := scenarioHelper{}.getRawFileURLWithSAS(c, srcShareName, "file") // Use default region
+	rawDstContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcFileURL.String(), rawDstContainerURLWithSAS.String())
+
+	// bucket should be resolved, and objects should be scheduled for transfer
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
 	})
 }

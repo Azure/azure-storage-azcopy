@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -43,6 +42,10 @@ func (e *copyS2SMigrationFileEnumerator) initEnumerator(ctx context.Context, cca
 
 	e.srcFileURLPartExtension = fileURLPartsExtension{azfile.NewFileURLParts(*e.sourceURL)}
 
+	// When need to do changing source validation, must get property(LMT) for Azure file during enumerating, in order to ensure that
+	// files are not changed since enumerating.
+	e.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetPropertiesInBackend && !cca.s2sSourceChangeValidation
+
 	return nil
 }
 
@@ -56,25 +59,35 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Case-1: Source is single file
 	srcFileURL := azfile.NewFileURL(*e.sourceURL, e.srcFilePipeline)
 	// Verify if source is a single file
-	// Note: Currently only support single to single, and not support single to directory.
-	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
-			return errors.New("invalid source and destination combination for service to service copy: " +
-				"destination must point to a single file, when source is a single file")
+	if e.srcFileURLPartExtension.isFileSyntactically() {
+		if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.srcFileURLPartExtension.DirectoryOrFilePath)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
+			}
+			err := e.createDestBucket(ctx, *e.destURL, nil)
+			if err != nil {
+				return err
+			}
+			// Disable get properties in backend, as GetProperties already get full properties.
+			e.S2SGetPropertiesInBackend = false
+
+			// directly use destURL as destination
+			if err := e.addFileToNTransfer(srcFileURL.URL(), *e.destURL, fileProperties, cca); err != nil {
+				return err
+			}
+			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForAzureFile(err)
 		}
-		err := e.createDestBucket(ctx, *e.destURL, nil)
-		if err != nil {
-			return err
-		}
-		// directly use destURL as destination
-		if err := e.addFileToNTransfer(srcFileURL.URL(), *e.destURL, fileProperties, cca); err != nil {
-			return err
-		}
-		return e.dispatchFinalPart(cca)
 	}
 
 	// Case-2: Source is account, currently only support blob destination
 	if isAccountLevel, sharePrefix := e.srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
@@ -93,6 +106,7 @@ func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		}
 
 	} else { // Case-3: Source is a file share or directory
+		glcm.Info(infoCopyFromDirectoryListOfFiles) // Share is mapped to root directory
 		searchPrefix, fileNamePattern, isWildcardSearch := e.srcFileURLPartExtension.searchPrefixFromFileURL()
 		if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire share or directory without recursive flag. Please use --recursive flag")
@@ -207,7 +221,7 @@ func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.C
 
 			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
 			// As changing source validation need LMT which is not returned during list, enforce to get property if s2sSourceChangeValidation is enabled.
-			if cca.s2sPreserveProperties || cca.s2sSourceChangeValidation {
+			if (cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) || cca.s2sSourceChangeValidation {
 				p, err := fileURL.GetProperties(ctx)
 				if err != nil {
 					return err

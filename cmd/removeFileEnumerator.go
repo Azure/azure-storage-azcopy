@@ -82,7 +82,7 @@ func (e *removeFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 		// If there is * it's matching a file (like pattern matching)
 		// get the search prefix to query the service
-		searchPrefix := util.getPossibleFileNameFromURL(sourceURL.Path)
+		searchPrefix := util.getFileNameFromPath(sourceURL.Path)
 		if searchPrefix == "" {
 			panic("invalid state, searchPrefix should not be emtpy in do prefix search.")
 		}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -58,28 +57,35 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// Case-1: Source is a single blob
 	// Verify if source is a single blob
 	srcBlobURL := azblob.NewBlobURL(*e.sourceURL, e.srcBlobPipeline)
-	// Note: Currently only support single to single, and not support single to directory.
-	if blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
-		if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() || e.isDestServiceSyntactically() {
-			return errors.New("invalid source and destination combination for service to service copy: " +
-				"destination must point to a single file, when source is a single file")
-		}
-		err := e.createDestBucket(ctx, *e.destURL, nil)
-		if err != nil {
-			return err
-		}
+	if e.srcBlobURLPartExtension.isBlobSyntactically() {
+		if blobProperties, err := srcBlobURL.GetProperties(ctx, azblob.BlobAccessConditions{}); err == nil {
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.srcBlobURLPartExtension.BlobName)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
+			}
+			err := e.createDestBucket(ctx, *e.destURL, nil)
+			if err != nil {
+				return err
+			}
 
-		// directly use destURL as destination
-		if err := e.addBlobToNTransfer2(srcBlobURL.URL(), *e.destURL, blobProperties, cca); err != nil {
-			return err
+			// directly use destURL as destination
+			if err := e.addBlobToNTransfer2(srcBlobURL.URL(), *e.destURL, blobProperties, cca); err != nil {
+				return err
+			}
+			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForBlob(err)
 		}
-		return e.dispatchFinalPart(cca)
 	}
 
 	// Case-2: Source is account level, e.g.:
 	// a: https://<blob-service>/
 	// b: https://<blob-service>/containerprefix*/vd/blob
 	if isAccountLevel, containerPrefix := e.srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
@@ -97,6 +103,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 			return err
 		}
 	} else { // Case-3: Source is a blob container or directory
+		glcm.Info(infoCopyFromContainerDirectoryListOfFiles)
 		blobPrefix, blobNamePattern, isWildcardSearch := e.srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire container or directory without recursive flag. Please use --recursive flag")

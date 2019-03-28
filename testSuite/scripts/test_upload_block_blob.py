@@ -147,6 +147,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         self.util_test_1GB_blob_upload()
 
     # test_1GB_blob_upload_with_oauth verifies the azcopy upload of 1Gb blob upload in blocks of 100 Mb with OAuth
+    @unittest.skip("single file authentication for oauth covered by small file")
     def test_1GB_blob_upload_with_oauth(self):
         self.util_test_1GB_blob_upload(True)
 
