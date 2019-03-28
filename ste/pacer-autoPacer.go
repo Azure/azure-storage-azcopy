@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -69,8 +71,23 @@ const (
 	maxPacerBytesPerSecond = maxPacerGbps * 1000 * 1000 * 1000 / 8
 )
 
+var (
+	shouldPacePageBlobs bool
+	shouldPaceOncer     sync.Once
+)
+
 func newPageBlobAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger) autoPacerConsumer {
-	return newAutoPacer(ctx, bytesPerSecond, expectedBytesPerRequest, isFair, logger, pageBlobThroughputTunerString)
+
+	shouldPaceOncer.Do(func() {
+		raw := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
+		shouldPacePageBlobs = strings.ToLower(raw) != "false"
+	})
+
+	if shouldPacePageBlobs {
+		return newAutoPacer(ctx, bytesPerSecond, expectedBytesPerRequest, isFair, logger, pageBlobThroughputTunerString)
+	} else {
+		return newNullAutoPacer()
+	}
 }
 
 func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger, logPrefix string) autoPacerConsumer {
