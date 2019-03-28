@@ -182,7 +182,7 @@ type ChunkStatusLogger interface {
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
 	GetCounts(td TransferDirection) []chunkStatusCount
-	IsDiskConstrained(td TransferDirection) bool
+	GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint
 	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
 }
 
@@ -341,15 +341,30 @@ func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount
 	return result
 }
 
-func (csl *chunkStatusLogger) IsDiskConstrained(td TransferDirection) bool {
-	switch td {
-	case ETransferDirection.Upload():
-		return csl.isUploadDiskConstrained()
-	case ETransferDirection.Download():
-		return csl.isDownloadDiskConstrained()
+func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint {
+	switch {
+	// it seems sensible to report file pacer (Service) constraint as a higher priority than Disk, if both exist at the same time (but usually they won't)
+	case csl.isConstrainedByFilePacer():
+		return EPerfConstraint.Service() // service is throttling us (as at March 2019, we only detect this for page blobs, but that may change in future)
+
+	case td == ETransferDirection.Upload() && csl.isUploadDiskConstrained():
+		return EPerfConstraint.Disk()
+
+	case td == ETransferDirection.Download() && csl.isDownloadDiskConstrained():
+		return EPerfConstraint.Disk()
+
 	default:
-		return false
+		return EPerfConstraint.Unknown()
 	}
+}
+
+const (
+	nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
+)
+
+func (csl *chunkStatusLogger) isConstrainedByFilePacer() bool {
+	haveBigQueueForPacer := csl.getCount(EWaitReason.FilePacer()) >= nearZeroQueueSize
+	return haveBigQueueForPacer
 }
 
 // is disk the bottleneck in an upload?
@@ -360,7 +375,6 @@ func (csl *chunkStatusLogger) isUploadDiskConstrained() bool {
 	// (not the _execution_ and so their counts will just tend to equal that of the small goroutine pool that runs them).
 	// It might be convenient if we could compare TWO queue sizes here, as we do in isDownloadDiskConstrained, but unfortunately our
 	// Jan 2019 architecture only gives us ONE useful queue-like state when uploading, so we can't compare two.
-	const nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
 	queueForNetworkIsSmall := csl.getCount(EWaitReason.WorkerGR()) < nearZeroQueueSize
 
 	beforeGRWaitQueue := csl.getCount(EWaitReason.RAMToSchedule()) + csl.getCount(EWaitReason.DiskIO())

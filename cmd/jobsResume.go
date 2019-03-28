@@ -148,7 +148,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
 			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.TransfersCompleted,

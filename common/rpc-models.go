@@ -147,7 +147,7 @@ type ListJobSummaryResponse struct {
 	TotalBytesEnumerated uint64
 	FailedTransfers      []TransferDetail
 	SkippedTransfers     []TransferDetail
-	IsDiskConstrained    bool
+	PerfConstraint       PerfConstraint
 	PerfStrings          []string `json:"-"`
 }
 
@@ -169,7 +169,7 @@ type ListSyncJobSummaryResponse struct {
 	DeleteTransfersCompleted uint32
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
-	IsDiskConstrained        bool
+	PerfConstraint           PerfConstraint
 	PerfStrings              []string `json:"-"`
 	// sum of the size of transfer completed successfully so far.
 	TotalBytesTransferred uint64
