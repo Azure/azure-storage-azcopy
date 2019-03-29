@@ -124,6 +124,8 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
 
+		defer reader.Close() // In case of memory leak in sparse file case.
+
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
 			return
