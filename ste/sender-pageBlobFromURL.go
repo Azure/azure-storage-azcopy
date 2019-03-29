@@ -69,7 +69,6 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 
-		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		s2sPacer := newS2SPacer(c.pacer)
 
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
@@ -85,6 +84,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			c.filePacer)
 
 		// upload the page
+		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
 			enrichedContext, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
