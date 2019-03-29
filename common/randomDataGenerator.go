@@ -47,6 +47,8 @@ var (
 func IsPlaceholderForRandomDataGenerator(filename string) bool {
 	// TODO: Add OS calls to also check here that the on-disk size of the file is zero bytes, so we KNOW for sure
 	//    that we are not throwing anything away by ignoring its content.
+	//    *** OR *** consider a random source enumerator (one day) so that we don't need to have the sparse files as placeholders
+	//   And if we do that, move the command line param from global to copy-only, since it will be no longer usable in sync.
 	return SendRandomDataExt != "" && strings.HasSuffix(filename, "."+SendRandomDataExt)
 }
 
