@@ -4,6 +4,8 @@ github.com/Azure/azure-storage-blob-go v0.0.0-20181022225951-5152f14ace1c h1:Y5u
 github.com/Azure/azure-storage-blob-go v0.0.0-20181022225951-5152f14ace1c/go.mod h1:oGfmITT1V6x//CswqY2gtAHND+xIP64/qL7a5QJix0Y=
 github.com/Azure/azure-storage-blob-go v0.0.0-20190123011202-457680cc0804 h1:QjGHsWFbJyl312t0BtgkmZy2TTYA++FF0UakGbr3ZhQ=
 github.com/Azure/azure-storage-blob-go v0.0.0-20190123011202-457680cc0804/go.mod h1:oGfmITT1V6x//CswqY2gtAHND+xIP64/qL7a5QJix0Y=
+github.com/Azure/azure-storage-blob-go v0.0.0-20190316203758-94d352293d76 h1:ULsj5wLfuHQ28x87RIHwGhsqPFzivaj2L7i9wYvXVas=
+github.com/Azure/azure-storage-blob-go v0.0.0-20190316203758-94d352293d76/go.mod h1:oGfmITT1V6x//CswqY2gtAHND+xIP64/qL7a5QJix0Y=
 github.com/Azure/azure-storage-file-go v0.0.0-20180929015327-d6c64f9676be h1:2TBD/QJYxkQf2jAHk/radyLgEfUpV8eqvRPvnjJt9EA=
 github.com/Azure/azure-storage-file-go v0.0.0-20180929015327-d6c64f9676be/go.mod h1:N5mXnKL8ZzcrxcNfqrcfWhiaCPAGagfTxH0/IwPN/LI=
 github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a h1:5OfEqciJHSMkxAWgJP1b3JTmzWNRlq9L9IgOxPNlBOM=
@@ -51,6 +53,7 @@ golang.org/x/net v0.0.0-20190110200230-915654e7eabc h1:Yx9JGxI1SBhVLFjpAkWMaO1TF
 golang.org/x/net v0.0.0-20190110200230-915654e7eabc/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 h1:YUO/7uOKsKeq9UokNS62b8FYywz3ker1l1vDZRCRefw=
 golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+golang.org/x/sys v0.0.0-20190107173414-20be8e55dc7b/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190109145017-48ac38b7c8cb h1:1w588/yEchbPNpa9sEvOcMZYbWHedwJjg4VOAdDHWHk=
 golang.org/x/sys v0.0.0-20190109145017-48ac38b7c8cb/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/text v0.3.0 h1:g61tztE5qeGQ89tm6NTjjM9VPIm088od1l6aSorWRWg=
