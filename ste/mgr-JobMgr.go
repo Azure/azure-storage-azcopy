@@ -215,7 +215,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 
 func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfConstraint) {
 	constraintString := fmt.Sprintf("primary performance constraint is %s", constraint)
-	msg := fmt.Sprintf("PERF: disk %s. States: %s", constraintString, strings.Join(displayStrings, ", "))
+	msg := fmt.Sprintf("PERF: %s. States: %s", constraintString, strings.Join(displayStrings, ", "))
 	jm.Log(pipeline.LogInfo, msg)
 }
 
