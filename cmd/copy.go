@@ -58,8 +58,6 @@ const pipingDefaultBlockSize = 8 * 1024 * 1024
 
 const pipeLocation = "~pipe~"
 
-const devNull = "/dev/null"
-
 // represents the raw copy command input from the user
 type rawCopyCmdArgs struct {
 	// from arguments
@@ -625,8 +623,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:              cca.putMd5,
-			MD5ValidationOption: cca.md5ValidationOption,
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
