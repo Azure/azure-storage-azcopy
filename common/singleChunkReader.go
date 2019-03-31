@@ -24,13 +24,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"hash"
 	"io"
 	"math"
 	"runtime"
-	"sync/atomic"
-
-	"github.com/Azure/azure-pipeline-go/pipeline"
+	"sync"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -83,9 +82,6 @@ type CloseableReaderAt interface {
 type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
 
 type singleChunkReader struct {
-	// for diagnostics for issue https://github.com/Azure/azure-storage-azcopy/issues/191
-	atomicUseIndicator int32
-
 	// context used to allow cancellation of blocking operations
 	// (Yes, ideally contexts are not stored in structs, but we need it inside Read, and there's no way for it to be passed in there)
 	ctx context.Context
@@ -116,7 +112,10 @@ type singleChunkReader struct {
 
 	// buffer used by prefetch
 	buffer []byte
-	// TODO: pooling of buffers to reduce pressure on GC?
+
+	// to prevent issues with context cancellation resulting in a close call while
+	// the worker GR's in transport.go are still doing a Read
+	mu *sync.Mutex
 }
 
 func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
@@ -124,6 +123,7 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
+		mu:            &sync.Mutex{},
 		ctx:           ctx,
 		chunkLogger:   chunkLogger,
 		generalLogger: generalLogger,
@@ -135,20 +135,19 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 	}
 }
 
-// Use and un-use are temporary, for identifying the root cause of
-// https://github.com/Azure/azure-storage-azcopy/issues/191
-// They may be removed after that.
-// For now, they are used to wrap every Public method
+// Analysis of error https://github.com/Azure/azure-storage-azcopy/issues/191
+// suggests that the HTTP request is getting closed as soon as the context is cancelled...
+// even if a disk read in blockingPrefetch is still underway (as can be the case when doing a retry).
+// That disk read is happening on a worker GR initiated by Transport.Go, and has no ability to directly
+// listen for context cancellation.
+// So, we introduce mutexes here so that the Close call won't null out the cr.buffer while
+// blockingPrefetch and doRead are still using it
 func (cr *singleChunkReader) use() {
-	if atomic.SwapInt32(&cr.atomicUseIndicator, 1) != 0 {
-		panic("trying to use chunk reader when already in use")
-	}
+	cr.mu.Lock()
 }
 
 func (cr *singleChunkReader) unuse() {
-	if atomic.SwapInt32(&cr.atomicUseIndicator, 0) != 1 {
-		panic("ending use when chunk reader was not actually IN use")
-	}
+	cr.mu.Unlock()
 }
 
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
@@ -210,6 +209,9 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	}
 	if int64(totalBytesRead) != cr.length {
 		return errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
+	}
+	if cr.ctx.Err() != nil {
+		return cr.ctx.Err() // context was cancelled while we were reading the file, so bail out now before we try to send anything
 	}
 
 	return nil
@@ -286,7 +288,8 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 		return 0, err
 	}
 
-	// extra checks until we find root cause of https://github.com/Azure/azure-storage-azcopy/issues/191
+	// extra checks to be safe (originally for https://github.com/Azure/azure-storage-azcopy/issues/191)
+	// No longer needed now that use/unuse lock with a mutex, but there's no harm in leaving them here
 	if cr.buffer == nil {
 		panic("unexpected nil buffer")
 	}
@@ -336,18 +339,16 @@ func (cr *singleChunkReader) Length() int64 {
 // "for ever", even after the object is gone.
 func (cr *singleChunkReader) Close() error {
 	// first, check and log early closes (before we do use(), since the situation we are trying
-	// to log is suspected to be one when use() will panic)
+	// to log is suspected to be one where the mutex in use() will prevent the issue, but we want to detect
+	// when it might be triggered)
 	if cr.positionInChunk < cr.length {
-		// this is an "early close". Adjust logging verbosity depending on whether context is still active
-		var extraMessage string
 		if cr.ctx.Err() == nil {
 			b := &bytes.Buffer{}
 			b.Write(stack())
-			extraMessage = "context active so logging full callstack, as follows: " + b.String()
-		} else {
-			extraMessage = "context cancelled so no callstack logged"
+			msg := "Early close of chunk in singleChunkReader with context still active"
+			cr.generalLogger.Log(pipeline.LogInfo, msg)
+			panic(msg) // panic otherwise we'll never know this bad situation has still happened (because, unlike previous versions, use() no longer panics)
 		}
-		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader: "+extraMessage)
 	}
 
 	// after logging callstack, do normal use()
