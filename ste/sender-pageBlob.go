@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
@@ -133,7 +134,26 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 	if s.isInManagedDiskImportExportAccount() {
-		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
+		// Target will already exist (and CANNOT be created through the REST API, because
+		// managed-disk import-export accounts have restricted API surface)
+
+		// Check its length, since it already has a size, and the upload will fail at the end if you what
+		// upload to it is bigger than its existing size. (And, for big files, it may be hours until you discover that
+		// difference if we don't check here).  Also, if the uploaded file is smaller, then can end up with
+		// two footers at the end (the one uploaded and the one that was already there at the end of the target blob).
+		p, err := s.destPageBlobURL.GetProperties(s.jptm.Context(), azblob.BlobAccessConditions{})
+		if err != nil {
+			s.jptm.FailActiveSend("Checking size of managed disk blob", err)
+			return
+		}
+		if s.srcSize != p.ContentLength() {
+			sizeErr := errors.New(fmt.Sprintf("source file is not the same size as the destination page blob. Source size is %d bytes but destination size is %d bytes",
+				s.srcSize, p.ContentLength()))
+			s.jptm.FailActiveSend("Checking size of managed disk blob", sizeErr)
+			return
+		}
+
+		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required")
 		return
 	}
 
