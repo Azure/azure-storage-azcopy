@@ -49,7 +49,10 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body, azblob.AppendBlobAccessConditions{}, nil)
+		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
+			azblob.AppendBlobAccessConditions{
+				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},
+			}, nil)
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
 			return
