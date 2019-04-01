@@ -22,7 +22,9 @@ package ste
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -95,11 +97,20 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		failFileCreation(err, false)
 		return
 	}
-	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
-	if err != nil {
-		failFileCreation(err, true)
-		return
+
+	var dstFile io.WriteCloser
+	if strings.EqualFold(info.Destination, common.DevNull) {
+		// the user wants to discard the downloaded data
+		dstFile = devNullWriter{}
+	} else {
+		// normal scenario, create the destination file as expected
+		dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
+		if err != nil {
+			failFileCreation(err, true)
+			return
+		}
 	}
+
 	// TODO: Question: do we need to Stat the file, to check its size, after explicitly making it with the desired size?
 	// That was what the old xfer-blobToLocal code used to do
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
@@ -186,7 +197,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.File, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	haveNonEmptyFile := activeDstFile != nil
@@ -293,4 +304,16 @@ func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
+}
+
+// conforms to io.Writer and io.Closer
+// does absolutely nothing to discard the given data
+type devNullWriter struct{}
+
+func (devNullWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (devNullWriter) Close() error {
+	return nil
 }
