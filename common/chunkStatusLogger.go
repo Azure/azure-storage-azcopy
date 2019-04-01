@@ -94,7 +94,9 @@ func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Que
 func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
 func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
 func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
-func (WaitReason) Cancelled() WaitReason            { return WaitReason{14, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
+// NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
+// the need to also change numWaitReasons()
+func (WaitReason) Cancelled() WaitReason { return WaitReason{14, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -211,7 +213,7 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
+	return EWaitReason.Cancelled().index + 1 // assume that maitainers follow the comment above to always keep Cancelled as numerically the greatest one
 }
 
 type chunkStatusCount struct {
