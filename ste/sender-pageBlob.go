@@ -134,7 +134,8 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 	if s.isInManagedDiskImportExportAccount() {
-		// Target will already exist (can CANNOT be created through the REST API)
+		// Target will already exist (and CANNOT be created through the REST API, because
+		// managed-disk import-export accounts have restricted API surface)
 
 		// Check its length, since it already has a size, and the upload will fail at the end if you what
 		// upload to it is bigger than its existing size. (And, for big files, it may be hours until you discover that
