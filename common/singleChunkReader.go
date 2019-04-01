@@ -21,7 +21,6 @@
 package common
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -113,8 +112,8 @@ type singleChunkReader struct {
 	// buffer used by prefetch
 	buffer []byte
 
-	// to prevent issues with context cancellation resulting in a close call while
-	// the worker GR's in transport.go are still doing a Read
+	// to prevent race conditions between context cancellation resulting in a Close call while
+	// we are still inside doRead (called from the worker GR's in transport.go)
 	mu *sync.Mutex
 }
 
@@ -135,13 +134,6 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 	}
 }
 
-// Analysis of error https://github.com/Azure/azure-storage-azcopy/issues/191
-// suggests that the HTTP request is getting closed as soon as the context is cancelled...
-// even if a disk read in blockingPrefetch is still underway (as can be the case when doing a retry).
-// That disk read is happening on a worker GR initiated by Transport.Go, and has no ability to directly
-// listen for context cancellation.
-// So, we introduce mutexes here so that the Close call won't null out the cr.buffer while
-// blockingPrefetch and doRead are still using it
 func (cr *singleChunkReader) use() {
 	cr.mu.Lock()
 }
@@ -198,20 +190,41 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 		return err
 	}
 
-	// get buffer from pool
-	cr.buffer = cr.slicePool.RentSlice(uint32Checked(cr.length))
-
-	// read bytes into the buffer
-	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
-	totalBytesRead, err := fileReader.ReadAt(cr.buffer, cr.chunkId.OffsetInFile)
-	if err != nil && err != io.EOF {
-		return err
+	// Read bytes into the buffer (in a context-cancellable way, by reading in a separate goroutine and waiting on
+	// it AND cancellation)
+	type readResult struct {
+		b   []byte
+		n   int
+		err error
 	}
-	if int64(totalBytesRead) != cr.length {
-		return errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
-	}
-	if cr.ctx.Err() != nil {
-		return cr.ctx.Err() // context was cancelled while we were reading the file, so bail out now before we try to send anything
+	targetBufferChan := make(chan readResult)
+	go func() {
+		cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
+		targetBuffer := cr.slicePool.RentSlice(uint32Checked(cr.length))
+		n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile)
+		// now that the buffer has been filled, we can safely share it with the world outside this go-routine
+		select {
+		case targetBufferChan <- readResult{targetBuffer, n, readErr}:
+			// normal code path
+		default:
+			// no-one is listening. Our containing routine must have given up waiting on us (due to context cancellation)
+			cr.returnSlice(targetBuffer) // throw it away again, to be tidy
+		}
+	}()
+	// Wait
+	select {
+	case rr := <-targetBufferChan:
+		if rr.err != nil && rr.err != io.EOF {
+			cr.returnSlice(rr.b)
+			return err
+		}
+		if int64(rr.n) != cr.length {
+			cr.returnSlice(rr.b)
+			return errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
+		}
+		cr.buffer = rr.b
+	case <-cr.ctx.Done():
+		return cr.ctx.Err()
 	}
 
 	return nil
@@ -308,7 +321,7 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	isEof := cr.positionInChunk >= cr.length
 	if isEof {
 		if freeBufferOnEof {
-			cr.returnBuffer()
+			cr.closeBuffer()
 		}
 		return bytesCopied, io.EOF
 	}
@@ -316,13 +329,17 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	return bytesCopied, nil
 }
 
-func (cr *singleChunkReader) returnBuffer() {
+func (cr *singleChunkReader) closeBuffer() {
 	if cr.buffer == nil {
 		return
 	}
-	cr.slicePool.ReturnSlice(cr.buffer)
-	cr.cacheLimiter.Remove(int64(len(cr.buffer)))
+	cr.returnSlice(cr.buffer)
 	cr.buffer = nil
+}
+
+func (cr *singleChunkReader) returnSlice(slice []byte) {
+	cr.slicePool.ReturnSlice(slice)
+	cr.cacheLimiter.Remove(int64(len(slice)))
 }
 
 func (cr *singleChunkReader) Length() int64 {
@@ -338,17 +355,12 @@ func (cr *singleChunkReader) Length() int64 {
 // Without this close, if something failed part way through, we would keep counting this object's bytes in cacheLimiter
 // "for ever", even after the object is gone.
 func (cr *singleChunkReader) Close() error {
-	// first, check and log early closes (before we do use(), since the situation we are trying
-	// to log is suspected to be one where the mutex in use() will prevent the issue, but we want to detect
-	// when it might be triggered)
-	if cr.positionInChunk < cr.length {
-		if cr.ctx.Err() == nil {
-			b := &bytes.Buffer{}
-			b.Write(stack())
-			msg := "Early close of chunk in singleChunkReader with context still active"
-			cr.generalLogger.Log(pipeline.LogInfo, msg)
-			panic(msg) // panic otherwise we'll never know this bad situation has still happened (because, unlike previous versions, use() no longer panics)
-		}
+	// First, check and log early closes
+	// This check originates from issue 191. Even tho we think we've now resolved that issue,
+	// we'll keep this code just to make sure.
+	if cr.positionInChunk < cr.length && cr.ctx.Err() == nil {
+		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader with context still active")
+		// cannot panic here, since this code path is NORMAL in the case of sparse files to Azure Files and Page Blobs
 	}
 
 	// after logging callstack, do normal use()
@@ -356,7 +368,7 @@ func (cr *singleChunkReader) Close() error {
 	defer cr.unuse()
 
 	// do the real work
-	cr.returnBuffer()
+	cr.closeBuffer()
 	return nil
 }
 
