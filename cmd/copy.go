@@ -960,7 +960,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
 			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.TransfersCompleted,
@@ -973,15 +973,15 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
 // to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, durationOfJob time.Duration) (perfString string, diskString string) {
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration) (perfString string, diskString string) {
 	perfString = ""
 	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
 	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
-	if isDiskConstrained && haveBeenRunningLongEnoughToStabilize {
-		diskString = " (disk may be limiting speed)"
+	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize {
+		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
 		diskString = ""
 	}

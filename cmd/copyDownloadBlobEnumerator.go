@@ -75,6 +75,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				LastModifiedTime: blobProperties.LastModified(),
 				SourceSize:       blobProperties.ContentLength(),
 				ContentMD5:       blobProperties.ContentMD5(),
+				BlobType:         blobProperties.BlobType(),
 			}, cca)
 			// only one transfer for this Job, dispatch the JobPart
 			err := e.dispatchFinalPart(cca)
@@ -160,6 +161,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					LastModifiedTime: blobProperties.LastModified(),
 					SourceSize:       blobProperties.ContentLength(),
 					ContentMD5:       blobProperties.ContentMD5(),
+					BlobType:         blobProperties.BlobType(),
 				}, cca)
 				continue
 			}
@@ -213,6 +215,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength,
 						ContentMD5:       blobInfo.Properties.ContentMD5,
+						BlobType:         blobInfo.Properties.BlobType,
 					}, cca)
 				}
 				marker = listBlob.NextMarker
@@ -304,6 +307,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				LastModifiedTime: blobInfo.Properties.LastModified,
 				SourceSize:       *blobInfo.Properties.ContentLength,
 				ContentMD5:       blobInfo.Properties.ContentMD5,
+				BlobType:         blobInfo.Properties.BlobType,
 			}, cca)
 		}
 		marker = listBlob.NextMarker

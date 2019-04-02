@@ -33,6 +33,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.ShowPerfStates(),
+	EEnvironmentVariable.PacePageBlobs(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -65,6 +66,13 @@ func (EnvironmentVariable) ProfileCPU() EnvironmentVariable {
 
 func (EnvironmentVariable) ProfileMemory() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM"}
+}
+
+func (EnvironmentVariable) PacePageBlobs() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_PACE_PAGE_BLOBS",
+		Description: "Should throughput for page blobs automatically be adjusted to match Service limits? Default is true. Set to 'false' to disable",
+	}
 }
 
 func (EnvironmentVariable) ShowPerfStates() EnvironmentVariable {

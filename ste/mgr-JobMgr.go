@@ -68,7 +68,7 @@ type IJobMgr interface {
 	ReleaseAConnection()
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
-	GetPerfInfo() (displayStrings []string, isDiskConstrained bool)
+	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
@@ -187,7 +187,7 @@ func (jm *jobMgr) ActiveConnections() int64 {
 
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
-func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool) {
+func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint) {
 	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction
@@ -203,24 +203,19 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool
 	}
 	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
 
-	diskCon := jm.chunkStatusLogger.IsDiskConstrained(atomicTransferDirection)
+	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection)
 
 	// logging from here is a bit of a hack
 	// TODO: can we find a better way to get this info into the log?  The caller is at app level,
 	//    not job level, so can't log it directly AFAICT.
-	jm.logPerfInfo(result, diskCon)
+	jm.logPerfInfo(result, con)
 
-	return result, diskCon
+	return result, con
 }
 
-func (jm *jobMgr) logPerfInfo(displayStrings []string, isDiskConstrained bool) {
-	var diskString string
-	if isDiskConstrained {
-		diskString = "disk MAY BE limiting throughput"
-	} else {
-		diskString = "disk IS NOT limiting throughput"
-	}
-	msg := fmt.Sprintf("PERF: disk %s. States: %s", diskString, strings.Join(displayStrings, ", "))
+func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfConstraint) {
+	constraintString := fmt.Sprintf("primary performance constraint is %s", constraint)
+	msg := fmt.Sprintf("PERF: %s. States: %s", constraintString, strings.Join(displayStrings, ", "))
 	jm.Log(pipeline.LogInfo, msg)
 }
 

@@ -47,10 +47,18 @@ type pageBlobSenderBase struct {
 	headersToApply  azblob.BlobHTTPHeaders
 	metadataToApply azblob.Metadata
 	destBlobTier    azblob.AccessTierType
+	// filePacer is necessary because page blobs have per-blob throughput limits. The limits depend on
+	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
+	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
+	// we won't be trying to move the faster than the Service wants us to.
+	filePacer autoPacerConsumer
 }
 
 const (
 	managedDiskImportExportAccountPrefix = "md-impexp-"
+	
+	// Start high(ish), because it auto-tunes downwards faster than it auto-tunes upwards
+	pageBlobInitialBytesPerSecond = (4 * 1000 * 1000 * 1000) / 8
 )
 
 var (
@@ -102,6 +110,7 @@ func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipel
 		headersToApply:  props.SrcHTTPHeaders.ToAzBlobHTTPHeaders(),
 		metadataToApply: props.SrcMetadata.ToAzBlobMetadata(),
 		destBlobTier:    destBlobTier,
+		filePacer:       newNullAutoPacer(), // defer creation of real one to Prologue
 	}
 
 	if s.isInManagedDiskImportExportAccount() && jptm.ShouldPutMd5() {
@@ -133,6 +142,11 @@ func (s *pageBlobSenderBase) RemoteFileExists() (bool, error) {
 }
 
 func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
+
+	// Create file pacer now.  Safe to create now, because we know that if Prologue is called the Epilogue will be to
+	// so we know that the pacer will be closed.  // TODO: consider re-factor xfer-anyToRemote so that epilogue is always called if uploader is constructed, and move this to constructor
+	s.filePacer = newPageBlobAutoPacer(s.jptm.Context(), pageBlobInitialBytesPerSecond, s.ChunkSize(), false, s.jptm.(common.ILogger))
+	
 	if s.isInManagedDiskImportExportAccount() {
 		// Target will already exist (and CANNOT be created through the REST API, because
 		// managed-disk import-export accounts have restricted API surface)
@@ -153,7 +167,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 			return
 		}
 
-		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required")
+		s.jptm.Log(pipeline.LogInfo, "Blob is managed disk import/export blob, so no Create call is required") // the blob always already exists
 		return
 	}
 
@@ -190,6 +204,8 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 }
 
 func (s *pageBlobSenderBase) Epilogue() {
+	_ = s.filePacer.Close() // release resources
+
 	jptm := s.jptm
 
 	// Cleanup

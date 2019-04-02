@@ -69,13 +69,24 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 
-		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		s2sPacer := newS2SPacer(c.pacer)
 
-		// Set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
-		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
+		c.jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
+		if err := c.filePacer.RequestRightToSend(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
+
+		// set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
+		// AND enrich the context for 503 (ServerBusy) detection
+		enrichedContext := withRetryNotification(
+			context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion),
+			c.filePacer)
+
+		// upload the page
+		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
+			enrichedContext, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
