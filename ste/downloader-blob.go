@@ -62,7 +62,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// Control rate of data movement (since page blobs can effectively have per-blob throughput limits)
 		// Note that the resulting throughput is somewhat ragged for downloads, and does not track the
 		// pacer's target rate as closely as it does for uploads. Presumably this is just because its
-		// hard to accurately control throughput from the receiving end. I.e. not a pacer bug, bug just
+		// hard to accurately control throughput from the receiving end. I.e. not a pacer bug, but just
 		// something inherent in the nature of REST downloads. So, as at March 2018, we are just living
 		// with it as known issue when downloading paced blobs.
 		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())

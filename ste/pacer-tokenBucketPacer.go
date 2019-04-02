@@ -27,7 +27,7 @@ import (
 	"time"
 )
 
-// pacerConsumer is used by callers who's activity must be controlled to a certain pace
+// pacerConsumer is used by callers whose activity must be controlled to a certain pace
 type pacerConsumer interface {
 	RequestRightToSend(ctx context.Context, bytesToSend int64) error
 	Close() error
