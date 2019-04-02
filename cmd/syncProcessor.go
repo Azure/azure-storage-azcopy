@@ -51,9 +51,9 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 		// flags
 		BlobAttributes: common.BlobTransferAttributes{
 			PreserveLastModifiedTime: true, // must be true for sync so that future syncs have this information available
-			PutMd5:              cca.putMd5,
-			MD5ValidationOption: cca.md5ValidationOption,
-			BlockSizeInBytes:    cca.blockSize},
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
+			BlockSizeInBytes:         cca.blockSize},
 		ForceWrite: true, // once we decide to transfer for a sync operation, we overwrite the destination regardless
 		LogLevel:   cca.logVerbosity,
 	}
@@ -124,22 +124,22 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 }
 
 func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) (shouldDelete bool, keepPrompting bool) {
-	answer := glcm.Prompt(fmt.Sprintf("Sync has discovered a %s(%s) that is not present at the source, "+
-		"would you like to delete it from the destination(%s)? "+
-		"Please confirm with y/n/y!/n! (default: n, add ! to choose the same answer for all future prompts): ",
+	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
+		"Do you wish to delete it from the destination(%s)? "+
+		"[Y] Yes  [A] Yes to all  [N] No  [L] No to all  (default is N):",
 		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay))
 
-	switch answer {
+	switch strings.ToLower(answer) {
 	case "y":
 		// print nothing, since the deleter is expected to log the message when the delete happens
 		return true, true
-	case "y!":
+	case "a":
 		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
 		return true, false
 	case "n":
 		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
 		return false, true
-	case "n!":
+	case "l":
 		glcm.Info("No deletions will happen from now onwards.")
 		return false, false
 	default:
