@@ -112,9 +112,15 @@ type singleChunkReader struct {
 	// buffer used by prefetch
 	buffer []byte
 
-	// to prevent race conditions between context cancellation resulting in a Close call while
-	// we are still inside doRead (called from the worker GR's in transport.go)
-	mu *sync.Mutex
+	// muMaster locks everything for single-threaded use...
+	muMaster *sync.Mutex
+
+	// ... except muMaster doesn't lock Close(), which can be called at the same time as reads (pipeline.Do calls it in cases where the context has been cancelled)
+	// It could be argued that we only need muClose (since that's the only case where we knowingly call two methods at the same time - Close while a Read is in progress -
+	// but it seems cleaner to also lock overall with muMaster rather than making weird assumptions about how we are called - concurrently or not)
+	muClose *sync.Mutex
+
+	isClosed bool
 }
 
 func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
@@ -122,7 +128,8 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
-		mu:            &sync.Mutex{},
+		muMaster:      &sync.Mutex{},
+		muClose:       &sync.Mutex{},
 		ctx:           ctx,
 		chunkLogger:   chunkLogger,
 		generalLogger: generalLogger,
@@ -135,11 +142,13 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 }
 
 func (cr *singleChunkReader) use() {
-	cr.mu.Lock()
+	cr.muMaster.Lock()
+	cr.muClose.Lock()
 }
 
 func (cr *singleChunkReader) unuse() {
-	cr.mu.Unlock()
+	cr.muClose.Unlock()
+	cr.muMaster.Unlock()
 }
 
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
@@ -190,43 +199,34 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 		return err
 	}
 
-	// Read bytes into the buffer (in a context-cancellable way, by reading in a separate goroutine and waiting on
-	// it AND cancellation)
-	type readResult struct {
-		b   []byte
-		n   int
-		err error
+	// prepare to read
+	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
+	targetBuffer := cr.slicePool.RentSlice(uint32Checked(cr.length))
+
+	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
+	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
+	cr.muClose.Unlock()
+	n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile)
+	cr.muClose.Lock()
+
+	// now that we have the lock again, see if any error means we can't continue
+	if readErr == nil {
+		if cr.isClosed {
+			readErr = errors.New("closed while reading")
+		} else if cr.ctx.Err() != nil {
+			readErr = cr.ctx.Err() // context cancelled
+		} else if int64(n) != cr.length {
+			readErr = errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
+		}
 	}
-	targetBufferChan := make(chan readResult)
-	go func() {
-		cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
-		targetBuffer := cr.slicePool.RentSlice(uint32Checked(cr.length))
-		n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile)
-		// now that the buffer has been filled, we can safely share it with the world outside this go-routine
-		select {
-		case targetBufferChan <- readResult{targetBuffer, n, readErr}:
-			// normal code path
-		default:
-			// no-one is listening. Our containing routine must have given up waiting on us (due to context cancellation)
-			cr.returnSlice(targetBuffer) // throw it away again, to be tidy
-		}
-	}()
-	// Wait
-	select {
-	case rr := <-targetBufferChan:
-		if rr.err != nil && rr.err != io.EOF {
-			cr.returnSlice(rr.b)
-			return err
-		}
-		if int64(rr.n) != cr.length {
-			cr.returnSlice(rr.b)
-			return errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
-		}
-		cr.buffer = rr.b
-	case <-cr.ctx.Done():
-		return cr.ctx.Err()
+	// return the revised error, if any
+	if readErr != nil {
+		cr.returnSlice(targetBuffer)
+		return readErr
 	}
 
+	// We can continue, so use the data we have read
+	cr.buffer = targetBuffer
 	return nil
 }
 
@@ -363,12 +363,14 @@ func (cr *singleChunkReader) Close() error {
 		// cannot panic here, since this code path is NORMAL in the case of sparse files to Azure Files and Page Blobs
 	}
 
-	// after logging callstack, do normal use()
-	cr.use()
-	defer cr.unuse()
+	// Only acquire the Close mutex (it will be free if the prefetch method is in the middle of a disk read)
+	// Don't acquire muMaster, which will not be free in that situation
+	cr.muClose.Lock()
+	defer cr.muClose.Unlock()
 
 	// do the real work
 	cr.closeBuffer()
+	cr.isClosed = true
 	return nil
 }
 
