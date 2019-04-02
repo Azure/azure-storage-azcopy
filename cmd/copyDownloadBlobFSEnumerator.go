@@ -76,7 +76,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// Case-2: Source is a filesystem or directory
 	// In this case, the destination should be a directory.
-	if !gCopyUtil.isPathALocalDirectory(cca.destination) {
+	if !gCopyUtil.isPathALocalDirectory(cca.destination) && !strings.EqualFold(cca.destination, common.DevNull) {
 		return fmt.Errorf("the destination must be an existing directory in this download scenario")
 	}
 
@@ -264,6 +264,11 @@ func (e *copyDownloadBlobFSEnumerator) parseLmt(lastModifiedTime string) time.Ti
 }
 
 func (e *copyDownloadBlobFSEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	// if we are downloading to dev null, we must point to devNull itself, rather than some file under it
+	if strings.EqualFold(e.DestinationRoot, common.DevNull) {
+		transfer.Destination = ""
+	}
+
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 

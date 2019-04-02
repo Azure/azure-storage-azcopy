@@ -63,8 +63,9 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				}
 			}
 
+			cleanedSource := strings.Replace(listOfFilesAndDirectories[0], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 			err = e.addTransfer(common.CopyTransfer{
-				Source:           listOfFilesAndDirectories[0],
+				Source:           cleanedSource,
 				Destination:      destinationURL.String(),
 				LastModifiedTime: f.ModTime(),
 				SourceSize:       f.Size(),
