@@ -67,6 +67,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				fileProperties.LastModified(),
 				fileProperties.ContentLength(),
 				fileProperties.ContentMD5(),
+				blobTypeNA,
 			)
 
 			if t.incrementEnumerationCounter != nil {
