@@ -70,6 +70,11 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 
 	// set the flag on cca, to indicate the enumeration is done
 	cca.isEnumerationComplete = true
+
+	// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+	if e.PartNum == 0 {
+		cca.waitUntilJobCompletion(false)
+	}
 	return nil
 }
 

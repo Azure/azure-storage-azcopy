@@ -142,6 +142,38 @@ func (e *syncEnumerator) enumerate() (err error) {
 	return
 }
 
+type copyEnumerator struct {
+	traverser resourceTraverser
+
+	// general filters apply to the objects returned by the traverser
+	filters []objectFilter
+
+	// receive objects from the traverser and dispatch them for transferring
+	objectDispatcher objectProcessor
+
+	// a finalizer that is always called if the enumeration finishes properly
+	finalize func() error
+}
+
+func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, objectDispatcher objectProcessor, finalizer func() error) *copyEnumerator {
+	return &copyEnumerator{
+		traverser:        traverser,
+		filters:          filters,
+		objectDispatcher: objectDispatcher,
+		finalize:         finalizer,
+	}
+}
+
+func (e *copyEnumerator) enumerate() (err error) {
+	err = e.traverser.traverse(e.objectDispatcher, e.filters)
+	if err != nil {
+		return
+	}
+
+	// execute the finalize func which may perform useful clean up steps
+	return e.finalize()
+}
+
 // -------------------------------------- Helper Funcs -------------------------------------- \\
 
 func passedFilters(filters []objectFilter, storedObject storedObject) bool {

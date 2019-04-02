@@ -31,6 +31,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
@@ -58,8 +59,13 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 	}
 
 	if !isSingleFileSync {
-		copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
-		copyJobTemplate.DestinationRoot += common.AZCOPY_PATH_SEPARATOR_STRING
+		if !strings.HasSuffix(copyJobTemplate.SourceRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
+			copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
+		}
+
+		if !strings.HasSuffix(copyJobTemplate.DestinationRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
+			copyJobTemplate.DestinationRoot += common.AZCOPY_PATH_SEPARATOR_STRING
+		}
 	}
 
 	reportFirstPart := func() { cca.setFirstPartOrdered() }

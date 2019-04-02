@@ -55,8 +55,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 	} else {
 		if t.recursive {
 			err = filepath.Walk(t.fullPath, func(filePath string, fileInfo os.FileInfo, fileError error) error {
-				if fileError != nil {
-					return fileError
+				if err != nil {
+					glcm.Info(fmt.Sprintf("Accessing %s failed with error %s", filePath, err))
+					return nil
 				}
 
 				// skip the subdirectories
