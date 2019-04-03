@@ -43,14 +43,14 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		// set up the container with a single blob
 		blobList := []string{blobName}
 		containerURL, containerName := createNewContainer(c, bsu)
-		scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
 		defer deleteContainer(c, containerURL)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up the destination as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 		dstFileName := blobName
-		scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
+		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// set up interceptor
 		mockedRPC := interceptor{}
@@ -59,7 +59,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 
 		// construct the raw input to simulate user input
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		raw := getDefaultRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
+		raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 		// the file was created after the blob, so no sync should happen
 		runSyncAndVerify(c, raw, func(err error) {
@@ -70,14 +70,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		})
 
 		// recreate the blob to have a later last modified time
-		scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
 		mockedRPC.reset()
 
 		runSyncAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
-			validateDownloadTransfersAreScheduled(c, containerURL.NewBlobURL(blobName).String(),
-				filepath.Join(dstDirName, dstFileName), []string{""}, mockedRPC)
+			validateDownloadTransfersAreScheduled(c, []string{""}, mockedRPC)
 		})
 	}
 }
@@ -88,7 +87,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
@@ -103,7 +102,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -112,7 +111,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
 
 		// validate that the right transfers were sent
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, blobList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
@@ -124,8 +123,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithEmptyDestination(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
 
 		for _, transfer := range mockedRPC.transfers {
-			localRelativeFilePath := strings.Replace(transfer.Destination, dstDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
-			c.Assert(strings.Contains(localRelativeFilePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
 		}
 	})
 }
@@ -136,14 +134,14 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with a folder that have the exact same files
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -152,7 +150,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -162,12 +160,12 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 	})
 
 	// refresh the blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, blobList, mockedRPC)
 	})
 }
 
@@ -177,15 +175,15 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// set up the destination with a folder that have half of the files from source
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList[0:len(blobList)/2])
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, []string{"extraFile1.pdf, extraFile2.txt"})
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList[0:len(blobList)/2])
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{"extraFile1.pdf, extraFile2.txt"})
 	expectedOutput := blobList[len(blobList)/2:] // the missing half of source files should be transferred
 
 	// set up interceptor
@@ -195,11 +193,11 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMismatchedDestination(c *chk.C
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, expectedOutput, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, expectedOutput, mockedRPC)
 
 		// make sure the extra files were deleted
 		currentDstFileList, err := ioutil.ReadDir(dstDirName)
@@ -220,14 +218,14 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeFlag(c *chk.C) {
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobs(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -240,12 +238,12 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.include = includeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -255,14 +253,14 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludeFlag(c *chk.C) {
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobs(c, containerURL, blobsToExclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -275,12 +273,12 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.exclude = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, blobList, mockedRPC)
 	})
 }
 
@@ -290,20 +288,20 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludeFlag(c *chk.C
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobs(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobs(c, containerURL, blobsToExclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude)
 	excludeString := "so*;not*;exactName"
 
 	// set up the destination with an empty folder
@@ -316,13 +314,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludeFlag(c *chk.C
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.include = includeString
 	raw.exclude = excludeString
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, containerURL.String(), dstDirName, blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, blobsToInclude, mockedRPC)
 	})
 }
 
@@ -332,7 +330,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
@@ -347,7 +345,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithMissingDestination(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {
 		// error should not be nil, but the app should not crash either
@@ -364,7 +362,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
@@ -372,7 +370,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 	// set up the destination as a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	dstFileName := blobList[0]
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -381,7 +379,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 	// type mismatch, we should get an error
 	runSyncAndVerify(c, raw, func(err error) {
@@ -392,7 +390,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchContainerAndFile(c *chk.C) {
 	})
 
 	// reverse the source and destination
-	raw = getDefaultRawInput(filepath.Join(dstDirName, dstFileName), rawContainerURLWithSAS.String())
+	raw = getDefaultSyncRawInput(filepath.Join(dstDirName, dstFileName), rawContainerURLWithSAS.String())
 
 	// type mismatch, we should get an error
 	runSyncAndVerify(c, raw, func(err error) {
@@ -411,7 +409,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 	blobName := "singleblobisbest"
 	blobList := []string{blobName}
 	containerURL, containerName := createNewContainer(c, bsu)
-	scenarioHelper{}.generateBlobs(c, containerURL, blobList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 
@@ -425,7 +423,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-	raw := getDefaultRawInput(rawBlobURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), dstDirName)
 
 	// type mismatch, we should get an error
 	runSyncAndVerify(c, raw, func(err error) {
@@ -436,7 +434,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 	})
 
 	// reverse the source and destination
-	raw = getDefaultRawInput(dstDirName, rawBlobURLWithSAS.String())
+	raw = getDefaultSyncRawInput(dstDirName, rawBlobURLWithSAS.String())
 
 	// type mismatch, we should get an error
 	runSyncAndVerify(c, raw, func(err error) {
@@ -456,7 +454,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 	// set up the destination as a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	dstFileName := blobName
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, []string{blobName})
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{blobName})
 
 	// set up the container
 	containerURL, containerName := createNewContainer(c, bsu)
@@ -475,7 +473,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadADLSDirectoryTypeMismatch(c *chk.C
 
 	// construct the raw input to simulate user input
 	rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobName)
-	raw := getDefaultRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
+	raw := getDefaultSyncRawInput(rawBlobURLWithSAS.String(), filepath.Join(dstDirName, dstFileName))
 
 	// the file was created after the blob, so no sync should happen
 	runSyncAndVerify(c, raw, func(err error) {
@@ -494,7 +492,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 
 	// set up the container with numerous blobs
 	containerURL, containerName := createNewContainer(c, bsu)
-	blobList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, adlsDirName+"/")
+	blobList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, adlsDirName+"/")
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
@@ -520,7 +518,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, adlsDirName)
-	raw := getDefaultRawInput(rawContainerURLWithSAS.String(), dstDirName)
+	raw := getDefaultSyncRawInput(rawContainerURLWithSAS.String(), dstDirName)
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -538,8 +536,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithADLSDirectory(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
 
 		for _, transfer := range mockedRPC.transfers {
-			localRelativeFilePath := strings.Replace(transfer.Destination, dstDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
-			c.Assert(strings.Contains(localRelativeFilePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+			c.Assert(strings.Contains(transfer.Source, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
 		}
 	})
 }

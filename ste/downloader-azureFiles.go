@@ -35,6 +35,14 @@ func newAzureFilesDownloader() downloader {
 	return &azureFilesDownloader{}
 }
 
+func (bd *azureFilesDownloader) Prologue(_ IJobPartTransferMgr) {
+	// noop
+}
+
+func (bd *azureFilesDownloader) Epilogue() {
+	//noop
+}
+
 // GenerateDownloadFunc returns a chunk-func for file downloads
 
 func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {

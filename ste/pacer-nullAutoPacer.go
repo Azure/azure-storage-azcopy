@@ -21,46 +21,26 @@
 package ste
 
 import (
-	"time"
-
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"context"
 )
 
-// Source info provider for Azure blob
-type blobSourceInfoProvider struct {
-	defaultRemoteSourceInfoProvider
+// nullAutoPacer is a no-op auto pacer. For use in code which may or may not need pacing. When not needed,
+// just use an instance of this type
+type nullAutoPacer struct {
 }
 
-func newBlobSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, error) {
-	b, err := newDefaultRemoteSourceInfoProvider(jptm)
-	if err != nil {
-		return nil, err
-	}
-
-	base := b.(*defaultRemoteSourceInfoProvider)
-
-	return &blobSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+func newNullAutoPacer() autoPacerConsumer {
+	return &nullAutoPacer{}
 }
 
-func (p *blobSourceInfoProvider) BlobTier() azblob.AccessTierType {
-	return p.transferInfo.S2SSrcBlobTier
+func (a *nullAutoPacer) Close() error {
+	return nil
 }
 
-func (p *blobSourceInfoProvider) BlobType() azblob.BlobType {
-	return p.transferInfo.SrcBlobType
+func (a *nullAutoPacer) RetryCallback() {
+	// noop
 }
 
-func (p *blobSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
-	presignedURL, err := p.PreSignedSourceURL()
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	blobURL := azblob.NewBlobURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := blobURL.GetProperties(p.jptm.Context(), azblob.BlobAccessConditions{})
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return properties.LastModified(), nil
+func (a *nullAutoPacer) RequestRightToSend(ctx context.Context, bytesToSend int64) error {
+	return nil
 }

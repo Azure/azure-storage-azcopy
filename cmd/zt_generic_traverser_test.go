@@ -25,34 +25,37 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type genericTraverserSuite struct{}
 
 var _ = chk.Suite(&genericTraverserSuite{})
 
-// validate traversing a single blob and a single file
-// compare that blob and local traversers get consistent results
+// validate traversing a single Blob, a single Azure File, and a single local file
+// compare that the traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
 
+	fsu := getFSU()
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
-	for _, blobName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob"} {
+	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
 		// set up the container with a single blob
-		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobs(c, containerURL, blobList)
-		c.Assert(containerURL, chk.NotNil)
+		blobList := []string{storedObjectName}
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
 
 		// set up the directory as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-		dstFileName := blobName
-		scenarioHelper{}.generateFilesFromList(c, dstDirName, blobList)
+		dstFileName := storedObjectName
+		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
 		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, func() {})
@@ -78,24 +81,50 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		// assert the important info are correct
 		c.Assert(localDummyProcessor.record[0].name, chk.Equals, blobDummyProcessor.record[0].name)
 		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, blobDummyProcessor.record[0].relativePath)
+
+		// Azure File cannot handle names with '/' in them
+		if !strings.Contains(storedObjectName, "/") {
+			// set up the Azure Share with a single file
+			fileList := []string{storedObjectName}
+			scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
+
+			// construct an Azure file traverser
+			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
+			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, func() {})
+
+			// invoke the file traversal with a dummy processor
+			fileDummyProcessor := dummyProcessor{}
+			err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
+			c.Assert(err, chk.IsNil)
+			c.Assert(len(fileDummyProcessor.record), chk.Equals, 1)
+
+			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, fileDummyProcessor.record[0].relativePath)
+			c.Assert(localDummyProcessor.record[0].name, chk.Equals, fileDummyProcessor.record[0].name)
+		}
 	}
 }
 
-// validate traversing a container and a local directory containing the same objects
-// compare that blob and local traversers get consistent results
+// validate traversing a container, a share, and a local directory containing the same objects
+// compare that traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
 
+	fsu := getFSU()
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+
 	// set up the container with numerous blobs
-	fileList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, "")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	c.Assert(containerURL, chk.NotNil)
 
-	// set up the destination with a folder that have the exact same files
-	time.Sleep(2 * time.Second) // make the lmts of local files newer
+	// set up an Azure File Share with the same files
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
+
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
 
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
@@ -119,14 +148,24 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
+		// construct an Azure File traverser
+		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
+
+		// invoke the file traversal with a dummy processor
+		fileDummyProcessor := dummyProcessor{}
+		err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+
 		// make sure the results are the same
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		for _, storedObject := range blobDummyProcessor.record {
+		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		for _, storedObject := range append(blobDummyProcessor.record, fileDummyProcessor.record...) {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 			c.Assert(present, chk.Equals, true)
 			c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
-			c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject), chk.Equals, true)
 
 			if !isRecursiveOn {
 				c.Assert(strings.Contains(storedObject.relativePath, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
@@ -142,14 +181,21 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
 
+	fsu := getFSU()
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	defer deleteShare(c, shareURL)
+
 	// set up the container with numerous blobs
 	virDirName := "virdir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenario(c, containerURL, virDirName+"/")
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
 	c.Assert(containerURL, chk.NotNil)
+
+	// set up an Azure File Share with the same files
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
 
 	// set up the destination with a folder that have the exact same files
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, fileList)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
 
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
@@ -173,9 +219,20 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 
+		// construct an Azure File traverser
+		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
+
+		// invoke the file traversal with a dummy processor
+		fileDummyProcessor := dummyProcessor{}
+		err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+
 		// make sure the results are the same
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		for _, storedObject := range blobDummyProcessor.record {
+		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		for _, storedObject := range append(blobDummyProcessor.record, fileDummyProcessor.record...) {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 			c.Assert(present, chk.Equals, true)

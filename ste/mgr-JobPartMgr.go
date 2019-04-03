@@ -133,7 +133,8 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 	f := []pipeline.Factory{
 		azblob.NewTelemetryPolicyFactory(o.Telemetry),
 		azblob.NewUniqueRequestIDPolicyFactory(),
-		NewBlobXferRetryPolicyFactory(r),
+		NewBlobXferRetryPolicyFactory(r),    // actually retry the operation
+		newRetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		//NewPacerPolicyFactory(p),
@@ -153,7 +154,8 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 	f := []pipeline.Factory{
 		azbfs.NewTelemetryPolicyFactory(o.Telemetry),
 		azbfs.NewUniqueRequestIDPolicyFactory(),
-		NewBFSXferRetryPolicyFactory(r),
+		NewBFSXferRetryPolicyFactory(r),     // actually retry the operation
+		newRetryNotificationPolicyFactory(), // record that a retry status was returned
 	}
 
 	f = append(f, c)
@@ -175,7 +177,8 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 	f := []pipeline.Factory{
 		azfile.NewTelemetryPolicyFactory(o.Telemetry),
 		azfile.NewUniqueRequestIDPolicyFactory(),
-		azfile.NewRetryPolicyFactory(r),
+		azfile.NewRetryPolicyFactory(r),     // actually retry the operation
+		newRetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewPacerPolicyFactory(p),

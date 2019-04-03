@@ -194,6 +194,23 @@ const removeCmdShortDescription = "Delete blobs or files from Azure Storage"
 
 const removeCmdLongDescription = `Delete blobs or files from Azure Storage.`
 
+const removeCmdExample = `
+Remove a single blob with SAS:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Remove an entire virtual directory with a SAS:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Remove only the top blobs inside a virtual directory but not its sub-directories:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=false
+
+Remove a subset of blobs in a virtual directory (ex: only jpg and pdf files, or if the blob name is "exactName"):
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --include="*.jpg;*.pdf;exactName"
+
+Remove an entire virtual directory but exclude certain blobs from the scope (ex: every blob that starts with foo or ends with bar):
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
+`
+
 // ===================================== SYNC COMMAND ===================================== //
 const syncCmdShortDescription = "Replicate source to the destination location"
 

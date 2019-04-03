@@ -66,10 +66,16 @@ type rawCopyCmdArgs struct {
 	fromTo string
 	//blobUrlForRedirection string
 
+	// TODO remove after refactoring
+	legacyInclude string
+	legacyExclude string
+	// new include/exclude only apply to file names
+	// implemented for remove (and sync) only
+	include string
+	exclude string
+
 	// filters from flags
 	listOfFilesToCopy string
-	include           string
-	exclude           string
 	recursive         bool
 	followSymlinks    bool
 	withSnapshots     bool
@@ -113,6 +119,20 @@ type rawCopyCmdArgs struct {
 	s2sSourceChangeValidation bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption string
+}
+
+func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
+	cookedPatterns = make([]string, 0)
+	rawPatterns := strings.Split(pattern, ";")
+	for _, pattern := range rawPatterns {
+
+		// skip the empty patterns
+		if len(pattern) != 0 {
+			cookedPatterns = append(cookedPatterns, pattern)
+		}
+	}
+
+	return
 }
 
 // validates and transform raw input into cooked input
@@ -163,7 +183,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
 	// file names to include explicitly and include file may mention the pattern.
 	// This could conflict enumerating the files to queue up for transfer.
-	if len(raw.listOfFilesToCopy) > 0 && len(raw.include) > 0 {
+	if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
 		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
 	}
 
@@ -203,9 +223,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// initialize the include map which contains the list of files to be included
 	// parse the string passed in include flag
 	// more than one file are expected to be separated by ';'
-	cooked.include = make(map[string]int)
-	if len(raw.include) > 0 {
-		files := strings.Split(raw.include, ";")
+	cooked.legacyInclude = make(map[string]int)
+	if len(raw.legacyInclude) > 0 {
+		files := strings.Split(raw.legacyInclude, ";")
 		for index := range files {
 			// If split of the include string leads to an empty string
 			// not include that string
@@ -215,16 +235,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
 			// this replacement is done to handle the windows file paths where path separator "\\"
 			includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.include[includePath] = index
+			cooked.legacyInclude[includePath] = index
 		}
 	}
 
 	// initialize the exclude map which contains the list of files to be excluded
 	// parse the string passed in exclude flag
 	// more than one file are expected to be separated by ';'
-	cooked.exclude = make(map[string]int)
-	if len(raw.exclude) > 0 {
-		files := strings.Split(raw.exclude, ";")
+	cooked.legacyExclude = make(map[string]int)
+	if len(raw.legacyExclude) > 0 {
+		files := strings.Split(raw.legacyExclude, ";")
 		for index := range files {
 			// If split of the include string leads to an empty string
 			// not include that string
@@ -234,7 +254,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
 			// this replacement is done to handle the windows file paths where path separator "\\"
 			excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.exclude[excludePath] = index
+			cooked.legacyExclude[excludePath] = index
 		}
 	}
 
@@ -388,6 +408,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	// parse the filter patterns
+	cooked.includePatterns = raw.parsePatterns(raw.include)
+	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+
 	return cooked, nil
 }
 
@@ -417,10 +441,16 @@ type cookedCopyCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 
+	// TODO remove after refactoring
+	legacyInclude map[string]int
+	legacyExclude map[string]int
+	// new include/exclude only apply to file names
+	// implemented for remove (and sync) only
+	includePatterns []string
+	excludePatterns []string
+
 	// filters from flags
 	listOfFilesToCopy []string
-	include           map[string]int
-	exclude           map[string]int
 	recursive         bool
 	followSymlinks    bool
 	withSnapshots     bool
@@ -449,6 +479,9 @@ type cookedCopyCmdArgs struct {
 
 	// generated
 	jobID common.JobID
+
+	// extracted from the input
+	credentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -603,44 +636,13 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
-	// initialize the fields that are constant across all job part orders
-	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:           cca.jobID,
-		FromTo:          cca.fromTo,
-		ForceWrite:      cca.forceWrite,
-		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        cca.logVerbosity,
-		Include:         cca.include,
-		Exclude:         cca.exclude,
-		ExcludeBlobType: cca.excludeBlobType,
-		BlobAttributes: common.BlobTransferAttributes{
-			BlobType:                 cca.blobType,
-			BlockSizeInBytes:         cca.blockSize,
-			ContentType:              cca.contentType,
-			ContentEncoding:          cca.contentEncoding,
-			BlockBlobTier:            cca.blockBlobTier,
-			PageBlobTier:             cca.pageBlobTier,
-			Metadata:                 cca.metadata,
-			NoGuessMimeType:          cca.noGuessMimeType,
-			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:                   cca.putMd5,
-			MD5ValidationOption:      cca.md5ValidationOption,
-		},
-		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
-		SourceSAS: cca.sourceSAS,
-
-		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
-		DestinationSAS: cca.destinationSAS,
-		CommandString:  cca.commandString,
-		CredentialInfo: common.CredentialInfo{},
-	}
-
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// verifies credential type and initializes credential info.
 	// Note: Currently, only one credential type is necessary for source and destination.
 	// For upload&download, only one side need credential.
 	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
-	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
 		source:         cca.source,
 		destination:    cca.destination,
@@ -652,7 +654,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Using OAuth token for authentication.")
@@ -662,8 +664,39 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
-			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
+	}
+
+	// initialize the fields that are constant across all job part orders
+	jobPartOrder := common.CopyJobPartOrderRequest{
+		JobID:           cca.jobID,
+		FromTo:          cca.fromTo,
+		ForceWrite:      cca.forceWrite,
+		Priority:        common.EJobPriority.Normal(),
+		LogLevel:        cca.logVerbosity,
+		Include:         cca.legacyInclude,
+		Exclude:         cca.legacyExclude,
+		ExcludeBlobType: cca.excludeBlobType,
+		BlobAttributes: common.BlobTransferAttributes{
+			BlobType:                 cca.blobType,
+			BlockSizeInBytes:         cca.blockSize,
+			ContentType:              cca.contentType,
+			ContentEncoding:          cca.contentEncoding,
+			BlockBlobTier:            cca.blockBlobTier,
+			PageBlobTier:             cca.pageBlobTier,
+			Metadata:                 cca.metadata,
+			NoGuessMimeType:          cca.noGuessMimeType,
+			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
+			MD5ValidationOption:      cca.md5ValidationOption,
+		},
+		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
+		SourceSAS: cca.sourceSAS,
+
+		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
+		DestinationSAS: cca.destinationSAS,
+		CommandString:  cca.commandString,
+		CredentialInfo: cca.credentialInfo,
 	}
 
 	// TODO remove this copy pasted code during refactoring
@@ -772,8 +805,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// set the root destination after it's been cleaned
 	jobPartOrder.DestinationRoot = cca.destination
 
-	// lastPartNumber determines the last part number order send for the Job.
-	var lastPartNumber common.PartNumber
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
@@ -784,27 +815,29 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.EFromTo.LocalFile():
 		e := copyUploadEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobLocal():
 		e := copyDownloadBlobEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.FileLocal():
 		e := copyDownloadFileEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobFSLocal():
 		e := copyDownloadBlobFSEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():
-		e := removeBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
+		e, createErr := newRemoveBlobEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+
+		err = e.enumerate()
 	case common.EFromTo.FileTrash():
-		e := removeFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
+		e, createErr := newRemoveFileEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+
+		err = e.enumerate()
 	case common.EFromTo.BlobBlob():
 		e := copyS2SMigrationBlobEnumerator{
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
@@ -812,7 +845,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			},
 		}
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.FileBlob():
 		e := copyS2SMigrationFileEnumerator{
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
@@ -820,7 +852,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			},
 		}
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.S3Blob():
 		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
@@ -828,7 +859,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			},
 		}
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
+
+	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
+	// case common.EFromTo.FileBlob():
+	// 	e := copyFileToNEnumerator(jobPartOrder)
+	// 	err = e.enumerate(cca)
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
 	}
@@ -837,16 +872,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return fmt.Errorf("cannot start job due to error: %s.\n", err)
 	}
 
-	// in background mode we would spit out the job id and quit
-	// in foreground mode we would continuously print out status updates for the job, so the job id is not important
-	if cca.background {
-		return nil
-	}
-
-	// If there is only one part, then start fetching the JobPart Order.
-	if lastPartNumber == 0 {
-		cca.waitUntilJobCompletion(false)
-	}
 	return nil
 }
 
@@ -960,7 +985,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
 			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.TransfersCompleted,
@@ -973,15 +998,15 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
 // to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, durationOfJob time.Duration) (perfString string, diskString string) {
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration) (perfString string, diskString string) {
 	perfString = ""
 	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
 	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
-	if isDiskConstrained && haveBeenRunningLongEnoughToStabilize {
-		diskString = " (disk may be limiting speed)"
+	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize {
+		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
 		diskString = ""
 	}
@@ -1060,11 +1085,11 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include these files when copying. "+
+	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")

@@ -83,18 +83,20 @@ type WaitReason struct {
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
 func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
 func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{3, "Head"} }               // waiting to finish downloading the HEAD
-func (WaitReason) Body() WaitReason                 { return WaitReason{4, "Body"} }               // waiting to finish sending/receiving the BODY
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{5, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{6, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) Sorting() WaitReason              { return WaitReason{7, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason{8, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
-func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{9, "Queue"} }              // prior chunk has arrived, but is not yet written out to disk
-func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "DiskIO"} }            // waiting on disk read/write to complete
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
-func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
-// extra status used only by S2S copy
-func (WaitReason) S2SCopyOnWire() WaitReason { return WaitReason{13, "S2SCopyOnWire"} } // waiting for S2S copy on wire get finished
+func (WaitReason) FilePacer() WaitReason            { return WaitReason{3, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{4, "Head"} }               // waiting to finish downloading the HEAD
+func (WaitReason) Body() WaitReason                 { return WaitReason{5, "Body"} }               // waiting to finish sending/receiving the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{6, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{7, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) Sorting() WaitReason              { return WaitReason{8, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason{9, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
+func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
+func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
+// NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
+// the need to also change numWaitReasons()
+func (WaitReason) Cancelled() WaitReason { return WaitReason{14, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -117,6 +119,9 @@ var uploadWaitReasons = []WaitReason{
 	// Chunks in this state are effectively a queue of work waiting to be sent over the network
 	EWaitReason.WorkerGR(),
 
+	// Waiting until the per-file pacer (if any applies to this upload) says we can proceed
+	EWaitReason.FilePacer(),
+
 	// This is the actual network activity
 	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
@@ -131,6 +136,9 @@ var downloadWaitReasons = []WaitReason{
 	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.
 	// Chunks in this state are effectively a queue of work, waiting for their network downloads to be initiated
 	EWaitReason.WorkerGR(),
+
+	// Waiting until the per-file pacer (if any applies to this download) says we can proceed
+	EWaitReason.FilePacer(),
 
 	// These next ones are the actual network activity
 	EWaitReason.HeaderResponse(),
@@ -157,6 +165,9 @@ var s2sCopyWaitReasons = []WaitReason{
 	// Chunks in this state are effectively a queue of work waiting to be sent over the network
 	EWaitReason.WorkerGR(),
 
+	// Waiting until the per-file pacer (if any applies to this s2sCopy) says we can proceed
+	EWaitReason.FilePacer(),
+
 	// Start to send Put*FromURL, then S2S copy will start in service side, and Azcopy will wait the response which indicates copy get finished.
 	EWaitReason.S2SCopyOnWire(),
 }
@@ -173,7 +184,7 @@ type ChunkStatusLogger interface {
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
 	GetCounts(td TransferDirection) []chunkStatusCount
-	IsDiskConstrained(td TransferDirection) bool
+	GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint
 	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
 }
 
@@ -202,7 +213,7 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.S2SCopyOnWire().index + 1 // assume this is the last wait reason
+	return EWaitReason.Cancelled().index + 1 // assume that maitainers follow the comment above to always keep Cancelled as numerically the greatest one
 }
 
 type chunkStatusCount struct {
@@ -332,15 +343,30 @@ func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount
 	return result
 }
 
-func (csl *chunkStatusLogger) IsDiskConstrained(td TransferDirection) bool {
-	switch td {
-	case ETransferDirection.Upload():
-		return csl.isUploadDiskConstrained()
-	case ETransferDirection.Download():
-		return csl.isDownloadDiskConstrained()
+func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint {
+	switch {
+	// it seems sensible to report file pacer (Service) constraint as a higher priority than Disk, if both exist at the same time (but usually they won't)
+	case csl.isConstrainedByFilePacer():
+		return EPerfConstraint.Service() // service is throttling us (as at March 2019, we only detect this for page blobs, but that may change in future)
+
+	case td == ETransferDirection.Upload() && csl.isUploadDiskConstrained():
+		return EPerfConstraint.Disk()
+
+	case td == ETransferDirection.Download() && csl.isDownloadDiskConstrained():
+		return EPerfConstraint.Disk()
+
 	default:
-		return false
+		return EPerfConstraint.Unknown()
 	}
+}
+
+const (
+	nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
+)
+
+func (csl *chunkStatusLogger) isConstrainedByFilePacer() bool {
+	haveBigQueueForPacer := csl.getCount(EWaitReason.FilePacer()) >= nearZeroQueueSize
+	return haveBigQueueForPacer
 }
 
 // is disk the bottleneck in an upload?
@@ -351,7 +377,6 @@ func (csl *chunkStatusLogger) isUploadDiskConstrained() bool {
 	// (not the _execution_ and so their counts will just tend to equal that of the small goroutine pool that runs them).
 	// It might be convenient if we could compare TWO queue sizes here, as we do in isDownloadDiskConstrained, but unfortunately our
 	// Jan 2019 architecture only gives us ONE useful queue-like state when uploading, so we can't compare two.
-	const nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
 	queueForNetworkIsSmall := csl.getCount(EWaitReason.WorkerGR()) < nearZeroQueueSize
 
 	beforeGRWaitQueue := csl.getCount(EWaitReason.RAMToSchedule()) + csl.getCount(EWaitReason.DiskIO())

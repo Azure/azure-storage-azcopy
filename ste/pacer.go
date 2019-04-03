@@ -31,6 +31,9 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+// TODO: rationalize and reduce the number of "pacer" classes (possibly by renaming those that, in the current design
+//     don't actually DO pacing)
+
 type pacer struct {
 	bytesAvailable          int64
 	availableBytesPerPeriod int64

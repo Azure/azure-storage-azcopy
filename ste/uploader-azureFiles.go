@@ -101,7 +101,7 @@ func (u *azureFilesUploader) Prologue(state common.PrologueState) {
 	info := jptm.Info()
 
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-	err := createParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
+	err := CreateParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
 	if err != nil {
 		jptm.FailActiveUpload("Creating parent directory", err)
 		return
@@ -210,8 +210,8 @@ func splitWithoutToken(str string, token rune) []string {
 	})
 }
 
-// createParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func createParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
+// CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
+func CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
 	dirURL := getParentDirectoryURL(fileURL, p)
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	// Check whether parent dir of the file exists.

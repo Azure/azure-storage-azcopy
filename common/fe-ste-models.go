@@ -939,3 +939,27 @@ func (td *TransferDirection) AtomicLoad() TransferDirection {
 func (td *TransferDirection) AtomicStore(newTransferDirection TransferDirection) {
 	atomic.StoreInt32((*int32)(td), int32(newTransferDirection))
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EPerfConstraint = PerfConstraint(0)
+
+type PerfConstraint int32
+
+func (PerfConstraint) Unknown() PerfConstraint { return PerfConstraint(0) }
+func (PerfConstraint) Disk() PerfConstraint    { return PerfConstraint(1) }
+func (PerfConstraint) Service() PerfConstraint { return PerfConstraint(2) }
+
+// others will be added in future
+
+func (pc PerfConstraint) String() string {
+	return enum.StringInt(pc, reflect.TypeOf(pc))
+}
+
+func (pc *PerfConstraint) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pc), s, false, true)
+	if err == nil {
+		*pc = val.(PerfConstraint)
+	}
+	return err
+}

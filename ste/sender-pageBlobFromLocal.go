@@ -67,9 +67,17 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			return
 		}
 
+		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
+		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
+		if err := u.filePacer.RequestRightToSend(jptm.Context(), reader.Length()); err != nil {
+			jptm.FailActiveUpload("Pacing block", err)
+		}
+
+		// send it
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newLiteRequestBodyPacer(reader, u.pacer)
-		_, err := u.destPageBlobURL.UploadPages(jptm.Context(), id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
+		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
+		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return

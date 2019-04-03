@@ -45,7 +45,8 @@ type scenarioHelper struct{}
 var specialNames = []string{
 	"打麻将.txt",
 	"wow such space so much space",
-	"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy",
+	"打%%#%@#%麻将.txt",
+	//"saywut.pdf?yo=bla&WUWUWU=foo&sig=yyy", // TODO this breaks on windows, figure out a way to add it only for tests on Unix
 	"coração",
 	"আপনার নাম কি",
 	"%4509%4254$85140&",
@@ -62,7 +63,7 @@ func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
 }
 
 // create a test file
-func (scenarioHelper) generateFile(filePath string, fileSize int) ([]byte, error) {
+func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, error) {
 	// generate random data
 	_, bigBuff := getRandomDataAndReader(fileSize)
 
@@ -77,7 +78,17 @@ func (scenarioHelper) generateFile(filePath string, fileSize int) ([]byte, error
 	return bigBuff, err
 }
 
-func (s scenarioHelper) generateRandomLocalFiles(c *chk.C, dirPath string, prefix string) (fileList []string) {
+func (s scenarioHelper) generateLocalFilesFromList(c *chk.C, dirPath string, fileList []string) {
+	for _, fileName := range fileList {
+		_, err := s.generateLocalFile(filepath.Join(dirPath, fileName), defaultFileSize)
+		c.Assert(err, chk.IsNil)
+	}
+
+	// sleep a bit so that the files' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+}
+
+func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath string, prefix string) (fileList []string) {
 	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
 		batch := []string{
@@ -90,7 +101,7 @@ func (s scenarioHelper) generateRandomLocalFiles(c *chk.C, dirPath string, prefi
 
 		for j, name := range batch {
 			fileList[5*i+j] = name
-			_, err := s.generateFile(filepath.Join(dirPath, name), defaultFileSize)
+			_, err := s.generateLocalFile(filepath.Join(dirPath, name), defaultFileSize)
 			c.Assert(err, chk.IsNil)
 		}
 	}
@@ -100,23 +111,13 @@ func (s scenarioHelper) generateRandomLocalFiles(c *chk.C, dirPath string, prefi
 	return
 }
 
-func (s scenarioHelper) generateFilesFromList(c *chk.C, dirPath string, fileList []string) {
-	for _, fileName := range fileList {
-		_, err := s.generateFile(filepath.Join(dirPath, fileName), defaultFileSize)
-		c.Assert(err, chk.IsNil)
-	}
-
-	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
-}
-
 // make 50 blobs with random names
 // 10 of them at the top level
 // 10 of them in sub dir "sub1"
 // 10 of them in sub dir "sub2"
 // 10 of them in deeper sub dir "sub1/sub3/sub5"
 // 10 of them with special characters
-func (scenarioHelper) generateCommonRemoteScenario(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
+func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL azblob.ContainerURL, prefix string) (blobList []string) {
 	blobList = make([]string, 50)
 
 	for i := 0; i < 10; i++ {
@@ -138,8 +139,30 @@ func (scenarioHelper) generateCommonRemoteScenario(c *chk.C, containerURL azblob
 	return
 }
 
+func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileList []string) {
+	fileList = make([]string, 50)
+
+	for i := 0; i < 10; i++ {
+		_, fileName1 := createNewAzureFile(c, shareURL, prefix+"top")
+		_, fileName2 := createNewAzureFile(c, shareURL, prefix+"sub1/")
+		_, fileName3 := createNewAzureFile(c, shareURL, prefix+"sub2/")
+		_, fileName4 := createNewAzureFile(c, shareURL, prefix+"sub1/sub3/sub5/")
+		_, fileName5 := createNewAzureFile(c, shareURL, prefix+specialNames[i])
+
+		fileList[5*i] = fileName1
+		fileList[5*i+1] = fileName2
+		fileList[5*i+2] = fileName3
+		fileList[5*i+3] = fileName4
+		fileList[5*i+4] = fileName5
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+	return
+}
+
 // create the demanded blobs
-func (scenarioHelper) generateBlobs(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
+func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
 		cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
@@ -222,6 +245,24 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	return
 }
 
+// create the demanded azure files
+func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.ShareURL, fileList []string) {
+	for _, filePath := range fileList {
+		file := shareURL.NewRootDirectoryURL().NewFileURL(filePath)
+
+		// create parents first
+		generateParentsForAzureFile(c, file)
+
+		// create the file itself
+		cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+		c.Assert(err, chk.IsNil)
+		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	}
+
+	// sleep a bit so that the files' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+}
+
 // Golang does not have sets, so we have to use a map to fulfill the same functionality
 func (scenarioHelper) convertListToMap(list []string) map[string]int {
 	lookupMap := make(map[string]int)
@@ -232,15 +273,25 @@ func (scenarioHelper) convertListToMap(list []string) map[string]int {
 	return lookupMap
 }
 
+func (scenarioHelper) shaveOffPrefix(list []string, prefix string) []string {
+	cleanList := make([]string, len(list))
+	for i, item := range list {
+		cleanList[i] = strings.TrimPrefix(item, prefix)
+	}
+	return cleanList
+}
+
 func (scenarioHelper) getRawContainerURLWithSAS(c *chk.C, containerName string) url.URL {
-	credential, err := getGenericCredential("")
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
 	return containerURLWithSAS.URL()
 }
 
 func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobName string) url.URL {
-	credential, err := getGenericCredential("")
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 	containerURLWithSAS := getContainerURLWithSAS(c, *credential, containerName)
 	blobURLWithSAS := containerURLWithSAS.NewBlockBlobURL(blobName)
@@ -248,14 +299,17 @@ func (scenarioHelper) getRawBlobURLWithSAS(c *chk.C, containerName string, blobN
 }
 
 func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
-	credential, err := getGenericCredential("")
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 
 	return getServiceURLWithSAS(c, *credential).URL()
 }
 
 func (scenarioHelper) getBlobServiceURL(c *chk.C) azblob.ServiceURL {
-	credential, err := getGenericCredential("")
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
 	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net", credential.AccountName())
 
 	// convert the raw url and validate it was parsed successfully
@@ -308,6 +362,14 @@ func (scenarioHelper) getRawFileURLWithSAS(c *chk.C, shareName string, fileName 
 	return fileURLWithSAS.URL()
 }
 
+func (scenarioHelper) getRawShareURLWithSAS(c *chk.C, shareName string) url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+	shareURLWithSAS := getShareURLWithSAS(c, *credential, shareName)
+	return shareURLWithSAS.URL()
+}
+
 func (scenarioHelper) blobExists(blobURL azblob.BlobURL) bool {
 	_, err := blobURL.GetProperties(context.Background(), azblob.BlobAccessConditions{})
 	if err == nil {
@@ -336,23 +398,35 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 	verifier(err)
 }
 
-func validateUploadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
-	validateTransfersAreScheduled(c, srcDirName, false, dstDirName, true, expectedTransfers, mockedRPC)
+func runRemoveAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
+	// the simulated user input should parse properly
+	cooked, err := raw.cook()
+	c.Assert(err, chk.IsNil)
+
+	// the enumeration ends when process() returns
+	err = cooked.process()
+
+	// the err is passed to verified, which knows whether it is expected or not
+	verifier(err)
 }
 
-func validateDownloadTransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
-	validateTransfersAreScheduled(c, srcDirName, true, dstDirName, false, expectedTransfers, mockedRPC)
+func validateUploadTransfersAreScheduled(c *chk.C, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(c, false, true, expectedTransfers, mockedRPC)
 }
 
-func validateTransfersAreScheduled(c *chk.C, srcDirName string, isSrcEncoded bool, dstDirName string, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
+func validateDownloadTransfersAreScheduled(c *chk.C, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(c, true, false, expectedTransfers, mockedRPC)
+}
+
+func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
-		srcRelativeFilePath := strings.Replace(transfer.Source, srcDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
-		dstRelativeFilePath := strings.Replace(transfer.Destination, dstDirName+common.AZCOPY_PATH_SEPARATOR_STRING, "", 1)
+		srcRelativeFilePath := transfer.Source
+		dstRelativeFilePath := transfer.Destination
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
@@ -365,17 +439,33 @@ func validateTransfersAreScheduled(c *chk.C, srcDirName string, isSrcEncoded boo
 		// the relative paths should be equal
 		c.Assert(srcRelativeFilePath, chk.Equals, dstRelativeFilePath)
 
-		// look up the source from the expected transfers, make sure it exists
-		_, srcExist := lookupMap[dstRelativeFilePath]
-		c.Assert(srcExist, chk.Equals, true)
-
-		// look up the destination from the expected transfers, make sure it exists
-		_, dstExist := lookupMap[dstRelativeFilePath]
-		c.Assert(dstExist, chk.Equals, true)
+		// look up the path from the expected transfers, make sure it exists
+		_, transferExist := lookupMap[srcRelativeFilePath]
+		c.Assert(transferExist, chk.Equals, true)
 	}
 }
 
-func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
+func validateRemoveTransfersAreScheduled(c *chk.C, isSrcEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
+
+	// validate that the right number of transfers were scheduled
+	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
+
+	// validate that the right transfers were sent
+	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
+	for _, transfer := range mockedRPC.transfers {
+		srcRelativeFilePath := transfer.Source
+
+		if isSrcEncoded {
+			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
+		}
+
+		// look up the source from the expected transfers, make sure it exists
+		_, srcExist := lookupMap[srcRelativeFilePath]
+		c.Assert(srcExist, chk.Equals, true)
+	}
+}
+
+func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 	deleteDestination := common.EDeleteDestination.True()
 
 	return rawSyncCmdArgs{
@@ -385,5 +475,23 @@ func getDefaultRawInput(src, dst string) rawSyncCmdArgs {
 		logVerbosity:        defaultLogVerbosityForSync,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
+	}
+}
+
+func getDefaultRemoveRawInput(src string, targetingBlob bool) rawCopyCmdArgs {
+	fromTo := common.EFromTo.BlobTrash()
+	if !targetingBlob {
+		fromTo = common.EFromTo.FileTrash()
+	}
+
+	return rawCopyCmdArgs{
+		src:                            src,
+		fromTo:                         fromTo.String(),
+		logVerbosity:                   defaultLogVerbosityForSync,
+		blobType:                       common.EBlobType.None().String(),
+		blockBlobTier:                  common.EBlockBlobTier.None().String(),
+		pageBlobTier:                   common.EPageBlobTier.None().String(),
+		md5ValidationOption:            common.DefaultHashValidationOption.String(),
+		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 	}
 }

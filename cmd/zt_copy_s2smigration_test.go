@@ -595,7 +595,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 	c.Assert(srcContainerURL, chk.NotNil)
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobs(c, srcContainerURL, objectList)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList)
 
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, dstContainerURL)
@@ -640,8 +640,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleAzureFileToBlobContainer(c *chk.C) {
 	bsu := getBSU()
-	fsu, err := getFSU()
-	c.Assert(err, chk.IsNil)
+	fsu := getFSU()
 
 	srcShareURL, srcShareName := createNewShare(c, fsu)
 	defer deleteShare(c, srcShareURL)
