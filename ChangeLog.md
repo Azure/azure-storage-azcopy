@@ -12,11 +12,11 @@
 
 1. Can migrate data directly from Amazon Web Services (AWS). In this high-performance data path
    the data is read directly from AWS by the Azure Storage service. It does not need to pass through
-   the machine running AzCopy. The copy happens syncronously, so you can see it's exact progress.  
+   the machine running AzCopy. The copy happens syncronously, so you can see its exact progress.  
 1. Can migrate data directly from Azure Files or Azure Blobs (any blob type) to Azure Blobs (any
    blob type). In this high-performance data path the data is read directly from the source by the
    Azure Storage service. It does not need to pass through the machine running AzCopy. The copy
-   happens syncronously, so you can see it's exact progress.  
+   happens syncronously, so you can see its exact progress.  
 1. Sync command prompts with 4 options about deleting unneeded files from the target: Yes, No, All or
    None. (Deletion only happens if the `--delete-destination` flag is specified).
 1. Can download to /dev/null. This throws the data away - but is useful for testing raw network
