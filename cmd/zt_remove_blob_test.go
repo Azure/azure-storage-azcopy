@@ -46,7 +46,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
 		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String(), true)
 
-		runRemoveAndVerify(c, raw, func(err error) {
+		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
 			// note that when we are targeting single blobs, the relative path is empty ("") since the root path already points to the blob
@@ -75,7 +75,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
@@ -89,7 +89,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
 
@@ -120,7 +120,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String(), true)
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
@@ -135,7 +135,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
 
@@ -172,9 +172,9 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
 	raw.include = includeString
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
 	})
 }
 
@@ -205,9 +205,9 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, blobList, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", blobList, mockedRPC)
 	})
 }
 
@@ -245,8 +245,8 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, blobsToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
 	})
 }

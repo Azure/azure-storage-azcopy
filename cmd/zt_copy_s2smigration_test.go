@@ -67,18 +67,6 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 	}
 }
 
-func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
-	// the simulated user input should parse properly
-	cooked, err := raw.cook()
-	c.Assert(err, chk.IsNil)
-
-	// the enumeration ends when process() returns
-	err = cooked.process()
-
-	// the err is passed to verified, which knows whether it is expected or not
-	verifier(err)
-}
-
 func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))

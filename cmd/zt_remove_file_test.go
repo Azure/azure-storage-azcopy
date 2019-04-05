@@ -46,7 +46,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleFile(c *chk.C) {
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
 		raw := getDefaultRemoveRawInput(rawFileURLWithSAS.String(), true)
 
-		runRemoveAndVerify(c, raw, func(err error) {
+		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
 			// note that when we are targeting single files, the relative path is empty ("") since the root path already points to the file
@@ -75,7 +75,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String(), false)
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
@@ -89,7 +89,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
 
@@ -120,7 +120,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
 	raw := getDefaultRemoveRawInput(rawDirectoryURLWithSAS.String(), false)
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
@@ -135,7 +135,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
 	raw.recursive = false
 	mockedRPC.reset()
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(fileList))
 
@@ -172,9 +172,9 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeFlag(c *chk.C) {
 	raw.include = includeString
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, filesToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
 	})
 }
 
@@ -205,9 +205,9 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithExcludeFlag(c *chk.C) {
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, fileList, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
 	})
 }
 
@@ -245,8 +245,8 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeAndExcludeFlag(c *chk.C)
 	raw.exclude = excludeString
 	raw.recursive = true
 
-	runRemoveAndVerify(c, raw, func(err error) {
+	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateDownloadTransfersAreScheduled(c, filesToInclude, mockedRPC)
+		validateDownloadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
 	})
 }
