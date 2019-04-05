@@ -475,7 +475,6 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 		ExpiryTime:    time.Now().UTC().Add(48 * time.Hour),
 		ContainerName: containerName,
 		Permissions:   azblob.ContainerSASPermissions{Read: true, Add: true, Write: true, Create: true, Delete: true, List: true}.String(),
-		Version:       "2018-03-28",
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 
@@ -520,7 +519,6 @@ func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareNa
 		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
 		ShareName:   shareName,
 		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
-		Version:     "2018-03-28",
 	}.NewSASQueryParameters(&credential)
 	c.Assert(err, chk.IsNil)
 

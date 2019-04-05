@@ -18,12 +18,12 @@
   version = "v0.1.8"
 
 [[projects]]
-  branch = "dev"
-  digest = "1:53630cef6342c8e902aef6ebf4a12ae186becf985c8f25f0fee841d97c62cf71"
+  digest = "1:b15d5bdadce5d98f1e06353508a4029fccfeb68761957b3a2a8cb38ebb8caca4"
   name = "github.com/Azure/azure-storage-blob-go"
   packages = ["azblob"]
   pruneopts = "UT"
-  revision = "94d352293d76ce65c0eff4439ea2e7a0fbce9708"
+  revision = "678206e7e6e55abf0265a6440135e92005176ebf"
+  version = "v0.6.0"
 
 [[projects]]
   digest = "1:0376b54cf965bdae03b9c2a2734cad87fc3bbaa4066c0374ec86f10f77f03d45"
@@ -75,14 +75,6 @@
   version = "v1.0.1"
 
 [[projects]]
-  digest = "1:ffe9824d294da03b391f44e1ae8281281b4afc1bdaa9588c9097785e3af10cec"
-  name = "github.com/davecgh/go-spew"
-  packages = ["spew"]
-  pruneopts = "UT"
-  revision = "8991bc29aa16c548c550c7ff78260e27b9ab7c73"
-  version = "v1.1.1"
-
-[[projects]]
   digest = "1:76dc72490af7174349349838f2fe118996381b31ea83243812a97e5a0fd5ed55"
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
@@ -128,14 +120,6 @@
   pruneopts = "UT"
   revision = "76626ae9c91c4f2a10f34cad8ce83ea42c93bb75"
   version = "v1.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:579e7d6716d34fb47b8648bf837295af67d6c6ad545ac3bddab01d9ef4e4a6e4"
-  name = "github.com/jiacfan/azure-storage-blob-go"
-  packages = ["azblob"]
-  pruneopts = "UT"
-  revision = "b295c708d94f6a5d778dd9aacf927ee97ba16669"
 
 [[projects]]
   digest = "1:ea6f6666dafd73ffad2f95feb9bca34ab09bc6942e2766a30dd603ebdde2ad70"
@@ -201,14 +185,6 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:0028cb19b2e4c3112225cd871870f2d9cf49b9b4276531f03438a88e94be86fe"
-  name = "github.com/pmezard/go-difflib"
-  packages = ["difflib"]
-  pruneopts = "UT"
-  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
-  version = "v1.0.0"
-
-[[projects]]
   digest = "1:87c2e02fb01c27060ccc5ba7c5a407cc91147726f8f40b70cceeedbc52b1f3a8"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -231,27 +207,6 @@
   pruneopts = "UT"
   revision = "298182f68c66c05229eb03ac171abe6e309ee79a"
   version = "v1.0.3"
-
-[[projects]]
-  digest = "1:ac83cf90d08b63ad5f7e020ef480d319ae890c208f8524622a2f3136e2686b02"
-  name = "github.com/stretchr/objx"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "477a77ecc69700c7cdeb1fa9e129548e1c1c393c"
-  version = "v0.1.1"
-
-[[projects]]
-  digest = "1:79c7e1dc6789fc4329a52a4f502cb71fb5d44eccbc665f6f7907c8cc06e48441"
-  name = "github.com/stretchr/testify"
-  packages = [
-    ".",
-    "assert",
-    "http",
-    "mock",
-  ]
-  pruneopts = "UT"
-  revision = "ffdc059bfe9ce6a4e144ba849dbedead332c6053"
-  version = "v1.3.0"
 
 [[projects]]
   digest = "1:2ae8314c44cd413cfdb5b1df082b350116dd8d2fff973e62c01b285b7affd89e"
@@ -429,7 +384,6 @@
     "github.com/minio/minio-go/pkg/credentials",
     "github.com/minio/minio-go/pkg/s3utils",
     "github.com/spf13/cobra",
-    "github.com/stretchr/testify",
     "golang.org/x/sync/semaphore",
     "gopkg.in/check.v1",
   ]

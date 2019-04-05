@@ -6,6 +6,8 @@ github.com/Azure/azure-storage-blob-go v0.0.0-20190123011202-457680cc0804 h1:QjG
 github.com/Azure/azure-storage-blob-go v0.0.0-20190123011202-457680cc0804/go.mod h1:oGfmITT1V6x//CswqY2gtAHND+xIP64/qL7a5QJix0Y=
 github.com/Azure/azure-storage-blob-go v0.0.0-20190316203758-94d352293d76 h1:ULsj5wLfuHQ28x87RIHwGhsqPFzivaj2L7i9wYvXVas=
 github.com/Azure/azure-storage-blob-go v0.0.0-20190316203758-94d352293d76/go.mod h1:oGfmITT1V6x//CswqY2gtAHND+xIP64/qL7a5QJix0Y=
+github.com/Azure/azure-storage-blob-go v0.6.0 h1:SEATKb3LIHcaSIX+E6/K4kJpwfuozFEsmt5rS56N6CE=
+github.com/Azure/azure-storage-blob-go v0.6.0/go.mod h1:oGfmITT1V6x//CswqY2gtAHND+xIP64/qL7a5QJix0Y=
 github.com/Azure/azure-storage-file-go v0.0.0-20180929015327-d6c64f9676be h1:2TBD/QJYxkQf2jAHk/radyLgEfUpV8eqvRPvnjJt9EA=
 github.com/Azure/azure-storage-file-go v0.0.0-20180929015327-d6c64f9676be/go.mod h1:N5mXnKL8ZzcrxcNfqrcfWhiaCPAGagfTxH0/IwPN/LI=
 github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a h1:5OfEqciJHSMkxAWgJP1b3JTmzWNRlq9L9IgOxPNlBOM=
