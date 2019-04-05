@@ -35,8 +35,8 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
     
 On Linux:
 ```
-wget -O azcopyv10.tar https://aka.ms/downloadazcopy-v10-linux
-tar -xf azcopyv10.tar
+wget -O azcopyv10.tar.gz https://aka.ms/downloadazcopy-v10-linux
+tar -xzf azcopyv10.tar.gz
 cd azcopy_linux_amd64_10.0.8
 ./azcopy
 ```
