@@ -43,7 +43,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 	var userFromTo common.FromTo
 	err := userFromTo.Parse(userSpecifiedFromTo)
 	if err != nil {
-		return common.EFromTo.Unknown(), fmt.Errorf("invalid --FromTo value specified: %q", userSpecifiedFromTo)
+		return common.EFromTo.Unknown(), fmt.Errorf("invalid --from-to value specified: %q", userSpecifiedFromTo)
 	}
 	if inferredFromTo == common.EFromTo.Unknown() || inferredFromTo == userFromTo ||
 		userFromTo == common.EFromTo.BlobTrash() || userFromTo == common.EFromTo.FileTrash() {
@@ -52,7 +52,7 @@ func validateFromTo(src, dst string, userSpecifiedFromTo string) (common.FromTo,
 		return userFromTo, nil
 	}
 	// inferredFromTo != raw.fromTo: What we inferred doesn't match what the user specified
-	return common.EFromTo.Unknown(), errors.New("the specified --FromTo switch is inconsistent with the specified source/destination combination")
+	return common.EFromTo.Unknown(), errors.New("the specified --from-to switch is inconsistent with the specified source/destination combination")
 }
 
 func inferFromTo(src, dst string) common.FromTo {
@@ -60,16 +60,16 @@ func inferFromTo(src, dst string) common.FromTo {
 	srcLocation := inferArgumentLocation(src)
 	if srcLocation == srcLocation.Unknown() {
 		glcm.Info("Cannot infer source location of " +
-			common.URLStringExtension(src).RedactSigQueryParamForLogging() +
-			". Please specify the --FromTo switch")
+			common.URLStringExtension(src).RedactSecretQueryParamForLogging() +
+			". Please specify the --from-to switch")
 		return common.EFromTo.Unknown()
 	}
 
 	dstLocation := inferArgumentLocation(dst)
 	if dstLocation == dstLocation.Unknown() {
 		glcm.Info("Cannot infer destination location of " +
-			common.URLStringExtension(dst).RedactSigQueryParamForLogging() +
-			". Please specify the --FromTo switch")
+			common.URLStringExtension(dst).RedactSecretQueryParamForLogging() +
+			". Please specify the --from-to switch")
 		return common.EFromTo.Unknown()
 	}
 
@@ -92,15 +92,10 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.BlobFSLocal()
 	case srcLocation == common.ELocation.Blob() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.BlobBlob()
-		//TODO: Add PipeFile and FilePipe support.
-		// case srcLocation == common.ELocation.Pipe() && dstLocation == common.ELocation.File():
-		// 	return common.EFromTo.PipeFile()
-		// case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Pipe():
-		// 	return common.EFromTo.FilePipe()
-
-		// TODO: Add File to Blob direction, when service side support is ready.
-		// case srcLocation == ELocation.File() && dstLocation == ELocation.Blob():
-		// 	return common.EFromTo.FileBlob()
+	case srcLocation == common.ELocation.File() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.FileBlob()
+	case srcLocation == common.ELocation.S3() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.S3Blob()
 	}
 	return common.EFromTo.Unknown()
 }
@@ -121,8 +116,12 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.Blob()
 			case strings.Contains(host, ".file"):
 				return common.ELocation.File()
-			case strings.Contains(host, ".dfs.core.windows.net"):
+			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
+			}
+
+			if common.IsS3URL(*u) {
+				return common.ELocation.S3()
 			}
 		}
 	} else {

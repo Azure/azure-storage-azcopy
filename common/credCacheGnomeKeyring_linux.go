@@ -40,21 +40,26 @@ import (
 
 type gnomeKeyring struct{}
 
-func (p gnomeKeyring) Get(Service string, Account string) (string, error) {
-	var gerr *C.GError
+func (p gnomeKeyring) Get(service string, account string) (string, error) {
+	var gErr *C.GError
 	var pw *C.gchar
 
-	username := (*C.gchar)(C.CString(Account))
-	service := (*C.gchar)(C.CString(Service))
-	defer C.free(unsafe.Pointer(username))
-	defer C.free(unsafe.Pointer(service))
+	cStrService := (*C.gchar)(C.CString(service))
+	cStrAccount := (*C.gchar)(C.CString(account))
 
-	pw = C.gkr_get_password(service, username, &gerr)
-	defer C.free(unsafe.Pointer(gerr))
+	defer C.free(unsafe.Pointer(cStrService))
+	defer C.free(unsafe.Pointer(cStrAccount))
+
+	pw = C.gkr_get_password(cStrService, cStrAccount, &gErr)
+	defer func() {
+		if gErr != nil {
+			C.g_error_free(gErr)
+		}
+	}()
 	defer C.secret_password_free((*C.gchar)(pw))
 
 	if pw == nil {
-		return "", fmt.Errorf("GnomeKeyring failed to lookup: %+v", gerr)
+		return "", fmt.Errorf("GnomeKeyring failed to lookup: %+v", gErr)
 	}
 	return C.GoString((*C.char)(pw)), nil
 }

@@ -26,9 +26,14 @@ type EnvironmentVariable struct {
 	Description  string
 }
 
+// This array needs to be updated when a new public environment variable is added
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.LogLocation(),
+	EEnvironmentVariable.AWSAccessKeyID(),
+	EEnvironmentVariable.AWSSecretAccessKey(),
+	EEnvironmentVariable.ShowPerfStates(),
+	EEnvironmentVariable.PacePageBlobs(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -63,9 +68,45 @@ func (EnvironmentVariable) ProfileMemory() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_PROFILE_MEM"}
 }
 
+func (EnvironmentVariable) PacePageBlobs() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_PACE_PAGE_BLOBS",
+		Description: "Should throughput for page blobs automatically be adjusted to match Service limits? Default is true. Set to 'false' to disable",
+	}
+}
+
 func (EnvironmentVariable) ShowPerfStates() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_SHOW_PERF_STATES",
 		Description: "If set, to anything, on-screen output will include counts of chunks by state",
 	}
+}
+
+func (EnvironmentVariable) AWSAccessKeyID() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AWS_ACCESS_KEY_ID",
+		Description: "The AWS access key ID for S3 source used in service to service copy.",
+	}
+}
+
+func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AWS_SECRET_ACCESS_KEY",
+		Description: "The AWS secret access key for S3 source used in service to service copy.",
+	}
+}
+
+// AwsSessionToken is temporaily internally reserved, and not exposed to users.
+func (EnvironmentVariable) AwsSessionToken() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AWS_SESSION_TOKEN"}
+}
+
+// OAuthTokenInfo is only used for internal integration.
+func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AZCOPY_OAUTH_TOKEN_INFO"}
+}
+
+// CredentialType is only used for internal integration.
+func (EnvironmentVariable) CredentialType() EnvironmentVariable {
+	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
 }

@@ -2,106 +2,124 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-// copyFileToNEnumerator enumerates file source, and submit request for copy file to N,
+// copyS2SMigrationFileEnumerator enumerates file source, and submit request for copy file to N,
 // where N stands for blob/file/blobFS (Currently only blob is supported).
 // The source could be single file/directory/share/file account
-type copyFileToNEnumerator struct {
-	copyS2SEnumerator
+type copyS2SMigrationFileEnumerator struct {
+	copyS2SMigrationEnumeratorBase
+
+	// source Azure File resources
+	srcFilePipeline         pipeline.Pipeline
+	srcFileURLPartExtension fileURLPartsExtension
 }
 
-func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
-	ctx := context.TODO()
-
-	// attempt to parse the source and destination url
-	sourceURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.source))
-	if err != nil {
-		return errors.New("cannot parse source URL")
-	}
-	destURL, err := url.Parse(gCopyUtil.replaceBackSlashWithSlash(cca.destination))
-	if err != nil {
-		return errors.New("cannot parse destination URL")
+func (e *copyS2SMigrationFileEnumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
+	if err = e.initEnumeratorCommon(ctx, cca); err != nil {
+		return err
 	}
 
 	// append the sas at the end of query params.
-	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
-	destURL = gCopyUtil.appendQueryParamToUrl(destURL, cca.destinationSAS)
+	e.sourceURL = gCopyUtil.appendQueryParamToUrl(e.sourceURL, cca.sourceSAS)
+	e.destURL = gCopyUtil.appendQueryParamToUrl(e.destURL, cca.destinationSAS)
 
 	// Create pipeline for source Azure File service.
 	// Note: only anonymous credential is supported for file source(i.e. SAS) now.
 	// e.CredentialInfo is for destination
 	srcCredInfo := common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()}
-	srcFilePipeline, err := createFilePipeline(ctx, srcCredInfo)
+	e.srcFilePipeline, err = createFilePipeline(ctx, srcCredInfo)
 	if err != nil {
 		return err
 	}
-	if err := e.initDestPipeline(ctx); err != nil {
+
+	e.srcFileURLPartExtension = fileURLPartsExtension{azfile.NewFileURLParts(*e.sourceURL)}
+
+	// When need to do changing source validation, must get property(LMT) for Azure file during enumerating, in order to ensure that
+	// files are not changed since enumerating.
+	e.S2SGetPropertiesInBackend = cca.s2sPreserveProperties && cca.s2sGetPropertiesInBackend && !cca.s2sSourceChangeValidation
+
+	return nil
+}
+
+func (e *copyS2SMigrationFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
+	ctx := context.TODO()
+
+	if err := e.initEnumerator(ctx, cca); err != nil {
 		return err
 	}
 
-	srcFileURLPartExtension := fileURLPartsExtension{azfile.NewFileURLParts(*sourceURL)}
-
 	// Case-1: Source is single file
-	srcFileURL := azfile.NewFileURL(*sourceURL, srcFilePipeline)
+	srcFileURL := azfile.NewFileURL(*e.sourceURL, e.srcFilePipeline)
 	// Verify if source is a single file
-	// Note: Currently only support single to single, and not support single to directory.
-	if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
-		if endWithSlashOrBackSlash(destURL.Path) {
-			return errors.New("invalid source and destination combination for service to service copy: " +
-				"destination must point to a single file, when source is a single file.")
+	if e.srcFileURLPartExtension.isFileSyntactically() {
+		if fileProperties, err := srcFileURL.GetProperties(ctx); err == nil {
+			if e.isDestServiceSyntactically() {
+				return errSingleToAccountCopy
+			}
+			if endWithSlashOrBackSlash(e.destURL.Path) || e.isDestBucketSyntactically() {
+				fileName := gCopyUtil.getFileNameFromPath(e.srcFileURLPartExtension.DirectoryOrFilePath)
+				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
+			}
+			err := e.createDestBucket(ctx, *e.destURL, nil)
+			if err != nil {
+				return err
+			}
+			// Disable get properties in backend, as GetProperties already get full properties.
+			e.S2SGetPropertiesInBackend = false
+
+			// directly use destURL as destination
+			if err := e.addFileToNTransfer(srcFileURL.URL(), *e.destURL, fileProperties, cca); err != nil {
+				return err
+			}
+			return e.dispatchFinalPart(cca)
+		} else {
+			handleSingleFileValidationErrorForAzureFile(err)
 		}
-		err := e.createDestBucket(ctx, *destURL, nil)
-		if err != nil {
-			return err
-		}
-		// directly use destURL as destination
-		if err := e.addFileToNTransfer(srcFileURL.URL(), *destURL, fileProperties, cca); err != nil {
-			return err
-		}
-		return e.dispatchFinalPart(cca)
 	}
 
 	// Case-2: Source is account, currently only support blob destination
-	if isAccountLevel, sharePrefix := srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
+	if isAccountLevel, sharePrefix := e.srcFileURLPartExtension.isFileAccountLevelSearch(); isAccountLevel {
+		glcm.Info(infoCopyFromAccount)
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
 
 		// Validate If destination is service level account.
-		if err := e.validateDestIsService(ctx, *destURL); err != nil {
+		if err := e.validateDestIsService(ctx, *e.destURL); err != nil {
 			return err
 		}
 
-		srcServiceURL := azfile.NewServiceURL(srcFileURLPartExtension.getServiceURL(), srcFilePipeline)
-		fileOrDirectoryPrefix, fileNamePattern, _ := srcFileURLPartExtension.searchPrefixFromFileURL()
+		srcServiceURL := azfile.NewServiceURL(e.srcFileURLPartExtension.getServiceURL(), e.srcFilePipeline)
+		fileOrDirectoryPrefix, fileNamePattern, _ := e.srcFileURLPartExtension.searchPrefixFromFileURL()
 		// List shares and add transfers for these shares.
-		if err := e.addTransferFromAccount(ctx, srcServiceURL, *destURL, sharePrefix, fileOrDirectoryPrefix,
+		if err := e.addTransferFromAccount(ctx, srcServiceURL, *e.destURL, sharePrefix, fileOrDirectoryPrefix,
 			fileNamePattern, cca); err != nil {
 			return err
 		}
 
 	} else { // Case-3: Source is a file share or directory
-		searchPrefix, fileNamePattern, isWildcardSearch := srcFileURLPartExtension.searchPrefixFromFileURL()
+		glcm.Info(infoCopyFromDirectoryListOfFiles) // Share is mapped to root directory
+		searchPrefix, fileNamePattern, isWildcardSearch := e.srcFileURLPartExtension.searchPrefixFromFileURL()
 		if fileNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire share or directory without recursive flag. Please use --recursive flag")
 		}
-		if err := e.createDestBucket(ctx, *destURL, nil); err != nil {
+		if err := e.createDestBucket(ctx, *e.destURL, nil); err != nil {
 			return err
 		}
 		if err := e.addTransfersFromDirectory(ctx,
-			azfile.NewShareURL(srcFileURLPartExtension.getShareURL(), srcFilePipeline).NewRootDirectoryURL(),
-			*destURL,
+			azfile.NewShareURL(e.srcFileURLPartExtension.getShareURL(), e.srcFilePipeline).NewRootDirectoryURL(),
+			*e.destURL,
 			searchPrefix,
 			fileNamePattern,
-			srcFileURLPartExtension.getParentSourcePath(),
+			e.srcFileURLPartExtension.getParentSourcePath(),
 			false,
 			isWildcardSearch,
 			cca); err != nil {
@@ -121,7 +139,7 @@ func (e *copyFileToNEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 }
 
 // addTransferFromAccount enumerates shares in account, and adds matched file into transfer.
-func (e *copyFileToNEnumerator) addTransferFromAccount(ctx context.Context,
+func (e *copyS2SMigrationFileEnumerator) addTransferFromAccount(ctx context.Context,
 	srcServiceURL azfile.ServiceURL, destBaseURL url.URL,
 	sharePrefix, fileOrDirectoryPrefix, fileNamePattern string, cca *cookedCopyCmdArgs) error {
 	return enumerateSharesInAccount(
@@ -155,7 +173,7 @@ func (e *copyFileToNEnumerator) addTransferFromAccount(ctx context.Context,
 
 // addTransfersFromDirectory enumerates files in directory and sub directoreis,
 // and adds matched file into transfer.
-func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
+func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.Context,
 	srcDirectoryURL azfile.DirectoryURL, destBaseURL url.URL,
 	fileOrDirNamePrefix, fileNamePattern, parentSourcePath string,
 	includExcludeShare, isWildcardSearch bool, cca *cookedCopyCmdArgs) error {
@@ -201,25 +219,34 @@ func (e *copyFileToNEnumerator) addTransfersFromDirectory(ctx context.Context,
 				fileRelativePath = gCopyUtil.getRelativePath(fileOrDirNamePrefix, fileURLPart.DirectoryOrFilePath)
 			}
 
-			// TODO: Remove get attribute, when file's list method can return property and metadata.
-			p, err := fileURL.GetProperties(ctx)
-			if err != nil {
-				return err
-			}
+			// TODO: Remove get attribute, when file's list method can return property and metadata directly.
+			// As changing source validation need LMT which is not returned during list, enforce to get property if s2sSourceChangeValidation is enabled.
+			if (cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) || cca.s2sSourceChangeValidation {
+				p, err := fileURL.GetProperties(ctx)
+				if err != nil {
+					return err
+				}
 
-			return e.addFileToNTransfer(
-				fileURL.URL(),
-				urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
-				p,
-				cca)
+				return e.addFileToNTransfer(
+					fileURL.URL(),
+					urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
+					p,
+					cca)
+			} else {
+				return e.addFileToNTransfer2(
+					fileURL.URL(),
+					urlExtension{URL: destBaseURL}.generateObjectPath(fileRelativePath),
+					fileItem.Properties,
+					cca)
+			}
 		})
 }
 
-func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
+func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
-		Destination:        gCopyUtil.stripSASFromFileShareUrl(destURL).String(),
+		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
 		LastModifiedTime:   properties.LastModified(),
 		SourceSize:         properties.ContentLength(),
 		ContentType:        properties.ContentType(),
@@ -232,14 +259,23 @@ func (e *copyFileToNEnumerator) addFileToNTransfer(srcURL, destURL url.URL, prop
 		cca)
 }
 
-func (e *copyFileToNEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer2(srcURL, destURL url.URL, properties *azfile.FileProperty,
+	cca *cookedCopyCmdArgs) error {
+	return e.addTransfer(common.CopyTransfer{
+		Source:      gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
+		Destination: gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
+		SourceSize:  properties.ContentLength},
+		cca)
+}
+
+func (e *copyS2SMigrationFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	return addTransfer(&(e.CopyJobPartOrderRequest), transfer, cca)
 }
 
-func (e *copyFileToNEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
+func (e *copyS2SMigrationFileEnumerator) dispatchFinalPart(cca *cookedCopyCmdArgs) error {
 	return dispatchFinalPart(&(e.CopyJobPartOrderRequest), cca)
 }
 
-func (e *copyFileToNEnumerator) partNum() common.PartNumber {
+func (e *copyS2SMigrationFileEnumerator) partNum() common.PartNumber {
 	return e.PartNum
 }

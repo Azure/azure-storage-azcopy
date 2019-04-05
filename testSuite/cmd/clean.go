@@ -7,13 +7,15 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/JeffreyRichter/enum/enum"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 )
 
@@ -45,6 +47,7 @@ type ServiceType uint8
 func (ServiceType) Blob() ServiceType   { return ServiceType(0) }
 func (ServiceType) File() ServiceType   { return ServiceType(1) }
 func (ServiceType) BlobFS() ServiceType { return ServiceType(2) } // For SAS or public.
+func (ServiceType) S3() ServiceType     { return ServiceType(3) }
 
 func (ct ServiceType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -116,6 +119,15 @@ func init() {
 				case EResourceType.Account():
 					cleanBfsAccount(resourceURL)
 				}
+			case EServiceType.S3():
+				switch resourceType {
+				case EResourceType.Bucket():
+					cleanBucket(resourceURL)
+				case EResourceType.SingleFile():
+					cleanObject(resourceURL)
+				case EResourceType.Account():
+					cleanS3Account(resourceURL)
+				}
 			default:
 				panic(fmt.Errorf("illegal resourceType %q", resourceType))
 			}
@@ -144,7 +156,7 @@ func cleanContainer(container string) {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		listBlob, err := containerUrl.ListBlobsFlatSegment(context.Background(), marker, azblob.ListBlobsSegmentOptions{})
 		if err != nil {
-			fmt.Println("error listing blobs inside the container. Please check the container sas")
+			fmt.Println("error listing blobs inside the container. Please check the container sas", err)
 			os.Exit(1)
 		}
 
@@ -303,7 +315,7 @@ func cleanBlobAccount(resourceURL string) {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
 		lResp, err := accountURL.ListContainersSegment(context.Background(), marker, azblob.ListContainersSegmentOptions{})
 		if err != nil {
-			fmt.Println("error listing containers inside the container. Please check the container sas")
+			fmt.Println("error listing containers, please check the container sas, ", err)
 			os.Exit(1)
 		}
 
@@ -319,9 +331,104 @@ func cleanBlobAccount(resourceURL string) {
 }
 
 func cleanFileAccount(resourceURL string) {
-	panic("not implemented")
+	accountSAS, err := url.Parse(resourceURL)
+
+	if err != nil {
+		fmt.Println("error parsing the account sas ", err)
+		os.Exit(1)
+	}
+
+	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	accountURL := azfile.NewServiceURL(*accountSAS, p)
+
+	// perform a list account
+	for marker := (azfile.Marker{}); marker.NotDone(); {
+		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
+		lResp, err := accountURL.ListSharesSegment(context.Background(), marker, azfile.ListSharesOptions{})
+		if err != nil {
+			fmt.Println("error listing shares, please check the share sas, ", err)
+			os.Exit(1)
+		}
+
+		for _, shareItem := range lResp.ShareItems {
+			_, err := accountURL.NewShareURL(shareItem.Name).Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
+			if err != nil {
+				fmt.Println("error deleting the share from account, ", err)
+				os.Exit(1)
+			}
+		}
+		marker = lResp.NextMarker
+	}
+}
+
+func cleanS3Account(resourceURL string) {
+	u, err := url.Parse(resourceURL)
+
+	if err != nil {
+		fmt.Println("fail to parse the S3 service URL, ", err)
+		os.Exit(1)
+	}
+
+	s3URLParts, err := common.NewS3URLParts(*u)
+	if err != nil {
+		fmt.Println("new S3 URL parts, ", err)
+		os.Exit(1)
+	}
+
+	s3Client := createS3ClientWithMinio(createS3ResOptions{
+		Location: s3URLParts.Region,
+	})
+
+	buckets, err := s3Client.ListBuckets()
+	if err != nil {
+		fmt.Println("error listing S3 service, ", err)
+		os.Exit(1)
+	}
+	for _, bucket := range buckets {
+		// Remove all the things in bucket with prefix
+		if !strings.HasPrefix(bucket.Name, "s2scopybucket") {
+			continue // skip buckets not created by s2s copy testings.
+		}
+
+		objectsCh := make(chan string)
+
+		go func() {
+			defer close(objectsCh)
+
+			// List all objects from a bucket-name with a matching prefix.
+			for object := range s3Client.ListObjectsV2(bucket.Name, "", true, context.Background().Done()) {
+				if object.Err != nil {
+					fmt.Printf("error listing the object from bucket %q, %v\n", bucket.Name, err)
+					os.Exit(1)
+				}
+				objectsCh <- object.Key
+			}
+		}()
+
+		// List bucket, and delete all the objects in the bucket
+		errChn := s3Client.RemoveObjects(bucket.Name, objectsCh)
+
+		for err := range errChn {
+			fmt.Println("error remove objects from bucket, ", err)
+			os.Exit(1)
+		}
+
+		// Remove the bucket.
+		if err := s3Client.RemoveBucket(bucket.Name); err != nil {
+			fmt.Printf("error deleting the bucket %q from account, %v\n", bucket.Name, err)
+			os.Exit(1)
+		}
+	}
 }
 
 func cleanBfsAccount(resourceURL string) {
-	panic("not implemented")
+	panic("not implemented: not used")
+}
+
+func cleanBucket(resourceURL string) {
+	panic("not implemented: not used")
+}
+
+func cleanObject(resourceURL string) {
+	panic("not implemented: not used")
 }

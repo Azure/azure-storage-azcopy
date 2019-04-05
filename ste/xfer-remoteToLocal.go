@@ -22,7 +22,9 @@ package ste
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -68,22 +70,47 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 			jptm.LogDownloadError(info.Source, info.Destination, "Empty File Creation error "+err.Error(), 0)
 			jptm.SetStatus(common.ETransferStatus.Failed())
 		}
-		epilogueWithCleanupDownload(jptm, nil, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
+		epilogueWithCleanupDownload(jptm, dl, nil, false, nil) // need standard epilogue, rather than a quick exit, so we can preserve modification dates
 		return
 	}
 
 	// step 4b: normal file creation when source has content
-	writeThrough := true // makes sense for bulk ingest, because OS-level caching can't possibly help there, and really only adds overhead
-	if fileSize <= 1*1024*1024 {
-		writeThrough = false // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
-	}
-	dstFile, err := common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
-	if err != nil {
+	writeThrough := false
+	// TODO: consider cases where we might set it to true. It might give more predictable and understandable disk throughput.
+	//    But can't be used in the cases shown in the if statement below (one of which is only pseudocode, at this stage)
+	//      if fileSize <= 1*1024*1024 || jptm.JobHasLowFileCount() || <is a short-running job> {
+	//        // but, for very small files, testing indicates that we can need it in at least some cases. (Presumably just can't get enough queue depth to physical disk without it.)
+	//        // And also, for very low file counts, we also need it. Presumably for same reasons of queue depth (given our sequential write strategy as at March 2019)
+	//        // And for very short-running jobs, it looks and feels faster for the user to just let the OS cache flush out after the job appears to have finished.
+	//        writeThrough = false
+	//    }
+
+	failFileCreation := func(err error, forceReleaseFileCount bool) {
 		jptm.LogDownloadError(info.Source, info.Destination, "File Creation Error "+err.Error(), 0)
 		jptm.SetStatus(common.ETransferStatus.Failed())
-		epilogueWithCleanupDownload(jptm, nil, nil) // use standard epilogue for consistency
+		// use standard epilogue for consistency, but force release of file count (without an actual file) if necessary
+		epilogueWithCleanupDownload(jptm, dl, nil, forceReleaseFileCount, nil)
+	}
+	// block until we can safely use a file handle	// TODO: it might be nice if this happened inside chunkedFileWriter, when first chunk needs to be saved,
+	err := jptm.FileCountLimiter().WaitUntilAdd(jptm.Context(), 1, func() bool { return true })
+	if err != nil {
+		failFileCreation(err, false)
 		return
 	}
+
+	var dstFile io.WriteCloser
+	if strings.EqualFold(info.Destination, common.DevNull) {
+		// the user wants to discard the downloaded data
+		dstFile = devNullWriter{}
+	} else {
+		// normal scenario, create the destination file as expected
+		dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
+		if err != nil {
+			failFileCreation(err, true)
+			return
+		}
+	}
+
 	// TODO: Question: do we need to Stat the file, to check its size, after explicitly making it with the desired size?
 	// That was what the old xfer-blobToLocal code used to do
 	// I've commented it out to be more concise, but we'll put it back if someone knows why it needs to be here
@@ -110,7 +137,8 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	// step 5b: create destination writer
-	chunkLogger := jptm
+	chunkLogger := jptm.ChunkStatusLogger()
+	sourceMd5Exists := len(info.SrcHTTPHeaders.ContentMD5) > 0
 	dstWriter := common.NewChunkedFileWriter(
 		jptm.Context(),
 		jptm.SlicePool(),
@@ -119,11 +147,15 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 		dstFile,
 		numChunks,
 		MaxRetryPerDownloadBody,
-		jptm.MD5ValidationOption())
+		jptm.MD5ValidationOption(),
+		sourceMd5Exists)
 
-	// step 5c: tell jptm what to expect, and how to clean up at the end
+	// step 5c: run prologue in downloader (here it can, for example, create things that will require cleanup in the epilogue)
+	dl.Prologue(jptm)
+
+	// step 5d: tell jptm what to expect, and how to clean up at the end
 	jptm.SetNumberOfChunks(numChunks)
-	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dstFile, dstWriter) })
+	jptm.SetActionAfterLastChunk(func() { epilogueWithCleanupDownload(jptm, dl, dstFile, false, dstWriter) })
 
 	// step 6: go through the blob range and schedule download chunk jobs
 	// TODO: currently, the epilogue will only run if the number of completed chunks = numChunks.
@@ -168,7 +200,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 }
 
 // complete epilogue. Handles both success and failure
-func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.File, cw common.ChunkedFileWriter) {
+func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
 	haveNonEmptyFile := activeDstFile != nil
@@ -177,6 +209,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 		// wait until all received chunks are flushed out
 		md5OfFileAsWritten, flushError := cw.Flush(jptm.Context())
 		closeErr := activeDstFile.Close() // always try to close if, even if flush failed
+		jptm.FileCountLimiter().Remove(1) // always release it from our count, no matter what happened
 		if flushError != nil {
 			jptm.FailActiveDownload("Flushing file", flushError)
 		}
@@ -196,6 +229,14 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, activeDstFile *os.Fil
 				jptm.FailActiveDownload("Checking MD5 hash", err)
 			}
 		}
+	} else {
+		if forceReleaseFileCount {
+			jptm.FileCountLimiter().Remove(1) // special case, for we we failed after adding it to count, but before making an actual file
+		}
+	}
+
+	if dl != nil {
+		dl.Epilogue() // it can release resources here
 	}
 
 	// Preserve modified time
@@ -265,9 +306,26 @@ func deleteFile(destinationPath string) error {
 
 // tries to delete file, but if that fails just logs and returns
 func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
+	// skip deleting if we are targeting dev null and throwing away the data
+	if strings.EqualFold(common.DevNull, info.Destination) {
+		return
+	}
+
 	err := deleteFile(info.Destination)
 	if err != nil {
 		// If there was an error deleting the file, log the error
 		jptm.LogError(info.Destination, "Delete File Error ", err)
 	}
+}
+
+// conforms to io.Writer and io.Closer
+// does absolutely nothing to discard the given data
+type devNullWriter struct{}
+
+func (devNullWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
+func (devNullWriter) Close() error {
+	return nil
 }

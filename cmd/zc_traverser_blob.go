@@ -23,11 +23,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"net/url"
-	"strings"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -66,8 +67,12 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),
+			blobProperties.BlobType(),
 		)
-		t.incrementEnumerationCounter()
+
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter()
+		}
 		return processIfPassedFilters(filters, storedObject, processor)
 	}
 
@@ -102,20 +107,26 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				continue
 			}
 
-			relativePath := strings.Replace(blobInfo.Name, searchPrefix, "", 1)
+			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
 
 			// if recursive
 			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {
 				continue
 			}
 
-			storedObject := storedObject{
-				name:             getObjectNameOnly(blobInfo.Name),
-				relativePath:     relativePath,
-				lastModifiedTime: blobInfo.Properties.LastModified,
-				size:             *blobInfo.Properties.ContentLength,
+			storedObject := newStoredObject(
+				getObjectNameOnly(blobInfo.Name),
+				relativePath,
+				blobInfo.Properties.LastModified,
+				*blobInfo.Properties.ContentLength,
+				blobInfo.Properties.ContentMD5,
+				blobInfo.Properties.BlobType,
+			)
+
+			if t.incrementEnumerationCounter != nil {
+				t.incrementEnumerationCounter()
 			}
-			t.incrementEnumerationCounter()
+
 			processErr := processIfPassedFilters(filters, storedObject, processor)
 			if processErr != nil {
 				return processErr

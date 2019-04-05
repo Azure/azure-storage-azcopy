@@ -66,10 +66,16 @@ type rawCopyCmdArgs struct {
 	fromTo string
 	//blobUrlForRedirection string
 
+	// TODO remove after refactoring
+	legacyInclude string
+	legacyExclude string
+	// new include/exclude only apply to file names
+	// implemented for remove (and sync) only
+	include string
+	exclude string
+
 	// filters from flags
 	listOfFilesToCopy string
-	include           string
-	exclude           string
 	recursive         bool
 	followSymlinks    bool
 	withSnapshots     bool
@@ -84,6 +90,7 @@ type rawCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	putMd5                   bool
 	md5ValidationOption      string
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
@@ -96,6 +103,36 @@ type rawCopyCmdArgs struct {
 	cancelFromStdin bool
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
+	// whether user wants to preserve full properties during service to service copy, the default value is true.
+	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
+	// to preserve full properties AzCopy needs to send one additional request per object/file.
+	s2sPreserveProperties bool
+	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
+	s2sGetPropertiesInBackend bool
+	// whether user wants to preserve access tier during service to service copy, the default value is true.
+	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
+	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
+	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	s2sPreserveAccessTier bool
+	// whether user wants to check if source has changed after enumerating, the default value is true.
+	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
+	s2sSourceChangeValidation bool
+	// specify how user wants to handle invalid metadata.
+	s2sInvalidMetadataHandleOption string
+}
+
+func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
+	cookedPatterns = make([]string, 0)
+	rawPatterns := strings.Split(pattern, ";")
+	for _, pattern := range rawPatterns {
+
+		// skip the empty patterns
+		if len(pattern) != 0 {
+			cookedPatterns = append(cookedPatterns, pattern)
+		}
+	}
+
+	return
 }
 
 // validates and transform raw input into cooked input
@@ -146,7 +183,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
 	// file names to include explicitly and include file may mention the pattern.
 	// This could conflict enumerating the files to queue up for transfer.
-	if len(raw.listOfFilesToCopy) > 0 && len(raw.include) > 0 {
+	if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
 		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
 	}
 
@@ -186,9 +223,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// initialize the include map which contains the list of files to be included
 	// parse the string passed in include flag
 	// more than one file are expected to be separated by ';'
-	cooked.include = make(map[string]int)
-	if len(raw.include) > 0 {
-		files := strings.Split(raw.include, ";")
+	cooked.legacyInclude = make(map[string]int)
+	if len(raw.legacyInclude) > 0 {
+		files := strings.Split(raw.legacyInclude, ";")
 		for index := range files {
 			// If split of the include string leads to an empty string
 			// not include that string
@@ -198,16 +235,16 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
 			// this replacement is done to handle the windows file paths where path separator "\\"
 			includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.include[includePath] = index
+			cooked.legacyInclude[includePath] = index
 		}
 	}
 
 	// initialize the exclude map which contains the list of files to be excluded
 	// parse the string passed in exclude flag
 	// more than one file are expected to be separated by ';'
-	cooked.exclude = make(map[string]int)
-	if len(raw.exclude) > 0 {
-		files := strings.Split(raw.exclude, ";")
+	cooked.legacyExclude = make(map[string]int)
+	if len(raw.legacyExclude) > 0 {
+		files := strings.Split(raw.legacyExclude, ";")
 		for index := range files {
 			// If split of the include string leads to an empty string
 			// not include that string
@@ -217,7 +254,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
 			// this replacement is done to handle the windows file paths where path separator "\\"
 			excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.exclude[excludePath] = index
+			cooked.legacyExclude[excludePath] = index
 		}
 	}
 
@@ -227,6 +264,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
+	cooked.putMd5 = raw.putMd5
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
@@ -250,49 +288,97 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while uploading")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while downloading")
+			return cooked, fmt.Errorf("blob-tier is not supported while uploading to Azure File")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while downloading")
+			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while downloading")
+			return cooked, fmt.Errorf("blob-tier is not supported while downloading")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while downloading")
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while downloading")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while downloading")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while downloading")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while downloading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while downloading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
-		common.EFromTo.FileBlob():
+		common.EFromTo.FileBlob(),
+		common.EFromTo.S3Blob():
 		if cooked.preserveLastModifiedTime {
-			return cooked, fmt.Errorf("preserve-last-modified-time is set to true while copying from sevice to service")
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while copying from service to service")
 		}
 		if cooked.followSymlinks {
-			return cooked, fmt.Errorf("follow-symlinks flag is set to true while copying from sevice to service")
+			return cooked, fmt.Errorf("follow-symlinks flag is not supported while copying from service to service")
 		}
+		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
+		// For s3 and file, only hot block blob tier is supported.
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
-			return cooked, fmt.Errorf("blob-tier is set while copying from sevice to service")
+			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
+		}
+		// Disabling blob type override.
+		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
+		// and when file and s3 is source, only block blob destination is supported.
+		if cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported while coping from service to service")
 		}
 		if cooked.noGuessMimeType {
-			return cooked, fmt.Errorf("no-guess-mime-type is set while copying from sevice to service")
+			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}
 		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is set while copying from sevice to service")
+			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while copying from service to service")
 		}
+	}
+	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
+		return cooked, err
 	}
 	if err = validateMd5Option(cooked.md5ValidationOption, cooked.fromTo); err != nil {
 		return cooked, err
@@ -312,7 +398,29 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 	}
 
+	cooked.s2sPreserveProperties = raw.s2sPreserveProperties
+	cooked.s2sGetPropertiesInBackend = raw.s2sGetPropertiesInBackend
+	cooked.s2sPreserveAccessTier = raw.s2sPreserveAccessTier
+	cooked.s2sSourceChangeValidation = raw.s2sSourceChangeValidation
+
+	err = cooked.s2sInvalidMetadataHandleOption.Parse(raw.s2sInvalidMetadataHandleOption)
+	if err != nil {
+		return cooked, err
+	}
+
+	// parse the filter patterns
+	cooked.includePatterns = raw.parsePatterns(raw.include)
+	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+
 	return cooked, nil
+}
+
+func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
+	isUpload := fromTo.From() == common.ELocation.Local() && fromTo.To().IsRemote()
+	if putMd5 && !isUpload {
+		return fmt.Errorf("put-md5 is set but the job is not an upload")
+	}
+	return nil
 }
 
 func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
@@ -333,10 +441,16 @@ type cookedCopyCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 
+	// TODO remove after refactoring
+	legacyInclude map[string]int
+	legacyExclude map[string]int
+	// new include/exclude only apply to file names
+	// implemented for remove (and sync) only
+	includePatterns []string
+	excludePatterns []string
+
 	// filters from flags
 	listOfFilesToCopy []string
-	include           map[string]int
-	exclude           map[string]int
 	recursive         bool
 	followSymlinks    bool
 	withSnapshots     bool
@@ -354,6 +468,7 @@ type cookedCopyCmdArgs struct {
 	contentEncoding          string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
+	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	background               bool
 	acl                      string
@@ -364,6 +479,9 @@ type cookedCopyCmdArgs struct {
 
 	// generated
 	jobID common.JobID
+
+	// extracted from the input
+	credentialInfo common.CredentialInfo
 
 	// variables used to calculate progress
 	// intervalStartTime holds the last time value when the progress summary was fetched
@@ -378,15 +496,27 @@ type cookedCopyCmdArgs struct {
 	// this flag is set by the enumerator
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	isEnumerationComplete bool
+
+	// whether user wants to preserve full properties during service to service copy, the default value is true.
+	// For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files,
+	// to preserve full properties AzCopy needs to send one additional request per object/file.
+	s2sPreserveProperties bool
+	// useful when preserveS3Properties set to true, enables get S3 objects' or Azure files' properties during s2s copy in backend, the default value is true
+	s2sGetPropertiesInBackend bool
+	// whether user wants to preserve access tier during service to service copy, the default value is true.
+	// In some case, e.g. target is a GPv1 storage account, access tier cannot be set properly.
+	// In such cases, use s2sPreserveAccessTier=false to bypass the access tier copy.
+	// For more details, please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
+	s2sPreserveAccessTier bool
+	// whether user wants to check if source has changed after enumerating, the default value is true.
+	// For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs.
+	s2sSourceChangeValidation bool
+	// specify how user wants to handle invalid metadata.
+	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
 	switch cca.fromTo {
-	// File's piping is not supported temporarily.
-	// case common.EFromTo.PipeFile():
-	// 	fallthrough
-	// case common.EFromTo.FilePipe():
-	// 	fallthrough
 	case common.EFromTo.BlobPipe():
 		fallthrough
 	case common.EFromTo.PipeBlob():
@@ -506,43 +636,13 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 // handles the copy command
 // dispatches the job order (in parts) to the storage engine
 func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
-	// initialize the fields that are constant across all job part orders
-	jobPartOrder := common.CopyJobPartOrderRequest{
-		JobID:           cca.jobID,
-		FromTo:          cca.fromTo,
-		ForceWrite:      cca.forceWrite,
-		Priority:        common.EJobPriority.Normal(),
-		LogLevel:        cca.logVerbosity,
-		Include:         cca.include,
-		Exclude:         cca.exclude,
-		ExcludeBlobType: cca.excludeBlobType,
-		BlobAttributes: common.BlobTransferAttributes{
-			BlobType:                 cca.blobType,
-			BlockSizeInBytes:         cca.blockSize,
-			ContentType:              cca.contentType,
-			ContentEncoding:          cca.contentEncoding,
-			BlockBlobTier:            cca.blockBlobTier,
-			PageBlobTier:             cca.pageBlobTier,
-			Metadata:                 cca.metadata,
-			NoGuessMimeType:          cca.noGuessMimeType,
-			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			MD5ValidationOption:      cca.md5ValidationOption,
-		},
-		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
-		SourceSAS: cca.sourceSAS,
-
-		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
-		DestinationSAS: cca.destinationSAS,
-		CommandString:  cca.commandString,
-		CredentialInfo: common.CredentialInfo{},
-	}
-
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// verifies credential type and initializes credential info.
 	// Note: Currently, only one credential type is necessary for source and destination.
 	// For upload&download, only one side need credential.
 	// For S2S copy, as azcopy-v10 use Put*FromUrl, only one credential is needed for destination.
-	if jobPartOrder.CredentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
+	if cca.credentialInfo.CredentialType, err = getCredentialType(ctx, rawFromToInfo{
 		fromTo:         cca.fromTo,
 		source:         cca.source,
 		destination:    cca.destination,
@@ -554,7 +654,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 	// For OAuthToken credential, assign OAuthTokenInfo to CopyJobPartOrderRequest properly,
 	// the info will be transferred to STE.
-	if jobPartOrder.CredentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
+	if cca.credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,
 		// in case of silently using cached token without consciousness。
 		glcm.Info("Using OAuth token for authentication.")
@@ -564,8 +664,40 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
 			return err
 		} else {
-			jobPartOrder.CredentialInfo.OAuthTokenInfo = *tokenInfo
+			cca.credentialInfo.OAuthTokenInfo = *tokenInfo
 		}
+	}
+
+	// initialize the fields that are constant across all job part orders
+	jobPartOrder := common.CopyJobPartOrderRequest{
+		JobID:           cca.jobID,
+		FromTo:          cca.fromTo,
+		ForceWrite:      cca.forceWrite,
+		Priority:        common.EJobPriority.Normal(),
+		LogLevel:        cca.logVerbosity,
+		Include:         cca.legacyInclude,
+		Exclude:         cca.legacyExclude,
+		ExcludeBlobType: cca.excludeBlobType,
+		BlobAttributes: common.BlobTransferAttributes{
+			BlobType:                 cca.blobType,
+			BlockSizeInBytes:         cca.blockSize,
+			ContentType:              cca.contentType,
+			ContentEncoding:          cca.contentEncoding,
+			BlockBlobTier:            cca.blockBlobTier,
+			PageBlobTier:             cca.pageBlobTier,
+			Metadata:                 cca.metadata,
+			NoGuessMimeType:          cca.noGuessMimeType,
+			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
+		},
+		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
+		SourceSAS: cca.sourceSAS,
+
+		// destination sas is stripped from the destination given by the user and it will not be stored in the part plan file.
+		DestinationSAS: cca.destinationSAS,
+		CommandString:  cca.commandString,
+		CredentialInfo: cca.credentialInfo,
 	}
 
 	// TODO remove this copy pasted code during refactoring
@@ -618,6 +750,21 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 
+	case common.ELocation.S3():
+		fromURL, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromURL.String(), err.Error())
+		}
+
+		// S3 management console encode ' '(space) as '+', which is not supported by Azure resources.
+		// To support URL from S3 managment console, azcopy decode '+' as ' '(space).
+		*fromURL = common.URLExtension{URL: *fromURL}.URLWithPlusDecodedInPath()
+		cca.source = fromURL.String()
+
+		// set the clean source root
+		fromURL.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fromURL.Path)
+		jobPartOrder.SourceRoot = fromURL.String()
+
 	default:
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 	}
@@ -659,8 +806,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// set the root destination after it's been cleaned
 	jobPartOrder.DestinationRoot = cca.destination
 
-	// lastPartNumber determines the last part number order send for the Job.
-	var lastPartNumber common.PartNumber
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
@@ -671,40 +816,55 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.EFromTo.LocalFile():
 		e := copyUploadEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobLocal():
 		e := copyDownloadBlobEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.FileLocal():
 		e := copyDownloadFileEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobFSLocal():
 		e := copyDownloadBlobFSEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
 	case common.EFromTo.BlobTrash():
-		e := removeBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
+		e, createErr := newRemoveBlobEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+
+		err = e.enumerate()
 	case common.EFromTo.FileTrash():
-		e := removeFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
+		e, createErr := newRemoveFileEnumerator(cca)
+		if createErr != nil {
+			return createErr
+		}
+
+		err = e.enumerate()
 	case common.EFromTo.BlobBlob():
-		e := copyBlobToNEnumerator{
-			copyS2SEnumerator: copyS2SEnumerator{
+		e := copyS2SMigrationBlobEnumerator{
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
 				CopyJobPartOrderRequest: jobPartOrder,
 			},
 		}
 		err = e.enumerate(cca)
-		lastPartNumber = e.PartNum
+	case common.EFromTo.FileBlob():
+		e := copyS2SMigrationFileEnumerator{
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
+				CopyJobPartOrderRequest: jobPartOrder,
+			},
+		}
+		err = e.enumerate(cca)
+	case common.EFromTo.S3Blob():
+		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
+			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
+				CopyJobPartOrderRequest: jobPartOrder,
+			},
+		}
+		err = e.enumerate(cca)
+
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
 	// case common.EFromTo.FileBlob():
 	// 	e := copyFileToNEnumerator(jobPartOrder)
 	// 	err = e.enumerate(cca)
-	// 	lastPartNumber = e.PartNum
 	default:
 		return fmt.Errorf("copy direction %v is not supported\n", cca.fromTo)
 	}
@@ -713,16 +873,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		return fmt.Errorf("cannot start job due to error: %s.\n", err)
 	}
 
-	// in background mode we would spit out the job id and quit
-	// in foreground mode we would continuously print out status updates for the job, so the job id is not important
-	if cca.background {
-		return nil
-	}
-
-	// If there is only one part, then start fetching the JobPart Order.
-	if lastPartNumber == 0 {
-		cca.waitUntilJobCompletion(false)
-	}
 	return nil
 }
 
@@ -836,7 +986,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.IsDiskConstrained, duration)
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
 			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.TransfersCompleted,
@@ -849,15 +999,15 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
 // to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, isDiskConstrained bool, durationOfJob time.Duration) (perfString string, diskString string) {
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration) (perfString string, diskString string) {
 	perfString = ""
 	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
 	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
-	if isDiskConstrained && haveBeenRunningLongEnoughToStabilize {
-		diskString = " (disk may be limiting speed)"
+	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize {
+		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
 		diskString = ""
 	}
@@ -936,11 +1086,11 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include these files when copying. "+
+	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
@@ -957,13 +1107,32 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
+	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
-	// TODO: should the previous line list the allowable values?
 
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
+		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
+		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
+		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-source-change-validation", false, "check if source has changed after enumerating. "+
+		"For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs. ")
+	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-invalid-metadata-handle", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
+
+	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
+	// right before transferring in ste(backend).
+	// The traditional behavior of all existing enumerator is to get full properties during enumerating(more specifically listing),
+	// while this could cause big performance issue for S3 and Azure file, where listing doesn't return full properties,
+	// and enumerating logic do fetching properties sequentially!
+	// To achieve better performance and at same time have good control for overall go routine numbers, getting property in ste is introduced,
+	// so properties can be get in parallel, at same time no additional go routines are created for this specific job.
+	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend. ")
 
 	// not implemented
 	cpCmd.PersistentFlags().MarkHidden("acl")
@@ -972,5 +1141,7 @@ func init() {
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("include")
+	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
+	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 }

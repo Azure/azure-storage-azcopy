@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/url"
@@ -13,8 +14,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	minio "github.com/minio/minio-go"
 	"github.com/spf13/cobra"
 )
 
@@ -46,6 +49,7 @@ func init() {
 	contentLanguage := ""
 	cacheControl := ""
 	contentMD5 := ""
+	location := ""
 
 	createCmd := &cobra.Command{
 		Use:     "create",
@@ -95,7 +99,40 @@ func init() {
 				case EResourceType.Bucket():
 					createShareOrDirectory(resourceURL)
 				case EResourceType.SingleFile():
-					createFile(resourceURL)
+					createFile(
+						resourceURL,
+						blobSize,
+						getFileMetadata(metaData),
+						azfile.FileHTTPHeaders{
+							ContentType:        contentType,
+							ContentDisposition: contentDisposition,
+							ContentEncoding:    contentEncoding,
+							ContentLanguage:    contentLanguage,
+							ContentMD5:         []byte(contentMD5),
+							CacheControl:       cacheControl,
+						})
+				default:
+					panic(fmt.Errorf("not implemented %v", resourceType))
+				}
+			case EServiceType.S3():
+				switch resourceType {
+				case EResourceType.Bucket():
+					createBucket(resourceURL)
+				case EResourceType.SingleFile():
+					// For S3, no content-MD5 will be returned during HEAD, i.e. no content-MD5 will be preserved during copy.
+					// And content-MD5 header is not set during upload. E.g. in S3 management portal, no property content-MD5 can be set.
+					// So here create object without content-MD5 as common practice.
+					createObject(
+						resourceURL,
+						blobSize,
+						minio.PutObjectOptions{
+							ContentType:        contentType,
+							ContentDisposition: contentDisposition,
+							ContentEncoding:    contentEncoding,
+							ContentLanguage:    contentLanguage,
+							CacheControl:       cacheControl,
+							UserMetadata:       getS3Metadata(metaData),
+						})
 				default:
 					panic(fmt.Errorf("not implemented %v", resourceType))
 				}
@@ -118,6 +155,7 @@ func init() {
 	createCmd.PersistentFlags().StringVar(&contentLanguage, "content-language", "", "content language for blob.")
 	createCmd.PersistentFlags().StringVar(&cacheControl, "cache-control", "", "cache control for blob.")
 	createCmd.PersistentFlags().StringVar(&contentMD5, "content-md5", "", "content MD5 for blob.")
+	createCmd.PersistentFlags().StringVar(&location, "location", "", "Location of the Azure account or S3 bucket to create")
 
 }
 
@@ -126,6 +164,33 @@ func getBlobMetadata(metadataString string) azblob.Metadata {
 
 	if len(metadataString) > 0 {
 		metadata = azblob.Metadata{}
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadata[kv[0]] = kv[1]
+		}
+	}
+
+	return metadata
+}
+
+func getFileMetadata(metadataString string) azfile.Metadata {
+	var metadata azfile.Metadata
+
+	if len(metadataString) > 0 {
+		metadata = azfile.Metadata{}
+		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
+			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
+			metadata[kv[0]] = kv[1]
+		}
+	}
+
+	return metadata
+}
+
+func getS3Metadata(metadataString string) map[string]string {
+	metadata := make(map[string]string)
+
+	if len(metadataString) > 0 {
 		for _, keyAndValue := range strings.Split(metadataString, ";") { // key/value pairs are separated by ';'
 			kv := strings.Split(keyAndValue, "=") // key/value are separated by '='
 			metadata[kv[0]] = kv[1]
@@ -149,8 +214,8 @@ func createContainer(container string) {
 	containerURL := azblob.NewContainerURL(*u, p)
 	_, err = containerURL.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
 
-	if err != nil {
-		fmt.Println("error createContainer, ", err)
+	if ignoreStorageConflictStatus(err) != nil {
+		fmt.Println("fail to create container, ", err)
 		os.Exit(1)
 	}
 }
@@ -194,12 +259,28 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 
 	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 
-	// Suppose it's a directory or share, try create and doesn't care if error happened.
-	dirURL := azfile.NewDirectoryURL(*u, p)
-	_, _ = dirURL.Create(context.Background(), azfile.Metadata{})
+	fileURLPart := azfile.NewFileURLParts(*u)
 
-	shareURL := azfile.NewShareURL(*u, p)
-	_, _ = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+	isShare := false
+	if fileURLPart.ShareName != "" && fileURLPart.DirectoryOrFilePath == "" {
+		isShare = true
+		// This is a share
+		shareURL := azfile.NewShareURL(*u, p)
+		_, err := shareURL.Create(context.Background(), azfile.Metadata{}, 0)
+		if ignoreStorageConflictStatus(err) != nil {
+			fmt.Println("fail to create share, ", err)
+			os.Exit(1)
+		}
+	}
+
+	dirURL := azfile.NewDirectoryURL(*u, p) // i.e. root directory, in share's case
+	if !isShare {
+		_, err := dirURL.Create(context.Background(), azfile.Metadata{})
+		if ignoreStorageConflictStatus(err) != nil {
+			fmt.Println("fail to create directory, ", err)
+			os.Exit(1)
+		}
+	}
 
 	// Finally valdiate if directory with specified URL exists, if doesn't exist, then report create failure.
 	time.Sleep(1 * time.Second)
@@ -211,6 +292,83 @@ func createShareOrDirectory(shareOrDirectoryURLStr string) {
 	}
 }
 
-func createFile(fileURLStr string) {
-	panic("todo")
+func createFile(fileURLStr string, fileSize uint32, metadata azfile.Metadata, fileHTTPHeaders azfile.FileHTTPHeaders) {
+	url, err := url.Parse(fileURLStr)
+	if err != nil {
+		fmt.Println("error parsing the blob sas ", err)
+		os.Exit(1)
+	}
+	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
+	fileURL := azfile.NewFileURL(*url, p)
+
+	randomString := createStringWithRandomChars(int(fileSize))
+	if fileHTTPHeaders.ContentType == "" {
+		fileHTTPHeaders.ContentType = http.DetectContentType([]byte(randomString))
+	}
+
+	err = azfile.UploadBufferToAzureFile(context.Background(), []byte(randomString), fileURL, azfile.UploadToAzureFileOptions{
+		FileHTTPHeaders: fileHTTPHeaders,
+		Metadata:        metadata,
+	})
+	if err != nil {
+		fmt.Println(fmt.Sprintf("error uploading the file %v", err))
+		os.Exit(1)
+	}
+}
+
+func createBucket(bucketURLStr string) {
+	u, err := url.Parse(bucketURLStr)
+
+	if err != nil {
+		fmt.Println("fail to parse the bucket URL, ", err)
+		os.Exit(1)
+	}
+
+	s3URLParts, err := common.NewS3URLParts(*u)
+	if err != nil {
+		fmt.Println("new S3 URL parts, ", err)
+		os.Exit(1)
+	}
+
+	s3Client := createS3ClientWithMinio(createS3ResOptions{
+		Location: s3URLParts.Region,
+	})
+
+	if err := s3Client.MakeBucket(s3URLParts.BucketName, s3URLParts.Region); err != nil {
+		exists, err := s3Client.BucketExists(s3URLParts.BucketName)
+		if err != nil || !exists {
+			fmt.Println("fail to create bucket, ", err)
+			os.Exit(1)
+		}
+	}
+}
+
+func createObject(objectURLStr string, objectSize uint32, o minio.PutObjectOptions) {
+	u, err := url.Parse(objectURLStr)
+	if err != nil {
+		fmt.Println("fail to parse the object URL, ", err)
+		os.Exit(1)
+	}
+
+	s3URLParts, err := common.NewS3URLParts(*u)
+	if err != nil {
+		fmt.Println("new S3 URL parts, ", err)
+		os.Exit(1)
+	}
+
+	s3Client := createS3ClientWithMinio(createS3ResOptions{
+		Location: s3URLParts.Region,
+	})
+
+	randomString := createStringWithRandomChars(int(objectSize))
+	if o.ContentType == "" {
+		o.ContentType = http.DetectContentType([]byte(randomString))
+	}
+
+	_, err = s3Client.PutObject(s3URLParts.BucketName, s3URLParts.ObjectKey, bytes.NewReader([]byte(randomString)), int64(objectSize), o)
+
+	if err != nil {
+		fmt.Println("fail to upload file to S3 object, ", err)
+		os.Exit(1)
+	}
 }

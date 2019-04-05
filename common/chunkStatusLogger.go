@@ -83,16 +83,20 @@ type WaitReason struct {
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
 func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
 func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{3, "Head"} }               // waiting to finish downloading the HEAD
-func (WaitReason) Body() WaitReason                 { return WaitReason{4, "Body"} }               // waiting to finish sending/receiving the BODY
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{5, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{6, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) Sorting() WaitReason              { return WaitReason{7, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason{8, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
-func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{9, "Queue"} }              // prior chunk has arrived, but is not yet written out to disk
-func (WaitReason) DiskIO() WaitReason               { return WaitReason{10, "DiskIO"} }            // waiting on disk read/write to complete
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{11, "Done"} }              // not waiting on anything. Chunk is done.
-func (WaitReason) Cancelled() WaitReason            { return WaitReason{12, "Cancelled"} }         // transfer was cancelled.  All chunks end with either Done or Cancelled.
+func (WaitReason) FilePacer() WaitReason            { return WaitReason{3, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{4, "Head"} }               // waiting to finish downloading the HEAD
+func (WaitReason) Body() WaitReason                 { return WaitReason{5, "Body"} }               // waiting to finish sending/receiving the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{6, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{7, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) Sorting() WaitReason              { return WaitReason{8, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason{9, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
+func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
+func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
+// NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
+// the need to also change numWaitReasons()
+func (WaitReason) Cancelled() WaitReason { return WaitReason{14, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -115,6 +119,9 @@ var uploadWaitReasons = []WaitReason{
 	// Chunks in this state are effectively a queue of work waiting to be sent over the network
 	EWaitReason.WorkerGR(),
 
+	// Waiting until the per-file pacer (if any applies to this upload) says we can proceed
+	EWaitReason.FilePacer(),
+
 	// This is the actual network activity
 	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
@@ -129,6 +136,9 @@ var downloadWaitReasons = []WaitReason{
 	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.
 	// Chunks in this state are effectively a queue of work, waiting for their network downloads to be initiated
 	EWaitReason.WorkerGR(),
+
+	// Waiting until the per-file pacer (if any applies to this download) says we can proceed
+	EWaitReason.FilePacer(),
 
 	// These next ones are the actual network activity
 	EWaitReason.HeaderResponse(),
@@ -150,34 +160,50 @@ var downloadWaitReasons = []WaitReason{
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
+var s2sCopyWaitReasons = []WaitReason{
+	// Waiting for a worker Go routine to pick up the scheduled chunk func.
+	// Chunks in this state are effectively a queue of work waiting to be sent over the network
+	EWaitReason.WorkerGR(),
+
+	// Waiting until the per-file pacer (if any applies to this s2sCopy) says we can proceed
+	EWaitReason.FilePacer(),
+
+	// Start to send Put*FromURL, then S2S copy will start in service side, and Azcopy will wait the response which indicates copy get finished.
+	EWaitReason.S2SCopyOnWire(),
+}
+
 func (wr WaitReason) String() string {
 	return string(wr.Name) // avoiding reflection here, for speed, since will be called a lot
 }
 
 type ChunkStatusLogger interface {
 	LogChunkStatus(id ChunkID, reason WaitReason)
+	IsWaitingOnFinalBodyReads() bool
 }
 
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
-	GetCounts(isDownload bool) []chunkStatusCount
-	IsDiskConstrained(isUpload, isDownload bool) bool
-	CloseLog()
+	GetCounts(td TransferDirection) []chunkStatusCount
+	GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint
+	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
 }
 
 // chunkStatusLogger records all chunk state transitions, and makes aggregate data immediately available
 // for performance diagnostics. Also optionally logs every individual transition to a file.
 type chunkStatusLogger struct {
-	counts         []int64
-	outputEnabled  bool
-	unsavedEntries chan chunkWaitState
+	counts                          []int64
+	outputEnabled                   bool
+	unsavedEntries                  chan *chunkWaitState
+	flushDone                       chan struct{}
+	atomicIsWaitingOnFinalBodyReads int32
 }
 
 func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
-		unsavedEntries: make(chan chunkWaitState, 1000000),
+		unsavedEntries: make(chan *chunkWaitState, 1000000),
+		flushDone:      make(chan struct{}),
 	}
 	if enableOutput {
 		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
@@ -187,7 +213,7 @@ func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) 
 }
 
 func numWaitReasons() int32 {
-	return EWaitReason.Cancelled().index + 1 // assume this is the last wait reason
+	return EWaitReason.Cancelled().index + 1 // assume that maitainers follow the comment above to always keep Cancelled as numerically the greatest one
 }
 
 type chunkStatusCount struct {
@@ -210,23 +236,20 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 	if !csl.outputEnabled {
 		return
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			// recover panic from writing to closed channel
-			// May happen in early exit of app, when Close is called before last call to this routine
-		}
-	}()
 
-	csl.unsavedEntries <- chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
+	csl.unsavedEntries <- &chunkWaitState{ChunkID: id, reason: reason, waitStart: time.Now()}
 }
 
-func (csl *chunkStatusLogger) CloseLog() {
+func (csl *chunkStatusLogger) FlushLog() {
 	if !csl.outputEnabled {
 		return
 	}
-	close(csl.unsavedEntries)
-	for len(csl.unsavedEntries) > 0 {
-		time.Sleep(100 * time.Millisecond)
+
+	// In order to be idempotent, we don't close any channel here, we just flush it
+
+	csl.unsavedEntries <- nil // tell writer that it it must flush, then wait until it has done so
+	select {
+	case <-csl.flushDone:
 	}
 }
 
@@ -238,12 +261,27 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 	defer func() { _ = f.Close() }()
 
 	w := bufio.NewWriter(f)
-	defer func() { _ = w.Flush() }()
-
 	_, _ = w.WriteString("Name,Offset,State,StateStartTime\n")
 
+	doFlush := func() {
+		_ = w.Flush()
+		_ = f.Sync()
+	}
+	defer doFlush()
+
+	alwaysFlushFromNowOn := false
 	for x := range csl.unsavedEntries {
+		if x == nil {
+			alwaysFlushFromNowOn = true
+			doFlush()
+			csl.flushDone <- struct{}{}
+			continue // TODO can become break (or be moved to later if we close unsaved entries, once we figure out how we got stuff written to us after CloseLog was called)
+		}
 		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
+		if alwaysFlushFromNowOn {
+			// TODO: remove when we figure out how we got stuff written to us after CloseLog was called. For now, this should handle those cases (if they still exist)
+			doFlush()
+		}
 	}
 }
 
@@ -275,13 +313,16 @@ func (csl *chunkStatusLogger) getCount(reason WaitReason) int64 {
 
 // Gets the current counts of chunks in each wait state
 // Intended for performance diagnostics and reporting
-func (csl *chunkStatusLogger) GetCounts(isDownload bool) []chunkStatusCount {
-
+func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount {
 	var allReasons []WaitReason
-	if isDownload {
-		allReasons = downloadWaitReasons
-	} else {
+
+	switch td {
+	case ETransferDirection.Upload():
 		allReasons = uploadWaitReasons
+	case ETransferDirection.Download():
+		allReasons = downloadWaitReasons
+	case ETransferDirection.S2SCopy():
+		allReasons = s2sCopyWaitReasons
 	}
 
 	result := make([]chunkStatusCount, len(allReasons))
@@ -302,14 +343,30 @@ func (csl *chunkStatusLogger) GetCounts(isDownload bool) []chunkStatusCount {
 	return result
 }
 
-func (csl *chunkStatusLogger) IsDiskConstrained(isUpload, isDownload bool) bool {
-	if isUpload {
-		return csl.isUploadDiskConstrained()
-	} else if isDownload {
-		return csl.isDownloadDiskConstrained()
-	} else {
-		return false // it's neither upload nor download (e.g. S2S)
+func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint {
+	switch {
+	// it seems sensible to report file pacer (Service) constraint as a higher priority than Disk, if both exist at the same time (but usually they won't)
+	case csl.isConstrainedByFilePacer():
+		return EPerfConstraint.Service() // service is throttling us (as at March 2019, we only detect this for page blobs, but that may change in future)
+
+	case td == ETransferDirection.Upload() && csl.isUploadDiskConstrained():
+		return EPerfConstraint.Disk()
+
+	case td == ETransferDirection.Download() && csl.isDownloadDiskConstrained():
+		return EPerfConstraint.Disk()
+
+	default:
+		return EPerfConstraint.Unknown()
 	}
+}
+
+const (
+	nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
+)
+
+func (csl *chunkStatusLogger) isConstrainedByFilePacer() bool {
+	haveBigQueueForPacer := csl.getCount(EWaitReason.FilePacer()) >= nearZeroQueueSize
+	return haveBigQueueForPacer
 }
 
 // is disk the bottleneck in an upload?
@@ -320,7 +377,6 @@ func (csl *chunkStatusLogger) isUploadDiskConstrained() bool {
 	// (not the _execution_ and so their counts will just tend to equal that of the small goroutine pool that runs them).
 	// It might be convenient if we could compare TWO queue sizes here, as we do in isDownloadDiskConstrained, but unfortunately our
 	// Jan 2019 architecture only gives us ONE useful queue-like state when uploading, so we can't compare two.
-	const nearZeroQueueSize = 10 // TODO: is there any intelligent way to set this threshold? It's just an arbitrary guestimate of "small" at the moment
 	queueForNetworkIsSmall := csl.getCount(EWaitReason.WorkerGR()) < nearZeroQueueSize
 
 	beforeGRWaitQueue := csl.getCount(EWaitReason.RAMToSchedule()) + csl.getCount(EWaitReason.DiskIO())
@@ -337,13 +393,31 @@ func (csl *chunkStatusLogger) isDownloadDiskConstrained() bool {
 	chunksWaitingOnDisk := csl.getCount(EWaitReason.Sorting()) + csl.getCount(EWaitReason.QueueToWrite())
 
 	// i.e. are queued before the actual network states
-	chunksWaitingOnNetwork := csl.getCount(EWaitReason.WorkerGR())
+	chunksQueuedBeforeNetwork := csl.getCount(EWaitReason.WorkerGR())
 
 	// if we have way more stuff waiting on disk than on network, we can assume disk is the bottleneck
 	const activeDiskQThreshold = 10
-	const bigDifference = 5                              // TODO: review/tune the arbitrary constant here
-	return chunksWaitingOnDisk > activeDiskQThreshold && // this test is in case both are near zero, as they would be near the end of the job
-		chunksWaitingOnDisk > bigDifference*chunksWaitingOnNetwork
+	const bigDifference = 5                                            // TODO: review/tune the arbitrary constant here
+	isDiskConstrained := chunksWaitingOnDisk > activeDiskQThreshold && // this test is in case both are near zero, as they would be near the end of the job
+		chunksWaitingOnDisk > bigDifference*chunksQueuedBeforeNetwork
+
+	// while we are here... set an indicator of whether we are waiting on body reads (only) with nothing more to download
+	// TODO: find a better place for this code
+	const finalBodyReadsThreshold = 50 // an empirically-derived guestimate of a suitable value.  Too high, and we trigger the final waiting logic too soon; too low and we trigger to too late
+	chunksBeforeBody := csl.getCount(EWaitReason.RAMToSchedule()) + chunksQueuedBeforeNetwork + csl.getCount(EWaitReason.HeaderResponse())
+	chunksWaitingOnBody := csl.getCount(EWaitReason.Body())
+	isSmallNumberWaitingOnBody := chunksWaitingOnBody > 0 && chunksWaitingOnBody < finalBodyReadsThreshold
+	if chunksBeforeBody == 0 && isSmallNumberWaitingOnBody {
+		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 1) // there's nothing BEFORE the body stage, so the body stage is the hold-up
+	} else {
+		atomic.StoreInt32(&csl.atomicIsWaitingOnFinalBodyReads, 0)
+	}
+
+	return isDiskConstrained
+}
+
+func (csl *chunkStatusLogger) IsWaitingOnFinalBodyReads() bool {
+	return atomic.LoadInt32(&csl.atomicIsWaitingOnFinalBodyReads) == 1 // not computed on demand, because there will be LOTS of calls (>= 1 per chunk)
 }
 
 ///////////////////////////////////// Sample LinqPad query for manual analysis of chunklog /////////////////////////////////////

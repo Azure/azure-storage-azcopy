@@ -23,6 +23,8 @@ package ste
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,11 +68,12 @@ type IJobMgr interface {
 	ReleaseAConnection()
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
-	GetPerfInfo() (displayStrings []string, isDiskConstrained bool)
+	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
-	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
+	ChunkStatusLogger() common.ChunkStatusLogger
+	HttpClient() *http.Client
 
 	common.ILoggerCloser
 }
@@ -81,6 +84,7 @@ func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Cont
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
+		httpClient:        NewAzcopyHTTPClient(),
 		logger:            common.NewJobLogger(jobID, level, appLogger, logFileFolder),
 		chunkStatusLogger: common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
 		/*Other fields remain zero-value until this job is scheduled */}
@@ -96,11 +100,20 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 	if len(commandString) > 0 {
 		jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Job-Command %s", commandString))
 	}
+	jm.logConcurrencyParameters()
 	jm.ctx, jm.cancel = context.WithCancel(appCtx)
 	atomic.StoreUint64(&jm.atomicNumberOfBytesCovered, 0)
 	atomic.StoreUint64(&jm.atomicTotalBytesToXfer, 0)
 	jm.partsDone = 0
 	return jm
+}
+
+func (jm *jobMgr) logConcurrencyParameters() {
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB", float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d", JobsAdmin.(*jobsAdmin).fileCountLimiter.Limit()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d", NumTransferInitiationRoutines))
+	// TODO: find a way to add concurrency value here (i.e. number of chunk func worker go routines)
 }
 
 // jobMgr represents the runtime information for a Job
@@ -110,6 +123,10 @@ type jobMgr struct {
 	jobID             common.JobID // The Job's unique ID
 	ctx               context.Context
 	cancel            context.CancelFunc
+
+	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
+	// its internal connection pool
+	httpClient *http.Client
 
 	jobPartMgrs jobPartToJobPartMgr // The map of part #s to JobPartMgrs
 	// partsDone keep the count of completed part of the Job.
@@ -130,8 +147,7 @@ type jobMgr struct {
 	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
 	// TODO: added for debugging purpose. remove later
 	atomicCurrentConcurrentConnections int64
-	atomicIsUploadIndicator            int32
-	atomicIsDownloadIndicator          int32
+	atomicTransferDirection            common.TransferDirection
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -171,12 +187,11 @@ func (jm *jobMgr) ActiveConnections() int64 {
 
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
-func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool) {
+func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint) {
+	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction
-	isUpload := atomic.LoadInt32(&jm.atomicIsUploadIndicator) == 1
-	isDownload := atomic.LoadInt32(&jm.atomicIsDownloadIndicator) == 1
-	chunkStateCounts := jm.chunkStatusLogger.GetCounts(isDownload)
+	chunkStateCounts := jm.chunkStatusLogger.GetCounts(atomicTransferDirection)
 
 	// convert the counts to simple strings for consumption by callers
 	const format = "%c: %2d"
@@ -188,24 +203,19 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, isDiskConstrained bool
 	}
 	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
 
-	diskCon := jm.chunkStatusLogger.IsDiskConstrained(isUpload, isDownload)
+	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection)
 
 	// logging from here is a bit of a hack
 	// TODO: can we find a better way to get this info into the log?  The caller is at app level,
 	//    not job level, so can't log it directly AFAICT.
-	jm.logPerfInfo(result, diskCon)
+	jm.logPerfInfo(result, con)
 
-	return result, diskCon
+	return result, con
 }
 
-func (jm *jobMgr) logPerfInfo(displayStrings []string, isDiskConstrained bool) {
-	var diskString string
-	if isDiskConstrained {
-		diskString = "disk MAY BE limiting throughput"
-	} else {
-		diskString = "disk IS NOT limiting throughput"
-	}
-	msg := fmt.Sprintf("PERF: disk %s. States: %s", diskString, strings.Join(displayStrings, ", "))
+func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfConstraint) {
+	constraintString := fmt.Sprintf("primary performance constraint is %s", constraint)
+	msg := fmt.Sprintf("PERF: %s. States: %s", constraintString, strings.Join(displayStrings, ", "))
 	jm.Log(pipeline.LogInfo, msg)
 }
 
@@ -214,8 +224,9 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 	destinationSAS string, scheduleTransfers bool) IJobPartMgr {
 	jpm := &jobPartMgr{jobMgr: jm, filename: planFile, sourceSAS: sourceSAS,
 		destinationSAS: destinationSAS, pacer: JobsAdmin.(*jobsAdmin).pacer,
-		slicePool:    JobsAdmin.(*jobsAdmin).slicePool,
-		cacheLimiter: JobsAdmin.(*jobsAdmin).cacheLimiter}
+		slicePool:        JobsAdmin.(*jobsAdmin).slicePool,
+		cacheLimiter:     JobsAdmin.(*jobsAdmin).cacheLimiter,
+		fileCountLimiter: JobsAdmin.(*jobsAdmin).fileCountLimiter}
 	jpm.planMMF = jpm.filename.Map()
 	jm.jobPartMgrs.Set(partNum, jpm)
 	jm.finalPartOrdered = jpm.planMMF.Plan().IsFinalPart
@@ -234,16 +245,29 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 // Remembers which direction we are running in (upload, download or neither (for service to service))
 // It actually remembers the direction that our most recently-added job PART is running in,
 // because that's where the fromTo information can be found,
-// but we assume taht all the job parts are running in the same direction
+// but we assume that all the job parts are running in the same direction.
+// TODO: Optimize this when it's necessary for delete.
 func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 	fromIsLocal := fromTo.From() == common.ELocation.Local()
 	toIsLocal := fromTo.To() == common.ELocation.Local()
 
 	isUpload := fromIsLocal && !toIsLocal
 	isDownload := !fromIsLocal && toIsLocal
+	isS2SCopy := fromTo.From().IsRemote() && fromTo.To().IsRemote()
 
-	atomic.StoreInt32(&jm.atomicIsUploadIndicator, common.Iffint32(isUpload, 1, 0))
-	atomic.StoreInt32(&jm.atomicIsDownloadIndicator, common.Iffint32(isDownload, 1, 0))
+	if isUpload {
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Upload())
+	}
+	if isDownload {
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Download())
+	}
+	if isS2SCopy {
+		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
+	}
+}
+
+func (jm *jobMgr) HttpClient() *http.Client {
+	return jm.httpClient
 }
 
 // SetIncludeExclude sets the include / exclude list of transfers
@@ -316,6 +340,9 @@ func (jm *jobMgr) ReportJobPartDone() uint32 {
 	case common.EJobStatus.InProgress():
 		part0Plan.SetJobStatus((common.EJobStatus).Completed())
 	}
+
+	jm.chunkStatusLogger.FlushLog() // TODO: remove once we sort out what will be calling CloseLog (currently nothing)
+
 	return partsDone
 }
 
@@ -342,11 +369,11 @@ func (jm *jobMgr) PipelineLogInfo() pipeline.LogOptions {
 func (jm *jobMgr) Panic(err error) { jm.logger.Panic(err) }
 func (jm *jobMgr) CloseLog() {
 	jm.logger.CloseLog()
-	jm.chunkStatusLogger.CloseLog()
+	jm.chunkStatusLogger.FlushLog()
 }
 
-func (jm *jobMgr) LogChunkStatus(id common.ChunkID, reason common.WaitReason) {
-	jm.chunkStatusLogger.LogChunkStatus(id, reason)
+func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
+	return jm.chunkStatusLogger
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed

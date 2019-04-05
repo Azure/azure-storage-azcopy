@@ -52,7 +52,7 @@ type CopyJobPartOrderRequest struct {
 	Exclude     map[string]int
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
-	SourceRoot string
+	SourceRoot      string
 	DestinationRoot string
 	Transfers       []CopyTransfer
 	LogLevel        LogLevel
@@ -62,13 +62,24 @@ type CopyJobPartOrderRequest struct {
 	// commandString hold the user given command which is logged to the Job log file
 	CommandString  string
 	CredentialInfo CredentialInfo
+
+	S2SGetPropertiesInBackend    bool
+	S2SSourceChangeValidation      bool
+	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 }
 
 // CredentialInfo contains essential credential info which need be transited between modules,
 // and used during creating Azure storage client Credential.
 type CredentialInfo struct {
-	CredentialType CredentialType
-	OAuthTokenInfo OAuthTokenInfo
+	CredentialType   CredentialType
+	OAuthTokenInfo   OAuthTokenInfo
+	S3CredentialInfo S3CredentialInfo
+}
+
+// S3CredentialInfo contains essential credential info which need to build up S3 client.
+type S3CredentialInfo struct {
+	Endpoint string
+	Region   string
 }
 
 type CopyJobPartOrderResponse struct {
@@ -93,6 +104,7 @@ type BlobTransferAttributes struct {
 	Metadata                 string               //User-defined Name-value pairs associated with the blob
 	NoGuessMimeType          bool                 // represents user decision to interpret the content-encoding from source file
 	PreserveLastModifiedTime bool                 // when downloading, tell engine to set file's timestamp to timestamp of blob
+	PutMd5                   bool                 // when uploading, should we create and PUT Content-MD5 hashes
 	MD5ValidationOption      HashValidationOption // when downloading, how strictly should we validate MD5 hashes?
 	BlockSizeInBytes         uint32
 }
@@ -135,7 +147,7 @@ type ListJobSummaryResponse struct {
 	TotalBytesEnumerated uint64
 	FailedTransfers      []TransferDetail
 	SkippedTransfers     []TransferDetail
-	IsDiskConstrained    bool
+	PerfConstraint       PerfConstraint
 	PerfStrings          []string `json:"-"`
 }
 
@@ -157,7 +169,7 @@ type ListSyncJobSummaryResponse struct {
 	DeleteTransfersCompleted uint32
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
-	IsDiskConstrained        bool
+	PerfConstraint           PerfConstraint
 	PerfStrings              []string `json:"-"`
 	// sum of the size of transfer completed successfully so far.
 	TotalBytesTransferred uint64

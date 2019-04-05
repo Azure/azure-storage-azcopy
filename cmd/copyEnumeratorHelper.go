@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	minio "github.com/minio/minio-go"
 )
 
 // addTransfer accepts a new transfer, if the threshold is reached, dispatch a job part order.
@@ -69,7 +70,64 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 
 	// set the flag on cca, to indicate the enumeration is done
 	cca.isEnumerationComplete = true
+
+	// if the current part order sent to engine is 0, then start fetching the Job Progress summary.
+	if e.PartNum == 0 {
+		cca.waitUntilJobCompletion(false)
+	}
 	return nil
+}
+
+var handleSingleFileValidationErrStr = "source is not validated as a single file: %v"
+var infoCopyFromContainerDirectoryListOfFiles = "trying to copy the source as container/directory/list of files"
+var infoCopyFromBucketDirectoryListOfFiles = "trying to copy the source as bucket/folder/list of files"
+var infoCopyFromDirectoryListOfFiles = "trying to copy the source as directory/list of files"
+var infoCopyFromAccount = "trying to copy the source account"
+
+func handleSingleFileValidationErrorForBlob(err error) {
+	errRootCause := err.Error()
+	stgErr, isStgErr := err.(azblob.StorageError)
+	if isStgErr {
+		if stgErr.ServiceCode() == azblob.ServiceCodeAuthenticationFailed {
+			errRootCause = fmt.Sprintf("%s, please check if SAS or OAuth is used properly, or source is a public blob", stgErr.ServiceCode())
+		} else {
+			errRootCause = string(stgErr.ServiceCode())
+		}
+	}
+
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+}
+
+func handleSingleFileValidationErrorForAzureFile(err error) {
+	errRootCause := err.Error()
+	stgErr, isStgErr := err.(azfile.StorageError)
+	if isStgErr {
+		if stgErr.ServiceCode() == azfile.ServiceCodeAuthenticationFailed {
+			errRootCause = fmt.Sprintf("%s, please check if SAS is set properly", stgErr.ServiceCode())
+		} else {
+			errRootCause = string(stgErr.ServiceCode())
+		}
+	}
+
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+}
+
+func handleSingleFileValidationErrorForADLSGen2(err error) {
+	errRootCause := err.Error()
+	stgErr, isStgErr := err.(azbfs.StorageError)
+	if isStgErr {
+		if stgErr.ServiceCode() == azbfs.ServiceCodeAuthenticationFailed {
+			errRootCause = fmt.Sprintf("%s, please check if AccessKey or OAuth is used properly", stgErr.ServiceCode())
+		} else {
+			errRootCause = string(stgErr.ServiceCode())
+		}
+	}
+
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+}
+
+func handleSingleFileValidationErrorForS3(err error) {
+	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, err.Error()))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -255,5 +313,48 @@ func enumerateFilesInADLSGen2Directory(ctx context.Context, directoryURL azbfs.D
 		}
 
 	}
+	return nil
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// S3 service enumerators.
+//////////////////////////////////////////////////////////////////////////////////////////
+// enumerateBucketsInServiceWithMinio is the helper for enumerating buckets in S3 service.
+func enumerateBucketsInServiceWithMinio(bucketInfos []minio.BucketInfo,
+	filter func(bucketInfo minio.BucketInfo) bool,
+	callback func(bucketInfo minio.BucketInfo) error) error {
+
+	for _, bucketInfo := range bucketInfos {
+		if !filter(bucketInfo) {
+			continue
+		}
+
+		if err := callback(bucketInfo); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// enumerateObjectsInBucketWithMinio enumerates objects in bucket.
+func enumerateObjectsInBucketWithMinio(ctx context.Context, s3Client *minio.Client, bucketName, objectNamePrefix string,
+	filter func(objectInfo minio.ObjectInfo) bool,
+	callback func(objectInfo minio.ObjectInfo) error) error {
+
+	for objectInfo := range s3Client.ListObjectsV2(bucketName, objectNamePrefix, true, ctx.Done()) {
+		if objectInfo.Err != nil {
+			return fmt.Errorf("cannot list objects, %v", objectInfo.Err)
+		}
+
+		if !filter(objectInfo) {
+			continue
+		}
+
+		if err := callback(objectInfo); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }

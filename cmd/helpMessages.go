@@ -19,11 +19,13 @@ The general format of the commands is: 'azcopy [command] [arguments] --[flag-nam
 const copyCmdShortDescription = "Copies source data to a destination location"
 
 const copyCmdLongDescription = `
-Copies source data to a destination location. The supported pairs are:
+Copies source data to a destination location. The supported directions are:
   - local <-> Azure Blob (SAS or OAuth authentication)
-  - local <-> Azure File (SAS authentication)
+  - local <-> Azure File (Share/directory SAS authentication)
   - local <-> ADLS Gen 2 (OAuth or SharedKey authentication)
-  - Azure Block Blob (SAS or public) <-> Azure Block Blob (SAS or OAuth authentication)
+  - Azure Blob (SAS or public) <-> Azure Blob (SAS or OAuth authentication)
+  - Azure File (SAS) -> Azure Block Blob (SAS or OAuth authentication)
+  - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
 
 Please refer to the examples for more information.
 
@@ -41,6 +43,9 @@ On Windows, MIME types are extracted from the registry. This feature can be turn
 const copyCmdExample = `Upload a single file using OAuth authentication. Please use 'azcopy login' command first if you aren't logged in yet:
 - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
+Same as above, but this time also compute MD5 hash of the file content and save it as the blob's Content-MD5 property. 
+- azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --put-md5
+
 Upload a single file with a SAS:
   - azcopy cp "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
@@ -49,6 +54,8 @@ Upload a single file with a SAS using piping (block blobs only):
 
 Upload an entire directory with a SAS:
   - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+or
+  - azcopy cp "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --put-md5
 
 Upload a set of files with a SAS using wildcards:
   - azcopy cp "/path/*foo/*bar/*.pdf" "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]"
@@ -74,18 +81,34 @@ Download a set of files with a SAS using wildcards:
 Download files and directories with a SAS using wildcards:
   - azcopy cp "https://[account].blob.core.windows.net/[container]/foo*?[SAS]" "/path/to/dir" --recursive=true
 
-Copy a single file between two storage accounts with a SAS:
+Copy a single blob with SAS to another blob with SAS:
   - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
 
-Copy a single file between two storage accounts using OAuth authentication. Please use 'azcopy login' command first if you aren't logged in yet. Note that the same OAuth token is used to access the destination storage account:
-- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
+Copy a single blob with SAS to another blob with OAuth token. Please use 'azcopy login' command first if you aren't logged in yet. Note that the OAuth token is used to access the destination storage account:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]"
 
-Copy an entire directory between two storage accounts with a SAS:
-- azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+Copy an entire directory from blob virtual directory with SAS to another blob virtual directory with SAS:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
 
-Copy an entire account data to another account with SAS:
-- azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+Copy an entire account data from blob account with SAS to another blob account with SAS:
+  - azcopy cp "https://[srcaccount].blob.core.windows.net?[SAS]" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 
+Copy a single object from S3 with access key to blob with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3.amazonaws.com/[bucket]/[object]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Copy an entire directory from S3 with access key to blob virtual directory with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3.amazonaws.com/[bucket]/[folder]" "https://[destaccount].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+  - Please refer to https://docs.aws.amazon.com/AmazonS3/latest/user-guide/using-folders.html for what [folder] means for S3.
+
+Copy all buckets in S3 service with access key to blob account with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3.amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
+
+Copy all buckets in a S3 region with access key to blob account with SAS:
+  - Set environment variable AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for S3 source.
+  - azcopy cp "https://s3-[region].amazonaws.com/" "https://[destaccount].blob.core.windows.net?[SAS]" --recursive=true
 `
 
 // ===================================== ENV COMMAND ===================================== //
@@ -127,7 +150,7 @@ const listCmdExample = "azcopy list [containerURL]"
 const loginCmdShortDescription = "Log in to Azure Active Directory to access Azure Storage resources."
 
 const loginCmdLongDescription = `Log in to Azure Active Directory to access Azure Storage resources. 
-		Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
+Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
 Please refer to the examples for more information.`
 
@@ -171,6 +194,23 @@ const removeCmdShortDescription = "Delete blobs or files from Azure Storage"
 
 const removeCmdLongDescription = `Delete blobs or files from Azure Storage.`
 
+const removeCmdExample = `
+Remove a single blob with SAS:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]"
+
+Remove an entire virtual directory with a SAS:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true
+
+Remove only the top blobs inside a virtual directory but not its sub-directories:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=false
+
+Remove a subset of blobs in a virtual directory (ex: only jpg and pdf files, or if the blob name is "exactName"):
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --include="*.jpg;*.pdf;exactName"
+
+Remove an entire virtual directory but exclude certain blobs from the scope (ex: every blob that starts with foo or ends with bar):
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
+`
+
 // ===================================== SYNC COMMAND ===================================== //
 const syncCmdShortDescription = "Replicate source to the destination location"
 
@@ -199,8 +239,13 @@ const syncCmdExample = `
 Sync a single file:
   - azcopy sync "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
 
+Same as above, but this time also compute MD5 hash of the file content and save it as the blob's Content-MD5 property. 
+  - azcopy sync "/path/to/file.txt" "https://[account].blob.core.windows.net/[container]/[path/to/blob]" --put-md5
+
 Sync an entire directory including its sub-directories (note that recursive is by default on):
   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]"
+or
+  - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --put-md5
 
 Sync only the top files inside a directory but not its sub-directories:
   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=false

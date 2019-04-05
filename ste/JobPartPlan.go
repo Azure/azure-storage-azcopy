@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 3
+const DataSchemaVersion common.Version = 6
 
 const (
 	ContentTypeMaxBytes     = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
@@ -57,6 +57,13 @@ type JobPartPlanHeader struct {
 	LogLevel              common.LogLevel     // This Job Part's minimal log level
 	DstBlobData           JobPartPlanDstBlob  // Additional data for blob destinations
 	DstLocalData          JobPartPlanDstLocal // Additional data for local destinations
+
+	// S2SGetPropertiesInBackend represents whether to enable get S3 objects' or Azure files' properties during s2s copy in backend.
+	S2SGetPropertiesInBackend bool
+	// S2SSourceChangeValidation represents whether user wants to check if source has changed after enumerating.
+	S2SSourceChangeValidation bool
+	// S2SInvalidMetadataHandleOption represents how user wants to handle invalid metadata.
+	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Any fields below this comment are NOT constants; they may change over as the job part is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!
@@ -133,9 +140,14 @@ func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
 
 // TransferSrcPropertiesAndMetadata returns the SrcHTTPHeaders, properties and metadata for a transfer at given transferIndex in JobPartOrder
 // TODO: Refactor return type to an object
-func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h azblob.BlobHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType) {
+func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex uint32) (h common.ResourceHTTPHeaders, metadata common.Metadata, blobType azblob.BlobType, blobTier azblob.AccessTierType,
+	s2sGetPropertiesInBackend bool, s2sSourceChangeValidation bool, s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption) {
 	var err error
 	t := jpph.Transfer(transferIndex)
+
+	s2sGetPropertiesInBackend = jpph.S2SGetPropertiesInBackend
+	s2sSourceChangeValidation = jpph.S2SSourceChangeValidation
+	s2sInvalidMetadataHandleOption = jpph.S2SInvalidMetadataHandleOption
 
 	offset := t.SrcOffset + int64(t.SrcLength) + int64(t.DstLength)
 
@@ -174,6 +186,11 @@ func (jpph *JobPartPlanHeader) TransferSrcPropertiesAndMetadata(transferIndex ui
 		blobType = azblob.BlobType(tmpBlobTypeStr)
 		offset += int64(t.SrcBlobTypeLength)
 	}
+	if t.SrcBlobTierLength != 0 {
+		tmpBlobTierStr := []byte(jpph.getString(offset, t.SrcBlobTierLength))
+		blobTier = azblob.AccessTierType(tmpBlobTierStr)
+		offset += int64(t.SrcBlobTierLength)
+	}
 
 	return
 }
@@ -203,6 +220,9 @@ type JobPartPlanDstBlob struct {
 	// Specifies the tier if this is a block or page blob
 	BlockBlobTier common.BlockBlobTier
 	PageBlobTier  common.PageBlobTier
+
+	// Controls uploading of MD5 hashes
+	PutMd5 bool
 
 	MetadataLength uint16
 	Metadata       [MetadataMaxBytes]byte
@@ -255,7 +275,7 @@ type JobPartPlanTransfer struct {
 	SrcContentMD5Length         int16
 	SrcMetadataLength           int16
 	SrcBlobTypeLength           int16
-	//SrcBlobTierLength           int16
+	SrcBlobTierLength           int16
 
 	// Any fields below this comment are NOT constants; they may change over as the transfer is processed.
 	// Care must be taken to read/write to these fields in a thread-safe way!

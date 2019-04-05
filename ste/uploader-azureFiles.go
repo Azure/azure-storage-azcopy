@@ -44,7 +44,7 @@ type azureFilesUploader struct {
 	creationTimeHeaders *azfile.FileHTTPHeaders // pointer so default value, nil, is clearly "wrong" and can't be used by accident
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer) (uploader, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 
@@ -61,7 +61,7 @@ func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipel
 	}
 
 	// compute num chunks
-	numChunks := getNumUploadChunks(info.SourceSize, chunkSize)
+	numChunks := getNumChunks(info.SourceSize, chunkSize)
 
 	// make sure URL is parsable
 	destURL, err := url.Parse(destination)
@@ -96,19 +96,19 @@ func (u *azureFilesUploader) RemoteFileExists() (bool, error) {
 	return remoteObjectExists(u.fileURL.GetProperties(u.jptm.Context()))
 }
 
-func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
+func (u *azureFilesUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 	info := jptm.Info()
 
 	// Create the parent directories of the file. Note share must be existed, as the files are listed from share or directory.
-	err := createParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
+	err := CreateParentDirToRoot(jptm.Context(), u.fileURL, u.pipeline)
 	if err != nil {
 		jptm.FailActiveUpload("Creating parent directory", err)
 		return
 	}
 
 	// Create Azure file with the source size
-	fileHTTPHeaders, metaData := jptm.FileDstData(leadingBytes)
+	fileHTTPHeaders, metaData := jptm.FileDstData(state.LeadingBytes)
 	_, err = u.fileURL.Create(jptm.Context(), info.SourceSize, fileHTTPHeaders, metaData)
 	if err != nil {
 		jptm.FailActiveUpload("Creating file", err)
@@ -121,8 +121,10 @@ func (u *azureFilesUploader) Prologue(leadingBytes []byte) {
 
 func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 
-	return createUploadChunkFunc(u.jptm, id, func() {
+	return createSendToRemoteChunkFunc(u.jptm, id, func() {
 		jptm := u.jptm
+
+		defer reader.Close() // In case of memory leak in sparse file case.
 
 		if jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
@@ -208,8 +210,8 @@ func splitWithoutToken(str string, token rune) []string {
 	})
 }
 
-// createParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
-func createParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
+// CreateParentDirToRoot creates parent directories of the Azure file if file's parent directory doesn't exist.
+func CreateParentDirToRoot(ctx context.Context, fileURL azfile.FileURL, p pipeline.Pipeline) error {
 	dirURL := getParentDirectoryURL(fileURL, p)
 	dirURLExtension := common.FileURLPartsExtension{FileURLParts: azfile.NewFileURLParts(dirURL.URL())}
 	// Check whether parent dir of the file exists.

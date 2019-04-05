@@ -43,49 +43,57 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// For example given source is https://<container>/a?<query-params> and there exists other blobs aa and aab
 	// Listing the blobs with prefix /a will list other blob as well
 	blobUrl := azblob.NewBlobURL(*sourceUrl, p)
-	blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
+	srcBlobURLPartsExtension := blobURLPartsExtension{BlobURLParts: blobUrlParts}
+	if srcBlobURLPartsExtension.isBlobSyntactically() {
+		blobProperties, err := blobUrl.GetProperties(ctx, azblob.BlobAccessConditions{})
 
-	// If the source blob exists, then queue transfer and return
-	// Example: https://<container>/<blob>?<query-params>
-	if err == nil {
-		// For a single blob, destination provided can be either a directory or file.
-		// If the destination is directory, then name of blob is preserved
-		// If the destination is file, then blob will be downloaded as the given file name
-		// Example1: Downloading https://<container>/a?<query-params> to directory C:\\Users\\User1
-		// will download the blob as C:\\Users\\User1\\a
-		// Example2: Downloading https://<container>/a?<query-params> to directory C:\\Users\\User1\\b
-		// (b is not a directory) will download blob as C:\\Users\\User1\\b
-		var blobLocalPath string
+		// If the source blob exists, then queue transfer and return
+		// Example: https://<container>/<blob>?<query-params>
+		if err == nil {
+			// For a single blob, destination provided can be either a directory or file.
+			// If the destination is directory, then name of blob is preserved
+			// If the destination is file, then blob will be downloaded as the given file name
+			// Example1: Downloading https://<container>/a?<query-params> to directory C:\\Users\\User1
+			// will download the blob as C:\\Users\\User1\\a
+			// Example2: Downloading https://<container>/a?<query-params> to directory C:\\Users\\User1\\b
+			// (b is not a directory) will download blob as C:\\Users\\User1\\b
+			var blobLocalPath string
 
-		if util.isPathALocalDirectory(cca.destination) {
-			blobNameFromUrl := util.blobNameFromUrl(blobUrlParts)
+			if util.isPathALocalDirectory(cca.destination) {
+				blobNameFromUrl := util.blobNameFromUrl(blobUrlParts)
 
-			// check for special characters and get blobName without special character.
-			blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
-			blobLocalPath = util.generateLocalPath(cca.destination, blobNameFromUrl)
+				// check for special characters and get blobName without special character.
+				blobNameFromUrl = util.blobPathWOSpecialCharacters(blobNameFromUrl)
+				blobLocalPath = util.generateLocalPath(cca.destination, blobNameFromUrl)
+			} else {
+				blobLocalPath = cca.destination
+			}
+			// Add the transfer to CopyJobPartOrderRequest
+			e.addTransfer(common.CopyTransfer{
+				Source:           util.stripSASFromBlobUrl(*sourceUrl).String(),
+				Destination:      blobLocalPath,
+				LastModifiedTime: blobProperties.LastModified(),
+				SourceSize:       blobProperties.ContentLength(),
+				ContentMD5:       blobProperties.ContentMD5(),
+				BlobType:         blobProperties.BlobType(),
+			}, cca)
+			// only one transfer for this Job, dispatch the JobPart
+			err := e.dispatchFinalPart(cca)
+			if err != nil {
+				return err
+			}
+			return nil
 		} else {
-			blobLocalPath = cca.destination
+			handleSingleFileValidationErrorForBlob(err)
 		}
-		// Add the transfer to CopyJobPartOrderRequest
-		e.addTransfer(common.CopyTransfer{
-			Source:           util.stripSASFromBlobUrl(*sourceUrl).String(),
-			Destination:      blobLocalPath,
-			LastModifiedTime: blobProperties.LastModified(),
-			SourceSize:       blobProperties.ContentLength(),
-			ContentMD5:       blobProperties.ContentMD5(),
-		}, cca)
-		// only one transfer for this Job, dispatch the JobPart
-		err := e.dispatchFinalPart(cca)
-		if err != nil {
-			return err
-		}
-		return nil
 	}
+
+	glcm.Info(infoCopyFromContainerDirectoryListOfFiles)
 	// Since the given source url doesn't represent an existing blob
 	// it is either a container or a virtual directory, so it need to be
 	// downloaded to an existing directory
 	// Check if the given destination path is a directory or not.
-	if !util.isPathALocalDirectory(cca.destination) {
+	if !util.isPathALocalDirectory(cca.destination) && !strings.EqualFold(cca.destination, common.DevNull) {
 		return errors.New("the destination must be an existing directory in this download scenario")
 	}
 
@@ -153,6 +161,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					LastModifiedTime: blobProperties.LastModified(),
 					SourceSize:       blobProperties.ContentLength(),
 					ContentMD5:       blobProperties.ContentMD5(),
+					BlobType:         blobProperties.BlobType(),
 				}, cca)
 				continue
 			}
@@ -206,6 +215,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						LastModifiedTime: blobInfo.Properties.LastModified,
 						SourceSize:       *blobInfo.Properties.ContentLength,
 						ContentMD5:       blobInfo.Properties.ContentMD5,
+						BlobType:         blobInfo.Properties.BlobType,
 					}, cca)
 				}
 				marker = listBlob.NextMarker
@@ -227,7 +237,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// searchPrefix is the used in listing blob inside a container
 	// all the blob listed should have the searchPrefix as the prefix
 	// blobNamePattern represents the regular expression which the blobName should Match
-	searchPrefix, blobNamePattern, isWildcardSearch := blobURLPartsExtension{blobUrlParts}.searchPrefixFromBlobURL() // TODO: replace blobURLParts with blobURLPartsExtension after util refactor finished.
+	searchPrefix, blobNamePattern, isWildcardSearch := srcBlobURLPartsExtension.searchPrefixFromBlobURL()
 
 	// If blobNamePattern is "*", means that all the contents inside the given source url recursively needs to be downloaded
 	// It means that source url provided is either a container or a virtual directory
@@ -297,6 +307,7 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				LastModifiedTime: blobInfo.Properties.LastModified,
 				SourceSize:       *blobInfo.Properties.ContentLength,
 				ContentMD5:       blobInfo.Properties.ContentMD5,
+				BlobType:         blobInfo.Properties.BlobType,
 			}, cca)
 		}
 		marker = listBlob.NextMarker
@@ -316,6 +327,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 }
 
 func (e *copyDownloadBlobEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	// if we are downloading to dev null, we must point to devNull itself, rather than some file under it
+	if strings.EqualFold(e.DestinationRoot, common.DevNull) {
+		transfer.Destination = ""
+	}
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 

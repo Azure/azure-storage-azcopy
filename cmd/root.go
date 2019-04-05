@@ -82,6 +82,23 @@ func Execute(azsAppPathFolder, logPathFolder string) {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output", "text", "format of the command's output, the choices include: text, json.")
+
+	// Special flag for generating test data
+	// TODO: find a cleaner way to get the value into common, rather than just using it directly as a variable here
+	rootCmd.PersistentFlags().StringVar(&common.SendRandomDataExt, "send-random-data-ext", "",
+		"Files with this extension will not have their actual content sent. Instead, random data will be generated "+
+			"and sent. The number of random bytes sent will equal the file size. To be used in testing. To use, use command-line "+
+			"tools to create a sparse file of any desired size (but zero bytes actually used on-disk). Choose a distinctive"+
+			"extension for the file (e.g. 'azCopySparseFill'). Then set this parameter to that extension (without the dot).")
+	// On Windows, to create a sparse file, do something like this from an admin prompt:
+	//     fsutil file createnew testfile.AzSparseFill 0
+	//     fsutil sparse setflag .\testfile.AzSparseFill
+	//     fsutil file seteof .\testfile.AzSparseFill 536870912000
+	// Use dd on Linux.
+
+	// Not making this publicly documented yet
+	// TODO: add API calls to check that the on-disk size really is zero for the affected files, then make this publicly exposed
+	rootCmd.PersistentFlags().MarkHidden("send-random-data-ext")
 }
 
 func detectNewVersion() {

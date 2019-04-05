@@ -37,7 +37,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	// set up the local file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	dstFileName := "extraFile.txt"
-	scenarioHelper{}.generateFilesFromList(c, dstDirName, []string{dstFileName})
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{dstFileName})
 
 	// construct the cooked input to simulate user input
 	cca := &cookedSyncCmdArgs{
@@ -68,7 +68,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	// set up the blob to delete
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
-	scenarioHelper{}.generateBlobs(c, containerURL, []string{blobName})
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{blobName})
 
 	// validate that the blob exists
 	blobURL := containerURL.NewBlobURL(blobName)

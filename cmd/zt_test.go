@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -38,6 +39,8 @@ import (
 	"math/rand"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	minio "github.com/minio/minio-go"
 )
 
 // Hookup to the testing framework
@@ -52,6 +55,15 @@ const (
 	containerPrefix      = "container"
 	blobPrefix           = "blob"
 	blockBlobDefaultData = "AzCopy Random Test Data"
+
+	bucketPrefix      = "s3bucket"
+	objectPrefix      = "s3object"
+	objectDefaultData = "AzCopy default data for S3 object"
+
+	fileDefaultData             = "AzCopy Random Test Data"
+	sharePrefix                 = "share"
+	azureFilePrefix             = "azfile"
+	defaultAzureFileSizeInBytes = 1000
 )
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -78,12 +90,54 @@ func generateName(prefix string) string {
 	return name
 }
 
+func getNameWithMaxLength(name string, maxLen int) string {
+	if maxLen < 1 {
+		panic("invalid state: maxLen should >= 1")
+	}
+
+	if name != "" && len(name) > maxLen {
+		return name[0:maxLen]
+	}
+	return name
+}
+
 func generateContainerName() string {
-	return generateName(containerPrefix)
+	name := generateName(containerPrefix)
+	return getNameWithMaxLength(name, 63)
 }
 
 func generateBlobName() string {
 	return generateName(blobPrefix)
+}
+
+func generateBucketName() string {
+	name := generateName(bucketPrefix)
+	return getNameWithMaxLength(name, 63)
+}
+
+func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
+	name := generateName(customizedPrefix)
+	return getNameWithMaxLength(name, 63)
+}
+
+func generateObjectName() string {
+	return generateName(objectPrefix)
+}
+
+func generateShareName() string {
+	name := generateName(sharePrefix)
+	return getNameWithMaxLength(name, 63)
+}
+
+func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	name = generateShareName()
+	share = fsu.NewShareURL(name)
+
+	return share, name
+}
+
+func generateAzureFileName() string {
+	return generateName(azureFilePrefix)
 }
 
 func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
@@ -114,6 +168,13 @@ func getPageBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blo
 	return
 }
 
+func getAzureFileURL(c *chk.C, shareURL azfile.ShareURL, prefix string) (fileURL azfile.FileURL, name string) {
+	name = prefix + generateAzureFileName()
+	fileURL = shareURL.NewRootDirectoryURL().NewFileURL(name)
+
+	return
+}
+
 func getReaderToRandomBytes(n int) *bytes.Reader {
 	r, _ := getRandomDataAndReader(n)
 	return r
@@ -123,6 +184,40 @@ func getRandomDataAndReader(n int) (*bytes.Reader, []byte) {
 	data := make([]byte, n, n)
 	rand.Read(data)
 	return bytes.NewReader(data), data
+}
+
+func getAccountAndKey() (string, string) {
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	if name == "" || key == "" {
+		panic("ACCOUNT_NAME and ACCOUNT_KEY environment vars must be set before running tests")
+	}
+
+	return name, key
+}
+
+func getBSU() azblob.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net/", accountName))
+
+	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
+	return azblob.NewServiceURL(*u, pipeline)
+}
+
+func getFSU() azfile.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.file.core.windows.net/", accountName))
+
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	if err != nil {
+		panic(err)
+	}
+	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{})
+	return azfile.NewServiceURL(*u, pipeline)
 }
 
 func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
@@ -144,6 +239,35 @@ func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) 
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 
 	return
+}
+
+func createNewAzureShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	share, name = getShareURL(c, fsu)
+
+	cResp, err := share.Create(ctx, nil, 0)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return share, name
+}
+
+func createNewAzureFile(c *chk.C, share azfile.ShareURL, prefix string) (file azfile.FileURL, name string) {
+	file, name = getAzureFileURL(c, share, prefix)
+
+	// generate parents first
+	generateParentsForAzureFile(c, file)
+
+	cResp, err := file.Create(ctx, defaultAzureFileSizeInBytes, azfile.FileHTTPHeaders{}, azfile.Metadata{})
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+	return
+}
+
+func generateParentsForAzureFile(c *chk.C, fileURL azfile.FileURL) {
+	accountName, accountKey := getAccountAndKey()
+	credential, _ := azfile.NewSharedKeyCredential(accountName, accountKey)
+	err := ste.CreateParentDirToRoot(ctx, fileURL, azfile.NewPipeline(credential, azfile.PipelineOptions{}))
+	c.Assert(err, chk.IsNil)
 }
 
 func createNewAppendBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
@@ -172,32 +296,6 @@ func deleteContainer(c *chk.C, container azblob.ContainerURL) {
 	c.Assert(resp.StatusCode(), chk.Equals, 202)
 }
 
-func getGenericCredential(accountType string) (*azblob.SharedKeyCredential, error) {
-	accountNameEnvVar := accountType + "ACCOUNT_NAME"
-	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
-	accountName, accountKey := os.Getenv(accountNameEnvVar), os.Getenv(accountKeyEnvVar)
-	if accountName == "" || accountKey == "" {
-		return nil, errors.New(accountNameEnvVar + " and/or " + accountKeyEnvVar + " environment variables not specified.")
-	}
-	return azblob.NewSharedKeyCredential(accountName, accountKey)
-}
-
-func getGenericBSU(accountType string) (azblob.ServiceURL, error) {
-	credential, err := getGenericCredential(accountType)
-	if err != nil {
-		return azblob.ServiceURL{}, err
-	}
-
-	pipeline := azblob.NewPipeline(credential, azblob.PipelineOptions{})
-	blobPrimaryURL, _ := url.Parse("https://" + credential.AccountName() + ".blob.core.windows.net/")
-	return azblob.NewServiceURL(*blobPrimaryURL, pipeline), nil
-}
-
-func getBSU() azblob.ServiceURL {
-	bsu, _ := getGenericBSU("")
-	return bsu
-}
-
 func validateStorageError(c *chk.C, err error, code azblob.ServiceCodeType) {
 	serr, _ := err.(azblob.StorageError)
 	c.Assert(serr.ServiceCode(), chk.Equals, code)
@@ -213,6 +311,124 @@ func generateCurrentTimeWithModerateResolution() time.Time {
 	highResolutionTime := time.Now().UTC()
 	return time.Date(highResolutionTime.Year(), highResolutionTime.Month(), highResolutionTime.Day(), highResolutionTime.Hour(), highResolutionTime.Minute(),
 		highResolutionTime.Second(), 0, highResolutionTime.Location())
+}
+
+type createS3ResOptions struct {
+	Location string
+}
+
+func createS3ClientWithMinio(o createS3ResOptions) (*minio.Client, error) {
+	accessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
+	secretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+
+	if accessKeyID == "" || secretAccessKey == "" {
+		return nil, fmt.Errorf("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY should be set before creating the S3 client")
+	}
+
+	s3Client, err := minio.NewWithRegion("s3.amazonaws.com", accessKeyID, secretAccessKey, true, o.Location)
+	if err != nil {
+		return nil, err
+	}
+	return s3Client, nil
+}
+
+func createNewBucket(c *chk.C, client *minio.Client, o createS3ResOptions) string {
+	bucketName := generateBucketName()
+	err := client.MakeBucket(bucketName, o.Location)
+	c.Assert(err, chk.IsNil)
+
+	return bucketName
+}
+
+func createNewBucketWithName(c *chk.C, client *minio.Client, bucketName string, o createS3ResOptions) {
+	err := client.MakeBucket(bucketName, o.Location)
+	c.Assert(err, chk.IsNil)
+}
+
+func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix string) (objectKey string) {
+	objectKey = prefix + generateObjectName()
+
+	size := int64(len(objectDefaultData))
+	n, err := client.PutObject(bucketName, objectKey, strings.NewReader(objectDefaultData), size, minio.PutObjectOptions{})
+	c.Assert(err, chk.IsNil)
+
+	c.Assert(n, chk.Equals, size)
+
+	return
+}
+
+func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
+	objectsCh := make(chan string)
+
+	go func() {
+		defer close(objectsCh)
+
+		// List all objects from a bucket-name with a matching prefix.
+		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
+			c.Assert(object.Err, chk.IsNil)
+			objectsCh <- object.Key
+		}
+	}()
+
+	// List bucket, and delete all the objects in the bucket
+	errChn := client.RemoveObjects(bucketName, objectsCh)
+
+	for err := range errChn {
+		c.Assert(err, chk.IsNil)
+	}
+
+	// Remove the bucket.
+	err := client.RemoveBucket(bucketName)
+	c.Assert(err, chk.IsNil)
+}
+
+func cleanS3Account(c *chk.C, client *minio.Client) {
+	buckets, err := client.ListBuckets()
+	c.Assert(err, chk.IsNil)
+
+	for _, bucket := range buckets {
+		deleteBucket(c, client, bucket.Name)
+	}
+}
+
+func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
+	accountNameEnvVar := accountType + "ACCOUNT_NAME"
+	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
+	accountName, accountKey := os.Getenv(accountNameEnvVar), os.Getenv(accountKeyEnvVar)
+	if accountName == "" || accountKey == "" {
+		return nil, errors.New(accountNameEnvVar + " and/or " + accountKeyEnvVar + " environment variables not specified.")
+	}
+	return azfile.NewSharedKeyCredential(accountName, accountKey)
+}
+
+func getAlternateFSU() (azfile.ServiceURL, error) {
+	secondaryAccountName, secondaryAccountKey := os.Getenv("SECONDARY_ACCOUNT_NAME"), os.Getenv("SECONDARY_ACCOUNT_KEY")
+	if secondaryAccountName == "" || secondaryAccountKey == "" {
+		return azfile.ServiceURL{}, errors.New("SECONDARY_ACCOUNT_NAME and/or SECONDARY_ACCOUNT_KEY environment variables not specified.")
+	}
+	fsURL, _ := url.Parse("https://" + secondaryAccountName + ".file.core.windows.net/")
+
+	credential, err := azfile.NewSharedKeyCredential(secondaryAccountName, secondaryAccountKey)
+	if err != nil {
+		return azfile.ServiceURL{}, err
+	}
+	pipeline := azfile.NewPipeline(credential, azfile.PipelineOptions{ /*Log: pipeline.NewLogWrapper(pipeline.LogInfo, log.New(os.Stderr, "", log.LstdFlags))*/ })
+
+	return azfile.NewServiceURL(*fsURL, pipeline), nil
+}
+
+func createNewShare(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
+	share, name = getShareURL(c, fsu)
+
+	cResp, err := share.Create(ctx, nil, 0)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return share, name
+}
+
+func deleteShare(c *chk.C, share azfile.ShareURL) {
+	_, err := share.Delete(ctx, azfile.DeleteSnapshotsOptionInclude)
+	c.Assert(err, chk.IsNil)
 }
 
 // Some tests require setting service properties. It can take up to 30 seconds for the new properties to be reflected across all FEs.
@@ -273,4 +489,48 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 
 	// TODO perhaps we need a global default pipeline
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
+func getServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblob.ServiceURL {
+	sasQueryParams, err := azblob.AccountSASSignatureValues{
+		Protocol:      azblob.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.blob.core.windows.net/?%s",
+		credential.AccountName(), qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
+func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {
+	sasQueryParams, err := azfile.FileSASSignatureValues{
+		Protocol:    azfile.SASProtocolHTTPS,
+		ExpiryTime:  time.Now().UTC().Add(48 * time.Hour),
+		ShareName:   shareName,
+		Permissions: azfile.ShareSASPermissions{Read: true, Write: true, Create: true, Delete: true, List: true}.String(),
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/%s?%s",
+		credential.AccountName(), shareName, qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	// TODO perhaps we need a global default pipeline
+	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }

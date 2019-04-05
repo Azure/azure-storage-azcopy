@@ -22,17 +22,26 @@ package ste
 
 import (
 	"errors"
+	"net/url"
+	"time"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"net/url"
-	"time"
 )
 
 type blobFSDownloader struct{}
 
 func newBlobFSDownloader() downloader {
 	return &blobFSDownloader{}
+}
+
+func (bd *blobFSDownloader) Prologue(_ IJobPartTransferMgr) {
+	// noop
+}
+
+func (bd *blobFSDownloader) Epilogue() {
+	//noop
 }
 
 // Returns a chunk-func for ADLS gen2 downloads

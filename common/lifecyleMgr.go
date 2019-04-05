@@ -128,8 +128,10 @@ func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
 }
 
 func (lcm *lifecycleMgr) Info(msg string) {
+	infoMsg := fmt.Sprintf("INFO: %v", msg)
+
 	lcm.msgQueue <- outputMessage{
-		msgContent: msg,
+		msgContent: infoMsg,
 		msgType:    eOutputMessageType.Info(),
 	}
 }

@@ -21,9 +21,11 @@
 package common
 
 import (
+	"bytes"
 	"encoding/json"
 	"math"
 	"reflect"
+	"regexp"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +43,7 @@ const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
+	DevNull                      = "/dev/null"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -290,6 +293,7 @@ func (Location) Pipe() Location    { return Location(2) }
 func (Location) Blob() Location    { return Location(3) }
 func (Location) File() Location    { return Location(4) }
 func (Location) BlobFS() Location  { return Location(5) }
+func (Location) S3() Location      { return Location(6) }
 func (l Location) String() string {
 	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
@@ -303,15 +307,13 @@ func fromToValue(from Location, to Location) FromTo {
 
 func (l Location) IsRemote() bool {
 	switch l {
-	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File():
+	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
 		return true
-	case ELocation.Local(), ELocation.Pipe():
+	case ELocation.Local(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
 	}
-
-	return false
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -338,6 +340,7 @@ func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local()
 func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
 func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
 func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
+func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -487,7 +490,7 @@ type BlockBlobTier uint8
 
 func (BlockBlobTier) None() BlockBlobTier    { return BlockBlobTier(0) }
 func (BlockBlobTier) Hot() BlockBlobTier     { return BlockBlobTier(1) }
-func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) }
+func (BlockBlobTier) Cold() BlockBlobTier    { return BlockBlobTier(2) } // TODO: not sure why cold is here.
 func (BlockBlobTier) Cool() BlockBlobTier    { return BlockBlobTier(3) }
 func (BlockBlobTier) Archive() BlockBlobTier { return BlockBlobTier(4) }
 
@@ -528,6 +531,7 @@ type PageBlobTier uint8
 
 func (PageBlobTier) None() PageBlobTier { return PageBlobTier(0) }
 func (PageBlobTier) P10() PageBlobTier  { return PageBlobTier(10) }
+func (PageBlobTier) P15() PageBlobTier  { return PageBlobTier(15) }
 func (PageBlobTier) P20() PageBlobTier  { return PageBlobTier(20) }
 func (PageBlobTier) P30() PageBlobTier  { return PageBlobTier(30) }
 func (PageBlobTier) P4() PageBlobTier   { return PageBlobTier(4) }
@@ -571,10 +575,11 @@ var ECredentialType = CredentialType(0)
 // CredentialType defines the different types of credentials
 type CredentialType uint8
 
-func (CredentialType) Unknown() CredentialType    { return CredentialType(0) }
-func (CredentialType) OAuthToken() CredentialType { return CredentialType(1) }
-func (CredentialType) Anonymous() CredentialType  { return CredentialType(2) } // For SAS or public.
-func (CredentialType) SharedKey() CredentialType  { return CredentialType(3) }
+func (CredentialType) Unknown() CredentialType     { return CredentialType(0) }
+func (CredentialType) OAuthToken() CredentialType  { return CredentialType(1) } // For Azure, OAuth
+func (CredentialType) Anonymous() CredentialType   { return CredentialType(2) } // For Azure, SAS or public.
+func (CredentialType) SharedKey() CredentialType   { return CredentialType(3) } // For Azure, SharedKey
+func (CredentialType) S3AccessKey() CredentialType { return CredentialType(4) } // For S3, AccessKeyID and SecretAccessKey
 
 func (ct CredentialType) String() string {
 	return enum.StringInt(ct, reflect.TypeOf(ct))
@@ -637,6 +642,53 @@ func (hvo *HashValidationOption) UnmarshalJSON(b []byte) error {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EInvalidMetadataHandleOption = InvalidMetadataHandleOption(0)
+
+var DefaultInvalidMetadataHandleOption = EInvalidMetadataHandleOption.ExcludeIfInvalid()
+
+type InvalidMetadataHandleOption uint8
+
+// ExcludeIfInvalid indicates whenever invalid metadata key is found, exclude the specific metadata with WARNING logged.
+func (InvalidMetadataHandleOption) ExcludeIfInvalid() InvalidMetadataHandleOption {
+	return InvalidMetadataHandleOption(0)
+}
+
+// FailIfInvalid indicates whenever invalid metadata key is found, directly fail the transfer.
+func (InvalidMetadataHandleOption) FailIfInvalid() InvalidMetadataHandleOption {
+	return InvalidMetadataHandleOption(1)
+}
+
+// RenameIfInvalid indicates whenever invalid metadata key is found, rename the metadata key and save the metadata with renamed key.
+func (InvalidMetadataHandleOption) RenameIfInvalid() InvalidMetadataHandleOption {
+	return InvalidMetadataHandleOption(2)
+}
+
+func (i InvalidMetadataHandleOption) String() string {
+	return enum.StringInt(i, reflect.TypeOf(i))
+}
+
+func (i *InvalidMetadataHandleOption) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(i), s, true, true)
+	if err == nil {
+		*i = val.(InvalidMetadataHandleOption)
+	}
+	return err
+}
+
+func (i InvalidMetadataHandleOption) MarshalJSON() ([]byte, error) {
+	return json.Marshal(i.String())
+}
+
+func (i *InvalidMetadataHandleOption) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	return i.Parse(s)
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const (
 	DefaultBlockBlobBlockSize = 8 * 1024 * 1024
 	MaxBlockBlobBlockSize     = 100 * 1024 * 1024
@@ -662,9 +714,9 @@ type CopyTransfer struct {
 	ContentMD5         []byte
 	Metadata           Metadata
 
-	// Properties for blob copy only
+	// Properties for S2S blob copy
 	BlobType azblob.BlobType
-	//BlobTier           string //TODO
+	BlobTier azblob.AccessTierType
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -713,4 +765,201 @@ func UnMarshalToCommonMetadata(metadataString string) (Metadata, error) {
 	}
 
 	return result, nil
+}
+
+// isValidMetadataKey checks if the given string is a valid metadata key for Azure.
+// For Azure, metadata key must adhere to the naming rules for C# identifiers.
+// As testing, reserved keyworkds for C# identifiers are also valid metadata key. (e.g. this, int)
+// TODO: consider to use "[A-Za-z_]\w*" to replace this implementation, after ensuring the complexity is O(N).
+func isValidMetadataKey(key string) bool {
+	for i := 0; i < len(key); i++ {
+		if i != 0 { // Most of case i != 0
+			if !isValidMetadataKeyChar(key[i]) {
+				return false
+			}
+			// Coming key is valid
+		} else { // i == 0
+			if !isValidMetadataKeyFirstChar(key[i]) {
+				return false
+			}
+			// First key is valid
+		}
+	}
+
+	return true
+}
+
+func isValidMetadataKeyChar(c byte) bool {
+	if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' {
+		return true
+	}
+	return false
+}
+
+func isValidMetadataKeyFirstChar(c byte) bool {
+	if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' {
+		return true
+	}
+	return false
+}
+
+func (m Metadata) ExcludeInvalidKey() (retainedMetadata Metadata, excludedMetadata Metadata, invalidKeyExists bool) {
+	retainedMetadata = make(map[string]string)
+	excludedMetadata = make(map[string]string)
+	for k, v := range m {
+		if isValidMetadataKey(k) {
+			retainedMetadata[k] = v
+		} else {
+			invalidKeyExists = true
+			excludedMetadata[k] = v
+		}
+	}
+
+	return
+}
+
+const metadataRenamedKeyPrefix = "rename_"
+const metadataKeyForRenamedOriginalKeyPrefix = "rename_key_"
+
+var metadataKeyInvalidCharRegex = regexp.MustCompile("\\W")
+var metadataKeyRenameErrStr = "failed to rename invalid metadata key %q"
+
+// ResolveInvalidKey resolves invalid metadata key with following steps:
+// 1. replace all invalid char(i.e. ASCII chars expect [0-9A-Za-z_]) with '_'
+// 2. add 'rename_' as prefix for the new valid key, this key will be used to save original metadata's value.
+// 3. add 'rename_key_' as prefix for the new valid key, this key will be used to save original metadata's invalid key.
+// Example, given invalid metadata for Azure: '123-invalid':'content', it will be resolved as two new k:v pairs:
+// 'rename_123_invalid':'content'
+// 'rename_key_123_invalid':'123-invalid'
+// So user can try to recover the metadata in Azure side.
+// Note: To keep first version simple, whenever collision is found during key resolving, error will be returned.
+// This can be further improved once any user feedback get.
+func (m Metadata) ResolveInvalidKey() (resolvedMetadata Metadata, err error) {
+	resolvedMetadata = make(map[string]string)
+
+	hasCollision := func(name string) bool {
+		_, hasCollisionToOrgNames := m[name]
+		_, hasCollisionToNewNames := resolvedMetadata[name]
+
+		return hasCollisionToOrgNames || hasCollisionToNewNames
+	}
+
+	for k, v := range m {
+		if !isValidMetadataKey(k) {
+			validKey := metadataKeyInvalidCharRegex.ReplaceAllString(k, "_")
+			renamedKey := metadataRenamedKeyPrefix + validKey
+			keyForRenamedOriginalKey := metadataKeyForRenamedOriginalKeyPrefix + validKey
+			if hasCollision(renamedKey) || hasCollision(keyForRenamedOriginalKey) {
+				return nil, fmt.Errorf(metadataKeyRenameErrStr, k)
+			}
+
+			resolvedMetadata[renamedKey] = v
+			resolvedMetadata[keyForRenamedOriginalKey] = k
+		} else {
+			resolvedMetadata[k] = v
+		}
+	}
+
+	return resolvedMetadata, nil
+}
+
+func (m Metadata) ConcatenatedKeys() string {
+	buf := bytes.Buffer{}
+
+	for k := range m {
+		buf.WriteString("'")
+		buf.WriteString(k)
+		buf.WriteString("' ")
+	}
+
+	return buf.String()
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Common resource's HTTP headers stands for properties used in AzCopy.
+type ResourceHTTPHeaders struct {
+	ContentType        string
+	ContentMD5         []byte
+	ContentEncoding    string
+	ContentLanguage    string
+	ContentDisposition string
+	CacheControl       string
+}
+
+// ToAzBlobHTTPHeaders converts ResourceHTTPHeaders to azblob's BlobHTTPHeaders.
+func (h ResourceHTTPHeaders) ToAzBlobHTTPHeaders() azblob.BlobHTTPHeaders {
+	return azblob.BlobHTTPHeaders{
+		ContentType:        h.ContentType,
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}
+
+// ToAzFileHTTPHeaders converts ResourceHTTPHeaders to azfile's FileHTTPHeaders.
+func (h ResourceHTTPHeaders) ToAzFileHTTPHeaders() azfile.FileHTTPHeaders {
+	return azfile.FileHTTPHeaders{
+		ContentType:        h.ContentType,
+		ContentMD5:         h.ContentMD5,
+		ContentEncoding:    h.ContentEncoding,
+		ContentLanguage:    h.ContentLanguage,
+		ContentDisposition: h.ContentDisposition,
+		CacheControl:       h.CacheControl,
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var ETransferDirection = TransferDirection(0)
+
+type TransferDirection int32
+
+func (TransferDirection) UnKnown() TransferDirection  { return TransferDirection(0) }
+func (TransferDirection) Upload() TransferDirection   { return TransferDirection(1) }
+func (TransferDirection) Download() TransferDirection { return TransferDirection(2) }
+func (TransferDirection) S2SCopy() TransferDirection  { return TransferDirection(3) }
+
+func (td TransferDirection) String() string {
+	return enum.StringInt(td, reflect.TypeOf(td))
+}
+func (td *TransferDirection) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(td), s, false, true)
+	if err == nil {
+		*td = val.(TransferDirection)
+	}
+	return err
+}
+
+func (td *TransferDirection) AtomicLoad() TransferDirection {
+	return TransferDirection(atomic.LoadInt32((*int32)(td)))
+}
+func (td *TransferDirection) AtomicStore(newTransferDirection TransferDirection) {
+	atomic.StoreInt32((*int32)(td), int32(newTransferDirection))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EPerfConstraint = PerfConstraint(0)
+
+type PerfConstraint int32
+
+func (PerfConstraint) Unknown() PerfConstraint { return PerfConstraint(0) }
+func (PerfConstraint) Disk() PerfConstraint    { return PerfConstraint(1) }
+func (PerfConstraint) Service() PerfConstraint { return PerfConstraint(2) }
+
+// others will be added in future
+
+func (pc PerfConstraint) String() string {
+	return enum.StringInt(pc, reflect.TypeOf(pc))
+}
+
+func (pc *PerfConstraint) Parse(s string) error {
+	val, err := enum.ParseInt(reflect.TypeOf(pc), s, false, true)
+	if err == nil {
+		*pc = val.(PerfConstraint)
+	}
+	return err
 }

@@ -58,12 +58,8 @@ func (c *md5Comparer) Check() error {
 		return nil
 	}
 
-	if c.actualAsSaved == nil || len(c.actualAsSaved) == 0 {
-		return errActualMd5NotComputed // Should never happen, so there's no way to opt out of this error being returned if it DOES happen
-	}
-
-	// missing
-	if c.expected == nil || len(c.expected) == 0 {
+	// missing (at the source)
+	if len(c.expected) == 0 {
 		switch c.validationOption {
 		case common.EHashValidationOption.FailIfDifferentOrMissing():
 			return errExpectedMd5Missing
@@ -76,7 +72,10 @@ func (c *md5Comparer) Check() error {
 		}
 	}
 
-	// different
+	// exists at source
+	if len(c.actualAsSaved) == 0 {
+		return errActualMd5NotComputed // Should never happen, so there's no way to opt out of this error being returned if it DOES happen
+	}
 	match := bytes.Equal(c.expected, c.actualAsSaved)
 	if !match {
 		switch c.validationOption {

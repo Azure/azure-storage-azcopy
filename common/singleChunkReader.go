@@ -21,7 +21,6 @@
 package common
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -29,7 +28,7 @@ import (
 	"io"
 	"math"
 	"runtime"
-	"sync/atomic"
+	"sync"
 )
 
 // Reader of ONE chunk of a file. Maybe used to re-read multiple times (e.g. if
@@ -51,9 +50,11 @@ type SingleChunkReader interface {
 	// BlockingPrefetch tries to read the full contents of the chunk into RAM.
 	BlockingPrefetch(fileReader io.ReaderAt, isRetry bool) error
 
-	// CaptureLeadingBytes is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
+	// GetPrologueState is used to grab enough of the initial bytes to do MIME-type detection.  Expected to be called only
 	// on the first chunk in each file (since there's no point in calling it on others)
-	CaptureLeadingBytes() []byte
+	// There is deliberately no error return value from the Prologue.
+	// If it failed, the Prologue itself must call jptm.FailActiveSend.
+	GetPrologueState() PrologueState
 
 	// Length is the number of bytes in the chunk
 	Length() int64
@@ -80,9 +81,6 @@ type CloseableReaderAt interface {
 type ChunkReaderSourceFactory func() (CloseableReaderAt, error)
 
 type singleChunkReader struct {
-	// for diagnostics for issue https://github.com/Azure/azure-storage-azcopy/issues/191
-	atomicUseIndicator int32
-
 	// context used to allow cancellation of blocking operations
 	// (Yes, ideally contexts are not stored in structs, but we need it inside Read, and there's no way for it to be passed in there)
 	ctx context.Context
@@ -113,7 +111,16 @@ type singleChunkReader struct {
 
 	// buffer used by prefetch
 	buffer []byte
-	// TODO: pooling of buffers to reduce pressure on GC?
+
+	// muMaster locks everything for single-threaded use...
+	muMaster *sync.Mutex
+
+	// ... except muMaster doesn't lock Close(), which can be called at the same time as reads (pipeline.Do calls it in cases where the context has been cancelled)
+	// It could be argued that we only need muClose (since that's the only case where we knowingly call two methods at the same time - Close while a Read is in progress -
+	// but it seems cleaner to also lock overall with muMaster rather than making weird assumptions about how we are called - concurrently or not)
+	muClose *sync.Mutex
+
+	isClosed bool
 }
 
 func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFactory, chunkId ChunkID, length int64, chunkLogger ChunkStatusLogger, generalLogger ILogger, slicePool ByteSlicePooler, cacheLimiter CacheLimiter) SingleChunkReader {
@@ -121,6 +128,8 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 		return &emptyChunkReader{}
 	}
 	return &singleChunkReader{
+		muMaster:      &sync.Mutex{},
+		muClose:       &sync.Mutex{},
 		ctx:           ctx,
 		chunkLogger:   chunkLogger,
 		generalLogger: generalLogger,
@@ -132,20 +141,14 @@ func NewSingleChunkReader(ctx context.Context, sourceFactory ChunkReaderSourceFa
 	}
 }
 
-// Use and un-use are temporary, for identifying the root cause of
-// https://github.com/Azure/azure-storage-azcopy/issues/191
-// They may be removed after that.
-// For now, they are used to wrap every Public method
 func (cr *singleChunkReader) use() {
-	if atomic.SwapInt32(&cr.atomicUseIndicator, 1) != 0 {
-		panic("trying to use chunk reader when already in use")
-	}
+	cr.muMaster.Lock()
+	cr.muClose.Lock()
 }
 
 func (cr *singleChunkReader) unuse() {
-	if atomic.SwapInt32(&cr.atomicUseIndicator, 0) != 1 {
-		panic("ending use when chunk reader was not actually IN use")
-	}
+	cr.muClose.Unlock()
+	cr.muMaster.Unlock()
 }
 
 func (cr *singleChunkReader) HasPrefetchedEntirelyZeros() bool {
@@ -191,24 +194,39 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// here doing retries, but no RAM _will_ become available because its
 	// all used by queued chunkfuncs (that can't be processed because all goroutines are active).
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.RAMToSchedule())
-	err := cr.cacheLimiter.WaitUntilAddBytes(cr.ctx, cr.length, func() bool { return isRetry })
+	err := cr.cacheLimiter.WaitUntilAdd(cr.ctx, cr.length, func() bool { return isRetry })
 	if err != nil {
 		return err
 	}
 
-	// get buffer from pool
-	cr.buffer = cr.slicePool.RentSlice(uint32Checked(cr.length))
-
-	// read bytes into the buffer
+	// prepare to read
 	cr.chunkLogger.LogChunkStatus(cr.chunkId, EWaitReason.DiskIO())
-	totalBytesRead, err := fileReader.ReadAt(cr.buffer, cr.chunkId.OffsetInFile)
-	if err != nil && err != io.EOF {
-		return err
+	targetBuffer := cr.slicePool.RentSlice(uint32Checked(cr.length))
+
+	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
+	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
+	cr.muClose.Unlock()
+	n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile)
+	cr.muClose.Lock()
+
+	// now that we have the lock again, see if any error means we can't continue
+	if readErr == nil {
+		if cr.isClosed {
+			readErr = errors.New("closed while reading")
+		} else if cr.ctx.Err() != nil {
+			readErr = cr.ctx.Err() // context cancelled
+		} else if int64(n) != cr.length {
+			readErr = errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
+		}
 	}
-	if int64(totalBytesRead) != cr.length {
-		return errors.New("bytes read not equal to expected length. Chunk reader must be constructed so that it won't read past end of file")
+	// return the revised error, if any
+	if readErr != nil {
+		cr.returnSlice(targetBuffer)
+		return readErr
 	}
 
+	// We can continue, so use the data we have read
+	cr.buffer = targetBuffer
 	return nil
 }
 
@@ -283,7 +301,8 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 		return 0, err
 	}
 
-	// extra checks until we find root cause of https://github.com/Azure/azure-storage-azcopy/issues/191
+	// extra checks to be safe (originally for https://github.com/Azure/azure-storage-azcopy/issues/191)
+	// No longer needed now that use/unuse lock with a mutex, but there's no harm in leaving them here
 	if cr.buffer == nil {
 		panic("unexpected nil buffer")
 	}
@@ -302,7 +321,7 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	isEof := cr.positionInChunk >= cr.length
 	if isEof {
 		if freeBufferOnEof {
-			cr.returnBuffer()
+			cr.closeBuffer()
 		}
 		return bytesCopied, io.EOF
 	}
@@ -310,13 +329,17 @@ func (cr *singleChunkReader) doRead(p []byte, freeBufferOnEof bool) (n int, err 
 	return bytesCopied, nil
 }
 
-func (cr *singleChunkReader) returnBuffer() {
+func (cr *singleChunkReader) closeBuffer() {
 	if cr.buffer == nil {
 		return
 	}
-	cr.slicePool.ReturnSlice(cr.buffer)
-	cr.cacheLimiter.RemoveBytes(int64(len(cr.buffer)))
+	cr.returnSlice(cr.buffer)
 	cr.buffer = nil
+}
+
+func (cr *singleChunkReader) returnSlice(slice []byte) {
+	cr.slicePool.ReturnSlice(slice)
+	cr.cacheLimiter.Remove(int64(len(slice)))
 }
 
 func (cr *singleChunkReader) Length() int64 {
@@ -332,34 +355,29 @@ func (cr *singleChunkReader) Length() int64 {
 // Without this close, if something failed part way through, we would keep counting this object's bytes in cacheLimiter
 // "for ever", even after the object is gone.
 func (cr *singleChunkReader) Close() error {
-	// first, check and log early closes (before we do use(), since the situation we are trying
-	// to log is suspected to be one when use() will panic)
-	if cr.positionInChunk < cr.length {
-		// this is an "early close". Adjust logging verbosity depending on whether context is still active
-		var extraMessage string
-		if cr.ctx.Err() == nil {
-			b := &bytes.Buffer{}
-			b.Write(stack())
-			extraMessage = "context active so logging full callstack, as follows: " + b.String()
-		} else {
-			extraMessage = "context cancelled so no callstack logged"
-		}
-		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader: "+extraMessage)
+	// First, check and log early closes
+	// This check originates from issue 191. Even tho we think we've now resolved that issue,
+	// we'll keep this code just to make sure.
+	if cr.positionInChunk < cr.length && cr.ctx.Err() == nil {
+		cr.generalLogger.Log(pipeline.LogInfo, "Early close of chunk in singleChunkReader with context still active")
+		// cannot panic here, since this code path is NORMAL in the case of sparse files to Azure Files and Page Blobs
 	}
 
-	// after logging callstack, do normal use()
-	cr.use()
-	defer cr.unuse()
+	// Only acquire the Close mutex (it will be free if the prefetch method is in the middle of a disk read)
+	// Don't acquire muMaster, which will not be free in that situation
+	cr.muClose.Lock()
+	defer cr.muClose.Unlock()
 
 	// do the real work
-	cr.returnBuffer()
+	cr.closeBuffer()
+	cr.isClosed = true
 	return nil
 }
 
 // Grab the leading bytes, for later MIME type recognition
 // (else we would have to re-read the start of the file later, and that breaks our rule to use sequential
 // reads as much as possible)
-func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
+func (cr *singleChunkReader) GetPrologueState() PrologueState {
 	cr.use()
 	// can't defer unuse here. See explict calls (plural) below
 
@@ -368,7 +386,7 @@ func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
 	n, err := cr.doRead(leadingBytes, false) // do NOT free bufferOnEOF. So that if its a very small file, and we hit the end, we won't needlessly discard the prefetched data
 	if err != nil && err != io.EOF {
 		cr.unuse()
-		return nil // we just can't sniff the mime type
+		return PrologueState{} // empty return value, because we just can't sniff the mime type
 	}
 	if n < len(leadingBytes) {
 		// truncate if we read less than expected (very small file, so err was EOF above)
@@ -377,8 +395,8 @@ func (cr *singleChunkReader) CaptureLeadingBytes() []byte {
 	// unuse before Seek, since Seek is public
 	cr.unuse()
 	// MUST re-wind, so that the bytes we read will get transferred too!
-	cr.Seek(0, io.SeekStart)
-	return leadingBytes
+	_, err = cr.Seek(0, io.SeekStart)
+	return PrologueState{LeadingBytes: leadingBytes}
 }
 
 func (cr *singleChunkReader) WriteBufferTo(h hash.Hash) {

@@ -49,9 +49,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrentConnections int, targetRateInMBps int64, azcopyAppPathFolder, azcopyLogPathFolder string) error {
+func MainSTE(concurrentConnections int, concurrentFilesLimit int, targetRateInMBps int64, azcopyAppPathFolder, azcopyLogPathFolder string) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrentConnections, targetRateInMBps, azcopyAppPathFolder, azcopyLogPathFolder)
+	initJobsAdmin(steCtx, concurrentConnections, concurrentFilesLimit, targetRateInMBps, azcopyAppPathFolder, azcopyLogPathFolder)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
@@ -281,7 +281,8 @@ func ResumeJobOrder(req common.ResumeJobRequest) common.CancelPauseResumeRespons
 		var errorMsg = ""
 		switch jpm.Plan().FromTo {
 		case common.EFromTo.LocalBlob(),
-			common.EFromTo.LocalFile():
+			common.EFromTo.LocalFile(),
+			common.EFromTo.S3Blob():
 			if len(req.DestinationSAS) == 0 {
 				errorMsg = "The destination-sas switch must be provided to resume the job"
 			}
@@ -458,7 +459,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
-	js.PerfStrings, js.IsDiskConstrained = jm.GetPerfInfo()
+	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
@@ -590,7 +591,7 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 	// Get the number of active go routines performing the transfer or executing the chunk Func
 	// TODO: added for debugging purpose. remove later
 	js.ActiveConnections = jm.ActiveConnections()
-	js.PerfStrings, js.IsDiskConstrained = jm.GetPerfInfo()
+	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
