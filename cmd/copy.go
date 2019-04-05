@@ -1168,4 +1168,5 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
+	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
 }
