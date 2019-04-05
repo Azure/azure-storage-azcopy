@@ -306,6 +306,11 @@ func deleteFile(destinationPath string) error {
 
 // tries to delete file, but if that fails just logs and returns
 func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
+	// skip deleting if we are targeting dev null and throwing away the data
+	if strings.EqualFold(common.DevNull, info.Destination) {
+		return
+	}
+
 	err := deleteFile(info.Destination)
 	if err != nil {
 		// If there was an error deleting the file, log the error
