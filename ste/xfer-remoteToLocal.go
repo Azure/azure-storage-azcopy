@@ -99,7 +99,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	var dstFile io.WriteCloser
-	if strings.EqualFold(info.Destination, common.DevNull) {
+	if strings.EqualFold(info.Destination, common.Dev_Null) {
 		// the user wants to discard the downloaded data
 		dstFile = devNullWriter{}
 	} else {
@@ -291,7 +291,7 @@ func createEmptyFile(destinationPath string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
 	if err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func deleteFile(destinationPath string) error {
 // tries to delete file, but if that fails just logs and returns
 func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 	// skip deleting if we are targeting dev null and throwing away the data
-	if strings.EqualFold(common.DevNull, info.Destination) {
+	if strings.EqualFold(common.Dev_Null, info.Destination) {
 		return
 	}
 

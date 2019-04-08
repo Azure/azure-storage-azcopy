@@ -43,7 +43,8 @@ const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
-	DevNull                      = "/dev/null"
+	Dev_Null                     = "/dev/null"
+	DEFAULT_FILE_PERM            = 0644
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
