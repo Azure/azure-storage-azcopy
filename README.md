@@ -220,7 +220,7 @@ Raise an issue on this repository for any feedback or issue encountered.
   - For `sync`, last modified times are used to determine whether to transfer the same file present at both the source and the destination.
   - If the use case is to incrementally transfer data, then `sync` is the better choice, since only the modified/missing files are transferred.
 - Will `copy` overwrite my files?
-  - By default, AzCopy will overwrite the files at the destination if they already exist. To avoid this behavior, please use the flag `--overwrite`. 
+  - By default, AzCopy will overwrite the files at the destination if they already exist. To avoid this behavior, please use the flag `--overwrite=false`. 
 
 ## Contributing
 
