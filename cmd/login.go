@@ -57,12 +57,20 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "the Azure active directory endpoint to use for OAuth user interactive login")
 	// Use identity which aligns to Azure powershell and CLI.
 	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "log in using virtual machine's identity, also known as managed service identity (MSI)")
+	// Use SPN certificate to log in.
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.certificate, "certificate", false, "log in using a certificate as a form of Service Principal Name (SPN) auth")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.secret, "secret", false, "log in using a client secret as a form of Service Principal Name (SPN) auth")
 	// Client ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "client ID of user-assigned identity")
 	// Object ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityObjectID, "identity-object-id", "", "object ID of user-assigned identity")
 	// Resource ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityResourceID, "identity-resource-id", "", "resource ID of user-assigned identity")
+
+	//login with SPN
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "application ID of user-assigned identity")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "path to certificate for SPN authentication")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.clientSecret, "client-secret", "", "client secret for SPN authentication")
 
 	// hide flags
 	// temporaily hide aad-endpoint and support Production environment only.
@@ -74,7 +82,9 @@ type loginCmdArgs struct {
 	tenantID    string
 	aadEndpoint string
 
-	identity bool // Whether to use MSI.
+	identity    bool // Whether to use MSI.
+	certificate bool
+	secret      bool
 
 	// Info of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
@@ -82,16 +92,46 @@ type loginCmdArgs struct {
 	identityClientID   string
 	identityObjectID   string
 	identityResourceID string
+
+	//Requried to sign in with a SPN (Service Principal Name)
+	applicationID string
+	certPath      string
+	certPass      string
+	clientSecret  string
+}
+
+type argValidity struct {
+	Required string
+	Invalid  string
 }
 
 func (lca loginCmdArgs) validate() error {
 	// Only support one kind of oauth login at same time.
-	if lca.identity && lca.tenantID != "" {
-		return errors.New("tenant ID cannot be used with identity")
-	}
+	switch {
+	case lca.identity:
+		if lca.certificate || lca.secret {
+			return errors.New("you can only log in with one type of OAuth at once")
+		}
 
-	if !lca.identity && (lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "") {
-		return errors.New("identity client/object/resource ID is only valid when using identity")
+		if lca.tenantID != "" || lca.applicationID != "" || lca.certPath != "" || lca.clientSecret != "" {
+			return errors.New("tenant ID/application ID/cert path/client secret cannot be used with identity")
+		}
+	case lca.certificate:
+		if lca.secret || lca.identity {
+			return errors.New("you can only log in with one type of OAuth at once")
+		}
+
+		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" || lca.clientSecret != "" {
+			return errors.New("identity client/object/resource ID, and clientSecret cannot be used on a certificate")
+		}
+	case lca.secret:
+		if lca.identity || lca.certificate {
+			return errors.New("you can only log in with one type of OAuth at once")
+		}
+
+		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" || lca.certPath != "" || lca.certPass != "" {
+			return errors.New("identity client/object/resource ID, and client cert path/pass cannot be used on a certificate")
+		}
 	}
 
 	return nil
