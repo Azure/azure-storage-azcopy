@@ -99,7 +99,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	}
 
 	var dstFile io.WriteCloser
-	if strings.EqualFold(info.Destination, common.DevNull) {
+	if strings.EqualFold(info.Destination, common.Dev_Null) {
 		// the user wants to discard the downloaded data
 		dstFile = devNullWriter{}
 	} else {
@@ -256,7 +256,11 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 	}
 
-	if jptm.TransferStatus() <= 0 {
+	// note that we do not really know whether the context was canceled because of an error, or because the user asked for it
+	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
+	// we leave these transfer status alone
+	// in case of errors, the status was already set, so we don't need to do anything here either
+	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() {
 		// If failed, log and delete the "bad" local file
 		// If the current transfer status value is less than or equal to 0
 		// then transfer either failed or was cancelled
@@ -291,7 +295,7 @@ func createEmptyFile(destinationPath string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
 	if err != nil {
 		return err
 	}
@@ -307,7 +311,7 @@ func deleteFile(destinationPath string) error {
 // tries to delete file, but if that fails just logs and returns
 func tryDeleteFile(info TransferInfo, jptm IJobPartTransferMgr) {
 	// skip deleting if we are targeting dev null and throwing away the data
-	if strings.EqualFold(common.DevNull, info.Destination) {
+	if strings.EqualFold(common.Dev_Null, info.Destination) {
 		return
 	}
 

@@ -55,7 +55,7 @@ func (jpfn JobPartPlanFileName) Delete() error {
 
 func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
 	// opening the file with given filename
-	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, 0644) // TODO: Check this permission
+	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, common.DEFAULT_FILE_PERM)
 	common.PanicIfErr(err)
 	// Ensure the file gets closed (although we can continue to use the MMF)
 	defer file.Close()

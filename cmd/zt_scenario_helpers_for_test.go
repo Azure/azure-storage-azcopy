@@ -74,7 +74,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	}
 
 	// write to file and return the data
-	err = ioutil.WriteFile(filePath, bigBuff, 0666)
+	err = ioutil.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
 	return bigBuff, err
 }
 

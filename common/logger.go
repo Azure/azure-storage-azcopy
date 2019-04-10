@@ -125,7 +125,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, lo
 
 func (jl *jobLogger) OpenLog() {
 	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+".log"),
-		os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666) // TODO: Make constant for 0666
+		os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
 	PanicIfErr(err)
 
 	jl.file = file
