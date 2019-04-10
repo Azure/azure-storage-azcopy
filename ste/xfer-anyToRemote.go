@@ -299,6 +299,10 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
 	// we leave these transfer status alone
 	// in case of errors, the status was already set, so we don't need to do anything here either
+	//
+	// it is entirely possible that all the chunks were finished, but then by the time we get to this line
+	// the context is canceled. In this case, a completely transferred file would not be marked "completed".
+	// it's definitely a case that we should be aware of, but given how rare it is, and how low the impact (the user can just resume), we don't have to do anything more to it atm.
 	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
 		// We know all chunks are done (because this routine was called)
 		// and we know the transfer didn't fail (because just checked its status above and made sure the context was not canceled),

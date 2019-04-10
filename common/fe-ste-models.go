@@ -44,7 +44,10 @@ const (
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
 	Dev_Null                     = "/dev/null"
-	DEFAULT_FILE_PERM            = 0644
+
+	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
+	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
+	DEFAULT_FILE_PERM = 0644
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -425,8 +428,10 @@ type TransferStatus int32 // Must be 32-bit for atomic operations; negative #s r
 // Transfer is ready to transfer and not started transferring yet
 func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
-// Transfer started & at least 1 chunk has successfully been transfered.
-// Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
+// TODO confirm whether this is actually needed
+//   Outdated:
+//     Transfer started & at least 1 chunk has successfully been transfered.
+//     Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
 // Transfer successfully completed
