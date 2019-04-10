@@ -426,7 +426,7 @@ type TransferStatus int32 // Must be 32-bit for atomic operations; negative #s r
 func (TransferStatus) NotStarted() TransferStatus { return TransferStatus(0) }
 
 // Transfer started & at least 1 chunk has successfully been transfered.
-// Used to resume a transfer that started to avoid transfering all chunks thereby improving performance
+// Used to resume a transfer that started to avoid transferring all chunks thereby improving performance
 func (TransferStatus) Started() TransferStatus { return TransferStatus(1) }
 
 // Transfer successfully completed

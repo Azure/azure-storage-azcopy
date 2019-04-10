@@ -456,9 +456,11 @@ func (jptm *jobPartTransferMgr) FailActiveSendWithStatus(where string, err error
 // Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
 // Unlike just setting the status to failed, this also handles cancellation correctly
 func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descriptionOfWhereErrorOccurred string, err error, failureStatus common.TransferStatus) {
-	// TODO: question. Prior to refactoring some code did a debug level log when WasCancelled is true (e.g. blob upload did)
-	// TODO: .. do we really need that? It's ommitted, for now.
-
+	// TODO here we only act if the transfer is not yet canceled
+	// 	however, it's possible that this function is called simultaneously by different chunks
+	//  in that case, the logs would be repeated
+	//  as of april 9th, 2019, there's no obvious solution without adding more complexity into this part of the code, which is already not pretty and kind of everywhere
+	//  consider redesign the lifecycle management in ste
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
 		status, msg := ErrorEx{err}.ErrorCodeAndString()
@@ -470,14 +472,15 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		// If the status code was 403, it means there was an authentication error and we exit.
 		// User can resume the job if completely ordered with a new sas.
 		if status == http.StatusForbidden {
-			// TODO: should this really exit??? why not just log like everything else does???  We've Failed the transfer anyway....
-			common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication Failed. The SAS is not correct or expired or does not have the correct permission %s", err.Error()))
+			// quit right away, since without proper authentication no work can be done
+			// display a clear message
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Authentication failed, it is either not correct, or expired, or does not have the correct permission %s", err.Error()))
 		}
 	}
 	// TODO: right now the convention re cancellation seems to be that if you cancel, you MUST both call cancel AND
-	// TODO: ... call ReportChunkDone (with the latter being done for ALL the expnected chunks). Is that maintainable?
+	// TODO: ... call ReportChunkDone (with the latter being done for ALL the expected chunks). Is that maintainable?
 	// TODO: ... Is that really ideal, having to call ReportChunkDone for all the chunks AFTER cancellation?
-	// TODO: ... but it is currently necesary, beause of the way the transfer is only considered done (and automatic epilogue only triggers)
+	// TODO: ... but it is currently necessary,because of the way the transfer is only considered done (and automatic epilogue only triggers)
 	// TODO: ... if all expected chunks report as done
 }
 

@@ -67,7 +67,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// with it as known issue when downloading paced blobs.
 		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
 		if err := bd.filePacer.RequestRightToSend(jptm.Context(), length); err != nil {
-			jptm.FailActiveUpload("Pacing block", err)
+			jptm.FailActiveDownload("Pacing block", err)
 		}
 
 		// download blob from start Index till startIndex + adjustedChunkSize

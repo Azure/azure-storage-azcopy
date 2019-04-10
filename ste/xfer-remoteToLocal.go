@@ -256,7 +256,11 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 		}
 	}
 
-	if jptm.TransferStatus() <= 0 {
+	// note that we do not really know whether the context was canceled because of an error, or because the user asked for it
+	// if was an intentional cancel, the status is still "in progress", so we are still counting it as pending
+	// we leave these transfer status alone
+	// in case of errors, the status was already set, so we don't need to do anything here either
+	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() {
 		// If failed, log and delete the "bad" local file
 		// If the current transfer status value is less than or equal to 0
 		// then transfer either failed or was cancelled
