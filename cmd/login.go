@@ -70,6 +70,7 @@ func init() {
 	//login with SPN
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "application ID of user-assigned identity")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "path to certificate for SPN authentication")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPass, "certificate-password", "", "certificate password for SPN authentication")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.clientSecret, "client-secret", "", "client secret for SPN authentication")
 
 	// hide flags
@@ -171,7 +172,11 @@ func (lca loginCmdArgs) process() error {
 
 		glcm.Info("Login with certificate succeeded.")
 	case lca.secret:
-		glcm.Info("Login with secret is not yet implemented.")
+		if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, true); err != nil {
+			return err
+		}
+
+		glcm.Info("Login using client secret succeeded.")
 	case lca.identity:
 		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
 			ClientID: lca.identityClientID,
