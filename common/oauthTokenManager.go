@@ -145,6 +145,81 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 	return oAuthTokenInfo, nil
 }
 
+//secretLoginNoUOTM non-interactively logs in with a client secret.
+func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID string) (*OAuthTokenInfo, error) {
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+
+	if activeDirectoryEndpoint == "" {
+		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
+	}
+
+	if applicationID == "" {
+		return nil, fmt.Errorf("please supply your OWN application ID")
+	}
+
+	oAuthTokenInfo := OAuthTokenInfo{
+		Tenant:                  tenantID,
+		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
+	}
+
+	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	spt, err := adal.NewServicePrincipalToken(
+		*oauthConfig,
+		applicationID,
+		secret,
+		Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = spt.Refresh()
+	if err != nil {
+		return nil, err
+	}
+
+	oAuthTokenInfo.Token = spt.Token()
+	oAuthTokenInfo.ApplicationID = applicationID
+	oAuthTokenInfo.ServicePrincipalName = true
+	oAuthTokenInfo.SPNInfo = SPNInfo{
+		Secret:   secret,
+		CertPath: "",
+	}
+
+	return &oAuthTokenInfo, nil
+}
+
+//SecretLogin is a UOTM shell for secretLoginNoUOTM.
+func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (*OAuthTokenInfo, error) {
+	oAuthTokenInfo, err := secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID)
+
+	if persist {
+		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return oAuthTokenInfo, nil
+}
+
+//GetNewTokenFromSecret is a refresh shell for secretLoginNoUOTM
+func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*adal.Token, error) {
+	tokeninfo, err := secretLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+
+	if err != nil {
+		return nil, err
+	} else {
+		return &tokeninfo.Token, nil
+	}
+}
+
 func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
 	if tenantID == "" {
 		tenantID = DefaultTenantID
@@ -155,7 +230,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 	}
 
 	if applicationID == "" {
-		applicationID = ApplicationID
+		return nil, fmt.Errorf("please supply your OWN application ID")
 	}
 
 	oAuthTokenInfo := OAuthTokenInfo{
@@ -185,6 +260,9 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		pk.(*rsa.PrivateKey),
 		Resource,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	err = spt.Refresh()
 	if err != nil {
@@ -452,7 +530,11 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 	}
 
 	if credInfo.ServicePrincipalName {
-		return credInfo.GetNewTokenFromCert(ctx)
+		if credInfo.SPNInfo.CertPath != "" {
+			return credInfo.GetNewTokenFromCert(ctx)
+		} else {
+			return credInfo.GetNewTokenFromSecret(ctx)
+		}
 	}
 
 	return credInfo.RefreshTokenWithUserCredential(ctx)
