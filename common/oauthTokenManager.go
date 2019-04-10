@@ -22,6 +22,7 @@ package common
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,9 +31,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/pkcs12"
 
 	"github.com/Azure/go-autorest/autorest/adal"
 )
@@ -139,6 +143,91 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 	}
 
 	return oAuthTokenInfo, nil
+}
+
+func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+
+	if activeDirectoryEndpoint == "" {
+		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
+	}
+
+	if applicationID == "" {
+		applicationID = ApplicationID
+	}
+
+	oAuthTokenInfo := OAuthTokenInfo{
+		Tenant:                  tenantID,
+		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
+	}
+
+	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	certData, err := ioutil.ReadFile(certPath)
+	if err != nil {
+		return nil, err
+	}
+
+	pk, cert, err := pkcs12.Decode(certData, certPass)
+	if err != nil {
+		return nil, err
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromCertificate(
+		*oauthConfig,
+		applicationID,
+		cert,
+		pk.(*rsa.PrivateKey),
+		Resource,
+	)
+
+	err = spt.Refresh()
+	if err != nil {
+		return nil, err
+	}
+
+	cpfq, _ := filepath.Abs(certPath)
+
+	oAuthTokenInfo.Token = spt.Token()
+	oAuthTokenInfo.RefreshToken = oAuthTokenInfo.Token.RefreshToken
+	oAuthTokenInfo.ApplicationID = applicationID
+	oAuthTokenInfo.ServicePrincipalName = true
+	oAuthTokenInfo.SPNInfo = SPNInfo{
+		Secret:   certPass,
+		CertPath: cpfq,
+	}
+
+	return &oAuthTokenInfo, nil
+}
+
+//CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
+func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
+	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
+
+	if persist {
+		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return oAuthTokenInfo, nil
+}
+
+//GetNewTokenFromCert refreshes a token manually from a certificate.
+func (credInfo *OAuthTokenInfo) GetNewTokenFromCert(ctx context.Context) (*adal.Token, error) {
+	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+
+	if err != nil {
+		return nil, err
+	} else {
+		return &tokeninfo.Token, nil
+	}
 }
 
 // UserLogin interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
@@ -307,8 +396,11 @@ type OAuthTokenInfo struct {
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	TokenRefreshSource      string `json:"_token_refresh_source"`
+	ApplicationID           string `json:"_application_id"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
+	ServicePrincipalName    bool `json:"_spn"`
+	SPNInfo                 SPNInfo
 	// Note: ClientID should be only used for internal integrations through env var with refresh token.
 	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
 	// In this case AzCopy refresh token on behalf of caller.
@@ -322,6 +414,13 @@ type IdentityInfo struct {
 	ClientID string `json:"_identity_client_id"`
 	ObjectID string `json:"_identity_object_id"`
 	MSIResID string `json:"_identity_msi_res_id"`
+}
+
+//SPNInfo contains info for authenticating with Service Principle Names
+type SPNInfo struct {
+	//Secret is used for two purposes: The certificate secret, and a client secret.
+	Secret   string `json:"_spn_secret"`
+	CertPath string `json:"_spn_cert_path"`
 }
 
 // Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
@@ -350,6 +449,10 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 
 	if credInfo.Identity {
 		return credInfo.GetNewTokenFromMSI(ctx)
+	}
+
+	if credInfo.ServicePrincipalName {
+		return credInfo.GetNewTokenFromCert(ctx)
 	}
 
 	return credInfo.RefreshTokenWithUserCredential(ctx)

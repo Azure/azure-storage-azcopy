@@ -145,7 +145,7 @@ func (lca loginCmdArgs) process() error {
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
-	if lca.identity {
+	/*if lca.identity {
 		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
@@ -156,6 +156,33 @@ func (lca loginCmdArgs) process() error {
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
 	} else {
+		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
+			return err
+		}
+		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
+		glcm.Info("Login succeeded.")
+	}*/
+
+	switch {
+	case lca.certificate:
+		if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, true); err != nil {
+			return err
+		}
+
+		glcm.Info("Login with certificate succeeded.")
+	case lca.secret:
+		glcm.Info("Login with secret is not yet implemented.")
+	case lca.identity:
+		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
+			ClientID: lca.identityClientID,
+			ObjectID: lca.identityObjectID,
+			MSIResID: lca.identityResourceID,
+		}, true); err != nil {
+			return err
+		}
+		// For MSI login, info success message to user.
+		glcm.Info("Login with identity succeeded.")
+	default:
 		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
 			return err
 		}
