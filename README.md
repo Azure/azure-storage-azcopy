@@ -28,7 +28,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 
 1. Download the AzCopy executable using one of the following links:
     * [Windows x64](https://aka.ms/downloadazcopy-v10-windows) (zip)
-    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux) (tar)
+    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux) (tar.gz)
     * [MacOS x64](https://aka.ms/downloadazcopy-v10-mac) (zip)
 
 2. Unzip (or untar on Linux) and get started
@@ -37,7 +37,7 @@ On Linux:
 ```
 wget -O azcopyv10.tar.gz https://aka.ms/downloadazcopy-v10-linux
 tar -xzf azcopyv10.tar.gz
-cd azcopy_linux_amd64_10.0.8
+cd azcopy_linux_amd64_10.0.9
 ./azcopy
 ```
 
@@ -45,7 +45,7 @@ On Windows:
 ```
 Invoke-WebRequest -Uri https://aka.ms/downloadazcopy-v10-windows -OutFile .\azcopyv10.zip
 Expand-Archive azcopyv10.zip -DestinationPath .
-cd .\azcopy_windows_amd64_10.0.8
+cd .\azcopy_windows_amd64_10.0.9
 .\azcopy.exe
 ```
 
