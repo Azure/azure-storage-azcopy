@@ -40,6 +40,10 @@ func (e *copyS2SMigrationEnumeratorBase) initEnumeratorCommon(ctx context.Contex
 		return errors.New("cannot parse destination URL")
 	}
 
+	if e.sourceURL.Scheme != "https" || e.destURL.Scheme != "https" {
+		return errors.New("S2S copy requires source and destination URLs using the https protocol scheme")
+	}
+
 	if err := e.initDestPipeline(ctx); err != nil {
 		return err
 	}
