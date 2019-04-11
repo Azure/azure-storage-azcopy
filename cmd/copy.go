@@ -1140,6 +1140,7 @@ func init() {
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
+	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
 	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
