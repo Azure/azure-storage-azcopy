@@ -34,6 +34,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.ShowPerfStates(),
 	EEnvironmentVariable.PacePageBlobs(),
+	EEnvironmentVariable.DefaultServiceApiVersion(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
@@ -109,4 +110,12 @@ func (EnvironmentVariable) OAuthTokenInfo() EnvironmentVariable {
 // CredentialType is only used for internal integration.
 func (EnvironmentVariable) CredentialType() EnvironmentVariable {
 	return EnvironmentVariable{Name: "AZCOPY_CRED_TYPE"}
+}
+
+func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:         "AZCOPY_DEFAULT_SERVICE_API_VERSION",
+		DefaultValue: "2018-03-28",
+		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
+	}
 }
