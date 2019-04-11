@@ -125,6 +125,10 @@ func (lca loginCmdArgs) validate() error {
 		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" || lca.clientSecret != "" {
 			return errors.New("identity client/object/resource ID, and clientSecret cannot be used on a certificate")
 		}
+
+		if lca.applicationID == "" || lca.certPath == "" {
+			return errors.New("certificate login requires a applicationID and a cert path")
+		}
 	case lca.secret:
 		if lca.identity || lca.certificate {
 			return errors.New("you can only log in with one type of OAuth at once")
@@ -132,6 +136,10 @@ func (lca loginCmdArgs) validate() error {
 
 		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" || lca.certPath != "" || lca.certPass != "" {
 			return errors.New("identity client/object/resource ID, and client cert path/pass cannot be used on a certificate")
+		}
+
+		if lca.applicationID == "" || lca.clientSecret == "" {
+			return errors.New("client secret login requires a applicationID and a client secret")
 		}
 	}
 
