@@ -188,11 +188,7 @@ export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
 
 ![Example registration](images/registration.png)
 
-**3**. Add the "Azure Storage" permissions to the application.
-
-![Example permission addition](images/permission.png)
-
-**4**. Add public keys or client secrets under the "keys" section of the application.
+**3**. Add public keys or client secrets under the "keys" section of the application.
 
 ![Keys](images/keys.png)
 
@@ -211,11 +207,11 @@ To generate a private & public keypair for AzCopy, perform the following steps i
     
     openssl pkcs12 -export -out "example-app.pfx" -inkey "example-app.key" -in "example-app.crt" -passout <password>
     
-**5**. Register the app as a contributor to any [resource groups or storage accounts](https://ms.portal.azure.com/#blade/HubsExtension/BrowseResourceGroupBlade/resourceType/Microsoft.Resources%2Fsubscriptions%2FresourceGroups) you plan to use with AzCopy.
+**4**. Register the app as a contributor to any [resource groups or storage accounts](https://ms.portal.azure.com/#blade/HubsExtension/BrowseResourceGroupBlade/resourceType/Microsoft.Resources%2Fsubscriptions%2FresourceGroups) you plan to use with AzCopy.
 
 ![Example role setup](images/role.png)
 
-**6**. Use one of the following sets of command line parameters depending on which type of SPN authentication you plan to use:
+**5**. Use one of the following sets of command line parameters depending on which type of SPN authentication you plan to use:
 
 Client secrets:
 
