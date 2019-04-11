@@ -180,6 +180,24 @@ export https_proxy=<user>:<pass>@<proxy IP>:<proxy port>
 export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
 ```
 
+#### Authenticate using Service Principal Names
+
+1. Create a web app within the Azure Portal and register the secrets you wish to use with it. 
+2. Register it as a contributor to any resource groups you'd like it to have access to.
+3. Use one of the following sets of command line parameters depending on which type of SPN authentication you plan to use:
+
+Client secrets:
+
+```
+./azcopy login --secret --application-id <your application ID> --client-secret <your secret>
+```
+
+Certificates:
+
+```
+./azcopy login --certificate --application-id <your application ID> --certificate-path <your certificate's path, can be relative> --certificate-password <your certificate's password, not a mandatory parameter>
+```
+
 ### Configure log location
 
 Set the environment variable 'AZCOPY_LOG_LOCATION' to a directory of your choice where there is plenty of disk space as logs for large data transfers may use up Gigabytes of space depending on the chosen log level.
