@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/go-autorest/autorest/adal"
 	minio "github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
 )

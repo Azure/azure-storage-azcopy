@@ -63,7 +63,7 @@ type CopyJobPartOrderRequest struct {
 	CommandString  string
 	CredentialInfo CredentialInfo
 
-	S2SGetPropertiesInBackend    bool
+	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 }
