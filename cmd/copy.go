@@ -34,6 +34,7 @@ import (
 
 	"io/ioutil"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -704,7 +705,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	from := cca.fromTo.From()
 	to := cca.fromTo.To()
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
-	// Note: SAS could exists in source of S2S copy, although the credential type is OAuth for destination.
+	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
 	switch from {
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
@@ -737,6 +738,25 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// set the clean source root
 		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
 		jobPartOrder.SourceRoot = fUrl.String()
+
+	case common.ELocation.BlobFS():
+		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
+		// (a) it also escapes spaces in the source (and we need that done) and
+		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
+		if redacted, _ := common.RedactSecretQueryParam(cca.source, "sig"); redacted {
+			panic("SAS in BlobFS is not yet supported")
+		}
+		fromUrl, err := url.Parse(cca.source)
+		if err != nil {
+			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
+		}
+		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
+		bfsUrl := bfsParts.URL()
+		cca.source = bfsUrl.String() // this escapes spaces in the source
+
+		// set the clean source root
+		bfsUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bfsUrl.Path)
+		jobPartOrder.SourceRoot = bfsUrl.String()
 
 	case common.ELocation.Local():
 		// If the path separator is '\\', it means
@@ -773,7 +793,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.ELocation.Blob():
 		toUrl, err := url.Parse(cca.destination)
 		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
 		}
 		blobParts := azblob.NewBlobURLParts(*toUrl)
 		cca.destinationSAS = blobParts.SAS.Encode()
@@ -784,7 +804,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.ELocation.File():
 		toUrl, err := url.Parse(cca.destination)
 		if err != nil {
-			return fmt.Errorf("error parsing the source url %s. Failed with error %s", toUrl.String(), err.Error())
+			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
 		}
 		fileParts := azfile.NewFileURLParts(*toUrl)
 		cca.destinationSAS = fileParts.SAS.Encode()
@@ -792,6 +812,20 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
 		cca.destination = fUrl.String()
+	case common.ELocation.BlobFS():
+		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
+		// (a) it also escapes spaces in the destination (and we need that done) and
+		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
+		if redacted, _ := common.RedactSecretQueryParam(cca.destination, "sig"); redacted {
+			panic("SAS in BlobFS is not yet supported")
+		}
+		toUrl, err := url.Parse(cca.destination)
+		if err != nil {
+			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
+		}
+		bfsParts := azbfs.NewBfsURLParts(*toUrl)
+		bfsUrl := bfsParts.URL()
+		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
 		// If the path separator is '\\', it means
 		// local path is a windows path
