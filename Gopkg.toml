@@ -1,6 +1,6 @@
 [[constraint]]
   name = "github.com/Azure/azure-pipeline-go"
-  version = "0.1.8"
+  version = "0.1.9"
 
 [[constraint]]
   name = "github.com/Azure/azure-storage-file-go"
