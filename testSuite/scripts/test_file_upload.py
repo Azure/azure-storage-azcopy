@@ -31,7 +31,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         # execute azcopy upload.
         destination = util.get_resource_sas_from_share(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
@@ -47,7 +47,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         destination = util.get_resource_sas_from_share(file_name)
         wildcard_path = file_path.replace(file_name, "test_file_upload_1mb_wildcard*")
         result = util.Command("copy").add_arguments(wildcard_path).add_arguments(util.test_share_url).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
@@ -65,7 +65,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         # execute azcopy file upload.
         destination_sas = util.get_resource_sas_from_share(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
@@ -85,7 +85,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         # execute azcopy file upload.
         destination_sas = util.get_resource_sas_from_share(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size", "4194304").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # number of range for partial sparse created above will be (size/2)
@@ -218,7 +218,7 @@ class FileShare_Upload_User_Scenario(unittest.TestCase):
         # execute azcopy upload.
         destination_sas = util.get_resource_sas_from_share(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "100").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded file.

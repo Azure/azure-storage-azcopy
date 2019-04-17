@@ -48,7 +48,7 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSize           uint32
+	blockSizeMB         uint32
 	logVerbosity        string
 	include             string
 	exclude             string
@@ -59,6 +59,10 @@ type rawSyncCmdArgs struct {
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
 	deleteDestination string
+}
+
+func (raw *rawSyncCmdArgs) blockSizeInBytes() uint32 {
+	return raw.blockSizeMB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MB
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -125,7 +129,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// generate a new job ID
 	cooked.jobID = common.NewJobID()
 
-	cooked.blockSize = raw.blockSize
+	cooked.blockSize = raw.blockSizeInBytes()
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.recursive = raw.recursive
 
@@ -508,7 +512,7 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	syncCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block (chunk) size when uploading/downloading to/from Azure Storage. Size is in megabytes.")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")

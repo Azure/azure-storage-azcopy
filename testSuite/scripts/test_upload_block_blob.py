@@ -50,7 +50,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # execute azcopy copy upload.
         dest = util.get_resource_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(dest) \
-            .add_flags("log-level", "info").add_flags("block-size", "104857600").add_flags("recursive", "true"). \
+            .add_flags("log-level", "info").add_flags("block-size-mb", "100").add_flags("recursive", "true"). \
             execute_azcopy_copy_command()
         self.assertTrue(result)
 
@@ -132,7 +132,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             dest_validate = util.get_resource_from_oauth_container_validate(filename)
 
         result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("log-level", "info"). \
-            add_flags("block-size", "104857600").add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "100").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded blob.
@@ -155,7 +155,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
     # performs the upload, verify the blob and number of blocks.
     def test_block_size(self):
 
-        block_size = 4 * 1024 * 1024
+        block_size_mb = 4
         # create file of size 63 Mb
         filename = "test63Mb_blob.txt"
         file_path = util.create_test_file(filename, 63 * 1024 * 1024)
@@ -163,15 +163,16 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # execute azcopy upload of 63 Mb file.
         destination_sas = util.get_resource_sas(filename)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level", "info"). \
-            add_flags("block-size", str(block_size)).add_flags("recursive", "true").execute_azcopy_copy_command()
+            add_flags("block-size-mb", str(block_size_mb)).add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the uploaded blob
         # calling the testBlob validator to verify whether blob has been successfully uploaded or not
-        if (63 * 1024 * 1024) % block_size == 0:
-            number_of_blocks = int(63 * 1024 * 1024 / block_size)
+        block_size_bytes = block_size_mb * 1024 * 1024
+        if (63 * 1024 * 1024) % block_size_bytes == 0:
+            number_of_blocks = int(63 * 1024 * 1024 / block_size_bytes)
         else:
-            number_of_blocks = int(63 * 1024 * 1024 / block_size) + 1
+            number_of_blocks = int(63 * 1024 * 1024 / block_size_bytes) + 1
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas).add_flags(
             "verify-block-size", "true").add_flags("number-blocks-or-pages", str(number_of_blocks)).execute_azcopy_verify()
         self.assertTrue(result)

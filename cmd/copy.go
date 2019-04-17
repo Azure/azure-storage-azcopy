@@ -85,7 +85,7 @@ type rawCopyCmdArgs struct {
 	forceWrite bool
 
 	// options from flags
-	blockSize                uint32
+	blockSizeMB              uint32
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -136,6 +136,10 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
+func (raw rawCopyCmdArgs) blockSizeInBytes() uint32 {
+	return raw.blockSizeMB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MB
+}
+
 // validates and transform raw input into cooked input
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{}
@@ -154,7 +158,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
-	cooked.blockSize = raw.blockSize
+	cooked.blockSize = raw.blockSizeInBytes()
 
 	// parse the given blob type.
 	err = cooked.blobType.Parse(raw.blobType)
@@ -162,10 +166,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// If the given blobType is AppendBlob, block-size should not be greater than
+	// If the given blobType is AppendBlob, block-size-mb should not be greater than
 	// 4MB.
 	if cooked.blobType == common.EBlobType.AppendBlob() &&
-		raw.blockSize > common.MaxAppendBlobBlockSize {
+		raw.blockSizeInBytes() > common.MaxAppendBlobBlockSize {
 		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
 	}
 
@@ -689,8 +693,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:                   cca.putMd5,
-			MD5ValidationOption:      cca.md5ValidationOption,
+			PutMd5:              cca.putMd5,
+			MD5ValidationOption: cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -1132,7 +1136,7 @@ func init() {
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block (chunk) size when uploading/downloading to/from Azure Storage. Size is in megabytes.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
