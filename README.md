@@ -216,13 +216,13 @@ To generate a private & public keypair for AzCopy, perform the following steps i
 Client secrets:
 
 ```
-./azcopy login --secret --application-id <your application ID> --client-secret <your secret>
+./azcopy login --service-principal --application-id <your application ID> --client-secret <your secret>
 ```
 
 Certificates:
 
 ```
-./azcopy login --certificate --application-id <your application ID> --certificate-path <your certificate's path, can be relative> --certificate-password <your certificate's password, not a mandatory parameter>
+./azcopy login --service-principal --application-id <your application ID> --certificate-path <your certificate's path, can be relative> --certificate-password <your certificate's password, not a mandatory parameter>
 ```
 
 ### Configure log location
