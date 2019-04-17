@@ -214,6 +214,6 @@ func init() {
 		},
 	}
 
-	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota", 0, "specifies the maximum size of the share in gigabytes, 0 means you accept the file service's default quota.")
+	makeCmd.PersistentFlags().Uint32Var(&rawArgs.quota, "quota-gb", 0, "specifies the maximum size of the share in gigabytes, 0 means you accept the file service's default quota.")
 	rootCmd.AddCommand(makeCmd)
 }
