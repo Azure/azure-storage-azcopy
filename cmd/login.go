@@ -58,8 +58,7 @@ func init() {
 	// Use identity which aligns to Azure powershell and CLI.
 	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "log in using virtual machine's identity, also known as managed service identity (MSI)")
 	// Use SPN certificate to log in.
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.certificate, "certificate", false, "log in using a certificate as a form of Service Principal Name (SPN) auth")
-	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.secret, "secret", false, "log in using a client secret as a form of Service Principal Name (SPN) auth")
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.servicePrincipal, "service-principal", false, "log in via SPN (Service Principal Name) using a certificate or a secret.")
 	// Client ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "client ID of user-assigned identity")
 	// Object ID of user-assigned identity.
@@ -83,9 +82,8 @@ type loginCmdArgs struct {
 	tenantID    string
 	aadEndpoint string
 
-	identity    bool // Whether to use MSI.
-	certificate bool
-	secret      bool
+	identity         bool // Whether to use MSI.
+	servicePrincipal bool
 
 	// Info of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
@@ -110,27 +108,15 @@ func (lca loginCmdArgs) validate() error {
 	// Only support one kind of oauth login at same time.
 	switch {
 	case lca.identity:
-		if lca.certificate || lca.secret {
+		if lca.servicePrincipal {
 			return errors.New("you can only log in with one type of OAuth at once")
 		}
 
 		if lca.tenantID != "" || lca.applicationID != "" || lca.certPath != "" || lca.clientSecret != "" {
 			return errors.New("tenant ID/application ID/cert path/client secret cannot be used with identity")
 		}
-	case lca.certificate:
-		if lca.secret || lca.identity {
-			return errors.New("you can only log in with one type of OAuth at once")
-		}
-
-		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" || lca.clientSecret != "" {
-			return errors.New("identity client/object/resource ID, and clientSecret cannot be used on a certificate")
-		}
-
-		if lca.applicationID == "" || lca.certPath == "" {
-			return errors.New("certificate login requires a applicationID and a cert path")
-		}
-	case lca.secret:
-		if lca.identity || lca.certificate {
+	case lca.servicePrincipal:
+		if lca.identity {
 			return errors.New("you can only log in with one type of OAuth at once")
 		}
 
@@ -138,7 +124,7 @@ func (lca loginCmdArgs) validate() error {
 			return errors.New("identity client/object/resource ID, and client cert path/pass cannot be used on a certificate")
 		}
 
-		if lca.applicationID == "" || lca.clientSecret == "" {
+		if lca.applicationID == "" || (lca.clientSecret == "" && lca.certPath == "") {
 			return errors.New("client secret login requires a applicationID and a client secret")
 		}
 	}
@@ -154,37 +140,23 @@ func (lca loginCmdArgs) process() error {
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
-	/*if lca.identity {
-		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
-			ClientID: lca.identityClientID,
-			ObjectID: lca.identityObjectID,
-			MSIResID: lca.identityResourceID,
-		}, true); err != nil {
-			return err
-		}
-		// For MSI login, info success message to user.
-		glcm.Info("Login with identity succeeded.")
-	} else {
-		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
-			return err
-		}
-		// User fulfills login in browser, and there would be message in browser indicating whether login fulfilled successfully.
-		glcm.Info("Login succeeded.")
-	}*/
 
 	switch {
-	case lca.certificate:
-		if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, true); err != nil {
-			return err
-		}
+	case lca.servicePrincipal:
 
-		glcm.Info("Login with certificate succeeded.")
-	case lca.secret:
-		if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, true); err != nil {
-			return err
-		}
+		if lca.certPath != "" {
+			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, true); err != nil {
+				return err
+			}
 
-		glcm.Info("Login using client secret succeeded.")
+			glcm.Info("SPN Auth via cert succeeded.")
+		} else {
+			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, true); err != nil {
+				return err
+			}
+
+			glcm.Info("SPN Auth via secret succeeded.")
+		}
 	case lca.identity:
 		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
 			ClientID: lca.identityClientID,
