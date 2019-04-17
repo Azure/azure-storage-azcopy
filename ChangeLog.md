@@ -1,6 +1,6 @@
 # Change Log
 
-## Version 10.0.10 (GA)
+## Version 10.1.0 (GA)
 
 ### Breaking changes
 
