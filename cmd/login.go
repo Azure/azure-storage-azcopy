@@ -120,7 +120,7 @@ func (lca loginCmdArgs) validate() error {
 			return errors.New("you can only log in with one type of OAuth at once")
 		}
 
-		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" || lca.certPath != "" || lca.certPass != "" {
+		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" {
 			return errors.New("identity client/object/resource ID, and client cert path/pass cannot be used on a certificate")
 		}
 

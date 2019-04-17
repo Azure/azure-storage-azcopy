@@ -184,6 +184,8 @@ export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
 
 **1**. Create a new app registration [in the azure portal](https://ms.portal.azure.com/#blade/Microsoft_AAD_IAM/ApplicationsListBlade).
 
+You can also create an app registration, generate a certificate, and register it, jumping you to step 4 at the same time via [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/create-an-azure-service-principal-azure-cli?view=azure-cli-latest#certificate-based-authentication)
+
 **2**. Ensure the app registration is labeled as a Web App/API. The sign-on URL does not matter, simply set it to http://whatever
 
 ![Example registration](images/registration.png)
@@ -192,7 +194,7 @@ export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
 
 ![Keys](images/keys.png)
 
-To generate a private & public keypair for AzCopy, perform the following steps in a command line, replacing example-app with your app name:
+To generate a private & public keypair for AzCopy (if you did not opt to use Azure CLI), perform the following steps in a command line, replacing example-app with your app name:
 
     4a. Generate a private key
     
