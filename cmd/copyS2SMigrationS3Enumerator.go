@@ -24,7 +24,7 @@ type copyS2SMigrationS3Enumerator struct {
 
 func (e *copyS2SMigrationS3Enumerator) initEnumerator(ctx context.Context, cca *cookedCopyCmdArgs) (err error) {
 	// TODO: Remove the message after S3 to blob feature GA.
-	glcm.Info("S3 to blob copy is in preview")
+	glcm.Info("AWS S3 to Azure Blob copy is currently in preview. Validate the copy operation carefully before removing your data at source.")
 
 	if err = e.initEnumeratorCommon(ctx, cca); err != nil {
 		return err
