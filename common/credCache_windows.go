@@ -205,8 +205,8 @@ func (c *CredCache) tokenFilePath() string {
 // DPAPI facilities
 // ======================================================================================
 
-var dCrypt32 = syscall.NewLazyDLL("Crypt32.dll")
-var dKernel32 = syscall.NewLazyDLL("Kernel32.dll")
+var dCrypt32 = syscall.NewLazyDLL("crypt32.dll") // lower case to tie in with Go's sysdll registration
+var dKernel32 = syscall.NewLazyDLL("kernel32.dll")
 
 // Refer to https://msdn.microsoft.com/en-us/library/windows/desktop/aa380261(v=vs.85).aspx for more details.
 var mCryptProtectData = dCrypt32.NewProc("CryptProtectData")

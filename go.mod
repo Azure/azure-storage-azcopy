@@ -1,7 +1,7 @@
 module github.com/Azure/azure-storage-azcopy
 
 require (
-	github.com/Azure/azure-pipeline-go v0.1.8
+	github.com/Azure/azure-pipeline-go v0.1.9
 	github.com/Azure/azure-storage-blob-go v0.6.0
 	github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a
 	github.com/Azure/go-autorest v10.15.2+incompatible
