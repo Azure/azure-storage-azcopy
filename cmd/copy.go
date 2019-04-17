@@ -302,10 +302,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -322,10 +322,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -349,10 +349,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while downloading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while downloading")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while downloading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
@@ -432,7 +432,7 @@ func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo)
 	hasMd5Validation := option != common.DefaultHashValidationOption
 	isDownload := fromTo.To() == common.ELocation.Local()
 	if hasMd5Validation && !isDownload {
-		return fmt.Errorf("md5-validation is set but the job is not a download")
+		return fmt.Errorf("check-md5 is set but the job is not a download")
 	}
 	return nil
 }

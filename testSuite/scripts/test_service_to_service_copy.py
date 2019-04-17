@@ -415,11 +415,11 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         cpCmd = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
             add_flags("log-level", "info")
         if invalidMetadataHandleOption == "" or invalidMetadataHandleOption == "ExcludeIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "ExcludeIfInvalid")
+            cpCmd.add_flags("s2s-handle-invalid-metadata", "ExcludeIfInvalid")
         if invalidMetadataHandleOption == "FailIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "FailIfInvalid")
+            cpCmd.add_flags("s2s-handle-invalid-metadata", "FailIfInvalid")
         if invalidMetadataHandleOption == "RenameIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "RenameIfInvalid")
+            cpCmd.add_flags("s2s-handle-invalid-metadata", "RenameIfInvalid")
 
         result = cpCmd.execute_azcopy_copy_command()
         self.assertTrue(result)
