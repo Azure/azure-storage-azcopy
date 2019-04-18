@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -139,7 +140,8 @@ func HandleListContainerCommand(source string) (err error) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			blobName := blobInfo.Name
+			blobName := blobInfo.Name + "; Content Size: " + ByteSizeToString(int(*blobInfo.Properties.ContentLength))
+
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
 				blobName = strings.Replace(blobName, searchPrefix, "", 1)
@@ -162,4 +164,26 @@ func printListContainerResponse(lsResponse *common.ListContainerResponse) {
 	for index := 0; index < len(lsResponse.Blobs); index++ {
 		glcm.Info(lsResponse.Blobs[index])
 	}
+}
+
+func ByteSizeToString(size int) string {
+	units := []string{
+		"bytes",
+		"kilobytes",
+		"megabytes",
+		"gigabytes",
+		"terabytes",
+		"petabytes",
+		"exabytes", //Let's face it, a file probably won't be more than 1000 exabytes in YEARS.
+	}
+	unit := 0
+	floatSize := float64(size)
+	gigSize := 1024
+
+	for floatSize/float64(gigSize) >= 1 {
+		unit++
+		floatSize /= float64(gigSize)
+	}
+
+	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
 }
