@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -438,6 +439,8 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	bucketName2 := generateBucketNameWithCustomizedPrefix(specificRegion)
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
 	defer deleteBucket(c, s3Client, bucketName2)
+
+	time.Sleep(60 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)

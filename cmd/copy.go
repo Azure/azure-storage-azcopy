@@ -85,7 +85,7 @@ type rawCopyCmdArgs struct {
 	forceWrite bool
 
 	// options from flags
-	blockSize                uint32
+	blockSizeMB              uint32
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -136,6 +136,10 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
+func (raw rawCopyCmdArgs) blockSizeInBytes() uint32 {
+	return raw.blockSizeMB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MB
+}
+
 // validates and transform raw input into cooked input
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{}
@@ -154,7 +158,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
-	cooked.blockSize = raw.blockSize
+	cooked.blockSize = raw.blockSizeInBytes()
 
 	// parse the given blob type.
 	err = cooked.blobType.Parse(raw.blobType)
@@ -162,10 +166,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// If the given blobType is AppendBlob, block-size should not be greater than
+	// If the given blobType is AppendBlob, block-size-mb should not be greater than
 	// 4MB.
 	if cooked.blobType == common.EBlobType.AppendBlob() &&
-		raw.blockSize > common.MaxAppendBlobBlockSize {
+		raw.blockSizeInBytes() > common.MaxAppendBlobBlockSize {
 		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
 	}
 
@@ -298,10 +302,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.LocalFile():
 		if cooked.preserveLastModifiedTime {
@@ -318,10 +322,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while uploading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -345,10 +349,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while downloading")
 		}
 		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
-			return cooked, fmt.Errorf("s2s-invalid-metadata-handle is not supported while downloading")
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while downloading")
 		}
 		if cooked.s2sSourceChangeValidation {
-			return cooked, fmt.Errorf("s2s-source-change-validation is not supported while downloading")
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while downloading")
 		}
 	case common.EFromTo.BlobBlob(),
 		common.EFromTo.FileBlob(),
@@ -428,7 +432,7 @@ func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo)
 	hasMd5Validation := option != common.DefaultHashValidationOption
 	isDownload := fromTo.To() == common.ELocation.Local()
 	if hasMd5Validation && !isDownload {
-		return fmt.Errorf("md5-validation is set but the job is not a download")
+		return fmt.Errorf("check-md5 is set but the job is not a download")
 	}
 	return nil
 }
@@ -689,8 +693,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:                   cca.putMd5,
-			MD5ValidationOption:      cca.md5ValidationOption,
+			PutMd5:              cca.putMd5,
+			MD5ValidationOption: cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -1132,7 +1136,7 @@ func init() {
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSize, "block-size", 0, "use this block(chunk) size when uploading/downloading to/from Azure Storage.")
+	cpCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
@@ -1142,7 +1146,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
-	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "md5-validation", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
+	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
 	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
 		"to the standard input. This is mostly used when the application is spawned by another process.")
@@ -1154,9 +1158,9 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
 		"please refer to https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers to ensure destination storage account supports setting access tier. "+
 		"In the cases that setting access tier is not supported, please use s2sPreserveAccessTier=false to bypass copying access tier. ")
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-source-change-validation", false, "check if source has changed after enumerating. "+
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sSourceChangeValidation, "s2s-detect-source-changed", false, "check if source has changed after enumerating. "+
 		"For S2S copy, as source is a remote resource, validating whether source has changed need additional request costs. ")
-	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-invalid-metadata-handle", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
+	cpCmd.PersistentFlags().StringVar(&raw.s2sInvalidMetadataHandleOption, "s2s-handle-invalid-metadata", common.DefaultInvalidMetadataHandleOption.String(), "specifies how invalid metadata keys are handled. AvailabeOptions: ExcludeIfInvalid, FailIfInvalid, RenameIfInvalid.")
 
 	// s2sGetPropertiesInBackend is an optional flag for controlling whether S3 object's or Azure file's full properties are get during enumerating in frontend or
 	// right before transferring in ste(backend).
