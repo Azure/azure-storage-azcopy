@@ -24,11 +24,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path"
 	"time"
 
 	"net/url"
-	"os"
 	"strings"
 
 	"sync/atomic"
@@ -96,19 +94,6 @@ func (raw *rawSyncCmdArgs) separateSasFromURL(rawURL string) (cleanURL string, s
 	return
 }
 
-func (raw *rawSyncCmdArgs) cleanLocalPath(rawPath string) (cleanPath string) {
-	// if the path separator is '\\', it means
-	// local path is a windows path
-	// to avoid path separator check and handling the windows
-	// path differently, replace the path separator with the
-	// the linux path separator '/'
-	if os.PathSeparator == '\\' {
-		cleanPath = strings.Replace(rawPath, common.OS_PATH_SEPARATOR, "/", -1)
-	}
-	cleanPath = path.Clean(rawPath)
-	return
-}
-
 // validates and transform raw input into cooked input
 func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
@@ -117,11 +102,11 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.source = raw.cleanLocalPath(raw.src)
+		cooked.source = cleanLocalPath(raw.src)
 		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
 		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
-		cooked.destination = raw.cleanLocalPath(raw.dst)
+		cooked.destination = cleanLocalPath(raw.dst)
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
 	}

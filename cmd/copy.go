@@ -763,15 +763,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.SourceRoot = bfsUrl.String()
 
 	case common.ELocation.Local():
-		// If the path separator is '\\', it means
-		// local path is a windows path
-		// To avoid path separator check and handling the windows
-		// path differently, replace the path separator with the
-		// the linux path separator '/'
-		if os.PathSeparator == '\\' {
-			cca.source = strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-		}
-
+		cca.source = cleanLocalPath(cca.source)
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 
 	case common.ELocation.S3():
@@ -831,14 +823,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
-		// If the path separator is '\\', it means
-		// local path is a windows path
-		// To avoid path separator check and handling the windows
-		// path differently, replace the path separator with the
-		// the linux path separator '/'
-		if os.PathSeparator == '\\' {
-			cca.destination = strings.Replace(cca.destination, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-		}
+		cca.destination = cleanLocalPath(cca.destination)
 	}
 
 	// set the root destination after it's been cleaned
