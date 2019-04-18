@@ -140,7 +140,7 @@ func HandleListContainerCommand(source string) (err error) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			blobName := blobInfo.Name + "; Content Size: " + ByteSizeToString(int(*blobInfo.Properties.ContentLength))
+			blobName := blobInfo.Name + "; Content Size: " + byteSizeToString(*blobInfo.Properties.ContentLength)
 
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
@@ -166,15 +166,15 @@ func printListContainerResponse(lsResponse *common.ListContainerResponse) {
 	}
 }
 
-func ByteSizeToString(size int) string {
+func byteSizeToString(size int64) string {
 	units := []string{
-		"bytes",
-		"kilobytes",
-		"megabytes",
-		"gigabytes",
-		"terabytes",
-		"petabytes",
-		"exabytes", //Let's face it, a file probably won't be more than 1000 exabytes in YEARS.
+		"B",
+		"KB",
+		"MB",
+		"GB",
+		"TB",
+		"PB",
+		"EB", //Let's face it, a file probably won't be more than 1000 exabytes in YEARS.
 	}
 	unit := 0
 	floatSize := float64(size)
