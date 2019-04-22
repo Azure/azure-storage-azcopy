@@ -761,17 +761,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
-		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
-		// (a) it also escapes spaces in the source (and we need that done) and
-		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.source, "sig"); redacted {
-			panic("SAS in BlobFS is not yet supported")
-		}
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
 			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
 		}
 		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
+		cca.sourceSAS = bfsParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		bfsParts.SAS = azbfs.SASQueryParameters{}
 		bfsUrl := bfsParts.URL()
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 

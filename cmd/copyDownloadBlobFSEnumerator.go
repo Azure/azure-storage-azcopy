@@ -30,6 +30,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// attempt to parse the source url
 	sourceURL, err := url.Parse(cca.source)
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
 	if err != nil {
 		return errors.New("cannot parse source URL")
 	}
