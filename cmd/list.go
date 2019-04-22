@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -71,8 +72,21 @@ func init() {
 
 		},
 	}
+
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.MachineReadable, "machine-readable", false, "Lists file sizes in bytes")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.RunningTally, "running-tally", false, "Counts the total number of files & their sizes")
+	listContainerCmd.PersistentFlags().BoolVar(&parameters.MegaUnits, "mega-units", false, "Displays units in orders of 1000, not 1024")
+
 	rootCmd.AddCommand(listContainerCmd)
 }
+
+type ListParameters struct {
+	MachineReadable bool
+	RunningTally    bool
+	MegaUnits       bool
+}
+
+var parameters = ListParameters{}
 
 // HandleListContainerCommand handles the list container command
 func HandleListContainerCommand(source string) (err error) {
@@ -128,6 +142,9 @@ func HandleListContainerCommand(source string) (err error) {
 
 	summary := common.ListContainerResponse{}
 
+	fileCount := 0
+	sizeCount := 0
+
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix
@@ -139,7 +156,19 @@ func HandleListContainerCommand(source string) (err error) {
 
 		// Process the blobs returned in this result segment (if the segment is empty, the loop body won't execute)
 		for _, blobInfo := range listBlob.Segment.BlobItems {
-			blobName := blobInfo.Name
+			blobName := blobInfo.Name + "; Content Size: "
+
+			if parameters.MachineReadable {
+				blobName += strconv.Itoa(int(*blobInfo.Properties.ContentLength))
+			} else {
+				blobName += byteSizeToString(*blobInfo.Properties.ContentLength)
+			}
+
+			if parameters.RunningTally {
+				fileCount++
+				sizeCount += int(*blobInfo.Properties.ContentLength)
+			}
+
 			if len(searchPrefix) > 0 {
 				// strip away search prefix from the blob name.
 				blobName = strings.Replace(blobName, searchPrefix, "", 1)
@@ -148,6 +177,17 @@ func HandleListContainerCommand(source string) (err error) {
 		}
 		marker = listBlob.NextMarker
 		printListContainerResponse(&summary)
+
+		if parameters.RunningTally {
+			glcm.Info("")
+			glcm.Info("File count: " + strconv.Itoa(fileCount))
+
+			if parameters.MachineReadable {
+				glcm.Info("Total file size: " + strconv.Itoa(sizeCount))
+			} else {
+				glcm.Info("Total file size: " + byteSizeToString(int64(sizeCount)))
+			}
+		}
 	}
 	return nil
 }
@@ -162,4 +202,41 @@ func printListContainerResponse(lsResponse *common.ListContainerResponse) {
 	for index := 0; index < len(lsResponse.Blobs); index++ {
 		glcm.Info(lsResponse.Blobs[index])
 	}
+}
+
+var megaSize = []string{
+	"B",
+	"KB",
+	"MB",
+	"GB",
+	"TB",
+	"PB",
+	"EB",
+}
+
+func byteSizeToString(size int64) string {
+	units := []string{
+		"B",
+		"KiB",
+		"MiB",
+		"GiB",
+		"TiB",
+		"PiB",
+		"EiB", //Let's face it, a file probably won't be more than 1000 exabytes in YEARS. (and int64 literally isn't large enough to handle too many exbibytes. 128 bit processors when)
+	}
+	unit := 0
+	floatSize := float64(size)
+	gigSize := 1024
+
+	if parameters.MegaUnits {
+		gigSize = 1000
+		units = megaSize
+	}
+
+	for floatSize/float64(gigSize) >= 1 {
+		unit++
+		floatSize /= float64(gigSize)
+	}
+
+	return strconv.FormatFloat(floatSize, 'f', 2, 64) + " " + units[unit]
 }
