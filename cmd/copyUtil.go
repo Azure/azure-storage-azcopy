@@ -455,7 +455,7 @@ func (util copyHandlerUtil) blobNameMatchesThePatternComponentWise(pattern strin
 	// each component of the blobName should match each component in pattern
 	// Length of patternComponents and blobNameComponents is same since we already
 	// match the number of path separators above.
-	patternComponents := strings.Split(blobName, common.AZCOPY_PATH_SEPARATOR_STRING)
+	patternComponents := strings.Split(pattern, common.AZCOPY_PATH_SEPARATOR_STRING)
 	blobNameComponents := strings.Split(blobName, common.AZCOPY_PATH_SEPARATOR_STRING)
 	for index := 0; index < len(patternComponents); index++ {
 		// match the pattern component and blobName component
