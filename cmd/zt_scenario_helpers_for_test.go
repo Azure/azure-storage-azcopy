@@ -57,7 +57,7 @@ var specialNames = []string{
 }
 
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopySyncDownload")
+	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil)
 	return
 }
