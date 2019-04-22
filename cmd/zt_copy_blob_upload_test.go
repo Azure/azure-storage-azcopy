@@ -25,6 +25,7 @@ import (
 	chk "gopkg.in/check.v1"
 	"net/url"
 	"path/filepath"
+	"strings"
 )
 
 // regular local file->blob upload
@@ -81,4 +82,132 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 			c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
 		})
 	}
+}
+
+// regular directory->container upload
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the source with numerous files
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+
+		// validate that the right transfers were sent
+		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, fileList, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+// regular directory->virtual dir upload
+func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "vdir"
+
+	// set up the source with numerous files
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
+	raw := getDefaultCopyRawInput(srcDirPath, rawContainerURLWithSAS.String())
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
+
+		// validate that the right transfers were sent
+		expectedTransfers := scenarioHelper{}.shaveOffPrefix(fileList, filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING)
+		validateUploadTransfersAreScheduled(c, common.AZCOPY_PATH_SEPARATOR_STRING,
+			common.AZCOPY_PATH_SEPARATOR_STRING+filepath.Base(srcDirPath)+common.AZCOPY_PATH_SEPARATOR_STRING, expectedTransfers, mockedRPC)
+	})
+
+	// turn off recursive, this time nothing should be transferred
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 0)
+	})
+}
+
+// files(from pattern)->container upload
+func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C) {
+	bsu := getBSU()
+
+	// set up the source with numerous files
+	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
+
+	// add special files that we wish to include
+	filesToInclude := []string{"important.pdf", "includeSub/amazing.pdf", "includeSub/wow/amazing.pdf"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirPath, filesToInclude)
+
+	// set up an empty container
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultCopyRawInput(filepath.Join(srcDirPath, "/*.pdf"), rawContainerURLWithSAS.String())
+	raw.recursive = true
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		// only the top pdf should be included
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(mockedRPC.transfers[0].Source, chk.Equals, mockedRPC.transfers[0].Destination)
+		c.Assert(strings.HasSuffix(mockedRPC.transfers[0].Source, ".pdf"), chk.Equals, true)
+		c.Assert(strings.Contains(mockedRPC.transfers[0].Source[1:], common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+	})
 }

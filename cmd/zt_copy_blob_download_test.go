@@ -171,7 +171,9 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 	})
 }
 
-// regular container->directory download
+// blobs(from pattern)->directory download
+// TODO the current pattern matching behavior is inconsistent with the posix filesystem
+//   update test after re-writing copy enumerators
 func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 	bsu := getBSU()
 
