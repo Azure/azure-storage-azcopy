@@ -75,8 +75,6 @@ func NewBfsURLParts(u url.URL) BfsURLParts {
 
 	// Convert the query parameters to a case-sensitive map & trim whitespace
 	paramsMap := u.Query()
-	up.UnparsedParams = paramsMap.Encode()
-
 	up.SAS = newSASQueryParameters(paramsMap, true)
 	up.UnparsedParams = paramsMap.Encode()
 	return up
