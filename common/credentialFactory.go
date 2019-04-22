@@ -184,6 +184,9 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 		// create the shared key credentials
 		cred = azbfs.NewSharedKeyCredential(name, key)
 
+	case ECredentialType.Anonymous():
+		// do nothing
+
 	default:
 		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
