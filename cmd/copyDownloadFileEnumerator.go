@@ -62,7 +62,7 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// Case-2: Source is a file share or directory
 	// The destination must be a directory, when source is share or directory.
-	if !gCopyUtil.isPathALocalDirectory(cca.destination) && !strings.EqualFold(cca.destination, common.DevNull) {
+	if !gCopyUtil.isPathALocalDirectory(cca.destination) && !strings.EqualFold(cca.destination, common.Dev_Null) {
 		return fmt.Errorf("the destination must be an existing directory in this download scenario")
 	}
 
@@ -165,7 +165,7 @@ func (e *copyDownloadFileEnumerator) addDownloadFileTransfer(srcURL url.URL, des
 
 func (e *copyDownloadFileEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
 	// if we are downloading to dev null, we must point to devNull itself, rather than some file under it
-	if strings.EqualFold(e.DestinationRoot, common.DevNull) {
+	if strings.EqualFold(e.DestinationRoot, common.Dev_Null) {
 		transfer.Destination = ""
 	}
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)

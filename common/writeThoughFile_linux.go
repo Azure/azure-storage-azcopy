@@ -40,7 +40,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 		// TODO: conduct further testing of this code path, on Linux
 		flags = flags | os.O_SYNC // technically, O_DSYNC may be very slightly faster, but its not exposed in the os package
 	}
-	f, err := os.OpenFile(destinationPath, flags, 0644)
+	f, err := os.OpenFile(destinationPath, flags, DEFAULT_FILE_PERM)
 	if err != nil {
 		return nil, err
 	}

@@ -93,7 +93,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 		c.Assert(err, chk.IsNil)
 
 		// assert the right transfers were scheduled
-		validateCopyTransfersAreScheduled(c, false, false, processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
+		validateCopyTransfersAreScheduled(c, false, false, "", "", processorTestSuiteHelper{}.getExpectedTransferFromStoredObjectList(sampleObjects), mockedRPC)
 
 		mockedRPC.reset()
 	}
@@ -142,5 +142,5 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 	c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "")
 
 	// assert the right transfers were scheduled
-	validateCopyTransfersAreScheduled(c, false, false, []string{""}, mockedRPC)
+	validateCopyTransfersAreScheduled(c, false, false, "", "", []string{""}, mockedRPC)
 }

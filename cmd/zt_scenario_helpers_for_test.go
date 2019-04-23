@@ -57,7 +57,7 @@ var specialNames = []string{
 }
 
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
-	dstDirName, err := ioutil.TempDir("", "AzCopySyncDownload")
+	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil)
 	return
 }
@@ -74,7 +74,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	}
 
 	// write to file and return the data
-	err = ioutil.WriteFile(filePath, bigBuff, 0666)
+	err = ioutil.WriteFile(filePath, bigBuff, common.DEFAULT_FILE_PERM)
 	return bigBuff, err
 }
 
@@ -398,7 +398,7 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 	verifier(err)
 }
 
-func runRemoveAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
+func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
 	c.Assert(err, chk.IsNil)
@@ -410,23 +410,23 @@ func runRemoveAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) 
 	verifier(err)
 }
 
-func validateUploadTransfersAreScheduled(c *chk.C, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(c, false, true, expectedTransfers, mockedRPC)
+func validateUploadTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(c, false, true, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateDownloadTransfersAreScheduled(c *chk.C, expectedTransfers []string, mockedRPC interceptor) {
-	validateCopyTransfersAreScheduled(c, true, false, expectedTransfers, mockedRPC)
+func validateDownloadTransfersAreScheduled(c *chk.C, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
+	validateCopyTransfersAreScheduled(c, true, false, sourcePrefix, destinationPrefix, expectedTransfers, mockedRPC)
 }
 
-func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool, expectedTransfers []string, mockedRPC interceptor) {
+func validateCopyTransfersAreScheduled(c *chk.C, isSrcEncoded bool, isDstEncoded bool, sourcePrefix string, destinationPrefix string, expectedTransfers []string, mockedRPC interceptor) {
 	// validate that the right number of transfers were scheduled
 	c.Assert(len(mockedRPC.transfers), chk.Equals, len(expectedTransfers))
 
 	// validate that the right transfers were sent
 	lookupMap := scenarioHelper{}.convertListToMap(expectedTransfers)
 	for _, transfer := range mockedRPC.transfers {
-		srcRelativeFilePath := transfer.Source
-		dstRelativeFilePath := transfer.Destination
+		srcRelativeFilePath := strings.TrimPrefix(transfer.Source, sourcePrefix)
+		dstRelativeFilePath := strings.TrimPrefix(transfer.Destination, destinationPrefix)
 
 		if isSrcEncoded {
 			srcRelativeFilePath, _ = url.PathUnescape(srcRelativeFilePath)
@@ -475,6 +475,19 @@ func getDefaultSyncRawInput(src, dst string) rawSyncCmdArgs {
 		logVerbosity:        defaultLogVerbosityForSync,
 		deleteDestination:   deleteDestination.String(),
 		md5ValidationOption: common.DefaultHashValidationOption.String(),
+	}
+}
+
+func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
+	return rawCopyCmdArgs{
+		src:                            src,
+		dst:                            dst,
+		logVerbosity:                   defaultLogVerbosityForSync,
+		blobType:                       common.EBlobType.None().String(),
+		blockBlobTier:                  common.EBlockBlobTier.None().String(),
+		pageBlobTier:                   common.EPageBlobTier.None().String(),
+		md5ValidationOption:            common.DefaultHashValidationOption.String(),
+		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 	}
 }
 

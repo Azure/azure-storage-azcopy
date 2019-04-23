@@ -269,11 +269,11 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         file_name = "test_63mb_in4mb_upload.txt"
         file_path = util.create_test_file(file_name, 63 * 1024 * 1024)
 
-        # uploading file through azcopy with flag block-size set to 4194304 i.e 4mb
+        # uploading file through azcopy with flag block-size set to 4mb
         destination_sas = util.get_resource_sas_from_share(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level",
                                                                                                         "info").add_flags(
-            "block-size", "4194304").execute_azcopy_copy_command()
+            "block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the uploaded file.
@@ -284,7 +284,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
         download_file = util.test_directory_path + "/test_63mb_in4mb_download.txt"
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file).add_flags("log-level",
                                                                                                             "info").add_flags(
-            "block-size", "4194304").execute_azcopy_copy_command()
+            "block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the downloaded file

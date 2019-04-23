@@ -415,11 +415,11 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         cpCmd = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
             add_flags("log-level", "info")
         if invalidMetadataHandleOption == "" or invalidMetadataHandleOption == "ExcludeIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "ExcludeIfInvalid")
+            cpCmd.add_flags("s2s-handle-invalid-metadata", "ExcludeIfInvalid")
         if invalidMetadataHandleOption == "FailIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "FailIfInvalid")
+            cpCmd.add_flags("s2s-handle-invalid-metadata", "FailIfInvalid")
         if invalidMetadataHandleOption == "RenameIfInvalid":
-            cpCmd.add_flags("s2s-invalid-metadata-handle", "RenameIfInvalid")
+            cpCmd.add_flags("s2s-handle-invalid-metadata", "RenameIfInvalid")
 
         result = cpCmd.execute_azcopy_copy_command()
         self.assertTrue(result)
@@ -450,47 +450,47 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     ##################################
     # Test scenarios related to blob type and blob tier.
     ##################################
-    # def test_copy_single_file_from_blockblob_to_blockblob_with_blobtier_from_source(self):
-    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-    #     blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
-    #     for size in blob_sizes:
-    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-    #             src_bucket_url, "Blob", dst_container_url, "Blob", size)
+    def test_copy_single_file_from_blockblob_to_blockblob_with_blobtier_from_source(self):
+        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
+        for size in blob_sizes:
+            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+                src_bucket_url, "Blob", dst_container_url, "Blob", size)
 
-    #     self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-    #             src_bucket_url, "Blob", dst_container_url, "Blob", 8*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Cool")
+        self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+                src_bucket_url, "Blob", dst_container_url, "Blob", 8*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Cool")
 
-    # def test_copy_single_file_from_blockblob_to_blockblob_with_no_preserve_blobtier(self):
-    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+    def test_copy_single_file_from_blockblob_to_blockblob_with_no_preserve_blobtier(self):
+        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
 
-    #     self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-    #             src_bucket_url, "Blob", dst_container_url, "Blob", 4*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Hot", False)
+        self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+                src_bucket_url, "Blob", dst_container_url, "Blob", 4*1024*1024+1, "BlockBlob", "Cool", "", "", "BlockBlob", "Hot", False)
 
-    # def test_copy_single_file_from_pageblob_to_pageblob_with_blobtier_from_source(self):
-    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-    #     blob_sizes = [0, 512, 1024, 4*1024*1024]
-    #     for size in blob_sizes:
-    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-    #             src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob")
+    def test_copy_single_file_from_pageblob_to_pageblob_with_blobtier_from_source(self):
+        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+        blob_sizes = [0, 512, 1024, 4*1024*1024]
+        for size in blob_sizes:
+            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+                src_bucket_url, "Blob", dst_container_url, "Blob", size, "PageBlob", "", "", "", "PageBlob")
 
-    # def test_copy_single_file_from_appendblob_to_appendblob_from_source(self):
-    #     src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-    #     blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024, 8*1024*1024+1]
-    #     for size in blob_sizes:
-    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-    #             src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob")    
+    def test_copy_single_file_from_appendblob_to_appendblob_from_source(self):
+        src_bucket_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name_block_append_page)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024, 8*1024*1024+1]
+        for size in blob_sizes:
+            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+                src_bucket_url, "Blob", dst_container_url, "Blob", size, "AppendBlob", "", "", "", "AppendBlob")    
 
-    # def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
-    #     src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
-    #     dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
-    #     blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
-    #     for size in blob_sizes:
-    #         self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
-    #             src_bucket_url, "S3", dst_container_url, "Blob", size)
+    def test_copy_single_file_from_s3_object_to_blockblob_with_default_blobtier(self):
+        src_bucket_url = util.get_object_without_sas(util.test_s2s_src_s3_service_url, self.bucket_name_block_append_page)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_block_append_page)
+        blob_sizes = [0, 1, 8*1024*1024 - 1, 8 * 1024*1024]
+        for size in blob_sizes:
+            self.util_test_copy_single_file_from_x_to_blob_with_blobtype_blobtier(
+                src_bucket_url, "S3", dst_container_url, "Blob", size)
 
     @unittest.skip("override blob tier not enabled")
     def test_copy_single_file_from_s3_object_to_blockblob_with_specified_blobtier(self):

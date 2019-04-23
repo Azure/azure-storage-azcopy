@@ -51,8 +51,14 @@ func ProcessOSSpecificInitialization() (int, error) {
 	set.Cur = set.Max - 1
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &set)
 	if err != nil {
-		return 0, err
+		// on some platforms such as OS X and BSD
+		// the max we get is not actually the right number (https://unix.stackexchange.com/questions/350776/setting-os-x-macos-bsd-maxfile)
+		// before Go 1.12, the call used to silently set the limit to a certain max number
+		// after Go 1.12, the runtime fails the call
+		// avoid returning an error and simply proceed with the current number
+		return int(rlimit.Cur), nil
 	}
+
 	if set.Cur > math.MaxInt32 {
 		return math.MaxInt32, nil
 	} else {

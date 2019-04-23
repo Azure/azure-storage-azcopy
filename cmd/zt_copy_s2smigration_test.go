@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -64,18 +65,6 @@ func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 		s2sSourceChangeValidation:      defaultS2SSourceChangeValidation,
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
 	}
-}
-
-func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
-	// the simulated user input should parse properly
-	cooked, err := raw.cook()
-	c.Assert(err, chk.IsNil)
-
-	// the enumeration ends when process() returns
-	err = cooked.process()
-
-	// the err is passed to verified, which knows whether it is expected or not
-	verifier(err)
 }
 
 func validateS2STransfersAreScheduled(c *chk.C, srcDirName string, dstDirName string, expectedTransfers []string, mockedRPC interceptor) {
@@ -438,6 +427,8 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	bucketName2 := generateBucketNameWithCustomizedPrefix(specificRegion)
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
 	defer deleteBucket(c, s3Client, bucketName2)
+
+	time.Sleep(60 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)

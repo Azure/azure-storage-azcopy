@@ -1,5 +1,38 @@
 # Change Log
 
+## Version 10.1.0 (GA)
+
+### Breaking changes
+
+1. The `--block-size` parameter has been replaced by `--block-size-mb`. The old parameter took a number of _bytes_; the
+   new one takes a number of Megabytes (MiB).
+1. The following command line parameters have been renamed, for clarity
+    * `--output` is now `--output-type`
+    * `--md5-validation` is now called `--check-md5`
+    * `--s2s-source-change-validation` is now called `--s2s-detect-source-changed`
+    * `--s2s-invalid-metadata-handle` is is now called `--s2s-handle-invalid-metadata`
+    * `--quota` (in the `make` command) is now called `--quota-gb`. Note that the values were always in GB, the new name
+      simply clarifies that fact
+
+### New features
+
+1. AzCopy is now able to be configured to use older API versions. This enables (limited) support for Azure Stack.
+1. Listing command now shows file sizes.
+
+### Bug fixes
+
+1. AzCopy v10 now works correctly with ADLS Gen 2 folders that contain spaces in their names.
+1. When cancelling with CRTL-C, status of in-progress transfers is now correctly recorded.
+1. For security, the Service-to-Service (S2S) feature will only work if both the source and destination connections are
+   HTTPS.
+1. Use of the `--overwrite` parameter is clarified in the in-application help.
+1. Fixed incorrect behavior with setting file descriptor limits on platforms including OS X and BSD.
+1. On Linux and OS X, log files are now created with same file permissions as all other files created by AzCopy.
+1. ThirdPartyNotice.txt is updated.
+1. Load DLL in a more secure manner compatible with Go's sysdll registration.
+1. Fixed support for relative paths and shorthands.
+1. Fixed bug in pattern matching for blob download when recursive is off.
+
 ## Version 10.0.9 (Release Candidate)
 
 ### Breaking changes

@@ -143,6 +143,12 @@ func cleanLocalPath(localPath string) string {
 	if strings.HasPrefix(localPath, "//") || strings.HasPrefix(localPath, `\\`) {
 		// if yes, we have trimmed away one of the leading slashes, so add it back
 		normalizedPath = common.AZCOPY_PATH_SEPARATOR_STRING + normalizedPath
+	} else if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
+		len(localPath) == 2 && strings.HasSuffix(localPath, ":") {
+		// detect if we are targeting a drive (ex: either C:\ or C:)
+		// note that on windows there must be a slash in order to target the root drive properly
+		// otherwise we'd point to the path from where AzCopy is running (if AzCopy is running from the same drive)
+		normalizedPath += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
 	return normalizedPath

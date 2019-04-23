@@ -77,10 +77,10 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         file_name = "test_63mb_in4mb_upload.txt"
         file_path = util.create_test_file(file_name, 63 * 1024 * 1024)
 
-        # uploading file through azcopy with flag block-size set to 4194304 i.e 4mb
+        # uploading file through azcopy with flag block-size set to 4mb
         destination_sas = util.get_resource_sas(file_name)
         result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).\
-                    add_flags("log-level","info").add_flags("block-size", "4194304").execute_azcopy_copy_command()
+                    add_flags("log-level","info").add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the uploaded file.
@@ -90,7 +90,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # downloading the created parallely in blocks of 4mb file through azcopy.
         download_file = util.test_directory_path + "/test_63mb_in4mb_download.txt"
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(download_file)\
-                    .add_flags("log-level","info").add_flags("block-size", "4194304").execute_azcopy_copy_command()
+                    .add_flags("log-level","info").add_flags("block-size-mb", "4").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # verify the downloaded file
@@ -260,14 +260,14 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # but recursive flag is set to false, so no files will be downloaded
         dir_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command()
+            add_flags("log-level", "Info").add_flags("output-type","json").execute_azcopy_copy_command()
         self.assertEquals(result, False)
 
         # create the resource sas
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path).\
-                add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command_get_output()
+                add_flags("log-level", "Info").add_flags("output-type","json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -286,7 +286,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*/*.txt")
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json").execute_azcopy_copy_command_get_output()
+            add_flags("log-level", "Info").add_flags("output-type","json").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
         try:
@@ -333,7 +333,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*")
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true").\
+            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("recursive","true").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -353,7 +353,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas_with_wildcard = util.get_resource_sas(dir_name + "/*/*")
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json") \
+            add_flags("log-level", "Info").add_flags("output-type","json") \
             .add_flags("recursive", "true").execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -402,7 +402,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dict["Files"] = [dir_name]
         filePath = util.create_json_file("testfile", dict)
         result = util.Command("copy").add_arguments(util.test_container_url).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true") \
+            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("recursive","true") \
             .add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -422,7 +422,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dict["Files"] = ["logs"]
         filePath = util.create_json_file("testfile", dict)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output","json").add_flags("recursive","true"). \
+            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("recursive","true"). \
             add_flags("list-of-files", filePath).execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)

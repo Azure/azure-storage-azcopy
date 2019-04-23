@@ -32,6 +32,8 @@ import (
 // regular file->blob sync
 func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
 
 	for _, srcFileName := range []string{"singlefileisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
@@ -41,9 +43,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 
 		// set up the destination container with a single blob
 		dstBlobName := srcFileName
-		containerURL, containerName := createNewContainer(c, bsu)
 		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName})
-		defer deleteContainer(c, containerURL)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up interceptor
@@ -71,7 +71,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		runSyncAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
-			validateUploadTransfersAreScheduled(c, []string{""}, mockedRPC)
+			validateUploadTransfersAreScheduled(c, "", "", []string{""}, mockedRPC)
 		})
 	}
 }
@@ -104,7 +104,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithEmptyDestination(c *chk.C) {
 		c.Assert(len(mockedRPC.transfers), chk.Equals, len(fileList))
 
 		// validate that the right transfers were sent
-		validateUploadTransfersAreScheduled(c, fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
 	})
 
 	// turn off recursive, this time only top blobs should be transferred
@@ -158,7 +158,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
 	})
 }
 
@@ -190,7 +190,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, expectedOutput, mockedRPC)
+		validateUploadTransfersAreScheduled(c, "", "", expectedOutput, mockedRPC)
 
 		// make sure the extra blobs were deleted
 		for _, blobName := range extraBlobs {
@@ -229,7 +229,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeFlag(c *chk.C) {
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, filesToInclude, mockedRPC)
+		validateUploadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
 	})
 }
 
@@ -262,7 +262,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeFlag(c *chk.C) {
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, fileList, mockedRPC)
+		validateUploadTransfersAreScheduled(c, "", "", fileList, mockedRPC)
 	})
 }
 
@@ -302,7 +302,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndExcludeFlag(c *chk.C) 
 
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
-		validateUploadTransfersAreScheduled(c, filesToInclude, mockedRPC)
+		validateUploadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
 	})
 }
 

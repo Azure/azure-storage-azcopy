@@ -81,7 +81,7 @@ func Execute(azsAppPathFolder, logPathFolder string) {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output", "text", "format of the command's output, the choices include: text, json.")
+	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
 
 	// Special flag for generating test data
 	// TODO: find a cleaner way to get the value into common, rather than just using it directly as a variable here

@@ -175,12 +175,14 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 	// See similar todo, with larger comments, in AppendData
 	overrideHttpVerb := "PATCH"
 
-	// TODO: feb 2019 API update: review the use of closeParameter here. Should it be true?
-	//    Doc implies only make it true if this is the end of the file
+	// We only call FlushData once the whole body is appended, so close can be safely set to true all the time
+	// It sends a notification on the service end, which doesn't concern AzCopy, so no need to make it configurable
+	// note that we should make it configurable if this SDK is ever split off and become its own thing
+	closeParameter := true
 
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
-		&retainUncommittedData, nil, nil, nil, nil, nil,
+		&retainUncommittedData, &closeParameter, nil, nil, nil, nil,
 		nil, nil, nil, md5InBase64, nil,
 		nil, nil, nil, nil, nil, nil, nil,
 		nil, &overrideHttpVerb, nil, nil, nil, nil)
