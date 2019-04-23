@@ -29,7 +29,7 @@ func (s *localTraverserTestSuite) TestCleanLocalPathForWindows(c *chk.C) {
 	// ignore these tests when not running on Windows
 	// as the path cleaning behavior depends on the platform
 	if os.PathSeparator != '\\' {
-		c.SucceedNow()
+		c.Skip("not running since the test applies to Windows only")
 	}
 
 	testCases := map[string]string{
