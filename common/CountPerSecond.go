@@ -21,9 +21,9 @@ type CountPerSecond interface {
 }
 
 type countPerSecond struct {
-	nocopy NoCopy
 	start  int64 // Unix time allowing atomic update: Seconds since 1/1/1970
 	count  uint64
+	nocopy NoCopy
 }
 
 func (cps *countPerSecond) Add(delta uint64) uint64 {

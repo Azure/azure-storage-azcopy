@@ -150,6 +150,23 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 }
 
 type cookedSyncCmdArgs struct {
+	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
+	// so the 64 bit integers are placed first in the struct to avoid future breaks
+	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	// defines the number of files listed at the source and compared.
+	atomicSourceFilesScanned uint64
+	// defines the number of files listed at the destination and compared.
+	atomicDestinationFilesScanned uint64
+	// defines the scanning status of the sync operation.
+	// 0 means scanning is in progress and 1 means scanning is complete.
+	atomicScanningStatus uint32
+	// defines whether first part has been ordered or not.
+	// 0 means first part is not ordered and 1 means first part is ordered.
+	atomicFirstPartOrdered uint32
+
+	// deletion count keeps track of how many extra files from the destination were removed
+	atomicDeletionCount uint32
+
 	source         string
 	sourceSAS      string
 	destination    string
@@ -189,20 +206,6 @@ type cookedSyncCmdArgs struct {
 	// it is useful to indicate whether we are simply waiting for the purpose of cancelling
 	// this is set to true once the final part has been dispatched
 	isEnumerationComplete bool
-
-	// defines the scanning status of the sync operation.
-	// 0 means scanning is in progress and 1 means scanning is complete.
-	atomicScanningStatus uint32
-	// defines whether first part has been ordered or not.
-	// 0 means first part is not ordered and 1 means first part is ordered.
-	atomicFirstPartOrdered uint32
-	// defines the number of files listed at the source and compared.
-	atomicSourceFilesScanned uint64
-	// defines the number of files listed at the destination and compared.
-	atomicDestinationFilesScanned uint64
-
-	// deletion count keeps track of how many extra files from the destination were removed
-	atomicDeletionCount uint32
 
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.

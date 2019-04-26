@@ -118,6 +118,18 @@ func (jm *jobMgr) logConcurrencyParameters() {
 
 // jobMgr represents the runtime information for a Job
 type jobMgr struct {
+	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
+	// so the 64 bit integers are placed first in the struct to avoid future breaks
+	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	atomicNumberOfBytesCovered uint64
+	atomicTotalBytesToXfer     uint64
+	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
+	// TODO: added for debugging purpose. remove later
+	atomicCurrentConcurrentConnections int64
+	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
+	atomicAllTransfersScheduled int32
+	atomicTransferDirection     common.TransferDirection
+
 	logger            common.ILoggerResetable
 	chunkStatusLogger common.ChunkStatusLoggerCloser
 	jobID             common.JobID // The Job's unique ID
@@ -139,15 +151,6 @@ type jobMgr struct {
 	// list of transfer mentioned to exclude while resuming the job
 	exclude          map[string]int
 	finalPartOrdered bool
-	// atomicAllTransfersScheduled defines whether all job parts have been iterated and resumed or not
-	// 	atomicAllTransfersScheduled is int32 since atomic load and store operations have to be performed
-	atomicAllTransfersScheduled int32
-	atomicNumberOfBytesCovered  uint64
-	atomicTotalBytesToXfer      uint64
-	// atomicCurrentConcurrentConnections defines the number of active goroutines performing the transfer / executing the chunk func
-	// TODO: added for debugging purpose. remove later
-	atomicCurrentConcurrentConnections int64
-	atomicTransferDirection            common.TransferDirection
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
