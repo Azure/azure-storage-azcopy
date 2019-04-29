@@ -2,7 +2,7 @@
 
 ## About
 
-AzCopy (v10 Preview) is the next-generation command-line utility designed for copying data to/from Microsoft Azure Blob and File, using simple commands designed for optimal performance. You can copy data between a file system and a storage account, or between storage accounts.
+AzCopy (v10) is the next-generation command-line utility designed for copying data to/from Microsoft Azure Blob and File, using simple commands designed for optimal performance. You can copy data between a file system and a storage account, or between storage accounts.
 
 ## Features
 
