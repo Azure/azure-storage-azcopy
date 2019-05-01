@@ -84,7 +84,9 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 			return nil
 		} else {
-			handleSingleFileValidationErrorForBlob(err)
+			if handleSingleFileValidationErrorForBlob(err) {
+				return err
+			}
 		}
 	}
 

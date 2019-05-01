@@ -69,7 +69,9 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	if err != nil {
-		handleSingleFileValidationErrorForADLSGen2(err)
+		if handleSingleFileValidationErrorForADLSGen2(err) {
+			return err
+		}
 	}
 
 	glcm.Info(infoCopyFromDirectoryListOfFiles)
