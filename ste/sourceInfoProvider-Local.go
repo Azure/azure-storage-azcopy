@@ -45,8 +45,11 @@ func (f localFileSourceInfoProvider) Properties() (*SrcProperties, error) {
 
 	return &SrcProperties{
 		SrcHTTPHeaders: common.ResourceHTTPHeaders{
-			ContentType:     headers.ContentType,
-			ContentEncoding: headers.ContentEncoding,
+			ContentType:        headers.ContentType,
+			ContentEncoding:    headers.ContentEncoding,
+			ContentLanguage:    headers.ContentLanguage,
+			ContentDisposition: headers.ContentDisposition,
+			CacheControl:       headers.CacheControl,
 		},
 		SrcMetadata: common.FromAzBlobMetadataToCommonMetadata(metadata),
 	}, nil

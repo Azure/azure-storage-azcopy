@@ -89,6 +89,9 @@ type rawCopyCmdArgs struct {
 	metadata                 string
 	contentType              string
 	contentEncoding          string
+	contentDisposition       string
+	contentLanguage          string
+	cacheControl             string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	putMd5                   bool
@@ -266,6 +269,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.metadata = raw.metadata
 	cooked.contentType = raw.contentType
 	cooked.contentEncoding = raw.contentEncoding
+	cooked.contentLanguage = raw.contentLanguage
+	cooked.contentDisposition = raw.contentDisposition
+	cooked.cacheControl = raw.cacheControl
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
@@ -339,8 +345,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while downloading")
 		}
-		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while downloading")
+		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
+			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while downloading")
 		}
 		if cooked.s2sPreserveProperties {
 			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while downloading")
@@ -378,8 +384,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}
-		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.metadata) > 0 {
-			return cooked, fmt.Errorf("content-type, content-encoding or metadata is not supported while copying from service to service")
+		if len(cooked.contentType) > 0 || len(cooked.contentEncoding) > 0 || len(cooked.contentLanguage) > 0 || len(cooked.contentDisposition) > 0 || len(cooked.cacheControl) > 0 || len(cooked.metadata) > 0 {
+			return cooked, fmt.Errorf("content-type, content-encoding, content-language, content-disposition, cache-control, or metadata is not supported while copying from service to service")
 		}
 	}
 	if err = validatePutMd5(cooked.putMd5, cooked.fromTo); err != nil {
@@ -471,6 +477,9 @@ type cookedCopyCmdArgs struct {
 	metadata                 string
 	contentType              string
 	contentEncoding          string
+	contentLanguage          string
+	contentDisposition       string
+	cacheControl             string
 	noGuessMimeType          bool
 	preserveLastModifiedTime bool
 	putMd5                   bool
@@ -688,13 +697,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			BlockSizeInBytes:         cca.blockSize,
 			ContentType:              cca.contentType,
 			ContentEncoding:          cca.contentEncoding,
+			ContentLanguage:          cca.contentLanguage,
+			ContentDisposition:       cca.contentDisposition,
+			CacheControl:             cca.cacheControl,
 			BlockBlobTier:            cca.blockBlobTier,
 			PageBlobTier:             cca.pageBlobTier,
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:              cca.putMd5,
-			MD5ValidationOption: cca.md5ValidationOption,
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -1128,6 +1140,9 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "specifies content type of the file. Implies no-guess-mime-type.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "upload to Azure Storage using this content encoding.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentDisposition, "content-disposition", "", "upload to Azure Storage using this content disposition.")
+	cpCmd.PersistentFlags().StringVar(&raw.contentLanguage, "content-language", "", "upload to Azure Storage using this content language.")
+	cpCmd.PersistentFlags().StringVar(&raw.cacheControl, "cache-control", "", "set the cache-control header.")
 	cpCmd.PersistentFlags().BoolVar(&raw.noGuessMimeType, "no-guess-mime-type", false, "prevents AzCopy from detecting the content-type based on the extension/content of the file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.preserveLastModifiedTime, "preserve-last-modified-time", false, "only available when destination is file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")

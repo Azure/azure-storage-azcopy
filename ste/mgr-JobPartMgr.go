@@ -264,16 +264,22 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	dstData := plan.DstBlobData
 
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
-		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
+		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
+		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
 	}
 
 	jpm.putMd5 = dstData.PutMd5
 	jpm.blockBlobTier = dstData.BlockBlobTier
 	jpm.pageBlobTier = dstData.PageBlobTier
 	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{
-		ContentType:     string(dstData.ContentType[:dstData.ContentTypeLength]),
-		ContentEncoding: string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
+		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
+		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
 	}
 	// For this job part, split the metadata string apart and create an azblob.Metadata out of it
 	metadataString := string(dstData.Metadata[:dstData.MetadataLength])
