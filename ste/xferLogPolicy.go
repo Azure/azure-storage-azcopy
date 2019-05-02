@@ -98,9 +98,6 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				}
 
 				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err)
-				if logLevel <= pipeline.LogError {
-					b.Write(stack()) // For errors (or lower levels), we append the stack trace (an expensive operation)
-				}
 				msg := b.String()
 
 				if forceLog {
