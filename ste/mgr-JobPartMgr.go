@@ -90,7 +90,7 @@ const AzCopyMaxIdleConnsPerHost = 500
 func NewAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy: getProxy(),
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,
