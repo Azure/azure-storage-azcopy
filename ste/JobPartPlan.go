@@ -17,13 +17,9 @@ import (
 const DataSchemaVersion common.Version = 6
 
 const (
-	ContentTypeMaxBytes        = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
-	ContentEncodingMaxBytes    = 256  // If > 65536, then jobPartPlanBlobData's ContentEncodingLength's type  field must change
-	ContentLanguageMaxBytes    = 256  // If > 65536, then jobPartPlanBlobData's ContentLanguageLength field's type must change
-	ContentDispositionMaxBytes = 256  // If > 65536, then jobPartPlanBlobData's ContentDispositionLength field's type must change
-	CacheControlMaxBytes       = 256  // If > 65536, then jobPartPlanBlobData's CacheControlLength field's type must change
-	MetadataMaxBytes           = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
-	BlobTierMaxBytes           = 10
+	CustomHeaderMaxBytes = 256
+	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
+	BlobTierMaxBytes     = 10
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -212,31 +208,31 @@ type JobPartPlanDstBlob struct {
 	ContentTypeLength uint16
 
 	// Specifies the MIME content type of the blob. The default type is application/octet-stream
-	ContentType [ContentTypeMaxBytes]byte
+	ContentType [CustomHeaderMaxBytes]byte
 
 	// Specifies length of content encoding which have been applied to the blob.
 	ContentEncodingLength uint16
 
 	// Specifies which content encodings have been applied to the blob.
-	ContentEncoding [ContentEncodingMaxBytes]byte
+	ContentEncoding [CustomHeaderMaxBytes]byte
 
 	// Specifies length of content language which has been applied to the blob.
 	ContentLanguageLength uint16
 
 	// Specifies which content language has been applied to the blob.
-	ContentLanguage [ContentLanguageMaxBytes]byte
+	ContentLanguage [CustomHeaderMaxBytes]byte
 
 	// Specifies length of content disposition which has been applied to the blob.
 	ContentDispositionLength uint16
 
 	// Specifies the content disposition of the blob
-	ContentDisposition [ContentDispositionMaxBytes]byte
+	ContentDisposition [CustomHeaderMaxBytes]byte
 
 	// Specifies the length of the cache control which has been applied to the blob.
 	CacheControlLength uint16
 
 	// Specifies the cache control of the blob
-	CacheControl [CacheControlMaxBytes]byte
+	CacheControl [CustomHeaderMaxBytes]byte
 
 	// Specifies the tier if this is a block or page blob
 	BlockBlobTier common.BlockBlobTier
