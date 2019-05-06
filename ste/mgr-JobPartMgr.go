@@ -528,14 +528,14 @@ func (jpm *jobPartMgr) blobDstData(fullFilePath string, dataFileToXfer []byte) (
 		return jpm.blobHTTPHeaders, jpm.blobMetadata
 	}
 
-	return azblob.BlobHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer)}, jpm.blobMetadata
+	return azblob.BlobHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobHTTPHeaders.ContentLanguage, ContentDisposition: jpm.blobHTTPHeaders.ContentDisposition, ContentEncoding: jpm.blobHTTPHeaders.ContentEncoding, CacheControl: jpm.blobHTTPHeaders.CacheControl}, jpm.blobMetadata
 }
 
 func (jpm *jobPartMgr) fileDstData(fullFilePath string, dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
 		return jpm.fileHTTPHeaders, jpm.fileMetadata
 	}
-	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer)}, jpm.fileMetadata
+	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.fileHTTPHeaders.ContentLanguage, ContentEncoding: jpm.fileHTTPHeaders.ContentEncoding, ContentDisposition: jpm.fileHTTPHeaders.ContentDisposition, CacheControl: jpm.fileHTTPHeaders.CacheControl}, jpm.fileMetadata
 }
 
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
