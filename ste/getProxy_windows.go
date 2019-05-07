@@ -8,12 +8,11 @@ import (
 )
 
 func getProxy() func(*http.Request) (*url.URL, error) {
-	if prox := httpproxy.FromEnvironment(); (prox.HTTPProxy != "" || prox.HTTPSProxy != "") && prox.NoProxy == "" {
+	if prox := httpproxy.FromEnvironment(); prox.HTTPProxy != "" || prox.HTTPSProxy != "" || prox.NoProxy != "" {
 		return http.ProxyFromEnvironment
-		//Option to default to env vars, with a fallback to env vars if grabbing from IE/Edge fails
 	}
 
-	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.QUERY_VALUE)
+	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.QUERY_VALUE)
 	if err != nil {
 		return http.ProxyFromEnvironment
 	}
