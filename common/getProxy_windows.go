@@ -1,7 +1,6 @@
-package ste
+package common
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/sys/windows/registry"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 )
 
 //TODO: Make this return httpproxy.config, make function to return properly
-func getProxy() func(*url.URL) (*url.URL, error) {
+func GetProxy() func(*url.URL) (*url.URL, error) {
 	prox := httpproxy.FromEnvironment()
 
 	key, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Internet Settings`, registry.QUERY_VALUE)
@@ -44,15 +43,15 @@ func getProxy() func(*url.URL) (*url.URL, error) {
 	}
 
 	cfg := httpproxy.Config{
-		HTTPSProxy: common.IffString(strings.HasPrefix(proxyURL.String(), "https"), proxyURL.String(), ""),
-		HTTPProxy:  common.IffString(strings.HasPrefix(proxyURL.String(), "https"), "", proxyURL.String()),
+		HTTPSProxy: IffString(strings.HasPrefix(proxyURL.String(), "https"), proxyURL.String(), ""),
+		HTTPProxy:  IffString(strings.HasPrefix(proxyURL.String(), "https"), "", proxyURL.String()),
 		NoProxy:    override,
 	}
 
 	return cfg.ProxyFunc()
 }
 
-func proxyFromFunc(f func(*url.URL) (*url.URL, error)) func(*http.Request) (*url.URL, error) {
+func ProxyFromFunc(f func(*url.URL) (*url.URL, error)) func(*http.Request) (*url.URL, error) {
 	return func(request *http.Request) (*url.URL, error) {
 		return f(request.URL)
 	}
