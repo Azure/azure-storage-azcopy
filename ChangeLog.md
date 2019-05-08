@@ -1,5 +1,12 @@
 # Change Log
 
+## Version 10.1.1
+
+### Bug fixes
+
+1. Fixed typo in local traverser (error handling in walk).
+1. Fixed memory alignment issue for atomic functions on 32 bit system.
+
 ## Version 10.1.0 (GA)
 
 ### Breaking changes

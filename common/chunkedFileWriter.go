@@ -55,6 +55,13 @@ type ChunkedFileWriter interface {
 }
 
 type chunkedFileWriter struct {
+	// NOTE: for the 64 bit atomic functions to work on a 32 bit system, we have to guarantee the right 64-bit alignment
+	// so the 64 bit integers are placed first in the struct to avoid future breaks
+	// refer to: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	// all time received count for this instance
+	totalChunkReceiveMilliseconds int64
+	totalReceivedChunkCount       int32
+
 	// the file we are writing to (type as interface to somewhat abstract away io.File - e.g. for unit testing)
 	file io.WriteCloser
 
@@ -74,10 +81,6 @@ type chunkedFileWriter struct {
 	// to make sure we don't get too many sitting in RAM all waiting to be
 	// saved at the same time
 	activeChunkCount int32
-
-	// all time received count for this instance
-	totalReceivedChunkCount       int32
-	totalChunkReceiveMilliseconds int64
 
 	// used for completion
 	successMd5   chan []byte
