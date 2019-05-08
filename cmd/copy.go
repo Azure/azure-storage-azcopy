@@ -368,12 +368,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
 		}
-		// Disabling blob type override.
-		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
-		// and when file and s3 is source, only block blob destination is supported.
-		if cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blob-type is not supported while coping from service to service")
-		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
 		}

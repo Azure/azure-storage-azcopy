@@ -578,6 +578,282 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromContainerToContainerNoPreserveBlobT
 	})
 }
 
+func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	//Generate page blobs
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "BlockBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "BlockBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	//Generate page blobs
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateBlobsFromListForPageCopy(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "PageBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "PageBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	//Generate page blobs
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "AppendBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "AppendBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	//Generate page blobs
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "BlockBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "BlockBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	//Generate page blobs
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "AppendBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "AppendBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
+func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
+	bsu := getBSU()
+
+	srcContainerURL, srcContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, srcContainerURL)
+	c.Assert(srcContainerURL, chk.NotNil)
+
+	//Generate page blobs
+	objectList := []string{"file", "sub/file2"}
+	scenarioHelper{}.generateAppendBlobsFromListForPageCopy(c, srcContainerURL, objectList)
+
+	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, dstContainerURL)
+	c.Assert(dstContainerURL, chk.NotNil)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawSrcBlobURL := scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "file")
+	rawDstContainerUrlWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw := getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "PageBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file")
+	})
+
+	rawSrcBlobURL = scenarioHelper{}.getRawBlobURLWithSAS(c, srcContainerName, "sub/file2")
+	rawDstContainerUrlWithSAS = scenarioHelper{}.getRawContainerURLWithSAS(c, dstContainerName)
+	raw = getDefaultRawCopyInput(rawSrcBlobURL.String(), rawDstContainerUrlWithSAS.String())
+	raw.blobType = "PageBlob"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+	})
+}
+
 func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C) {
 	bsu := getBSU()
 
