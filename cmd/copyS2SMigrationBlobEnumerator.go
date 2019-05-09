@@ -68,7 +68,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
 			}
 			if cca.blobType == cca.blobType.PageBlob() && blobProperties.ContentLength()%512 != 0 {
-				return errors.New("page blobs must be a modulus of 512 bytes exactly")
+				return errors.New("page blobs must be a multiple of 512 bytes in length")
 			}
 			err := e.createDestBucket(ctx, *e.destURL, nil)
 			if err != nil {
@@ -93,7 +93,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	if isAccountLevel, containerPrefix := e.srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
 		glcm.Info(infoCopyFromAccount)
 		if cca.blobType == cca.blobType.PageBlob() {
-			glcm.Info("Copying entire account to page blobs will fail on files without a content length of modulus 512 bytes")
+			glcm.Info("Copying entire account to page blobs will fail on files without a content length that is a multiple of 512 bytes")
 		}
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
@@ -114,7 +114,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	} else { // Case-3: Source is a blob container or directory
 		glcm.Info(infoCopyFromContainerDirectoryListOfFiles)
 		if cca.blobType == cca.blobType.PageBlob() {
-			glcm.Info("Copying directory to page blobs will fail on files without a content length of modulus 512 bytes")
+			glcm.Info("Copying directory to page blobs will fail on files without a content length that is a multiple of 512 bytes")
 		}
 		blobPrefix, blobNamePattern, isWildcardSearch := e.srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
