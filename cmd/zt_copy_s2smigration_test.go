@@ -624,7 +624,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
@@ -676,7 +676,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
@@ -728,7 +728,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
@@ -780,7 +780,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
@@ -832,7 +832,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
@@ -884,7 +884,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
@@ -935,7 +935,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
 		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
