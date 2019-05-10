@@ -1,5 +1,11 @@
 # Change Log
 
+## Version XX.XX.XX
+
+### New features
+
+1. On-Screen job summary is output to log file @ end of job
+
 ## Version 10.1.1
 
 ### Bug fixes
