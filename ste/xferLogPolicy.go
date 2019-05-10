@@ -98,6 +98,8 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				}
 
 				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err)
+				//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
+				//for a set of harmless errors. HTTP requests ultimately will be retried.
 				if logLevel <= pipeline.LogError && !httpError {
 					b.Write(stack())
 				}
