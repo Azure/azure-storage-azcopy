@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"io"
 	"net/url"
@@ -693,8 +694,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:              cca.putMd5,
-			MD5ValidationOption: cca.md5ValidationOption,
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -962,7 +963,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
-				return fmt.Sprintf(
+				output := fmt.Sprintf(
 					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
@@ -972,6 +973,12 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 					summary.TransfersSkipped,
 					summary.TotalBytesTransferred,
 					summary.JobStatus)
+
+				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
+				if exists {
+					jobMan.Log(pipeline.LogInfo, output)
+				}
+				return output
 			}
 		}, exitCode)
 	}
