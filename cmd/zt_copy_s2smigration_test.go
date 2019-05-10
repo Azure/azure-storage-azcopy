@@ -626,7 +626,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
@@ -678,7 +678,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
@@ -730,7 +730,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
@@ -782,7 +782,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
@@ -834,7 +834,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
@@ -886,7 +886,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
@@ -937,7 +937,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 		// validate that the right number of transfers were scheduled
 		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
 
-		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
 	})
 }
 
