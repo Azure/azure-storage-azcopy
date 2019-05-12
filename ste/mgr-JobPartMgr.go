@@ -103,7 +103,7 @@ func NewAzcopyHTTPClient() *http.Client {
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     false,
+			DisableCompression:     true, // must disable the auto-decompression of gzipped files, and just download the gzipped version. See https://github.com/Azure/azure-storage-azcopy/issues/374
 			MaxResponseHeaderBytes: 0,
 			//ResponseHeaderTimeout:  time.Duration{},
 			//ExpectContinueTimeout:  time.Duration{},

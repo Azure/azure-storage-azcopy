@@ -5,6 +5,10 @@
 ### New features
 
 1. On-Screen job summary is output to log file @ end of job
+1. Files with `Content-Encoding: gzip` are now downloaded in compressed form. Previous versions tried to save a 
+   decompressed version of the file. But they incorrectly truncated it at the original _compressed_ length. By changing
+   AzCopy to to save the compressed version, that problem is solved, and Content-MD5 checks now work for such files. (It is 
+   assumed that the Content-MD5 hash is the hash of the _compressed_ file.)
 
 ## Version 10.1.1
 
