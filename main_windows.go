@@ -21,7 +21,9 @@
 package main
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
@@ -58,4 +60,8 @@ func GetAzCopyAppPath() string {
 		return ""
 	}
 	return azcopyAppDataFolder
+}
+
+func init() {
+	http.DefaultTransport.(*http.Transport).Proxy = common.ProxyMiddleman()
 }
