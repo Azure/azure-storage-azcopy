@@ -23,7 +23,9 @@ package common
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -31,6 +33,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -248,9 +251,43 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		return nil, err
 	}
 
-	pk, cert, err := pkcs12.Decode(certData, certPass)
-	if err != nil {
-		return nil, err
+	var pk interface{}
+	var cert *x509.Certificate
+
+	if path.Ext(certPath) == ".pfx" {
+		pk, cert, err = pkcs12.Decode(certData, certPass)
+		if err != nil {
+			return nil, err
+		}
+	} else if path.Ext(certPath) == ".pem" {
+		block, rest := pem.Decode(certData)
+
+		for len(rest) != 0 || pk == nil || cert == nil {
+			switch block.Type {
+			case "PRIVATE KEY":
+				pk, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+
+				if err != nil {
+					return nil, fmt.Errorf("private key has invalid format")
+				}
+			case "CERTIFICATE":
+				cert, err = x509.ParseCertificate(block.Bytes)
+
+				if err != nil {
+					return nil, fmt.Errorf("certificate has invalid format")
+				}
+			default:
+				return nil, fmt.Errorf("field " + block.Type + " not expected")
+			}
+
+			if len(rest) == 0 && (pk == nil || cert == nil) {
+				return nil, fmt.Errorf("could not find the required information (private key & certificate) in the supplied .pem file")
+			}
+
+			block, rest = pem.Decode(rest)
+		}
+	} else {
+		return nil, fmt.Errorf("please supply either a .pfx or a .pem file containing a private key and a certificate")
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromCertificate(
@@ -287,14 +324,14 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
 	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
 
-	if persist {
+	if persist && err == nil {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return oAuthTokenInfo, nil
+	return oAuthTokenInfo, err
 }
 
 //GetNewTokenFromCert refreshes a token manually from a certificate.
