@@ -183,9 +183,36 @@ export https_proxy=<domain>%5C<user>:<pass>@<proxy IP>:<proxy port>
 
 #### Authenticate using Service Principal Names
 
-1. Create a web app within the Azure Portal and register the secrets you wish to use with it. 
-2. Register it as a contributor to any resource groups you'd like it to have access to.
-3. Use one of the following sets of command line parameters depending on which type of SPN authentication you plan to use:
+**1**. Create a new app registration [in the azure portal](https://ms.portal.azure.com/#blade/Microsoft_AAD_IAM/ApplicationsListBlade).
+
+**2**. Ensure the app registration is labeled as a Web App/API. The sign-on URL does not matter, simply set it to http://whatever
+
+![Example registration](images/registration.png)
+
+**3**. Add public keys or client secrets under the "keys" section of the application.
+
+![Keys](images/keys.png)
+
+To generate a private & public keypair for AzCopy, perform the following steps in a command line, replacing example-app with your app name:
+
+    4a. Generate a private key
+    
+    openssl genrsa -out "example-app.key" 2048
+    
+    4b. Create the certificate
+    
+    openssl req -new -key "example-app.key" -subj "/CN=example-app" -out "example-app.csr"
+    openssl x509 -req -in "example-app.csr" -signkey "example-app.key" -out "example-app.crt" -days 10000
+    
+    4c. Create the PKCS12 version of the certificate containing the private key
+    
+    openssl pkcs12 -export -out "example-app.pfx" -inkey "example-app.key" -in "example-app.crt" -passout <password>
+    
+**4**. Register the app as a contributor to any [resource groups or storage accounts](https://ms.portal.azure.com/#blade/HubsExtension/BrowseResourceGroupBlade/resourceType/Microsoft.Resources%2Fsubscriptions%2FresourceGroups) you plan to use with AzCopy.
+
+![Example role setup](images/role.png)
+
+**5**. Use one of the following sets of command line parameters depending on which type of SPN authentication you plan to use:
 
 Client secrets:
 
