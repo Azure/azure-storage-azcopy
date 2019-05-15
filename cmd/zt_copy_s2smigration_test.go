@@ -935,9 +935,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 		c.Assert(err, chk.IsNil)
 
 		// validate that the right number of transfers were scheduled
-		c.Assert(len(mockedRPC.transfers), chk.Equals, 2)
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
 
-		c.Assert(mockedRPC.transfers[1].Destination, chk.Equals, "/file2")
+		c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, "/file2")
 	})
 }
 
