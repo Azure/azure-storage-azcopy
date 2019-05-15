@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
@@ -43,6 +44,8 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			loginCmdArgs.certPass = os.Getenv("CERT_PASSWORD")
+			loginCmdArgs.clientSecret = os.Getenv("CLIENT_SECRET")
 			err := loginCmdArgs.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform login command, %v", err)
@@ -69,8 +72,8 @@ func init() {
 	//login with SPN
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "application ID of user-assigned identity")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "path to certificate for SPN authentication")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPass, "certificate-password", "", "certificate password for SPN authentication")
-	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.clientSecret, "client-secret", "", "client secret for SPN authentication")
+	lgCmd.PersistentFlags().String("CERT_PASSWORD", "", "environment variable defining the cert password, remove --") //Is there a better way to display these?
+	lgCmd.PersistentFlags().String("CLIENT_SECRET", "", "environment variable defining the client secret, remove --")
 
 	// hide flags
 	// temporaily hide aad-endpoint and support Production environment only.
