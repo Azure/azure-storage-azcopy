@@ -67,7 +67,7 @@ func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOA
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy: ProxyMiddleman(),
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,
