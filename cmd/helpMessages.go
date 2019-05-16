@@ -172,6 +172,12 @@ Log in using a VM's user-assigned identity with an Object ID of the service iden
 Log in using a VM's user-assigned identity with a Resource ID of the service identity:
 - azcopy login --identity --identity-resource-id "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
 
+Log in as a service principal using a client secret:
+- CLIENT_SECRET=secret azcopy login --service-principal
+
+Log in as a service principal using a certificate & password:
+- CERT_PASSWORD=password azcopy login --service-principal --certificate-path /path/to/my/cert
+
 `
 
 // ===================================== LOGOUT COMMAND ===================================== //

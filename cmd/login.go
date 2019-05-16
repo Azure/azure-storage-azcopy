@@ -72,8 +72,6 @@ func init() {
 	//login with SPN
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "application ID of user-assigned identity")
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "path to certificate for SPN authentication")
-	lgCmd.PersistentFlags().String("CERT_PASSWORD", "", "environment variable defining the cert password, remove --") //Is there a better way to display these?
-	lgCmd.PersistentFlags().String("CLIENT_SECRET", "", "environment variable defining the client secret, remove --")
 
 	// hide flags
 	// temporaily hide aad-endpoint and support Production environment only.
