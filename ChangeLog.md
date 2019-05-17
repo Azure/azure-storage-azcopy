@@ -2,12 +2,12 @@
 
 ## Version 10.1.2
 
-### Breaking changes
+### Breaking change
 
 1. Jobs created with earlier releases cannot be resumed with this release. We recommend 
 you update to this release only when you have no partially-completed jobs that you want to resume.
 
-### Bug fixes
+### Bug fix
 
 1. Files with `Content-Encoding: gzip` are now downloaded in compressed form. Previous versions tried to save a 
    decompressed version of the file. But they incorrectly truncated it at the original _compressed_ length, so the
