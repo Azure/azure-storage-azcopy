@@ -92,11 +92,11 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	fileList = make([]string, 50)
 	for i := 0; i < 10; i++ {
 		batch := []string{
-			generateName(prefix + "top"),
-			generateName(prefix + "sub1/"),
-			generateName(prefix + "sub2/"),
-			generateName(prefix + "sub1/sub3/sub5/"),
-			generateName(prefix + specialNames[i]),
+			generateName(prefix+"top", 0),
+			generateName(prefix+"sub1/", 0),
+			generateName(prefix+"sub2/", 0),
+			generateName(prefix+"sub1/sub3/sub5/", 0),
+			generateName(prefix+specialNames[i], 0),
 		}
 
 		for j, name := range batch {
