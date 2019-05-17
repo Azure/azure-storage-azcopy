@@ -82,6 +82,15 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	if len(order.BlobAttributes.ContentEncoding) > len(JobPartPlanDstBlob{}.ContentEncoding) {
 		panic(fmt.Errorf("content encoding string is too large: %q", order.BlobAttributes.ContentEncoding))
 	}
+	if len(order.BlobAttributes.ContentLanguage) > len(JobPartPlanDstBlob{}.ContentLanguage) {
+		panic(fmt.Errorf("content language string is too large: %q", order.BlobAttributes.ContentLanguage))
+	}
+	if len(order.BlobAttributes.ContentDisposition) > len(JobPartPlanDstBlob{}.ContentDisposition) {
+		panic(fmt.Errorf("content disposition string is too large: %q", order.BlobAttributes.ContentDisposition))
+	}
+	if len(order.BlobAttributes.CacheControl) > len(JobPartPlanDstBlob{}.CacheControl) {
+		panic(fmt.Errorf("cache control string is too large: %q", order.BlobAttributes.CacheControl))
+	}
 	if len(order.BlobAttributes.Metadata) > len(JobPartPlanDstBlob{}.Metadata) {
 		panic(fmt.Errorf("metadata string is too large: %q", order.BlobAttributes.Metadata))
 	}
@@ -152,15 +161,18 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 		NumTransfers:          uint32(len(order.Transfers)),
 		LogLevel:              order.LogLevel,
 		DstBlobData: JobPartPlanDstBlob{
-			BlobType:              order.BlobAttributes.BlobType,
-			NoGuessMimeType:       order.BlobAttributes.NoGuessMimeType,
-			ContentTypeLength:     uint16(len(order.BlobAttributes.ContentType)),
-			ContentEncodingLength: uint16(len(order.BlobAttributes.ContentEncoding)),
-			PutMd5:                order.BlobAttributes.PutMd5, // here because it relates to uploads (blob destination)
-			BlockBlobTier:         order.BlobAttributes.BlockBlobTier,
-			PageBlobTier:          order.BlobAttributes.PageBlobTier,
-			MetadataLength:        uint16(len(order.BlobAttributes.Metadata)),
-			BlockSize:             blockSize,
+			BlobType:                 order.BlobAttributes.BlobType,
+			NoGuessMimeType:          order.BlobAttributes.NoGuessMimeType,
+			ContentTypeLength:        uint16(len(order.BlobAttributes.ContentType)),
+			ContentEncodingLength:    uint16(len(order.BlobAttributes.ContentEncoding)),
+			ContentDispositionLength: uint16(len(order.BlobAttributes.ContentDisposition)),
+			ContentLanguageLength:    uint16(len(order.BlobAttributes.ContentLanguage)),
+			CacheControlLength:       uint16(len(order.BlobAttributes.CacheControl)),
+			PutMd5:                   order.BlobAttributes.PutMd5, // here because it relates to uploads (blob destination)
+			BlockBlobTier:            order.BlobAttributes.BlockBlobTier,
+			PageBlobTier:             order.BlobAttributes.PageBlobTier,
+			MetadataLength:           uint16(len(order.BlobAttributes.Metadata)),
+			BlockSize:                blockSize,
 		},
 		DstLocalData: JobPartPlanDstLocal{
 			PreserveLastModifiedTime: order.BlobAttributes.PreserveLastModifiedTime,
@@ -178,6 +190,9 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 	copy(jpph.DestinationRoot[:], order.DestinationRoot)
 	copy(jpph.DstBlobData.ContentType[:], order.BlobAttributes.ContentType)
 	copy(jpph.DstBlobData.ContentEncoding[:], order.BlobAttributes.ContentEncoding)
+	copy(jpph.DstBlobData.ContentLanguage[:], order.BlobAttributes.ContentLanguage)
+	copy(jpph.DstBlobData.ContentDisposition[:], order.BlobAttributes.ContentDisposition)
+	copy(jpph.DstBlobData.CacheControl[:], order.BlobAttributes.CacheControl)
 	copy(jpph.DstBlobData.Metadata[:], order.BlobAttributes.Metadata)
 
 	eof += writeValue(file, &jpph)

@@ -80,7 +80,7 @@ func newAzcopyHTTPClient() *http.Client {
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
 			DisableKeepAlives:      false,
-			DisableCompression:     false,
+			DisableCompression:     true,
 			MaxResponseHeaderBytes: 0,
 			//ResponseHeaderTimeout:  time.Duration{},
 			//ExpectContinueTimeout:  time.Duration{},
