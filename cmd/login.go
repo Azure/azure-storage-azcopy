@@ -44,8 +44,8 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loginCmdArgs.certPass = os.Getenv("CERT_PASSWORD")
-			loginCmdArgs.clientSecret = os.Getenv("CLIENT_SECRET")
+			loginCmdArgs.certPass = os.Getenv("AZCOPY_SPA_CERT_PASSWORD")
+			loginCmdArgs.clientSecret = os.Getenv("AZCOPY_SPA_CLIENT_SECRET")
 			err := loginCmdArgs.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform login command, %v", err)

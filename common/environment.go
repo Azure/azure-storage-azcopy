@@ -43,14 +43,14 @@ var EEnvironmentVariable = EnvironmentVariable{}
 
 func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:        "CLIENT_SECRET",
+		Name:        "AZCOPY_SPA_CLIENT_SECRET",
 		Description: "The Azure Active Directory client secret used for Service Principal authentication",
 	}
 }
 
 func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 	return EnvironmentVariable{
-		Name:        "CERT_PASSWORD",
+		Name:        "AZCOPY_SPA_CERT_PASSWORD",
 		Description: "The password used to decrypt the certificate used for Service Principal authentication.",
 	}
 }

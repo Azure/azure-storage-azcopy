@@ -219,13 +219,15 @@ To generate a private & public keypair for AzCopy (if you did not opt to use Azu
 Client secrets:
 
 ```
+AZCOPY_SPA_CLIENT_SECRET=<your secret>
 ./azcopy login --service-principal --application-id <your application ID> --client-secret <your secret>
 ```
 
 Certificates:
 
 ```
-./azcopy login --service-principal --application-id <your application ID> --certificate-path <your certificate's path, can be relative> --certificate-password <your certificate's password, not a mandatory parameter>
+AZCOPY_SPA_CERT_PASSWORD=<your cert password>
+./azcopy login --service-principal --application-id <your application ID> --certificate-path <your certificate's path, can be relative>
 ```
 
 ### Configure log location
