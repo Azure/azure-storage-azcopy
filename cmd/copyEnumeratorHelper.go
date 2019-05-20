@@ -89,7 +89,7 @@ func handleSingleFileValidationErrorForBlob(err error) (stop bool) {
 	stgErr, isStgErr := err.(azblob.StorageError)
 	if isStgErr {
 		if stgErr.ServiceCode() == azblob.ServiceCodeInvalidAuthenticationInfo {
-			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this blob)", stgErr.ServiceCode())
+			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this storage account)", stgErr.ServiceCode())
 			stop = true
 		} else if stgErr.ServiceCode() == azblob.ServiceCodeAuthenticationFailed {
 			errRootCause = fmt.Sprintf("%s, please check if SAS or OAuth is used properly, or source is a public blob", stgErr.ServiceCode())
@@ -112,7 +112,7 @@ func handleSingleFileValidationErrorForAzureFile(err error) (stop bool) {
 	stgErr, isStgErr := err.(azfile.StorageError)
 	if isStgErr {
 		if stgErr.ServiceCode() == azfile.ServiceCodeInvalidAuthenticationInfo {
-			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this blob)", stgErr.ServiceCode())
+			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this storage account)", stgErr.ServiceCode())
 			stop = true
 		} else if stgErr.ServiceCode() == azfile.ServiceCodeAuthenticationFailed {
 			errRootCause = fmt.Sprintf("%s, please check if SAS is set properly", stgErr.ServiceCode())
@@ -135,7 +135,7 @@ func handleSingleFileValidationErrorForADLSGen2(err error) (stop bool) {
 	stgErr, isStgErr := err.(azbfs.StorageError)
 	if isStgErr {
 		if stgErr.ServiceCode() == azbfs.ServiceCodeInvalidAuthenticationInfo {
-			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this blob)", stgErr.ServiceCode())
+			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this storage account)", stgErr.ServiceCode())
 			stop = true
 		} else if stgErr.ServiceCode() == azbfs.ServiceCodeAuthenticationFailed {
 			errRootCause = fmt.Sprintf("%s, please check if AccessKey or OAuth is used properly", stgErr.ServiceCode())

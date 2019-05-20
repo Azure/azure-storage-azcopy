@@ -170,7 +170,12 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	}
 
 	// Display the authentication message
-	fmt.Println(*deviceCode.Message)
+	fmt.Println(*deviceCode.Message + "\n")
+
+	if tenantID == "" || tenantID == "common" {
+		fmt.Println("INFO: Logging in under the \"Common\" tenant. This will log the account in under its home tenant.")
+		fmt.Println("INFO: If you plan to use AzCopy with a B2B account (where the account's home tenant is separate from the tenant of the target storage account), please sign in under the target tenant with --tenant-id")
+	}
 
 	// Wait here until the user is authenticated
 	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.

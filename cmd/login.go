@@ -103,11 +103,6 @@ func (lca loginCmdArgs) process() error {
 		return err
 	}
 
-	if lca.tenantID == "" || lca.tenantID == "common" {
-		glcm.Info("Logging in under the \"Common\" tenant. This will log the account in under its home tenant.")
-		glcm.Info("If you plan to use AzCopy with a B2B account (where the account's home tenant is separate from the tenant of the target storage account), please sign in under the target tenant with --tenant-id\n")
-	}
-
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
 	if lca.identity {
