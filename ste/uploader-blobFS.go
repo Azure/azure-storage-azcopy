@@ -135,8 +135,10 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 }
 
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
+	jptm := u.jptm
+
 	// Create file with the source size
-	_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
+	_, err := u.fileURL.Create(u.jptm.Context(), jptm.BfsDstData(state.LeadingBytes)) // note that "create" actually calls "create path"
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
@@ -171,7 +173,7 @@ func (u *blobFSUploader) Epilogue() {
 	if jptm.TransferStatus() > 0 {
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash)
+			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, azbfs.BlobFSFileHTTPHeaders{})
 			if err != nil {
 				jptm.FailActiveUpload("Flushing data", err)
 				// don't return, since need cleanup below
