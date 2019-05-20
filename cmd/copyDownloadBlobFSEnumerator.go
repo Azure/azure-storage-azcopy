@@ -69,7 +69,7 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	}
 
 	if err != nil {
-		if handleSingleFileValidationErrorForADLSGen2(err) {
+		if isFatal := handleSingleFileValidationErrorForADLSGen2(err); isFatal {
 			return err
 		}
 	}

@@ -77,7 +77,9 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 			}
 			return e.dispatchFinalPart(cca)
 		} else {
-			handleSingleFileValidationErrorForBlob(err)
+			if isFatal := handleSingleFileValidationErrorForBlob(err); isFatal {
+				return err
+			}
 		}
 	}
 
