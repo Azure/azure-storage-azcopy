@@ -9,6 +9,10 @@
 1. `--log-level=none` now drops no logs, and has a listing in `--help`
 1. Fixed bug where piping was not picking up the service version override, making it not work well against Azure Stack.
 
+### New features
+
+1. Enabled copying from page/block/append blob to another blob of a different type
+
 ## Version 10.1.2
 
 ### Breaking change
