@@ -173,7 +173,8 @@ func (u *blobFSUploader) Epilogue() {
 	if jptm.TransferStatus() > 0 {
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, azbfs.BlobFSFileHTTPHeaders{})
+			//Type assertions aren't my favorite thing to do but it does work when you need it to.
+			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).bfsFileHTTPHeaders)
 			if err != nil {
 				jptm.FailActiveUpload("Flushing data", err)
 				// don't return, since need cleanup below
