@@ -6,6 +6,10 @@
 
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
 
+### New features
+
+1. SAS tokens are supported on ADLS Gen 2/dfs.core.windows.net endpoints
+
 ## Version 10.1.2
 
 ### Breaking change

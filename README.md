@@ -62,7 +62,7 @@ AzCopy supports two types of authentication. See the table below to see which ty
 | ------------- | ------------- |
 | Blob storage  | SAS tokens OR Azure Active Directory Authentication  |
 | File storage  | SAS tokens  |
-| ADLS Gen2 | Azure Active Directory Authentication |
+| ADLS Gen2 | SAS tokens OR Azure Active Directory Authentication |
 
 > :exclamation::exclamation::exclamation:Note a [SAS token](https://docs.microsoft.com/en-us/azure/storage/common/storage-dotnet-shared-access-signature-part-1) is *NOT* an account key. SAS tokens are limited in scope and validity, and starts with a question mark which can be appended to a Blob URL. Here is an example: `?sv=2017-11-09&ss=bf&srt=co&sp=rwac&se=2018-11-16T03:59:09Z&st=2018-11-15T19:59:09Z&sip=10.102.166.17&spr=https,http&sig=k8xSm2K3crBbtNpfoxyvh9n%2BMjDTqRk2XpY8JYIAMaA%3D`.
 
