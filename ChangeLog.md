@@ -1,5 +1,11 @@
 # Change Log
 
+## Version XX.XX.XX
+
+### Bug fix
+
+1. Added error to using Azure Files without a SAS token (invalid auth configuration)
+
 ## Version 10.1.2
 
 ### Breaking change
