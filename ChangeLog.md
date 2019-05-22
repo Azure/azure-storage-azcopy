@@ -6,6 +6,10 @@
 
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
 
+### New features
+
+1. Service Principal Authentication is now available under `azcopy login`-- check `azcopy env` for details on client secrets/cert passwords. 
+
 ## Version 10.1.2
 
 ### Breaking change
