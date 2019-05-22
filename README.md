@@ -2,7 +2,7 @@
 
 ## About
 
-AzCopy (v10 Preview) is the next-generation command-line utility designed for copying data to/from Microsoft Azure Blob and File, using simple commands designed for optimal performance. You can copy data between a file system and a storage account, or between storage accounts.
+AzCopy (v10) is the next-generation command-line utility designed for copying data to/from Microsoft Azure Blob and File, using simple commands designed for optimal performance. You can copy data between a file system and a storage account, or between storage accounts.
 
 ## Features
 
@@ -18,6 +18,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 * Synchronize a file system up to Azure Blob or vice versa. Use `azcopy sync <source> <destination>`
 * Supports Azure Data Lake Storage Gen2. Use `myaccount.dfs.core.windows.net` for the URI to use ADLS Gen2 APIs.
 * Supports copying an entire account (Blob service only) to another account. Use `azcopy cp https://myaccount.blob.core.windows.net https://myotheraccount.blob.core.windows.net` which will enumerate all Blob containers and copy to the destination account
+* Supports [copying data from AWS S3](https://github.com/Azure/azure-storage-azcopy/wiki/Copy-from-AWS-S3)
 * Account to account copy is now using the new Put from URL APIs that will copy the data directly from one storage account to another. No data transfer is needed down to the client where AzCopy runs. Therefore it is significantly faster!
 * List/Remove files and blobs in a given path
 * Supports glob patterns in path, and --exclude flags
@@ -28,7 +29,7 @@ AzCopy (v10 Preview) is the next-generation command-line utility designed for co
 
 1. Download the AzCopy executable using one of the following links:
     * [Windows x64](https://aka.ms/downloadazcopy-v10-windows) (zip)
-    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux) (tar)
+    * [Linux x64](https://aka.ms/downloadazcopy-v10-linux) (tar.gz)
     * [MacOS x64](https://aka.ms/downloadazcopy-v10-mac) (zip)
 
 2. Unzip (or untar on Linux) and get started
@@ -37,7 +38,7 @@ On Linux:
 ```
 wget -O azcopyv10.tar.gz https://aka.ms/downloadazcopy-v10-linux
 tar -xzf azcopyv10.tar.gz
-cd azcopy_linux_amd64_10.0.8
+cd azcopy_linux_amd64_10.0.9
 ./azcopy
 ```
 
@@ -45,7 +46,7 @@ On Windows:
 ```
 Invoke-WebRequest -Uri https://aka.ms/downloadazcopy-v10-windows -OutFile .\azcopyv10.zip
 Expand-Archive azcopyv10.zip -DestinationPath .
-cd .\azcopy_windows_amd64_10.0.8
+cd .\azcopy_windows_amd64_10.0.9
 .\azcopy.exe
 ```
 
@@ -220,7 +221,7 @@ Raise an issue on this repository for any feedback or issue encountered.
   - For `sync`, last modified times are used to determine whether to transfer the same file present at both the source and the destination.
   - If the use case is to incrementally transfer data, then `sync` is the better choice, since only the modified/missing files are transferred.
 - Will `copy` overwrite my files?
-  - By default, AzCopy will overwrite the files at the destination if they already exist. To avoid this behavior, please use the flag `--overwrite`. 
+  - By default, AzCopy will overwrite the files at the destination if they already exist. To avoid this behavior, please use the flag `--overwrite=false`. 
 
 ## Contributing
 

@@ -70,8 +70,9 @@ const (
 // the name of the test requesting the entity name, and the minute, second, and nanoseconds of the call.
 // This should make it easy to associate the entities with their test, uniquely identify
 // them, and determine the order in which they were created.
-// Note that this imposes a restriction on the length of test names
-func generateName(prefix string) string {
+// Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
+// with a non-zero maxLen.
+func generateName(prefix string, maxLen int) string {
 	// These next lines up through the for loop are obtaining and walking up the stack
 	// trace to extrat the test name, which is stored in name
 	pc := make([]uintptr, 10)
@@ -85,48 +86,44 @@ func generateName(prefix string) string {
 	funcNameStart := strings.Index(name, "Test")
 	name = name[funcNameStart+len("Test"):] // Just get the name of the test and not any of the garbage at the beginning
 	name = strings.ToLower(name)            // Ensure it is a valid resource name
+	textualPortion := fmt.Sprintf("%s%s", prefix, strings.ToLower(name))
 	currentTime := time.Now()
-	name = fmt.Sprintf("%s%s%d%d%d", prefix, strings.ToLower(name), currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
-	return name
-}
-
-func getNameWithMaxLength(name string, maxLen int) string {
-	if maxLen < 1 {
-		panic("invalid state: maxLen should >= 1")
+	numericSuffix := fmt.Sprintf("%02d%02d%d", currentTime.Minute(), currentTime.Second(), currentTime.Nanosecond())
+	if maxLen > 0 {
+		maxTextLen := maxLen - len(numericSuffix)
+		if maxTextLen < 1 {
+			panic("max len too short")
+		}
+		if len(textualPortion) > maxTextLen {
+			textualPortion = textualPortion[:maxTextLen]
+		}
 	}
-
-	if name != "" && len(name) > maxLen {
-		return name[0:maxLen]
-	}
+	name = textualPortion + numericSuffix
 	return name
 }
 
 func generateContainerName() string {
-	name := generateName(containerPrefix)
-	return getNameWithMaxLength(name, 63)
+	return generateName(containerPrefix, 63)
 }
 
 func generateBlobName() string {
-	return generateName(blobPrefix)
+	return generateName(blobPrefix, 0)
 }
 
 func generateBucketName() string {
-	name := generateName(bucketPrefix)
-	return getNameWithMaxLength(name, 63)
+	return generateName(bucketPrefix, 63)
 }
 
 func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
-	name := generateName(customizedPrefix)
-	return getNameWithMaxLength(name, 63)
+	return generateName(customizedPrefix, 63)
 }
 
 func generateObjectName() string {
-	return generateName(objectPrefix)
+	return generateName(objectPrefix, 0)
 }
 
 func generateShareName() string {
-	name := generateName(sharePrefix)
-	return getNameWithMaxLength(name, 63)
+	return generateName(sharePrefix, 63)
 }
 
 func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
@@ -137,7 +134,7 @@ func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name s
 }
 
 func generateAzureFileName() string {
-	return generateName(azureFilePrefix)
+	return generateName(azureFilePrefix, 0)
 }
 
 func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {

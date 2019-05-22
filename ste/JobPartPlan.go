@@ -14,13 +14,12 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 6
+const DataSchemaVersion common.Version = 7
 
 const (
-	ContentTypeMaxBytes     = 256  // If > 65536, then jobPartPlanBlobData's ContentTypeLength's type  field must change
-	ContentEncodingMaxBytes = 256  // If > 65536, then jobPartPlanBlobData's ContentEncodingLength's type  field must change
-	MetadataMaxBytes        = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
-	BlobTierMaxBytes        = 10
+	CustomHeaderMaxBytes = 256
+	MetadataMaxBytes     = 1000 // If > 65536, then jobPartPlanBlobData's MetadataLength field's type must change
+	BlobTierMaxBytes     = 10
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -209,13 +208,31 @@ type JobPartPlanDstBlob struct {
 	ContentTypeLength uint16
 
 	// Specifies the MIME content type of the blob. The default type is application/octet-stream
-	ContentType [ContentTypeMaxBytes]byte
+	ContentType [CustomHeaderMaxBytes]byte
 
 	// Specifies length of content encoding which have been applied to the blob.
 	ContentEncodingLength uint16
 
 	// Specifies which content encodings have been applied to the blob.
-	ContentEncoding [ContentEncodingMaxBytes]byte
+	ContentEncoding [CustomHeaderMaxBytes]byte
+
+	// Specifies length of content language which has been applied to the blob.
+	ContentLanguageLength uint16
+
+	// Specifies which content language has been applied to the blob.
+	ContentLanguage [CustomHeaderMaxBytes]byte
+
+	// Specifies length of content disposition which has been applied to the blob.
+	ContentDispositionLength uint16
+
+	// Specifies the content disposition of the blob
+	ContentDisposition [CustomHeaderMaxBytes]byte
+
+	// Specifies the length of the cache control which has been applied to the blob.
+	CacheControlLength uint16
+
+	// Specifies the cache control of the blob
+	CacheControl [CustomHeaderMaxBytes]byte
 
 	// Specifies the tier if this is a block or page blob
 	BlockBlobTier common.BlockBlobTier

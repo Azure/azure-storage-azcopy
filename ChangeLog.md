@@ -6,6 +6,29 @@
 
 1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
 
+## Version 10.1.2
+
+### Breaking change
+
+1. Jobs created with earlier releases cannot be resumed with this release. We recommend 
+you update to this release only when you have no partially-completed jobs that you want to resume.
+
+### Bug fix
+
+1. Files with `Content-Encoding: gzip` are now downloaded in compressed form. Previous versions tried to save a 
+   decompressed version of the file. But they incorrectly truncated it at the original _compressed_ length, so the
+   downloaded file was not complete.
+   
+   By changing AzCopy to save the compressed version, that problem is solved, and Content-MD5 checks now work for such files. (It is 
+   assumed that the Content-MD5 hash is the hash of the _compressed_ file.)
+
+### New features
+
+1. Headers for Content-Disposition, Content-Language and Cache-Control can now be set when uploading
+files to Blob Storage and to Azure Files. Run `azcopy copy --help` to see command line parameter
+information, including those needed to set the new headers.
+1. On-screen job summary is output to the log file at end of job, so that the log will include those summary statistics.
+
 ## Version 10.1.1
 
 ### Bug fixes

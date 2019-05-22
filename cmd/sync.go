@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
 
 	"net/url"
@@ -360,7 +361,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				return cca.getJsonOfSyncJobSummary(summary)
 			}
 
-			return fmt.Sprintf(
+			output := fmt.Sprintf(
 				`
 Job %s Summary
 Files Scanned at Source: %v
@@ -386,6 +387,12 @@ Final Job Status: %v
 				summary.TotalBytesEnumerated,
 				summary.JobStatus)
 
+			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
+			if exists {
+				jobMan.Log(pipeline.LogInfo, output)
+			}
+
+			return output
 		}, exitCode)
 	}
 
