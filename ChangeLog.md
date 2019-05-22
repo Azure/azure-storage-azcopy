@@ -8,7 +8,7 @@
 
 ### New features
 
-1. SAS tokens are supported on ADLS Gen 2/dfs.core.windows.net endpoints
+1. SAS tokens are supported on HNS (Hierarchical NameSpace/Azure Data Lakes Generation 2) Storage Accounts
 
 ## Version 10.1.2
 
