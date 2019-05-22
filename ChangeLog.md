@@ -1,5 +1,11 @@
 # Change Log
 
+## Version XX.XX.XX
+
+### New features
+
+1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
+
 ## Version 10.1.1
 
 ### Bug fixes
