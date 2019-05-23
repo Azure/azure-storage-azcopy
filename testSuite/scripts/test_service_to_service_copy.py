@@ -645,7 +645,12 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             add_flags("log-level", "info")
         if dstBlobType != "":
             result = result.add_flags("blob-type", dstBlobType)
+
         result = result.execute_azcopy_copy_command()  # nice "dynamic typing"
+        if not result:
+            output = result.execute_azcopy_operation_get_output()
+            print(output)
+
         self.assertTrue(result)
 
         # Downloading the copied file for validation
