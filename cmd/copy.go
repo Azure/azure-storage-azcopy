@@ -152,6 +152,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	if fromTo.From() == common.ELocation.Local() {
+		raw.src = common.ToLongPath(raw.src)
+	}
+	if fromTo.To() == common.ELocation.Local() {
+		raw.dst = common.ToLongPath(raw.dst)
+	}
 	cooked.source = raw.src
 	cooked.destination = raw.dst
 
@@ -1090,6 +1096,7 @@ func init() {
 		Long:       copyCmdLongDescription,
 		Example:    copyCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
+
 			if len(args) == 1 { // redirection
 				if stdinPipeIn, err := isStdinPipeIn(); stdinPipeIn == true {
 					raw.src = pipeLocation

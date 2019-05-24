@@ -108,6 +108,10 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 func replacePathSeparators(path string) string {
 	if os.PathSeparator != common.AZCOPY_PATH_SEPARATOR_CHAR {
+		if strings.HasPrefix(path, `\\?\`) {
+			//Windows is not a fan of / in UNC & extended length strings
+			return path
+		}
 		return strings.Replace(path, string(os.PathSeparator), common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 	} else {
 		return path
@@ -137,7 +141,12 @@ func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCoun
 }
 
 func cleanLocalPath(localPath string) string {
-	normalizedPath := path.Clean(replacePathSeparators(localPath))
+	var normalizedPath string
+	if strings.HasPrefix(localPath, `\\?\`) {
+		return localPath
+	} else {
+		normalizedPath = path.Clean(replacePathSeparators(localPath))
+	}
 
 	// detect if we are targeting a network share
 	if strings.HasPrefix(localPath, "//") || strings.HasPrefix(localPath, `\\`) {
