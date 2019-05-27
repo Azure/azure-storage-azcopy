@@ -38,7 +38,7 @@ On Linux:
 ```
 wget -O azcopyv10.tar.gz https://aka.ms/downloadazcopy-v10-linux
 tar -xzf azcopyv10.tar.gz
-cd azcopy_linux_amd64_10.0.9
+cd azcopy_linux_amd64_10.*
 ./azcopy
 ```
 
@@ -46,7 +46,7 @@ On Windows:
 ```
 Invoke-WebRequest -Uri https://aka.ms/downloadazcopy-v10-windows -OutFile .\azcopyv10.zip
 Expand-Archive azcopyv10.zip -DestinationPath .
-cd .\azcopy_windows_amd64_10.0.9
+cd .\azcopy_windows_amd64_10.*
 .\azcopy.exe
 ```
 
