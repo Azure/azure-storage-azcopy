@@ -25,9 +25,14 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	common.PanicIfErr(err)
 
 	// list the source files and directories
-	listOfFilesAndDirectories, err := filepath.Glob(cca.source)
+	// try trimming the longer string before the shorter string
+	listOfFilesAndDirectories, err := filepath.Glob(strings.TrimPrefix(strings.TrimPrefix(cca.source, `\\?\UNC`), `\\?\`))
 	if err != nil || len(listOfFilesAndDirectories) == 0 {
 		return fmt.Errorf("cannot find source to upload")
+	}
+
+	for k, v := range listOfFilesAndDirectories {
+		listOfFilesAndDirectories[k] = common.ToLongPath(v)
 	}
 
 	// when a single file is being uploaded, we need to treat this case differently, as the destinationURL might be a blob
@@ -180,7 +185,11 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	wcIndex := util.firstIndexOfWildCard(parentSourcePath)
 	if wcIndex != -1 {
 		parentSourcePath = parentSourcePath[:wcIndex]
-		pathSepIndex := strings.LastIndex(parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		searchSep := common.AZCOPY_PATH_SEPARATOR_STRING
+		if strings.HasPrefix(cca.source, `\\?\`) {
+			searchSep = common.OS_PATH_SEPARATOR
+		}
+		pathSepIndex := strings.LastIndex(parentSourcePath, searchSep)
 		parentSourcePath = parentSourcePath[:pathSepIndex]
 	}
 
@@ -207,13 +216,15 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// TODO: Currently not implemented the upload of empty directories for BlobFS
 						return nil
 					} else if f.Mode().IsRegular() { // If the resource is file
-						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
-						// this replacement is done to handle the windows file paths where path separator "\\"
-						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if !(strings.HasPrefix(pathToFile, `\\?\`) || strings.HasPrefix(fileOrDirectoryPath, `\\?\`)) {
+							// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
+							// this replacement is done to handle the windows file paths where path separator "\\"
+							pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
-						// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
-						// this replacement is done to handle the windows file paths where path separator "\\"
-						fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+							// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
+							// this replacement is done to handle the windows file paths where path separator "\\"
+							fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						}
 
 						// check if the should be included or not
 						if !util.resourceShouldBeIncluded(parentSourcePath, e.Include, pathToFile) {

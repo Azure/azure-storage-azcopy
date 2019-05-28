@@ -59,11 +59,11 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int,
 	}
 
 	if !isSingleFileSync {
-		if !strings.HasSuffix(copyJobTemplate.SourceRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
+		if !strings.HasSuffix(copyJobTemplate.SourceRoot, common.AZCOPY_PATH_SEPARATOR_STRING) && !strings.HasPrefix(copyJobTemplate.SourceRoot, `\\?\`) {
 			copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
 		}
 
-		if !strings.HasSuffix(copyJobTemplate.DestinationRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
+		if !strings.HasSuffix(copyJobTemplate.DestinationRoot, common.AZCOPY_PATH_SEPARATOR_STRING) && !strings.HasPrefix(copyJobTemplate.DestinationRoot, `\\?\`) {
 			copyJobTemplate.DestinationRoot += common.AZCOPY_PATH_SEPARATOR_STRING
 		}
 	}

@@ -27,7 +27,12 @@ import (
 
 func CreateParentDirectoryIfNotExist(destinationPath string) error {
 	// check if parent directory exists
-	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, AZCOPY_PATH_SEPARATOR_STRING)]
+	sepString := AZCOPY_PATH_SEPARATOR_STRING
+	if strings.HasPrefix(destinationPath, `\\?\`) {
+		sepString = OS_PATH_SEPARATOR
+	}
+
+	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, sepString)]
 	_, err := os.Stat(parentDirectory)
 	// if the parent directory does not exist, create it and all its parents
 	if os.IsNotExist(err) {

@@ -25,6 +25,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"os"
+	"path/filepath"
 	"time"
 
 	"net/url"
@@ -100,6 +102,38 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked := cookedSyncCmdArgs{}
 
 	cooked.fromTo = inferFromTo(raw.src, raw.dst)
+	if cooked.fromTo.From() == common.ELocation.Local() {
+		var err error
+		raw.src, err = filepath.Abs(raw.src)
+		if err != nil {
+			return cooked, err
+		}
+
+		if common.OS_PATH_SEPARATOR == `\` {
+			raw.src = common.ToLongPath(raw.src)
+			if fi, err := os.Stat(raw.src); err == nil {
+				if fi.IsDir() && !strings.HasSuffix(raw.src, `\`) {
+					raw.src += `\`
+				}
+			}
+		}
+	}
+	if cooked.fromTo.To() == common.ELocation.Local() {
+		var err error
+		raw.dst, err = filepath.Abs(raw.dst)
+		if err != nil {
+			return cooked, err
+		}
+
+		if common.OS_PATH_SEPARATOR == `\` {
+			raw.dst = common.ToLongPath(raw.dst)
+			if fi, err := os.Stat(raw.dst); err == nil {
+				if fi.IsDir() && !strings.HasSuffix(raw.dst, `\`) {
+					raw.dst += `\`
+				}
+			}
+		}
+	}
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {

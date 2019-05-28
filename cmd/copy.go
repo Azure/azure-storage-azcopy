@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"path/filepath"
 
 	"io"
 	"net/url"
@@ -148,20 +149,43 @@ func (raw rawCopyCmdArgs) blockSizeInBytes() uint32 {
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{}
 
-	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
+	var err error
+	cooked.fromTo, err = validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
 		return cooked, err
 	}
-	if fromTo.From() == common.ELocation.Local() {
-		raw.src = common.ToLongPath(raw.src)
+	if cooked.fromTo.From() == common.ELocation.Local() {
+		raw.src, err = filepath.Abs(raw.src)
+		if err != nil {
+			return cooked, err
+		}
+
+		if common.OS_PATH_SEPARATOR == `\` {
+			raw.src = common.ToLongPath(raw.src)
+			if fi, err := os.Stat(raw.src); err == nil {
+				if fi.IsDir() && !strings.HasSuffix(raw.src, `\`) {
+					raw.src += `\`
+				}
+			}
+		}
 	}
-	if fromTo.To() == common.ELocation.Local() {
-		raw.dst = common.ToLongPath(raw.dst)
+	if cooked.fromTo.To() == common.ELocation.Local() {
+		raw.dst, err = filepath.Abs(raw.dst)
+		if err != nil {
+			return cooked, err
+		}
+
+		if common.OS_PATH_SEPARATOR == `\` {
+			raw.dst = common.ToLongPath(raw.dst)
+			if fi, err := os.Stat(raw.dst); err == nil {
+				if fi.IsDir() && !strings.HasSuffix(raw.dst, `\`) {
+					raw.dst += `\`
+				}
+			}
+		}
 	}
 	cooked.source = raw.src
 	cooked.destination = raw.dst
-
-	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
 	cooked.recursive = raw.recursive

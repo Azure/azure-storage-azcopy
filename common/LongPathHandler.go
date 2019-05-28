@@ -1,22 +1,31 @@
 package common
 
-import "strings"
+import (
+	"os"
+	"strings"
+)
 
 func ToLongPath(short string) string {
-	if strings.HasPrefix(short, `\\?\`) {
-		return short
-	} else if strings.HasPrefix(short, `\\`) {
-		return `\\?\UNC` + short[1:]
-	} else {
-		return `\\?\` + short
+	if os.PathSeparator == '\\' {
+		if strings.HasPrefix(short, `\\?\`) {
+			return strings.Replace(short, `/`, `\`, -1)
+		} else if strings.HasPrefix(short, `\\`) {
+			return strings.Replace(`\\?\UNC`+short[1:], `/`, `\`, -1)
+		} else {
+			return strings.Replace(`\\?\`+short, `/`, `\`, -1)
+		}
 	}
+
+	return short
 }
 
 func ToShortPath(long string) string {
-	if strings.HasPrefix(long, `\\?\UNC`) {
-		return `\` + long[7:]
-	} else if strings.HasPrefix(long, `\\?\`) {
-		return long[4:]
+	if os.PathSeparator == '\\' {
+		if strings.HasPrefix(long, `\\?\UNC`) {
+			return strings.Replace(`\`+long[7:], `\`, `/`, -1)
+		} else if strings.HasPrefix(long, `\\?\`) {
+			return strings.Replace(long[4:], `\`, `/`, -1)
+		}
 	}
 
 	return long

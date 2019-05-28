@@ -38,6 +38,21 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 		fullPath = cca.destination
 	}
 
+	had := ``
+	/*
+		0 = nothing
+		1 = \\?\UNC
+		2 = \\?\
+	*/
+
+	if strings.HasPrefix(fullPath, `\\?\UNC`) {
+		fullPath = `\` + fullPath[7:]
+		had = `\\?\UNC`
+	} else if strings.HasPrefix(fullPath, `\\?\`) {
+		fullPath = fullPath[4:]
+		had = `\\?\`
+	}
+
 	if strings.ContainsAny(fullPath, "*?") {
 		return nil, errors.New("illegal local path, no pattern matching allowed for sync command")
 	}
@@ -53,6 +68,8 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 
 		atomic.AddUint64(counterAddr, 1)
 	}
+
+	fullPath = had + fullPath
 
 	traverser := newLocalTraverser(fullPath, cca.recursive, incrementEnumerationCounter)
 

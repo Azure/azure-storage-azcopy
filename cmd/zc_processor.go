@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+	"strings"
 )
 
 type copyTransferProcessor struct {
@@ -57,6 +58,10 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 }
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
+	if strings.HasPrefix(s.destination, `\\?\`) {
+		storedObject.relativePath = strings.Replace(storedObject.relativePath, `/`, `\`, -1)
+	}
+
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
 		err = s.sendPartToSte()
 		if err != nil {

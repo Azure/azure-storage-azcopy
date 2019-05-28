@@ -295,19 +295,24 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 
 	// replace the path separator in filepath with AZCOPY_PATH_SEPARATOR
 	// this replacement is required to handle the windows filepath
-	filePath = strings.Replace(filePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	searchSep := common.AZCOPY_PATH_SEPARATOR_STRING
+	if !strings.HasPrefix(filePath, `\\?\`) {
+		filePath = strings.Replace(filePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	} else {
+		searchSep = `\`
+	}
 	var scrubAway string
 	// test if root path finishes with a /, if yes, ignore it
-	if rootPath[len(rootPath)-1:] == common.AZCOPY_PATH_SEPARATOR_STRING {
-		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+	if rootPath[len(rootPath)-1:] == searchSep {
+		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], searchSep)+1]
 	} else {
 		// +1 because we want to include the / at the end of the dir
-		scrubAway = rootPath[:strings.LastIndex(rootPath, common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+		scrubAway = rootPath[:strings.LastIndex(rootPath, searchSep)+1]
 	}
 
 	result = strings.Replace(filePath, scrubAway, "", 1)
 
-	return result
+	return strings.Replace(result, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 }
 
 // this function can tell if a path represents a directory (must exist)
@@ -324,11 +329,15 @@ func (util copyHandlerUtil) isPathALocalDirectory(pathString string) bool {
 
 func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
 	var result string
+	sepString := common.AZCOPY_PATH_SEPARATOR_STRING
+	if strings.HasPrefix(directoryPath, `\\?\`) {
+		sepString = common.OS_PATH_SEPARATOR
+	}
 	// check if the directory path ends with the path separator
-	if strings.LastIndex(directoryPath, common.AZCOPY_PATH_SEPARATOR_STRING) == len(directoryPath)-1 {
+	if strings.LastIndex(directoryPath, sepString) == len(directoryPath)-1 {
 		result = fmt.Sprintf("%s%s", directoryPath, fileName)
 	} else {
-		result = fmt.Sprintf("%s%s%s", directoryPath, common.AZCOPY_PATH_SEPARATOR_STRING, fileName)
+		result = fmt.Sprintf("%s%s%s", directoryPath, sepString, fileName)
 	}
 
 	// blob name has "/" as Path Separator.

@@ -74,6 +74,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 				// leading path separators are trimmed away
 				computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+				computedRelativePath = strings.TrimPrefix(computedRelativePath, `\`) //Handle long file path separators as well
 
 				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
 					fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
@@ -142,6 +143,8 @@ func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCoun
 
 func cleanLocalPath(localPath string) string {
 	var normalizedPath string
+
+	//Can't handle / with \\?\
 	if strings.HasPrefix(localPath, `\\?\`) {
 		return localPath
 	} else {
