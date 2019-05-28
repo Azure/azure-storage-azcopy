@@ -9,15 +9,23 @@ type pathHandlerSuite struct{}
 var _ = chk.Suite(&pathHandlerSuite{})
 
 func (p *pathHandlerSuite) TestShortToLong(c *chk.C) {
-	c.Assert(ToLongPath(`C:\myPath`), chk.Equals, `\\?\C:\myPath`)
-	c.Assert(ToLongPath(`\\myHost\myPath`), chk.Equals, `\\?\UNC\myHost\myPath`)
-	c.Assert(ToLongPath(`\\?\C:\myPath`), chk.Equals, `\\?\C:\myPath`)
-	c.Assert(ToLongPath(`\\?\UNC\myHost\myPath`), chk.Equals, `\\?\UNC\myHost\myPath`)
+	if OS_PATH_SEPARATOR == `\` {
+		c.Assert(ToLongPath(`C:\myPath`), chk.Equals, `\\?\C:\myPath`)
+		c.Assert(ToLongPath(`\\myHost\myPath`), chk.Equals, `\\?\UNC\myHost\myPath`)
+		c.Assert(ToLongPath(`\\?\C:\myPath`), chk.Equals, `\\?\C:\myPath`)
+		c.Assert(ToLongPath(`\\?\UNC\myHost\myPath`), chk.Equals, `\\?\UNC\myHost\myPath`)
+	} else {
+		c.Skip("Test only pertains to Windows.")
+	}
 }
 
 func (p *pathHandlerSuite) TestLongToShort(c *chk.C) {
-	c.Assert(ToShortPath(`\\?\C:\myPath`), chk.Equals, `C:\myPath`)
-	c.Assert(ToShortPath(`\\?\UNC\myHost\myPath`), chk.Equals, `\\myHost\myPath`)
-	c.Assert(ToShortPath(`\\myHost\myPath`), chk.Equals, `\\myHost\myPath`)
-	c.Assert(ToShortPath(`C:\myPath`), chk.Equals, `C:\myPath`)
+	if OS_PATH_SEPARATOR == `\` {
+		c.Assert(ToShortPath(`\\?\C:\myPath`), chk.Equals, `C:\myPath`)
+		c.Assert(ToShortPath(`\\?\UNC\myHost\myPath`), chk.Equals, `\\myHost\myPath`)
+		c.Assert(ToShortPath(`\\myHost\myPath`), chk.Equals, `\\myHost\myPath`)
+		c.Assert(ToShortPath(`C:\myPath`), chk.Equals, `C:\myPath`)
+	} else {
+		c.Skip("Test only pertains to Windows.")
+	}
 }
