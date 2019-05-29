@@ -25,9 +25,17 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	common.PanicIfErr(err)
 
 	// list the source files and directories
-	listOfFilesAndDirectories, err := filepath.Glob(cca.source)
+	// filepath.Glob incorrectly handles the long file paths indicator as a meta character, so trim it...
+	listOfFilesAndDirectories, err := filepath.Glob(common.ToShortPath(cca.source))
 	if err != nil || len(listOfFilesAndDirectories) == 0 {
 		return fmt.Errorf("cannot find source to upload")
+	}
+
+	// ...and then give it back to everything
+	for k, v := range listOfFilesAndDirectories {
+		if common.OS_PATH_SEPARATOR == `\` {
+			listOfFilesAndDirectories[k] = common.ToLongPath(v)
+		}
 	}
 
 	// when a single file is being uploaded, we need to treat this case differently, as the destinationURL might be a blob
@@ -228,6 +236,10 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 						// example: fileOrDirectoryPath = "/dir1/dir2/dir3" pathToFile = "/dir1/dir2/dir3/file1.txt" result = "dir3/file1.txt"
 						destinationURL.Path = util.generateObjectPath(cleanContainerPath,
 							util.getRelativePath(fileOrDirectoryPath, pathToFile))
+						// force path to be forward slash, only really important on Windows.
+						if common.AZCOPY_PATH_SEPARATOR_STRING == `\` {
+							destinationURL.Path = strings.Replace(destinationURL.Path, common.AZCOPY_PATH_SEPARATOR_STRING, `/`, -1) //Filter out windows filesystem characters
+						}
 						err = e.addTransfer(common.CopyTransfer{
 							Source:           pathToFile,
 							Destination:      destinationURL.String(),

@@ -156,7 +156,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				}
 				// check for the special character in blob relative path and get path without special character.
 				blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
-
+				// force path to be AZCOPY_PATH_SEPARATOR_STRING, only really important on Windows.
+				if common.AZCOPY_PATH_SEPARATOR_STRING == `\` {
+					blobRelativePath = strings.Replace(blobRelativePath, "/", common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				}
 				e.addTransfer(common.CopyTransfer{
 					Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobPath)).String(),
 					Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
@@ -211,6 +214,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 					// check for the special character in blob relative path and get path without special character.
 					blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
+					// force path to be AZCOPY_PATH_SEPARATOR_STRING, only really important on Windows.
+					if common.AZCOPY_PATH_SEPARATOR_STRING == `\` {
+						blobRelativePath = strings.Replace(blobRelativePath, "/", common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+					}
 					e.addTransfer(common.CopyTransfer{
 						Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
 						Destination:      util.generateLocalPath(cca.destination, blobRelativePath),
@@ -303,6 +310,10 @@ func (e *copyDownloadBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 			// check for the special character in blob relative path and get path without special character.
 			blobRelativePath = util.blobPathWOSpecialCharacters(blobRelativePath)
+			// force path to be AZCOPY_PATH_SEPARATOR_STRING, only really important on Windows.
+			if common.AZCOPY_PATH_SEPARATOR_STRING == `\` {
+				blobRelativePath = strings.Replace(blobRelativePath, "/", common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			}
 			e.addTransfer(common.CopyTransfer{
 				Source:           util.stripSASFromBlobUrl(util.createBlobUrlFromContainer(blobUrlParts, blobInfo.Name)).String(),
 				Destination:      util.generateLocalPath(cca.destination, blobRelativePath),

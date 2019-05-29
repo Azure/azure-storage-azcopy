@@ -324,6 +324,12 @@ func (util copyHandlerUtil) isPathALocalDirectory(pathString string) bool {
 
 func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) string {
 	var result string
+
+	//Because \ and / can't be used interchangeably with the long file path discriminator (\\?\), filter forward slash out
+	if strings.HasPrefix(directoryPath, `\\?\`) {
+		fileName = strings.Replace(fileName, `/`, `\`, -1)
+	}
+
 	// check if the directory path ends with the path separator
 	if strings.LastIndex(directoryPath, common.AZCOPY_PATH_SEPARATOR_STRING) == len(directoryPath)-1 {
 		result = fmt.Sprintf("%s%s", directoryPath, fileName)

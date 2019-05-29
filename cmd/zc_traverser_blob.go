@@ -107,7 +107,11 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				continue
 			}
 
-			relativePath := strings.TrimPrefix(blobInfo.Name, searchPrefix)
+			//format relative path for current path separator
+			var relativePath string
+			if common.AZCOPY_PATH_SEPARATOR_STRING == `\` {
+				relativePath = strings.Replace(strings.TrimPrefix(blobInfo.Name, searchPrefix), `/`, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			}
 
 			// if recursive
 			if !t.recursive && strings.Contains(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING) {

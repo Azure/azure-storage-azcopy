@@ -139,6 +139,11 @@ func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCoun
 func cleanLocalPath(localPath string) string {
 	normalizedPath := path.Clean(replacePathSeparators(localPath))
 
+	if strings.HasPrefix(localPath, `\\?\`) {
+		//Nothing needs to be done, we've already cleaned it.
+		return localPath
+	}
+
 	// detect if we are targeting a network share
 	if strings.HasPrefix(localPath, "//") || strings.HasPrefix(localPath, `\\`) {
 		// if yes, we have trimmed away one of the leading slashes, so add it back

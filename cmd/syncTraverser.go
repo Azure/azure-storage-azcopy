@@ -38,7 +38,8 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 		fullPath = cca.destination
 	}
 
-	if strings.ContainsAny(fullPath, "*?") {
+	//Trim the offending prefix and then check if it has any pattern matching
+	if strings.ContainsAny(strings.TrimPrefix(fullPath, `\\?\`), "*?") {
 		return nil, errors.New("illegal local path, no pattern matching allowed for sync command")
 	}
 

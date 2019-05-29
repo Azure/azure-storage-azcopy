@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"path/filepath"
 
 	"io"
 	"net/url"
@@ -148,14 +149,49 @@ func (raw rawCopyCmdArgs) blockSizeInBytes() uint32 {
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked := cookedCopyCmdArgs{}
 
-	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
+	var err error
+	cooked.fromTo, err = validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
 		return cooked, err
 	}
+
+	//Convert local paths to long filepaths on windows, get absolute filepath everywhere.
+	//This ensures that long file paths work on Windows and that relative filepaths using . work everywhere.
+	if cooked.fromTo.From() == common.ELocation.Local() {
+		raw.src, err = filepath.Abs(raw.src)
+		if err != nil {
+			return cooked, err
+		}
+
+		if common.OS_PATH_SEPARATOR == `\` {
+			raw.src = common.ToLongPath(raw.src)
+			common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_CHAR = `\`, '\\'
+			if fi, err := os.Stat(raw.src); err == nil {
+				if fi.IsDir() && !strings.HasSuffix(raw.src, `\`) {
+					raw.src += `\`
+				}
+			}
+		}
+	}
+	if cooked.fromTo.To() == common.ELocation.Local() {
+		raw.dst, err = filepath.Abs(raw.dst)
+		if err != nil {
+			return cooked, err
+		}
+
+		if common.OS_PATH_SEPARATOR == `\` {
+			raw.dst = common.ToLongPath(raw.dst)
+			common.AZCOPY_PATH_SEPARATOR_STRING, common.AZCOPY_PATH_SEPARATOR_CHAR = `\`, '\\'
+			if fi, err := os.Stat(raw.dst); err == nil {
+				if fi.IsDir() && !strings.HasSuffix(raw.dst, `\`) {
+					raw.dst += `\`
+				}
+			}
+		}
+	}
+
 	cooked.source = raw.src
 	cooked.destination = raw.dst
-
-	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
 	cooked.recursive = raw.recursive
