@@ -162,6 +162,14 @@
   version = "v0.1.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:dc5fcd55d659de4ba03aa3f941cbf4736ce1277562d41012aa1122af28cd425f"
+  name = "github.com/mattn/go-ieproxy"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "5671a450ae01446f63cd63ee93070ed3d244925a"
+
+[[projects]]
   digest = "1:037939a41d1cbd3e9e0fa81372144cce899fc3895122ff7b52b7a1ea7ead1d10"
   name = "github.com/minio/minio-go"
   packages = [
@@ -246,11 +254,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:acd9bf9ec8ff02347d0acbf223d033616d5d837b31fc5fb1bcb18e439ee02bad"
+  digest = "1:bdcea3c8dea37a6fcb2406a51303d3b366164b689a4e26b79e2d22bef26d3fa2"
   name = "golang.org/x/net"
   packages = [
     "context",
     "http/httpguts",
+    "http/httpproxy",
     "http2",
     "http2/hpack",
     "idna",
@@ -271,12 +280,13 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:8c41805cf4d0776e4e4aaedd60cb7b184113a265054433bc39644f289f7c86cc"
+  digest = "1:8e0c2bbe7e976a05ef60ed5df8ac381dbc864a69402211f2b5d498bf84563f40"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
     "unix",
     "windows",
+    "windows/registry",
   ]
   pruneopts = "UT"
   revision = "c2f5717e611cf8e89a852a41081355194d80c943"
@@ -380,10 +390,12 @@
     "github.com/danieljoos/wincred",
     "github.com/jiacfan/keychain",
     "github.com/jiacfan/keyctl",
+    "github.com/mattn/go-ieproxy",
     "github.com/minio/minio-go",
     "github.com/minio/minio-go/pkg/credentials",
     "github.com/minio/minio-go/pkg/s3utils",
     "github.com/spf13/cobra",
+    "golang.org/x/net/http/httpproxy",
     "golang.org/x/sync/semaphore",
     "gopkg.in/check.v1",
   ]

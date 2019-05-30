@@ -37,6 +37,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+github.com/mattn/go-ieproxy v0.0.0-20190125011930-5671a450ae01 h1:+ugoV37c+f+hsAvcunbibalpmIvc99I86UKS/b+RyXs=
+github.com/mattn/go-ieproxy v0.0.0-20190125011930-5671a450ae01/go.mod h1:31jz6HNzdxOmlERGGEc4v/dMssOfmp2p5bT/okiKFFc=
 github.com/minio/minio-go v6.0.12+incompatible h1:wA5F3AVAzW47K06l3WgXjBPY/Z3QdasUp+cDd6RzUnM=
 github.com/minio/minio-go v6.0.12+incompatible/go.mod h1:7guKYtitv8dktvNUGrhzmNlA5wrAABTQXCoesZdFQO8=
 github.com/mitchellh/go-homedir v1.0.0 h1:vKb8ShqSby24Yrqr/yDYkuFz8d0WUjys40rvnGC8aR0=
