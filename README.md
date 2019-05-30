@@ -66,11 +66,18 @@ To pin to a version of `azcopy`
 
 2. Now in your scripts download the version from this URL, unpack it and use as before. 
 
+Linux:
 ```
 
 wget -O azcopyv10.tar https://azcopyvnext.azureedge.net/release20190301/azcopy_linux_amd64_10.0.8.tar.gz
 tar -xf azcopyv10.tar --strip-components=1
 ./azcopy
+```
+Windows:
+```
+Invoke-WebRequest https://azcopyvnext.azureedge.net/release20190517/azcopy_windows_amd64_10.1.2.zip -OutFile azcopyv10.zip
+<<Unzip here>>
+
 ```
 
 > Note: `--strip-components=1` on the `tar` command removes the top level folder containing the version name and instead extracts the binary directly into the current folder. This allows the script to be updated with a new version of `azcopy` by only updating the `wget` URL.
