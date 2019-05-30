@@ -63,5 +63,6 @@ func GetAzCopyAppPath() string {
 }
 
 func init() {
+	//Catch everything that uses http.DefaultTransport with our ProxyMiddleman function
 	http.DefaultTransport.(*http.Transport).Proxy = common.ProxyMiddleman()
 }
