@@ -137,22 +137,24 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 // getBlobFSCredentialType is used to get BlobFS's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
 // 1. If there is cached session OAuth token, indicating using token credential.
-// 2. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
-// 3. Otherwise use shared key.
+// 3. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
+// 4. Check if there is a SAS query appended to the URL
+// 5. Otherwise use shared key.
 func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 	if err != nil {
 		return common.ECredentialType.Unknown(), err
 	}
 
-	if oAuthTokenExists() {
-		return common.ECredentialType.OAuthToken(), nil
-	}
-
+	//Give preference to explicitly supplied SAS tokens
 	sas := azbfs.NewBfsURLParts(*resourceURL).SAS
 
 	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
 		return common.ECredentialType.Anonymous(), nil
+	}
+
+	if oAuthTokenExists() {
+		return common.ECredentialType.OAuthToken(), nil
 	}
 
 	name := os.Getenv("ACCOUNT_NAME")
@@ -160,7 +162,7 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 	if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 		return common.ECredentialType.SharedKey(), nil
 	} else {
-		return common.ECredentialType.Unknown(), errors.New("OAuth token or shared key should be provided for Blob FS (gbfsct)")
+		return common.ECredentialType.Unknown(), errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
 	}
 }
 
