@@ -55,7 +55,7 @@ The version of `azcopy` available at `https://aka.ms/downloadazcopy-v10-linux` w
 
 To pin to a version of `azcopy`
 
-1. Run `curl -v https://aka.ms/downloadazcopy-v10-linux` and review the output to locate the current version URL. Here is an example output from `curl` showing the `301 Moved Permanently` response.
+1. Run `curl -v https://aka.ms/downloadazcopy-v10-linux` (linux) or `(curl https://aka.ms/downloadazcopy-v10-windows -MaximumRedirection 0 -ErrorAction silentlycontinue).RawContent` (windows) and review the output to locate the current version URL. Here is an example output from `curl` showing the `301 Moved Permanently` response.
 
 ```
 ...
