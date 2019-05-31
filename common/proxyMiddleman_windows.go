@@ -19,8 +19,8 @@ func proxyMiddleman() func(req *http.Request) (i *url.URL, e error) {
 	} else if conf.Static.Active {
 		//If static proxy obtaining is specified
 		prox := httpproxy.Config{
-			HTTPSProxy: conf.Static.Protocols["https"],
-			HTTPProxy:  conf.Static.Protocols["http"],
+			HTTPSProxy: mapFallback("https", "", conf.Static.Protocols),
+			HTTPProxy:  mapFallback("http", "", conf.Static.Protocols),
 			NoProxy:    conf.Static.NoProxy,
 		}
 
@@ -30,5 +30,13 @@ func proxyMiddleman() func(req *http.Request) (i *url.URL, e error) {
 	} else {
 		//Final fallthrough case; use the environment variables.
 		return http.ProxyFromEnvironment
+	}
+}
+
+func mapFallback(oKey, fbKey string, m map[string]string) string {
+	if v, ok := m[oKey]; ok {
+		return v
+	} else {
+		return m[fbKey]
 	}
 }
