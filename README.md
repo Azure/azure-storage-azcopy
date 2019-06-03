@@ -30,21 +30,21 @@ For complete guidance, visit any of these articles on the docs.microsoft.com web
 
 :eight_spoked_asterisk: [Get started with AzCopy](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-v10)
 
-:eight_spoked_asterisk: [Transfer data with AzCopy and blob storage](storage-use-azcopy-blobs.md)
+:eight_spoked_asterisk: [Transfer data with AzCopy and blob storage](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-blobs)
 
-:eight_spoked_asterisk: [Transfer data with AzCopy and file storage](storage-use-azcopy-files.md)
+:eight_spoked_asterisk: [Transfer data with AzCopy and file storage](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-files)
 
-:eight_spoked_asterisk: [Transfer data with AzCopy and Amazon S3 buckets](storage-use-azcopy-s3.md)
+:eight_spoked_asterisk: [Transfer data with AzCopy and Amazon S3 buckets](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-s3)
 
-:eight_spoked_asterisk: [Configure, optimize, and troubleshoot AzCopy](storage-use-azcopy-configure.md)
+:eight_spoked_asterisk: [Configure, optimize, and troubleshoot AzCopy](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-configure)
 
 ### Find help from your command prompt
 
 Be sure to add AzCopy to your system path. Then, open a command prompt window.
 
-To see a list of commands, type `azcopy` and then press the ENTER key.
+To see a list of commands, type `azcopy -h` and then press the ENTER key.
 
-To learn about a specific command, type `azCopy` followed by the name of the command.
+To learn about a specific command, just include the name of the command (For example: `azcopy copy -h`).
 
 ![AzCopy command help example](readme-command-prompt.png)
 
@@ -52,7 +52,7 @@ To learn about a specific command, type `azCopy` followed by the name of the com
 
 ### What is the difference between `sync` and `copy`?
 
-The `copy` command is a simple transferring operation, it scans the source and attempts to transfer every single file/blob. The supported source/destination pairs are listed in the help message of the tool. On the other hand, `sync` makes sure that whatever is present in the source will be replicated to the destination, and also whatever is not at the source will be deleted from the destination. If your goal is to simply move some files, then `copy` is definitely the right command, since it offers much better performance.
+The `copy` command is a simple transferring operation, it scans the source and attempts to transfer every single file/blob. The supported source/destination pairs are listed in the help message of the tool. On the other hand, `sync` makes sure that whatever is present in the source will be replicated to the destination. If your goal is to simply move some files, then `copy` is definitely the right command, since it offers much better performance.
 
 For `sync`, last modified times are used to determine whether to transfer the same file present at both the source and the destination. If the use case is to incrementally transfer data
 then `sync` is the better choice, since only the modified/missing files are transferred.
