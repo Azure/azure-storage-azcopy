@@ -139,7 +139,7 @@ func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCoun
 func cleanLocalPath(localPath string) string {
 	normalizedPath := path.Clean(replacePathSeparators(localPath))
 
-	if strings.HasPrefix(localPath, `\\?\`) {
+	if strings.HasPrefix(localPath, common.EXTENDED_PATH_PREFIX) {
 		//Nothing needs to be done, we've already cleaned it.
 		return localPath
 	}

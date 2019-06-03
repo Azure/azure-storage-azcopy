@@ -47,7 +47,12 @@ var (
 
 const (
 	OS_PATH_SEPARATOR = string(os.PathSeparator)
-	Dev_Null          = "/dev/null"
+
+	//Windows handles long file paths (without a registry fix) by adding the prefix \\?\
+	EXTENDED_PATH_PREFIX     = `\\?\`
+	EXTENDED_UNC_PATH_PREFIX = `\\?\UNC`
+
+	Dev_Null = "/dev/null"
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.

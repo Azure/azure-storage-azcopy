@@ -9,12 +9,12 @@ import (
 //ToExtendedPath converts short paths to an extended path.
 func ToExtendedPath(short string) string {
 	if os.PathSeparator == '\\' {
-		if strings.HasPrefix(short, `\\?\`) {
+		if strings.HasPrefix(short, EXTENDED_PATH_PREFIX) {
 			return strings.Replace(short, `/`, `\`, -1)
 		} else if strings.HasPrefix(short, `\\`) {
-			return strings.Replace(`\\?\UNC`+short[1:], `/`, `\`, -1)
+			return strings.Replace(EXTENDED_UNC_PATH_PREFIX+short[1:], `/`, `\`, -1)
 		} else {
-			return strings.Replace(`\\?\`+short, `/`, `\`, -1)
+			return strings.Replace(EXTENDED_PATH_PREFIX+short, `/`, `\`, -1)
 		}
 	}
 
@@ -24,9 +24,9 @@ func ToExtendedPath(short string) string {
 //ToShortPath converts an extended path to a short path.
 func ToShortPath(long string) string {
 	if os.PathSeparator == '\\' {
-		if strings.HasPrefix(long, `\\?\UNC`) {
+		if strings.HasPrefix(long, EXTENDED_UNC_PATH_PREFIX) {
 			return strings.Replace(`\`+long[7:], `\`, `/`, -1)
-		} else if strings.HasPrefix(long, `\\?\`) {
+		} else if strings.HasPrefix(long, EXTENDED_PATH_PREFIX) {
 			return strings.Replace(long[4:], `\`, `/`, -1)
 		}
 	}

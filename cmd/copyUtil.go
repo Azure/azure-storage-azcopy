@@ -326,7 +326,7 @@ func (util copyHandlerUtil) generateLocalPath(directoryPath, fileName string) st
 	var result string
 
 	//Because \ and / can't be used interchangeably with the long file path discriminator (\\?\), filter forward slash out
-	if strings.HasPrefix(directoryPath, `\\?\`) {
+	if strings.HasPrefix(directoryPath, common.EXTENDED_PATH_PREFIX) {
 		fileName = strings.Replace(fileName, `/`, `\`, -1)
 	}
 

@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
 	"strings"
@@ -39,7 +40,7 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 	}
 
 	//Trim the offending prefix and then check if it has any pattern matching
-	if strings.ContainsAny(strings.TrimPrefix(fullPath, `\\?\`), "*?") {
+	if strings.ContainsAny(strings.TrimPrefix(fullPath, common.EXTENDED_PATH_PREFIX), "*?") {
 		return nil, errors.New("illegal local path, no pattern matching allowed for sync command")
 	}
 
