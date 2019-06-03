@@ -34,7 +34,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// ...and then give it back to everything
 	for k, v := range listOfFilesAndDirectories {
 		if common.OS_PATH_SEPARATOR == `\` {
-			listOfFilesAndDirectories[k] = common.ToLongPath(v)
+			listOfFilesAndDirectories[k] = common.ToExtendedPath(v)
 		}
 	}
 
