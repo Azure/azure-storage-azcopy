@@ -8,15 +8,15 @@ AzCopy v10 is a command-line utility that you can use to copy data to and from c
 
 :white_check_mark: Create containers and file shares.
 
-:white_check_mark: Upload files and folders.
+:white_check_mark: Upload files and directories.
 
-:white_check_mark: Download files and folders.
+:white_check_mark: Download files and directories.
 
-:white_check_mark: Copy containers, folders and blobs between storage accounts (Blobs only).
+:white_check_mark: Copy containers, directories and blobs between storage accounts (Blobs only).
 
 :white_check_mark: Synchronize containers with local file systems and visa versa (Blobs only).
 
-:white_check_mark: Copy objects, folders, and buckets from Amazon Web Services (AWS) (Blobs only).
+:white_check_mark: Copy objects, directories, and buckets from Amazon Web Services (AWS) (Blobs only).
 
 :white_check_mark: List files in a container (Blobs only).
 
