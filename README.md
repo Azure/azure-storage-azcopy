@@ -40,13 +40,15 @@ For complete guidance, visit any of these articles on the docs.microsoft.com web
 
 ### Find help from your command prompt
 
-Be sure to add AzCopy to your system path. Then, open a command prompt window.
+For convenience, consider adding the AzCopy directory location to your system path for ease of use. That way you can type `azcopy` from any directory on your system.
 
 To see a list of commands, type `azcopy -h` and then press the ENTER key.
 
 To learn about a specific command, just include the name of the command (For example: `azcopy list -h`).
 
 ![AzCopy command help example](readme-command-prompt.png)
+
+If you choose not to add AzCopy to your path, you'll have to change directories to the location of your AzCopy executable and type `azcopy` or `.\azcopy` in Windows PowerShell command prompts.
 
 ## Frequently asked questions
 
