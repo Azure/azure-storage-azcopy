@@ -61,6 +61,10 @@ then `sync` is the better choice, since only the modified/missing files are tran
 
 By default, AzCopy will overwrite the files at the destination if they already exist. To avoid this behavior, please use the flag `--overwrite=false`.
 
+### Will 'sync' delete files in the destination if they no longer exist in the source location?
+
+By default, the 'sync' command doesn't delete files in the destination unless you use an optional flag with the command. To learn more, see [Synchronize files](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-blobs#synchronize-files).
+
 ## How to contribute to AzCopy v10
 
 This project welcomes contributions and suggestions.  Most contributions require you to agree to a
