@@ -1,5 +1,11 @@
 # Change Log
 
+## Version XX.XX.XX 
+
+### Bug fixes
+
+1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
+
 ## Version 10.1.2
 
 ### Breaking change
