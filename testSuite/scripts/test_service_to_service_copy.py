@@ -121,7 +121,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
     # and destination is authenticated with OAuth token.
     def test_copy_single_17mb_file_from_blob_to_blob_oauth(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
-        dst_container_url = util.get_object_without_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        # URL on next line was test_s2s_dst_blob_account_url, but for now its changed to
+        # be the main OAuth one, to simplify OAuth setup
+        dst_container_url = util.get_object_without_sas(util.test_oauth_container_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 17 * 1024 * 1024, True)
 
 
