@@ -1,5 +1,5 @@
 [[constraint]]
- name = "github.com/mattn/go-ieproxy"
+ name = "github.com/adreed-msft/go-ieproxy"
  branch = "master"
 
 [[constraint]]

@@ -21,7 +21,7 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/adreed-msft/go-ieproxy"
 	"math"
 	"net/http"
 	"os"
@@ -63,6 +63,6 @@ func GetAzCopyAppPath() string {
 }
 
 func init() {
-	//Catch everything that uses http.DefaultTransport with our ProxyMiddleman function
-	http.DefaultTransport.(*http.Transport).Proxy = common.ProxyMiddleman()
+	//Catch everything that uses http.DefaultTransport with ieproxy.GetProxyFunc()
+	http.DefaultTransport.(*http.Transport).Proxy = ieproxy.GetProxyFunc()
 }

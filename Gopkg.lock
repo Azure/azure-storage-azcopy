@@ -54,6 +54,14 @@
   revision = "2567042f9cda26772f0afe08bab6e5105745f298"
 
 [[projects]]
+  branch = "master"
+  digest = "1:4e1acfe59730c777679d427f8e72aba600ea3d44a13e84606378ed6fa7b8dfaf"
+  name = "github.com/adreed-msft/go-ieproxy"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "aa0393549e35693a5468de187e0b9e17b6db9dc0"
+
+[[projects]]
   digest = "1:65b0d980b428a6ad4425f2df4cd5410edd81f044cf527bd1c345368444649e58"
   name = "github.com/census-instrumentation/opencensus-proto"
   packages = [
@@ -160,14 +168,6 @@
   pruneopts = "UT"
   revision = "e2ffdb16a802fe2bb95e2e35ff34f0e53aeef34f"
   version = "v0.1.0"
-
-[[projects]]
-  branch = "master"
-  digest = "1:dc5fcd55d659de4ba03aa3f941cbf4736ce1277562d41012aa1122af28cd425f"
-  name = "github.com/mattn/go-ieproxy"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "5671a450ae01446f63cd63ee93070ed3d244925a"
 
 [[projects]]
   digest = "1:037939a41d1cbd3e9e0fa81372144cce899fc3895122ff7b52b7a1ea7ead1d10"
@@ -387,15 +387,14 @@
     "github.com/Azure/azure-storage-file-go/azfile",
     "github.com/Azure/go-autorest/autorest/adal",
     "github.com/JeffreyRichter/enum/enum",
+    "github.com/adreed-msft/go-ieproxy",
     "github.com/danieljoos/wincred",
     "github.com/jiacfan/keychain",
     "github.com/jiacfan/keyctl",
-    "github.com/mattn/go-ieproxy",
     "github.com/minio/minio-go",
     "github.com/minio/minio-go/pkg/credentials",
     "github.com/minio/minio-go/pkg/s3utils",
     "github.com/spf13/cobra",
-    "golang.org/x/net/http/httpproxy",
     "golang.org/x/sync/semaphore",
     "gopkg.in/check.v1",
   ]
