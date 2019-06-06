@@ -365,10 +365,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
 		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("file -> blob is not a supported direction while copying from service to service")
+			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
 		}
 		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("custom blob type is not supported while copying from s3 to blob")
+			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
