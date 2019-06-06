@@ -24,8 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -44,8 +42,14 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loginCmdArgs.certPass = os.Getenv("AZCOPY_SPA_CERT_PASSWORD")
-			loginCmdArgs.clientSecret = os.Getenv("AZCOPY_SPA_CLIENT_SECRET")
+			loginCmdArgs.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			loginCmdArgs.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+
+			if loginCmdArgs.certPass != "" || loginCmdArgs.clientSecret != "" {
+				glcm.Info(`Bear in mind that setting a environment variable from the command line will be readable in your command line history (on Windows).
+				Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.`)
+			}
+
 			err := loginCmdArgs.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform login command, %v", err)

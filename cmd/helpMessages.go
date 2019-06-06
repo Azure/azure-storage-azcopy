@@ -172,6 +172,10 @@ Log in using a VM's user-assigned identity with an Object ID of the service iden
 Log in using a VM's user-assigned identity with a Resource ID of the service identity:
 - azcopy login --identity --identity-resource-id "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
 
+--NOTICE FOR THE FOLLOWING EXAMPLES:--
+Bear in mind that setting a environment variable from the command line will be readable in your command line history (on Windows).
+Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.
+
 Log in as a service principal using a client secret:
 - AZCOPY_SPA_CLIENT_SECRET=secret
 - azcopy login --service-principal
