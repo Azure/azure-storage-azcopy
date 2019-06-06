@@ -21,7 +21,7 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
-	BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSFileHTTPHeaders)
+	BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -252,7 +252,7 @@ func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfi
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
 }
 
-func (jptm *jobPartTransferMgr) BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSFileHTTPHeaders) {
+func (jptm *jobPartTransferMgr) BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
 	return jptm.jobPartMgr.(*jobPartMgr).bfsDstData(jptm.Info().Source, dataFileToXfer)
 }
 

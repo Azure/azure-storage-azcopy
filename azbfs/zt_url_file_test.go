@@ -47,7 +47,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	// Create and delete file in root directory.
 	file, _ := getFileURLFromFileSystem(c, fsURL)
 
-	cResp, err := file.Create(context.Background(), azbfs.BlobFSFileHTTPHeaders{})
+	cResp, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -69,7 +69,7 @@ func (s *FileURLSuite) TestFileCreateDelete(c *chk.C) {
 	// Create and delete file in named directory.
 	file, _ = getFileURLFromDirectory(c, dirURL)
 
-	cResp, err = file.Create(context.Background(), azbfs.BlobFSFileHTTPHeaders{})
+	cResp, err = file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -96,7 +96,7 @@ func (s *FileURLSuite) TestFileCreateDeleteNonExistingParent(c *chk.C) {
 	file, _ := getFileURLFromDirectory(c, dirNotExist)
 
 	// Verify that the file was created even though its parent directory does not exist yet
-	cResp, err := file.Create(context.Background(), azbfs.BlobFSFileHTTPHeaders{})
+	cResp, err := file.Create(context.Background(), azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.Response().StatusCode, chk.Equals, http.StatusCreated)
 	c.Assert(cResp.ETag(), chk.Not(chk.Equals), "")
@@ -193,7 +193,7 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	c.Assert(pResp.Date(), chk.Not(chk.Equals), "")
 
 	// Flush data
-	fResp, err := fileURL.FlushData(context.Background(), 4096, make([]byte, 0), azbfs.BlobFSFileHTTPHeaders{})
+	fResp, err := fileURL.FlushData(context.Background(), 4096, make([]byte, 0), azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
 	c.Assert(fResp.StatusCode(), chk.Equals, http.StatusOK)
 	c.Assert(fResp.ETag(), chk.Not(chk.Equals), "")
