@@ -5,6 +5,7 @@
 ### Bug fixes
 
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
+1. `--log-level=none` now drops no logs, and has a listing in `--help`
 
 ## Version 10.1.2
 
