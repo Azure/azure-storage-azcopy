@@ -37,6 +37,7 @@ konsorten/go-windows-terminal-sequences, Copyright (c) 2017 marvin + konsorten G
 jiacfan/keychain, Copyright (c) 2015 Keybase
 mattn/go-ieproxy, Copyright (c) 2014 mattn
 mattn/go-ieproxy, Copyright (c) 2017 oliverpool
+adreed-msft/go-ieproxy, Copyright (c) 2019 Adele Reed
 
 
 The MIT License (MIT)
