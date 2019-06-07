@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+//https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file#maximum-path-length-limitation
+//Because windows doesn't (by default) support strings above 260 characters,
+//we need to provide a special prefix to tell it to support paths up to 32,767 characters.
+
+//Furthermore, we don't use the built-in long path support in the Go SDK commit 231aa9d6d7
+//because it fails to support long UNC paths. As a result, we opt to wrap things such as filepath.Glob()
+//to safely use them with long UNC paths.
+
 //ToExtendedPath converts short paths to an extended path.
 func ToExtendedPath(short string) string {
 	if os.PathSeparator == '\\' {

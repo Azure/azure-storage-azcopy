@@ -2,7 +2,12 @@
 
 ## Version XX.XX.XX 
 
-### Bug fixes
+### Breaking change
+
+1. Jobs created with earlier releases cannot be resumed with this release. We recommend
+you update to this release only when you have no partially-completed jobs that you want to resume.
+
+### Bug fix
 
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
 1. Long file paths are now supported on Windows without registry changes.
