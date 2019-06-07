@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a
 	github.com/Azure/go-autorest v10.15.2+incompatible
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
-	github.com/adreed-msft/go-ieproxy v0.0.0-20190605172227-aa0393549e35 // indirect
+	github.com/adreed-msft/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182 // indirect
 	github.com/danieljoos/wincred v1.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/go-ini/ini v1.41.0 // indirect

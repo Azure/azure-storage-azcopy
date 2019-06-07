@@ -20,6 +20,8 @@ github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda h1:NOo6+gM9NNP
 github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda/go.mod h1:2CaSFTh2ph9ymS6goiOKIBdfhwWUVsX4nQ5QjIYFHHs=
 github.com/adreed-msft/go-ieproxy v0.0.0-20190605172227-aa0393549e35 h1:3Nkg4Id3IWdZX0ssPdOA1V76oWlyyDBGpuGAU70GEn8=
 github.com/adreed-msft/go-ieproxy v0.0.0-20190605172227-aa0393549e35/go.mod h1:HPo+VI2VjacBV8RYFyGMpKF9u3Pyc94ANMVz0F5bbkQ=
+github.com/adreed-msft/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182 h1:FmLo6KAMILAwLj6shr0byoqVgUcxfAfF956ecY+Zum4=
+github.com/adreed-msft/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182/go.mod h1:HPo+VI2VjacBV8RYFyGMpKF9u3Pyc94ANMVz0F5bbkQ=
 github.com/danieljoos/wincred v1.0.1 h1:fcRTaj17zzROVqni2FiToKUVg3MmJ4NtMSGCySPIr/g=
 github.com/danieljoos/wincred v1.0.1/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3EJbmjhLdK9U=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
