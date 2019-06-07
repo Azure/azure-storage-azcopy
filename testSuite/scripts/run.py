@@ -11,6 +11,8 @@ from test_blobfs_download_oauth import *
 from test_blob_piping import *
 from test_blob_sync import *
 from test_service_to_service_copy import *
+from test_blobfs_download_SAS import *
+from test_blobfs_upload_SAS import *
 import glob, os
 import configparser
 import platform
@@ -73,6 +75,7 @@ def parse_config_file_set_env():
 
     # set the filesystem url in the environment
     os.environ['FILESYSTEM_URL'] = config['CREDENTIALS']['FILESYSTEM_URL']
+    os.environ['FILESYSTEM_SAS_URL'] = config['CREDENTIALS']['FILESYSTEM_SAS_URL']
 
     # set the env var OAuth token info
     os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = config['CREDENTIALS']['AZCOPY_OAUTH_TOKEN_INFO']
@@ -107,8 +110,9 @@ def init():
             check_env_not_exist('TEST_SUITE_EXECUTABLE_LOCATION') or check_env_not_exist('CONTAINER_SAS_URL') or \
             check_env_not_exist('CONTAINER_OAUTH_URL') or check_env_not_exist('CONTAINER_OAUTH_VALIDATE_SAS_URL') or \
             check_env_not_exist('SHARE_SAS_URL') or check_env_not_exist('PREMIUM_CONTAINER_SAS_URL') or \
-            check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('ACCOUNT_NAME') or \
-            check_env_not_exist('ACCOUNT_KEY') or check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
+            check_env_not_exist('FILESYSTEM_URL') or check_env_not_exist('FILESYSTEM_SAS_URL') or \
+            check_env_not_exist('ACCOUNT_NAME') or check_env_not_exist('ACCOUNT_KEY') or \
+            check_env_not_exist('AZCOPY_OAUTH_TOKEN_INFO') or \
             check_env_not_exist('S2S_SRC_BLOB_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_DST_BLOB_ACCOUNT_SAS_URL') or \
             check_env_not_exist('S2S_SRC_FILE_ACCOUNT_SAS_URL') or check_env_not_exist('S2S_SRC_S3_SERVICE_URL'):
         parse_config_file_set_env()
@@ -143,6 +147,7 @@ def init():
 
     # get the filesystem url
     filesystem_url = os.environ.get('FILESYSTEM_URL')
+    filesystem_sas_url = os.environ.get('FILESYSTEM_SAS_URL')
 
     # get the s2s copy src URLs
     s2s_src_blob_account_url = os.environ.get('S2S_SRC_BLOB_ACCOUNT_SAS_URL')
@@ -156,7 +161,7 @@ def init():
     cleanup()
 
     if not util.initialize_test_suite(test_dir_path, container_sas, container_oauth, container_oauth_validate, share_sas_url, premium_container_sas,
-                                      filesystem_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
+                                      filesystem_url, filesystem_sas_url, s2s_src_blob_account_url, s2s_src_file_account_url, s2s_src_s3_service_url, s2s_dst_blob_account_url, azcopy_exec_location, test_suite_exec_location):
         print("failed to initialize the test suite with given user input")
         return
     else:
@@ -182,6 +187,8 @@ def main():
                          PageBlob_Upload_User_Scenarios,
                          BlobFs_Upload_OAuth_User_Scenarios,
                          BlobFs_Download_OAuth_User_Scenarios,
+                         BlobFs_Download_SAS_User_Scenarios,
+                         BlobFs_Upload_SAS_User_Scenarios,
                          Azcopy_Operation_User_Scenario,
                          FileShare_Download_User_Scenario,
                          FileShare_Upload_User_Scenario,
