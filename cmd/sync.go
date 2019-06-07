@@ -510,7 +510,7 @@ func init() {
 	syncCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size.")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
