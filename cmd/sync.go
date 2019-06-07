@@ -25,8 +25,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"os"
-	"path/filepath"
 	"time"
 
 	"net/url"
@@ -139,7 +137,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.recursive = raw.recursive
 
 	// determine whether we should prompt the user to delete extra files
-	err := cooked.deleteDestination.Parse(raw.deleteDestination)
+	err = cooked.deleteDestination.Parse(raw.deleteDestination)
 	if err != nil {
 		return cooked, err
 	}

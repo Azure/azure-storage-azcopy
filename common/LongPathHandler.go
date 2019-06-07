@@ -25,9 +25,9 @@ func ToExtendedPath(short string) string {
 func ToShortPath(long string) string {
 	if os.PathSeparator == '\\' {
 		if strings.HasPrefix(long, EXTENDED_UNC_PATH_PREFIX) {
-			return strings.Replace(`\`+long[7:], `\`, `/`, -1)
+			return `\` + long[7:] //Return what we stole from it
 		} else if strings.HasPrefix(long, EXTENDED_PATH_PREFIX) {
-			return strings.Replace(long[4:], `\`, `/`, -1)
+			return long[4:]
 		}
 	}
 
