@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"math"
 
 	"io"
 	"net/url"
@@ -86,7 +87,7 @@ type rawCopyCmdArgs struct {
 	forceWrite bool
 
 	// options from flags
-	blockSizeMB              uint32
+	blockSizeMB              float64
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -140,8 +141,27 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
-func (raw rawCopyCmdArgs) blockSizeInBytes() uint32 {
-	return raw.blockSizeMB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MB
+// blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
+// A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
+// The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
+// to use fractions of a MiB. E.g.
+// 0.25 = 256 KiB
+// 0.015625 = 16 KiB
+func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
+	if rawBlockSizeInMiB < 0 {
+		return 0, errors.New("negative block size not allowed")
+	}
+	rawSizeInBytes := rawBlockSizeInMiB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MiB
+	if rawSizeInBytes > math.MaxUint32 {
+		return 0, errors.New("block size too big for uint32")
+	}
+	const epsilon = 0.001 // arbitrarily using a tolerance of 1000th of a byte
+	_, frac := math.Modf(rawSizeInBytes)
+	isWholeNumber := frac < epsilon || frac > 1.0-epsilon // frac is very close to 0 or 1, so rawSizeInBytes is (very close to) an integer
+	if !isWholeNumber {
+		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
+	}
+	return uint32(math.Round(rawSizeInBytes)), nil
 }
 
 // validates and transform raw input into cooked input
@@ -162,7 +182,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
-	cooked.blockSize = raw.blockSizeInBytes()
+
+	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
+	if err != nil {
+		return cooked, err
+	}
 
 	// parse the given blob type.
 	err = cooked.blobType.Parse(raw.blobType)
@@ -172,8 +196,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// If the given blobType is AppendBlob, block-size-mb should not be greater than
 	// 4MB.
-	if cooked.blobType == common.EBlobType.AppendBlob() &&
-		raw.blockSizeInBytes() > common.MaxAppendBlobBlockSize {
+	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
 		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
 	}
 
@@ -710,8 +733,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:                   cca.putMd5,
-			MD5ValidationOption:      cca.md5ValidationOption,
+			PutMd5:              cca.putMd5,
+			MD5ValidationOption: cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -1144,7 +1167,7 @@ func init() {
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size.")
+	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
