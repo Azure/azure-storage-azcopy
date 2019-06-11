@@ -128,16 +128,6 @@ func (f FileURL) GetProperties(ctx context.Context) (*PathGetPropertiesResponse,
 		nil, nil, nil, nil, nil)
 }
 
-func (f FileURL) SetProperties(ctx context.Context, headers BlobFSHTTPHeaders) (*PathUpdateResponse, error) {
-	overrideHttpVerb := "PATCH"
-
-	return f.fileClient.Update(ctx, PathUpdateActionSetProperties, f.fileSystemName, f.path, nil,
-		nil, nil, nil, nil,
-		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
-		nil, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
-}
-
 // UploadRange writes bytes to a file.
 // offset indiciates the offset at which to begin writing, in bytes.
 // custom headers are not valid on this operation

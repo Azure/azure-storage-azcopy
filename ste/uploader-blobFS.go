@@ -33,13 +33,14 @@ import (
 )
 
 type blobFSUploader struct {
-	jptm       IJobPartTransferMgr
-	fileURL    azbfs.FileURL
-	chunkSize  uint32
-	numChunks  uint32
-	pipeline   pipeline.Pipeline
-	pacer      *pacer
-	md5Channel chan []byte
+	jptm                IJobPartTransferMgr
+	fileURL             azbfs.FileURL
+	chunkSize           uint32
+	numChunks           uint32
+	pipeline            pipeline.Pipeline
+	pacer               *pacer
+	md5Channel          chan []byte
+	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
 }
 
 func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -137,8 +138,10 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 
+	h := jptm.BfsDstData(state.LeadingBytes)
+	u.creationTimeHeaders = &h
 	// Create file with the source size
-	_, err := u.fileURL.Create(u.jptm.Context(), jptm.BfsDstData(state.LeadingBytes)) // note that "create" actually calls "create path"
+	_, err := u.fileURL.Create(u.jptm.Context(), h) // note that "create" actually calls "create path"
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
@@ -174,7 +177,7 @@ func (u *blobFSUploader) Epilogue() {
 		md5Hash, ok := <-u.md5Channel
 		if ok {
 			//Type assertions aren't my favorite thing to do but it does work when you need it to.
-			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, jptm.(*jobPartTransferMgr).jobPartMgr.(*jobPartMgr).blobFSHTTPHeaders)
+			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, *u.creationTimeHeaders)
 			if err != nil {
 				jptm.FailActiveUpload("Flushing data", err)
 				// don't return, since need cleanup below
