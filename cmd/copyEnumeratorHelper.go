@@ -84,46 +84,73 @@ var infoCopyFromBucketDirectoryListOfFiles = "trying to copy the source as bucke
 var infoCopyFromDirectoryListOfFiles = "trying to copy the source as directory/list of files"
 var infoCopyFromAccount = "trying to copy the source account"
 
-func handleSingleFileValidationErrorForBlob(err error) {
+func handleSingleFileValidationErrorForBlob(err error) (stop bool) {
 	errRootCause := err.Error()
 	stgErr, isStgErr := err.(azblob.StorageError)
 	if isStgErr {
-		if stgErr.ServiceCode() == azblob.ServiceCodeAuthenticationFailed {
+		if stgErr.ServiceCode() == azblob.ServiceCodeInvalidAuthenticationInfo {
+			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this storage account)", stgErr.ServiceCode())
+			stop = true
+		} else if stgErr.ServiceCode() == azblob.ServiceCodeAuthenticationFailed {
 			errRootCause = fmt.Sprintf("%s, please check if SAS or OAuth is used properly, or source is a public blob", stgErr.ServiceCode())
+			stop = true
 		} else {
 			errRootCause = string(stgErr.ServiceCode())
 		}
 	}
 
-	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+	if stop {
+		glcm.Info(errRootCause)
+	} else {
+		glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+	}
+	return
 }
 
-func handleSingleFileValidationErrorForAzureFile(err error) {
+func handleSingleFileValidationErrorForAzureFile(err error) (stop bool) {
 	errRootCause := err.Error()
 	stgErr, isStgErr := err.(azfile.StorageError)
 	if isStgErr {
-		if stgErr.ServiceCode() == azfile.ServiceCodeAuthenticationFailed {
+		if stgErr.ServiceCode() == azfile.ServiceCodeInvalidAuthenticationInfo {
+			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this storage account)", stgErr.ServiceCode())
+			stop = true
+		} else if stgErr.ServiceCode() == azfile.ServiceCodeAuthenticationFailed {
 			errRootCause = fmt.Sprintf("%s, please check if SAS is set properly", stgErr.ServiceCode())
+			stop = true
 		} else {
 			errRootCause = string(stgErr.ServiceCode())
 		}
 	}
 
-	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+	if stop {
+		glcm.Info(errRootCause)
+	} else {
+		glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+	}
+	return
 }
 
-func handleSingleFileValidationErrorForADLSGen2(err error) {
+func handleSingleFileValidationErrorForADLSGen2(err error) (stop bool) {
 	errRootCause := err.Error()
 	stgErr, isStgErr := err.(azbfs.StorageError)
 	if isStgErr {
-		if stgErr.ServiceCode() == azbfs.ServiceCodeAuthenticationFailed {
+		if stgErr.ServiceCode() == azbfs.ServiceCodeInvalidAuthenticationInfo {
+			errRootCause = fmt.Sprintf("%s, Please ensure all login details are correct (or that you are signed into the correct tenant for this storage account)", stgErr.ServiceCode())
+			stop = true
+		} else if stgErr.ServiceCode() == azbfs.ServiceCodeAuthenticationFailed {
 			errRootCause = fmt.Sprintf("%s, please check if AccessKey or OAuth is used properly", stgErr.ServiceCode())
+			stop = true
 		} else {
 			errRootCause = string(stgErr.ServiceCode())
 		}
 	}
 
-	glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+	if stop {
+		glcm.Info(errRootCause)
+	} else {
+		glcm.Info(fmt.Sprintf(handleSingleFileValidationErrStr, errRootCause))
+	}
+	return
 }
 
 func handleSingleFileValidationErrorForS3(err error) {
