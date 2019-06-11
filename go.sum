@@ -18,10 +18,6 @@ github.com/Azure/go-autorest v10.15.2+incompatible h1:oZpnRzZie83xGV5txbT1aa/7zp
 github.com/Azure/go-autorest v10.15.2+incompatible/go.mod h1:r+4oMnoxhatjLLJ6zxSWATqVooLgysK6ZNox3g/xq24=
 github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda h1:NOo6+gM9NNPJ3W56nxOKb4164LEw094U0C8zYQM8mQU=
 github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda/go.mod h1:2CaSFTh2ph9ymS6goiOKIBdfhwWUVsX4nQ5QjIYFHHs=
-github.com/adreed-msft/go-ieproxy v0.0.0-20190605172227-aa0393549e35 h1:3Nkg4Id3IWdZX0ssPdOA1V76oWlyyDBGpuGAU70GEn8=
-github.com/adreed-msft/go-ieproxy v0.0.0-20190605172227-aa0393549e35/go.mod h1:HPo+VI2VjacBV8RYFyGMpKF9u3Pyc94ANMVz0F5bbkQ=
-github.com/adreed-msft/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182 h1:FmLo6KAMILAwLj6shr0byoqVgUcxfAfF956ecY+Zum4=
-github.com/adreed-msft/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182/go.mod h1:HPo+VI2VjacBV8RYFyGMpKF9u3Pyc94ANMVz0F5bbkQ=
 github.com/danieljoos/wincred v1.0.1 h1:fcRTaj17zzROVqni2FiToKUVg3MmJ4NtMSGCySPIr/g=
 github.com/danieljoos/wincred v1.0.1/go.mod h1:SnuYRW9lp1oJrZX/dXJqr0cPK5gYXqx3EJbmjhLdK9U=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
@@ -41,8 +37,9 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/mattn/go-ieproxy v0.0.0-20190125011930-5671a450ae01 h1:+ugoV37c+f+hsAvcunbibalpmIvc99I86UKS/b+RyXs=
-github.com/mattn/go-ieproxy v0.0.0-20190125011930-5671a450ae01/go.mod h1:31jz6HNzdxOmlERGGEc4v/dMssOfmp2p5bT/okiKFFc=
+github.com/mattn/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182/go.mod h1:31jz6HNzdxOmlERGGEc4v/dMssOfmp2p5bT/okiKFFc=
+github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149 h1:HfxbT6/JcvIljmERptWhwa8XzP7H3T+Z2N26gTsaDaA=
+github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149/go.mod h1:31jz6HNzdxOmlERGGEc4v/dMssOfmp2p5bT/okiKFFc=
 github.com/minio/minio-go v6.0.12+incompatible h1:wA5F3AVAzW47K06l3WgXjBPY/Z3QdasUp+cDd6RzUnM=
 github.com/minio/minio-go v6.0.12+incompatible/go.mod h1:7guKYtitv8dktvNUGrhzmNlA5wrAABTQXCoesZdFQO8=
 github.com/mitchellh/go-homedir v1.0.0 h1:vKb8ShqSby24Yrqr/yDYkuFz8d0WUjys40rvnGC8aR0=

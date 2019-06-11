@@ -21,7 +21,7 @@
 package main
 
 import (
-	"github.com/adreed-msft/go-ieproxy"
+	"github.com/mattn/go-ieproxy"
 	"math"
 	"net/http"
 	"os"

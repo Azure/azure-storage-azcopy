@@ -3,7 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
-	"github.com/adreed-msft/go-ieproxy"
+	"github.com/mattn/go-ieproxy"
 	"mime"
 	"net"
 	"net/http"

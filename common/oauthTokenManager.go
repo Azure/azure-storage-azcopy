@@ -25,7 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/adreed-msft/go-ieproxy"
+	"github.com/mattn/go-ieproxy"
 	"io"
 	"io/ioutil"
 	"net"

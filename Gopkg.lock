@@ -56,7 +56,7 @@
 [[projects]]
   branch = "master"
   digest = "1:4e1acfe59730c777679d427f8e72aba600ea3d44a13e84606378ed6fa7b8dfaf"
-  name = "github.com/adreed-msft/go-ieproxy"
+  name = "github.com/mattn/go-ieproxy"
   packages = ["."]
   pruneopts = "UT"
   revision = "aa0393549e35693a5468de187e0b9e17b6db9dc0"
@@ -387,7 +387,7 @@
     "github.com/Azure/azure-storage-file-go/azfile",
     "github.com/Azure/go-autorest/autorest/adal",
     "github.com/JeffreyRichter/enum/enum",
-    "github.com/adreed-msft/go-ieproxy",
+    "github.com/mattn/go-ieproxy",
     "github.com/danieljoos/wincred",
     "github.com/jiacfan/keychain",
     "github.com/jiacfan/keyctl",

@@ -6,7 +6,6 @@ require (
 	github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a
 	github.com/Azure/go-autorest v10.15.2+incompatible
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
-	github.com/adreed-msft/go-ieproxy v0.0.0-20190607195407-a1ba01f4d182 // indirect
 	github.com/danieljoos/wincred v1.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/go-ini/ini v1.41.0 // indirect
@@ -15,6 +14,7 @@ require (
 	github.com/jiacfan/keyctl v0.0.0-20160328205232-988d05162bc5
 	github.com/kr/pretty v0.1.0
 	github.com/kr/text v0.1.0
+	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149 // indirect
 	github.com/minio/minio-go v6.0.12+incompatible
 	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/spf13/cobra v0.0.3
