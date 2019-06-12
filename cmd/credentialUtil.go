@@ -136,10 +136,10 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 // getBlobFSCredentialType is used to get BlobFS's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
-// 1. If there is cached session OAuth token, indicating using token credential.
+// 1. Check if there is a SAS query appended to the URL
+// 2. If there is cached session OAuth token, indicating using token credential.
 // 3. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
-// 4. Check if there is a SAS query appended to the URL
-// 5. Otherwise use shared key.
+// 4. Otherwise use shared key.
 func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 	if err != nil {
