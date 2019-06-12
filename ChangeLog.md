@@ -5,6 +5,7 @@
 ### Bug fixes
 
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
+1. `--log-level=none` now drops no logs, and has a listing in `--help`
 
 ### New features
 
@@ -127,4 +128,3 @@ information, including those needed to set the new headers.
    1. excludedBlobType -> excluded-blob-type
    1. outputRaw (in "list" command) -> output
    1. stdIn-enable (reserved for internal use) -> stdin-enable
-
