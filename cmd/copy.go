@@ -751,6 +751,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		fileParts := azfile.NewFileURLParts(*fromUrl)
 		cca.sourceSAS = fileParts.SAS.Encode()
+		if cca.sourceSAS == "" {
+			return fmt.Errorf("azure files only supports SAS token authentication")
+		}
 		jobPartOrder.SourceSAS = cca.sourceSAS
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
@@ -821,6 +824,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		fileParts := azfile.NewFileURLParts(*toUrl)
 		cca.destinationSAS = fileParts.SAS.Encode()
+		if cca.destinationSAS == "" {
+			return fmt.Errorf("azure files only supports SAS token authentication")
+		}
 		jobPartOrder.DestinationSAS = cca.destinationSAS
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()

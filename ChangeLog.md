@@ -1,9 +1,10 @@
 # Change Log
 
-## Version XX.XX.XX 
+## Version XX.XX.XX
 
-### Bug fixes
+### Bug fix
 
+1. Added error to using Azure Files without a SAS token (invalid auth configuration)
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
 1. `--log-level=none` now drops no logs, and has a listing in `--help`
 
