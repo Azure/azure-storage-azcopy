@@ -587,7 +587,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToBlockBlob(c *chk.C) {
 	defer deleteContainer(c, srcContainerURL)
 	c.Assert(srcContainerURL, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList)
+	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -639,7 +639,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToPageBlob(c *chk.C) {
 	defer deleteContainer(c, srcContainerURL)
 	c.Assert(srcContainerURL, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromListForPageCopy(c, srcContainerURL, objectList)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -691,7 +691,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromBlockToAppendBlob(c *chk.C) {
 	defer deleteContainer(c, srcContainerURL)
 	c.Assert(srcContainerURL, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, blockBlobDefaultData)
 
 	// Create destination container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -743,7 +743,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToBlockBlob(c *chk.C) {
 	defer deleteContainer(c, srcContainerURL)
 	c.Assert(srcContainerURL, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList)
+	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList, appendBlobDefaultData)
 
 	// Create destination container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -795,7 +795,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromPageToAppendBlob(c *chk.C) {
 	defer deleteContainer(c, srcContainerURL)
 	c.Assert(srcContainerURL, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList)
+	scenarioHelper{}.generatePageBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -847,7 +847,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromAppendToPageBlob(c *chk.C) {
 	defer deleteContainer(c, srcContainerURL)
 	c.Assert(srcContainerURL, chk.NotNil)
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateAppendBlobsFromListForPageCopy(c, srcContainerURL, objectList)
+	scenarioHelper{}.generateAppendBlobsFromList(c, srcContainerURL, objectList, pageBlobDefaultData)
 
 	// Create destination container
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
@@ -898,7 +898,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromSingleBlobToBlobContainer(c *chk.C)
 	c.Assert(srcContainerURL, chk.NotNil)
 
 	objectList := []string{"file", "sub/file2"}
-	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList)
+	scenarioHelper{}.generateBlobsFromList(c, srcContainerURL, objectList, blockBlobDefaultData)
 
 	dstContainerURL, dstContainerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, dstContainerURL)

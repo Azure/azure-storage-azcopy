@@ -162,10 +162,10 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
+func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
-		cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
+		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
 			nil, azblob.BlobAccessConditions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
@@ -175,25 +175,12 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	time.Sleep(time.Millisecond * 1500)
 }
 
-func (scenarioHelper) generateBlobsFromListForPageCopy(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
-	for _, blobName := range blobList {
-		blob := containerURL.NewBlockBlobURL(blobName)
-		cResp, err := blob.Upload(ctx, strings.NewReader(pageBlobDefaultData), azblob.BlobHTTPHeaders{},
-			nil, azblob.BlobAccessConditions{})
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
-	}
-
-	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
-}
-
-func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
+func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		//Create the blob (PUT blob)
 		blob := containerURL.NewPageBlobURL(blobName)
 		cResp, err := blob.Create(ctx,
-			int64(len(pageBlobDefaultData)),
+			int64(len(data)),
 			0,
 			azblob.BlobHTTPHeaders{
 				ContentType: "text/random",
@@ -207,7 +194,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 		//Create the page (PUT page)
 		uResp, err := blob.UploadPages(ctx,
 			0,
-			strings.NewReader(pageBlobDefaultData),
+			strings.NewReader(data),
 			azblob.PageBlobAccessConditions{},
 			nil,
 		)
@@ -219,7 +206,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 	time.Sleep(time.Millisecond * 1500)
 }
 
-func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
+func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		//Create the blob (PUT blob)
 		blob := containerURL.NewAppendBlobURL(blobName)
@@ -235,34 +222,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 
 		//Append a block (PUT block)
 		uResp, err := blob.AppendBlock(ctx,
-			strings.NewReader(blockBlobDefaultData),
-			azblob.AppendBlobAccessConditions{},
-			nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(uResp.StatusCode(), chk.Equals, 201)
-	}
-
-	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
-}
-
-func (scenarioHelper) generateAppendBlobsFromListForPageCopy(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
-	for _, blobName := range blobList {
-		//Create the blob (PUT blob)
-		blob := containerURL.NewAppendBlobURL(blobName)
-		cResp, err := blob.Create(ctx,
-			azblob.BlobHTTPHeaders{
-				ContentType: "text/random",
-			},
-			azblob.Metadata{},
-			azblob.BlobAccessConditions{},
-		)
-		c.Assert(err, chk.IsNil)
-		c.Assert(cResp.StatusCode(), chk.Equals, 201)
-
-		//Append a block (PUT block)
-		uResp, err := blob.AppendBlock(ctx,
-			strings.NewReader(pageBlobDefaultData),
+			strings.NewReader(data),
 			azblob.AppendBlobAccessConditions{},
 			nil)
 		c.Assert(err, chk.IsNil)

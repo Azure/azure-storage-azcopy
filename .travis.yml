@@ -4,7 +4,7 @@ python:
 services:
 - docker
 script:
-- make test build # Drop OSX build temporarily
+- make all # Drop OSX build temporarily
 - mkdir test-temp
 - export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
 - export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
