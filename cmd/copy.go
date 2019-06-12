@@ -299,8 +299,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.None() || cooked.contentType != "" || cooked.contentDisposition != "" || cooked.contentLanguage != "" || cooked.contentEncoding != "" || cooked.cacheControl != "" {
-			return cooked, fmt.Errorf("cannot use blob-type, content-type, content-disposition, content-language, content-encoding, or cache-control with ADLS Gen 2")
+		if cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {

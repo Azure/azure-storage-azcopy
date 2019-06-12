@@ -17,6 +17,15 @@ type FileURL struct {
 	path           string
 }
 
+// BlobFSHTTPHeaders represents the set of custom headers available for defining information about the content.
+type BlobFSHTTPHeaders struct {
+	ContentType        string
+	ContentEncoding    string
+	ContentLanguage    string
+	ContentDisposition string
+	CacheControl       string
+}
+
 // NewFileURL creates a FileURL object using the specified URL and request policy pipeline.
 func NewFileURL(url url.URL, p pipeline.Pipeline) FileURL {
 	if p == nil {
@@ -46,10 +55,10 @@ func (f FileURL) WithPipeline(p pipeline.Pipeline) FileURL {
 
 // Create creates a new file or replaces a file. Note that this method only initializes the file.
 // For more information, see https://docs.microsoft.com/en-us/rest/api/storageservices/create-file.
-func (f FileURL) Create(ctx context.Context) (*PathCreateResponse, error) {
+func (f FileURL) Create(ctx context.Context, headers BlobFSHTTPHeaders) (*PathCreateResponse, error) {
 	return f.fileClient.Create(ctx, f.fileSystemName, f.path, PathResourceFile,
 		nil, PathRenameModeNone, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil,
+		&headers.CacheControl, &headers.ContentType, &headers.ContentEncoding, &headers.ContentLanguage, &headers.ContentDisposition,
 		nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil,
@@ -121,6 +130,7 @@ func (f FileURL) GetProperties(ctx context.Context) (*PathGetPropertiesResponse,
 
 // UploadRange writes bytes to a file.
 // offset indiciates the offset at which to begin writing, in bytes.
+// custom headers are not valid on this operation
 func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeker) (*PathUpdateResponse, error) {
 	if offset < 0 {
 		panic("offset must be >= 0")
@@ -155,7 +165,7 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 
 // flushes writes previously uploaded data to a file
 // The contentMd5 parameter, if not nil, should represent the MD5 hash that has been computed for the file as whole
-func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte) (*PathUpdateResponse, error) {
+func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte, headers BlobFSHTTPHeaders) (*PathUpdateResponse, error) {
 	if fileSize < 0 {
 		panic("fileSize must be >= 0")
 	}
@@ -182,8 +192,8 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
-		&retainUncommittedData, &closeParameter, nil, nil, nil, nil,
-		nil, nil, nil, md5InBase64, nil,
-		nil, nil, nil, nil, nil, nil, nil,
-		nil, &overrideHttpVerb, nil, nil, nil, nil)
+		&retainUncommittedData, &closeParameter, nil, nil,
+		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
+		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)
 }

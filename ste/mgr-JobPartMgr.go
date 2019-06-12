@@ -207,8 +207,9 @@ type jobPartMgr struct {
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blobHTTPHeaders azblob.BlobHTTPHeaders
-	fileHTTPHeaders azfile.FileHTTPHeaders
+	blobHTTPHeaders   azblob.BlobHTTPHeaders
+	fileHTTPHeaders   azfile.FileHTTPHeaders
+	blobFSHTTPHeaders azbfs.BlobFSHTTPHeaders
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blockBlobTier common.BlockBlobTier
@@ -264,6 +265,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	dstData := plan.DstBlobData
 
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
+		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
+		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
+		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
+	}
+
+	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{
 		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
@@ -538,6 +547,13 @@ func (jpm *jobPartMgr) fileDstData(fullFilePath string, dataFileToXfer []byte) (
 	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.fileHTTPHeaders.ContentLanguage, ContentEncoding: jpm.fileHTTPHeaders.ContentEncoding, ContentDisposition: jpm.fileHTTPHeaders.ContentDisposition, CacheControl: jpm.fileHTTPHeaders.CacheControl}, jpm.fileMetadata
 }
 
+func (jpm *jobPartMgr) bfsDstData(fullFilePath string, dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
+		return jpm.blobFSHTTPHeaders
+	}
+	return azbfs.BlobFSHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobFSHTTPHeaders.ContentLanguage, ContentEncoding: jpm.blobFSHTTPHeaders.ContentEncoding, ContentDisposition: jpm.blobFSHTTPHeaders.ContentDisposition, CacheControl: jpm.blobFSHTTPHeaders.CacheControl}
+}
+
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
 	if guessedType := mime.TypeByExtension(filepath.Ext(fullFilePath)); guessedType != "" {
 		return guessedType
@@ -587,6 +603,7 @@ func (jpm *jobPartMgr) Close() {
 	jpm.blobMetadata = azblob.Metadata{}
 	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{}
 	jpm.fileMetadata = azfile.Metadata{}
+	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{}
 	jpm.preserveLastModifiedTime = false
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {
