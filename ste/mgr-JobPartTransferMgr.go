@@ -21,6 +21,7 @@ type IJobPartTransferMgr interface {
 	Info() TransferInfo
 	BlobDstData(dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata)
 	FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata)
+	BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders)
 	LastModifiedTime() time.Time
 	PreserveLastModifiedTime() (time.Time, bool)
 	ShouldPutMd5() bool
@@ -249,6 +250,10 @@ func (jptm *jobPartTransferMgr) BlobDstData(dataFileToXfer []byte) (headers azbl
 
 func (jptm *jobPartTransferMgr) FileDstData(dataFileToXfer []byte) (headers azfile.FileHTTPHeaders, metadata azfile.Metadata) {
 	return jptm.jobPartMgr.(*jobPartMgr).fileDstData(jptm.Info().Source, dataFileToXfer)
+}
+
+func (jptm *jobPartTransferMgr) BfsDstData(dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
+	return jptm.jobPartMgr.(*jobPartMgr).bfsDstData(jptm.Info().Source, dataFileToXfer)
 }
 
 // TODO refactor into something like jptm.IsLastModifiedTimeEqual() so that there is NO LastModifiedTime method and people therefore CAN'T do it wrong due to time zone
