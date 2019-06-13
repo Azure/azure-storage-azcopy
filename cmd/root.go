@@ -24,12 +24,12 @@ import (
 	"bytes"
 	"context"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	"strings"
-	"time"
 )
 
 var azcopyAppPathFolder string
@@ -111,18 +111,10 @@ func detectNewVersion() {
 	}
 
 	// step 1: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      1,               // try a single time, if network is not available, just fail fast
-			TryTimeout:    time.Second * 3, // don't wait for too long
-			RetryDelay:    downloadRetryDelay,
-			MaxRetryDelay: downloadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return
+	}
 
 	// step 2: parse source url
 	u, err := url.Parse(versionMetadataUrl)
@@ -137,7 +129,7 @@ func detectNewVersion() {
 		return
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: read newest version str
