@@ -124,6 +124,10 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, lo
 }
 
 func (jl *jobLogger) OpenLog() {
+	if jl.minimumLevelToLog == pipeline.LogNone {
+		return
+	}
+
 	file, err := os.OpenFile(path.Join(jl.logFileFolder, jl.jobID.String()+".log"),
 		os.O_RDWR|os.O_CREATE|os.O_APPEND, DEFAULT_FILE_PERM)
 	PanicIfErr(err)

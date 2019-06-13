@@ -38,7 +38,7 @@ build-osx: setup ## build osx binary specially, as it's using CGO
 smoke: setup ## set up smoke test
 	$(call with_docker,go build -o test-validator ./testSuite/)
 
-all: setup test build build-osx smoke ## run all tests and lints
+all: setup test build smoke ## run all tests and lints
 
 ## unused for now
 clean: docker-clean ## clean environment and binaries
