@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"time"
@@ -169,18 +170,26 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 	})
 }
 
+var flushThreshold int64 = (1024 ^ 3) * 20 //20 GB flush threshold
+
 func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
 
 	// flush
 	if jptm.TransferStatus() > 0 {
 		md5Hash, ok := <-u.md5Channel
+		ss := jptm.Info().SourceSize
 		if ok {
-			//Type assertions aren't my favorite thing to do but it does work when you need it to.
-			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, *u.creationTimeHeaders)
-			if err != nil {
-				jptm.FailActiveUpload("Flushing data", err)
-				// don't return, since need cleanup below
+			for i := int64(math.Min(float64(ss), float64(flushThreshold))); i <= ss; i = int64(math.Min(float64(ss), float64(i+flushThreshold))) {
+				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders)
+				if err != nil {
+					jptm.FailActiveUpload("Flushing data", err)
+					// don't return, since need cleanup below
+				}
+
+				if i == ss {
+					break
+				}
 			}
 		} else {
 			jptm.FailActiveUpload("Getting hash", errNoHash)
