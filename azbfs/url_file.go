@@ -165,14 +165,10 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 
 // flushes writes previously uploaded data to a file
 // The contentMd5 parameter, if not nil, should represent the MD5 hash that has been computed for the file as whole
-func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte, headers BlobFSHTTPHeaders) (*PathUpdateResponse, error) {
+func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte, headers BlobFSHTTPHeaders, retainUncommited bool, closeParameter bool) (*PathUpdateResponse, error) {
 	if fileSize < 0 {
 		panic("fileSize must be >= 0")
 	}
-
-	// hardcoded to be false for the moment
-	// azcopy does not need this
-	retainUncommittedData := false
 
 	var md5InBase64 *string = nil
 	if len(contentMd5) > 0 {
@@ -185,14 +181,9 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 	// See similar todo, with larger comments, in AppendData
 	overrideHttpVerb := "PATCH"
 
-	// We only call FlushData once the whole body is appended, so close can be safely set to true all the time
-	// It sends a notification on the service end, which doesn't concern AzCopy, so no need to make it configurable
-	// note that we should make it configurable if this SDK is ever split off and become its own thing
-	closeParameter := true
-
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
-		&retainUncommittedData, &closeParameter, nil, nil,
+		&retainUncommited, &closeParameter, nil, nil,
 		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
 		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)

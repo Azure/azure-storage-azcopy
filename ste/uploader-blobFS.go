@@ -139,6 +139,11 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 
+	if !thresholdSetup {
+		setupThreshold(int64(u.chunkSize))
+		thresholdSetup = true
+	}
+
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h
 	// Create file with the source size
@@ -170,7 +175,20 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 	})
 }
 
-var flushThreshold int64 = (1024 ^ 3) * 20 //20 GB flush threshold
+var flushThreshold int64 = (1024 * 1024 * 1024) * 20 //20GB
+//TODO: Should a flag be present for the threshold?
+var thresholdSetup bool
+
+func setupThreshold(blockSize int64) {
+	//Find the closest multiple of the block size to the flush threshold
+	m := flushThreshold % blockSize
+
+	if math.Abs(float64(m)) < math.Abs(float64((flushThreshold-m+blockSize)-flushThreshold)) {
+		flushThreshold -= m
+	} else {
+		flushThreshold = (flushThreshold - m) + blockSize
+	}
+}
 
 func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
@@ -180,11 +198,13 @@ func (u *blobFSUploader) Epilogue() {
 		md5Hash, ok := <-u.md5Channel
 		ss := jptm.Info().SourceSize
 		if ok {
+			// Flush incrementally to avoid timeouts on a full flush
 			for i := int64(math.Min(float64(ss), float64(flushThreshold))); i <= ss; i = int64(math.Min(float64(ss), float64(i+flushThreshold))) {
-				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders)
+				// Close only at the end of the file, keep all uncommitted data before then.
+				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders, i != ss, i == ss)
 				if err != nil {
 					jptm.FailActiveUpload("Flushing data", err)
-					// don't return, since need cleanup below
+					break // don't return, since need cleanup below
 				}
 
 				if i == ss {
@@ -192,8 +212,7 @@ func (u *blobFSUploader) Epilogue() {
 				}
 			}
 		} else {
-			jptm.FailActiveUpload("Getting hash", errNoHash)
-			// don't return, since need cleanup below
+			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
 
