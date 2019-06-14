@@ -172,7 +172,7 @@ type localFileDeleter struct {
 
 func (l *localFileDeleter) deleteFile(object storedObject) error {
 	glcm.Info("Deleting extra file: " + object.relativePath)
-	return os.Remove(filepath.Join(l.rootPath, object.relativePath))
+	return os.Remove(common.ToExtendedPath(filepath.Join(l.rootPath, object.relativePath)))
 }
 
 func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {

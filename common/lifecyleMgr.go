@@ -71,7 +71,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	cpuProfilePath := os.Getenv("AZCOPY_PROFILE_CPU")
 	if cpuProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
-		f, err := os.Create(cpuProfilePath)
+		f, err := os.Create(ToExtendedPath(cpuProfilePath))
 		if err != nil {
 			lcm.Error(fmt.Sprintf("Fail to create file for CPU profiling, %v", err))
 		}
@@ -94,7 +94,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	memProfilePath := os.Getenv("AZCOPY_PROFILE_MEM")
 	if memProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
-		f, err := os.Create(memProfilePath)
+		f, err := os.Create(ToExtendedPath(memProfilePath))
 		if err != nil {
 			lcm.Error(fmt.Sprintf("Fail to create file for memory profiling, %v", err))
 		}

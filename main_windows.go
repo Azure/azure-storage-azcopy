@@ -21,6 +21,7 @@
 package main
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
 	"math"
 	"os"
 	"os/exec"
@@ -54,7 +55,7 @@ func ProcessOSSpecificInitialization() (int, error) {
 func GetAzCopyAppPath() string {
 	userProfile := os.Getenv("USERPROFILE")
 	azcopyAppDataFolder := path.Join(userProfile, ".azcopy")
-	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err) {
+	if err := os.Mkdir(common.ToExtendedPath(azcopyAppDataFolder), os.ModeDir); err != nil && !os.IsExist(err) {
 		return ""
 	}
 	return azcopyAppDataFolder

@@ -73,6 +73,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), t.fullPath)
 
 				// leading path separators are trimmed away
+
 				computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
@@ -115,7 +116,7 @@ func replacePathSeparators(path string) string {
 }
 
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
-	fileInfo, err := os.Stat(t.fullPath)
+	fileInfo, err := os.Stat(common.ToExtendedPath(t.fullPath))
 
 	if err != nil {
 		return nil, false, err
@@ -130,13 +131,17 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 
 func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCounter func()) *localTraverser {
 	traverser := localTraverser{
-		fullPath:                    cleanLocalPath(fullPath),
+		fullPath:                    common.ToExtendedPath(cleanLocalPath(fullPath)),
 		recursive:                   recursive,
 		incrementEnumerationCounter: incrementEnumerationCounter}
 	return &traverser
 }
 
 func cleanLocalPath(localPath string) string {
+	if strings.HasPrefix(localPath, `\\?\`) {
+		return localPath
+	}
+
 	normalizedPath := path.Clean(replacePathSeparators(localPath))
 
 	// detect if we are targeting a network share

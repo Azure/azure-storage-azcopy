@@ -49,7 +49,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	deleter := newSyncLocalDeleteProcessor(cca)
 
 	// validate that the file still exists
-	_, err := os.Stat(filepath.Join(dstDirName, dstFileName))
+	_, err := os.Stat(common.ToExtendedPath(filepath.Join(dstDirName, dstFileName)))
 	c.Assert(err, chk.IsNil)
 
 	// exercise the deleter
@@ -57,7 +57,7 @@ func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// validate that the file no longer exists
-	_, err = os.Stat(filepath.Join(dstDirName, dstFileName))
+	_, err = os.Stat(common.ToExtendedPath(filepath.Join(dstDirName, dstFileName)))
 	c.Assert(err, chk.NotNil)
 }
 

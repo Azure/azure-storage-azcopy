@@ -313,7 +313,7 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 // this function can tell if a path represents a directory (must exist)
 func (util copyHandlerUtil) isPathALocalDirectory(pathString string) bool {
 	// check if path exists
-	destinationInfo, err := os.Stat(pathString)
+	destinationInfo, err := os.Stat(common.ToExtendedPath(pathString))
 
 	if err == nil && destinationInfo.IsDir() {
 		return true

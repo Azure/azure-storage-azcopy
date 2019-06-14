@@ -254,7 +254,7 @@ func (csl *chunkStatusLogger) FlushLog() {
 }
 
 func (csl *chunkStatusLogger) main(chunkLogPath string) {
-	f, err := os.Create(chunkLogPath)
+	f, err := os.Create(ToExtendedPath(chunkLogPath))
 	if err != nil {
 		panic(err.Error())
 	}

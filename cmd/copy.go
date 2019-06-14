@@ -202,7 +202,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
 	// any limit on the number of files that can be copied.
 	if len(raw.listOfFilesToCopy) > 0 {
-		jsonFile, err := os.Open(raw.listOfFilesToCopy)
+		jsonFile, err := os.Open(common.ToExtendedPath(raw.listOfFilesToCopy))
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
 		}

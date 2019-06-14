@@ -123,7 +123,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	suicideCh := make(chan SuicideJob, concurrentConnections)
 
 	planDir := path.Join(azcopyAppPathFolder, "plans")
-	if err := os.Mkdir(planDir, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+	if err := os.Mkdir(common.ToExtendedPath(planDir), os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
 		common.PanicIfErr(err)
 	}
 

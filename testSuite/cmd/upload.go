@@ -125,7 +125,7 @@ func (u *testUploader) enumerateLocalDir(uf uploadFunc) error {
 
 	// Single file upload
 	if len(listOfFilesAndDirectories) == 1 {
-		f, err := os.Stat(listOfFilesAndDirectories[0])
+		f, err := os.Stat(common.ToExtendedPath(listOfFilesAndDirectories[0]))
 		if err != nil {
 			return errors.New("cannot find source to upload")
 		}
@@ -146,7 +146,7 @@ func (u *testUploader) enumerateLocalDir(uf uploadFunc) error {
 	// Upload from directory
 	for _, fileOrDirectoryPath := range listOfFilesAndDirectories {
 		tempDestURL := u.destURL
-		f, err := os.Stat(fileOrDirectoryPath)
+		f, err := os.Stat(common.ToExtendedPath(fileOrDirectoryPath))
 		if err == nil {
 			// directories are uploaded only if recursive is on
 			if f.IsDir() && u.recursive {

@@ -32,7 +32,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 
 	// when a single file is being uploaded, we need to treat this case differently, as the destinationURL might be a blob
 	if len(listOfFilesAndDirectories) == 1 {
-		f, err := os.Stat(listOfFilesAndDirectories[0])
+		f, err := os.Stat(common.ToExtendedPath(listOfFilesAndDirectories[0]))
 		if err != nil {
 			return errors.New("cannot find source to upload")
 		}
@@ -93,7 +93,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				parentSourcePath = parentSourcePath[:len(parentSourcePath)-1]
 			}
 			filePath := fmt.Sprintf("%s%s%s", parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING, file)
-			f, err := os.Stat(filePath)
+			f, err := os.Stat(common.ToExtendedPath(filePath))
 			if err != nil {
 				glcm.Info(fmt.Sprintf("Error getting the fileInfo for file %s. failed with error %s", filePath, err.Error()))
 				continue
@@ -181,14 +181,21 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	if wcIndex != -1 {
 		parentSourcePath = parentSourcePath[:wcIndex]
 		pathSepIndex := strings.LastIndex(parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING)
-		parentSourcePath = parentSourcePath[:pathSepIndex]
+		if len(parentSourcePath) != 0 {
+			parentSourcePath = parentSourcePath[:pathSepIndex]
+		} else {
+			parentSourcePath, err = os.Getwd()
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	// walk through every file and directory
 	// upload every file
 	// upload directory recursively if recursive option is on
 	for _, fileOrDirectoryPath := range listOfFilesAndDirectories {
-		f, err := os.Stat(fileOrDirectoryPath)
+		f, err := os.Stat(common.ToExtendedPath(fileOrDirectoryPath))
 		if err == nil {
 			// directories are uploaded only if recursive is on
 			if f.IsDir() && cca.recursive {
@@ -318,7 +325,7 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 	for _, files := range listOfFilesDirs {
 		// replace the windows path separator in the path with "/" path separator
 		files = strings.Replace(files, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-		fInfo, err := os.Stat(files)
+		fInfo, err := os.Stat(common.ToExtendedPath(files))
 		if err != nil {
 			glcm.Info(fmt.Sprintf("error %s fetching the fileInfo for filePath %s", err.Error(), files))
 		} else if fInfo.IsDir() {

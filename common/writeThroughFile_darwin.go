@@ -40,7 +40,7 @@ func CreateFileOfSizeWithWriteThroughOption(destinationPath string, fileSize int
 	// A quick internet search returned conflicting opinions on whether MacOS suppose O_SYNC or uses a different flag with the same meaning.
 	// If different with same meaning, can we just use O_SYNC here?  That's what we need to find out before implementing.
 
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM)
+	f, err := os.OpenFile(ToExtendedPath(destinationPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, DEFAULT_FILE_PERM)
 	if err != nil {
 		return nil, err
 	}

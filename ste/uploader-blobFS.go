@@ -55,7 +55,7 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 
 	// Get the file/dir Info to determine whether source is a file or directory
 	// since url to upload files and directories is different
-	fInfo, err := os.Stat(info.Source)
+	fInfo, err := os.Stat(common.ToExtendedPath(info.Source))
 	if err != nil {
 		return nil, err
 	}

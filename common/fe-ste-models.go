@@ -40,6 +40,8 @@ import (
 )
 
 const (
+	EXTENDED_PATH_PREFIX         = `\\?\`
+	EXTENDED_UNC_PATH_PREFIX     = `\\?\UNC`
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)

@@ -68,7 +68,7 @@ func (scenarioHelper) generateLocalFile(filePath string, fileSize int) ([]byte, 
 	_, bigBuff := getRandomDataAndReader(fileSize)
 
 	// create all parent directories
-	err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
+	err := os.MkdirAll(filepath.Dir(common.ToExtendedPath(filePath)), os.ModePerm)
 	if err != nil {
 		return nil, err
 	}

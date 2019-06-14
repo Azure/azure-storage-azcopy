@@ -52,7 +52,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, 
 	// then check the file exists locally or not.
 	// If it does, mark transfer as failed.
 	if !jptm.IsForceWriteTrue() {
-		_, err := os.Stat(info.Destination)
+		_, err := os.Stat(common.ToExtendedPath(info.Destination))
 		if err == nil {
 			// If the error is nil, then file exists locally and it doesn't need to be downloaded.
 			jptm.LogDownloadError(info.Source, info.Destination, "File already exists", 0)
@@ -295,7 +295,7 @@ func createEmptyFile(destinationPath string) error {
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(destinationPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
+	f, err := os.OpenFile(common.ToExtendedPath(destinationPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, common.DEFAULT_FILE_PERM)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func createEmptyFile(destinationPath string) error {
 
 // deletes the file
 func deleteFile(destinationPath string) error {
-	return os.Remove(destinationPath)
+	return os.Remove(common.ToExtendedPath(destinationPath))
 }
 
 // tries to delete file, but if that fails just logs and returns

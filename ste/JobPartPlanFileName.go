@@ -50,19 +50,11 @@ func (jpfn JobPartPlanFileName) Parse() (jobID common.JobID, partNumber common.P
 }
 
 func (jpfn JobPartPlanFileName) Delete() error {
-	return os.Remove(string(jpfn))
+	return os.Remove(common.ToExtendedPath(string(jpfn)))
 }
 
 func (jpfn JobPartPlanFileName) Map() *JobPartPlanMMF {
-	// opening the file with given filename
-	file, err := os.OpenFile(jpfn.GetJobPartPlanPath(), os.O_RDWR, common.DEFAULT_FILE_PERM)
-	common.PanicIfErr(err)
-	// Ensure the file gets closed (although we can continue to use the MMF)
-	defer file.Close()
-
-	fileInfo, err := file.Stat()
-	common.PanicIfErr(err)
-	mmf, err := common.NewMMF(file, true, 0, fileInfo.Size())
+	mmf, err := common.NewMMF(jpfn.GetJobPartPlanPath(), true, 0)
 	common.PanicIfErr(err)
 	return (*JobPartPlanMMF)(mmf)
 }
@@ -119,7 +111,7 @@ func (jpfn JobPartPlanFileName) Create(order common.CopyJobPartOrderRequest) {
 
 	// create the Job Part Plan file
 	//planPathname := planDir + "/" + string(jpfn)
-	file, err := os.Create(jpfn.GetJobPartPlanPath())
+	file, err := os.Create(common.ToExtendedPath(jpfn.GetJobPartPlanPath()))
 	if err != nil {
 		panic(fmt.Errorf("couldn't create job part plan file %q: %v", jpfn, err))
 	}

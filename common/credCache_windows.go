@@ -96,7 +96,7 @@ func (c *CredCache) LoadToken() (*OAuthTokenInfo, error) {
 
 // hasCachedTokenInternal returns if there is cached token in token manager.
 func (c *CredCache) hasCachedTokenInternal() (bool, error) {
-	if _, err := os.Stat(c.tokenFilePath()); err == nil {
+	if _, err := os.Stat(ToExtendedPath(c.tokenFilePath())); err == nil {
 		return true, nil
 	} else {
 		if os.IsNotExist(err) {
@@ -110,7 +110,7 @@ func (c *CredCache) hasCachedTokenInternal() (bool, error) {
 func (c *CredCache) removeCachedTokenInternal() error {
 	tokenFilePath := c.tokenFilePath()
 
-	if _, err := os.Stat(tokenFilePath); err == nil {
+	if _, err := os.Stat(ToExtendedPath(tokenFilePath)); err == nil {
 		// Cached token file existed
 		err = os.Remove(tokenFilePath)
 		if err != nil { // remove failed
@@ -158,7 +158,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	tokenFilePath := c.tokenFilePath()
 	dir := filepath.Dir(tokenFilePath)
 
-	err := os.MkdirAll(dir, os.ModePerm)
+	err := os.MkdirAll(ToExtendedPath(dir), os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create directory %q to store token in, %v", dir, err)
 	}
@@ -191,7 +191,7 @@ func (c *CredCache) saveTokenInternal(token OAuthTokenInfo) error {
 	if err := os.Rename(tempPath, tokenFilePath); err != nil {
 		return fmt.Errorf("failed to move temporary token to desired output location. src=%q dst=%q, %v", tempPath, tokenFilePath, err)
 	}
-	if err := os.Chmod(tokenFilePath, 0600); err != nil { // read/write for current user
+	if err := os.Chmod(ToExtendedPath(tokenFilePath), 0600); err != nil { // read/write for current user
 		return fmt.Errorf("failed to chmod the token file %q, %v", tokenFilePath, err)
 	}
 	return nil

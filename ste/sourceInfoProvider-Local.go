@@ -60,7 +60,7 @@ func (f localFileSourceInfoProvider) IsLocal() bool {
 }
 
 func (f localFileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
-	i, err := os.Stat(f.jptm.Info().Source)
+	i, err := os.Stat(common.ToExtendedPath(f.jptm.Info().Source))
 	if err != nil {
 		return time.Time{}, err
 	}

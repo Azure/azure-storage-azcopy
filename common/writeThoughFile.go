@@ -27,11 +27,12 @@ import (
 
 func CreateParentDirectoryIfNotExist(destinationPath string) error {
 	// check if parent directory exists
+	destinationPath = strings.Replace(ToShortPath(destinationPath), `\`, `/`, -1)
 	parentDirectory := destinationPath[:strings.LastIndex(destinationPath, AZCOPY_PATH_SEPARATOR_STRING)]
-	_, err := os.Stat(parentDirectory)
+	_, err := os.Stat(ToExtendedPath(parentDirectory))
 	// if the parent directory does not exist, create it and all its parents
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(parentDirectory, os.ModePerm)
+		err = os.MkdirAll(ToExtendedPath(parentDirectory), os.ModePerm)
 		if err != nil {
 			return err
 		}

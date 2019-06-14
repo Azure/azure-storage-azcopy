@@ -151,7 +151,7 @@ func openSourceFile(info TransferInfo) (common.CloseableReaderAt, error) {
 		// to make them yourself
 		return common.NewRandomDataGenerator(info.SourceSize), nil
 	} else {
-		return os.Open(info.Source)
+		return os.Open(common.ToExtendedPath(info.Source))
 	}
 }
 
