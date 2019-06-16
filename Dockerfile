@@ -14,6 +14,9 @@ RUN go get -u golang.org/x/lint/golint
 RUN \
   apt-get update && \
   apt-get install -y clang patch xz-utils && \
+  apt-get install -y cmake && \
+  apt-get install -y libxml2-dev && \
+  apt-get install -y libssl-dev && \
   apt-get install -y libglib2.0-dev && \
   apt-get install -y libgnome-keyring-dev && \
   apt-get install -y libsecret-1-dev
