@@ -48,7 +48,13 @@ type MMF struct {
 	lock sync.RWMutex
 }
 
-func NewMMF(file *os.File, writable bool, offset int64, length int64) (*MMF, error) {
+func NewMMF(filePath string, writable bool, offset int64) (*MMF, error) {
+	file, err := os.OpenFile(filePath, os.O_RDWR, DEFAULT_FILE_PERM)
+	PanicIfErr(err)
+	info, err := file.Stat()
+	PanicIfErr(err)
+	length := info.Size()
+
 	prot, flags := syscall.PROT_READ, syscall.MAP_SHARED // Assume read-only
 	if writable {
 		prot, flags = syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED
