@@ -16,6 +16,7 @@ type copyUploadEnumerator common.CopyJobPartOrderRequest
 
 // this function accepts the list of files/directories to transfer and processes them
 func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
+	e.SourceRoot = common.ToExtendedPath(e.SourceRoot)
 	util := copyHandlerUtil{}
 	ctx := context.TODO() // Ensure correct context is used
 
@@ -25,7 +26,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	common.PanicIfErr(err)
 
 	// list the source files and directories
-	listOfFilesAndDirectories, err := filepath.Glob(cca.source)
+	listOfFilesAndDirectories, err := filepath.Glob(common.ToExtendedPath(cca.source))
 	if err != nil || len(listOfFilesAndDirectories) == 0 {
 		return fmt.Errorf("cannot find source to upload")
 	}
@@ -63,7 +64,10 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				}
 			}
 
-			cleanedSource := strings.Replace(listOfFilesAndDirectories[0], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			cleanedSource := listOfFilesAndDirectories[0]
+			if !strings.HasPrefix(listOfFilesAndDirectories[0], `\\?\`) {
+				cleanedSource = strings.Replace(listOfFilesAndDirectories[0], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			}
 			err = e.addTransfer(common.CopyTransfer{
 				Source:           cleanedSource,
 				Destination:      destinationURL.String(),
@@ -176,11 +180,11 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 	// For Example: src = "/home/user/dir1" parentSourcePath = "/home/user/dir1"
 	// For Example: src = "/home/user/dir*" parentSourcePath = "/home/user"
 	// For Example: src = "/home/*" parentSourcePath = "/home"
-	parentSourcePath := cca.source
+	parentSourcePath := common.ToExtendedPath(cca.source)
 	wcIndex := util.firstIndexOfWildCard(parentSourcePath)
 	if wcIndex != -1 {
 		parentSourcePath = parentSourcePath[:wcIndex]
-		pathSepIndex := strings.LastIndex(parentSourcePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+		pathSepIndex := strings.LastIndex(parentSourcePath, common.OS_PATH_SEPARATOR)
 		if len(parentSourcePath) != 0 {
 			parentSourcePath = parentSourcePath[:pathSepIndex]
 		} else {
@@ -216,11 +220,15 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 					} else if f.Mode().IsRegular() { // If the resource is file
 						// replace the OS path separator in pathToFile string with AZCOPY_PATH_SEPARATOR
 						// this replacement is done to handle the windows file paths where path separator "\\"
-						pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if !strings.HasPrefix(pathToFile, `\\?\`) {
+							pathToFile = strings.Replace(pathToFile, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						}
 
 						// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
 						// this replacement is done to handle the windows file paths where path separator "\\"
-						fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						if !strings.HasPrefix(fileOrDirectoryPath, `\\?\`) {
+							fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+						}
 
 						// check if the should be included or not
 						if !util.resourceShouldBeIncluded(parentSourcePath, e.Include, pathToFile) {
@@ -270,7 +278,9 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			} else if f.Mode().IsRegular() {
 				// replace the OS path separator in fileOrDirectoryPath string with AZCOPY_PATH_SEPARATOR
 				// this replacement is done to handle the windows file paths where path separator "\\"
-				fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				if !strings.HasPrefix(fileOrDirectoryPath, `\\?\`) {
+					fileOrDirectoryPath = strings.Replace(fileOrDirectoryPath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				}
 				// check if the should be included or not
 				if !util.resourceShouldBeIncluded(parentSourcePath, e.Include, fileOrDirectoryPath) {
 					continue

@@ -295,17 +295,21 @@ func (copyHandlerUtil) getRelativePath(rootPath, filePath string) string {
 
 	// replace the path separator in filepath with AZCOPY_PATH_SEPARATOR
 	// this replacement is required to handle the windows filepath
-	filePath = strings.Replace(filePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	if !strings.HasPrefix(filePath, `\\?\`) {
+		filePath = strings.Replace(filePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	}
 	var scrubAway string
 	// test if root path finishes with a /, if yes, ignore it
-	if rootPath[len(rootPath)-1:] == common.AZCOPY_PATH_SEPARATOR_STRING {
-		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+	if rootPath[len(rootPath)-1:] == common.OS_PATH_SEPARATOR {
+		scrubAway = rootPath[:strings.LastIndex(rootPath[:len(rootPath)-1], common.OS_PATH_SEPARATOR)+1]
 	} else {
 		// +1 because we want to include the / at the end of the dir
-		scrubAway = rootPath[:strings.LastIndex(rootPath, common.AZCOPY_PATH_SEPARATOR_STRING)+1]
+		scrubAway = rootPath[:strings.LastIndex(rootPath, common.OS_PATH_SEPARATOR)+1]
 	}
 
 	result = strings.Replace(filePath, scrubAway, "", 1)
+
+	result = strings.Replace(result, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
 	return result
 }
