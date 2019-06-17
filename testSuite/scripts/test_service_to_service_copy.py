@@ -646,8 +646,10 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         if dstBlobType != "":
             result = result.add_flags("blob-type", dstBlobType)
 
-        result = result.execute_azcopy_copy_command()  # nice "dynamic typing"
-        self.assertTrue(result)
+        r = result.execute_azcopy_copy_command()  # nice "dynamic typing"
+        strout = result.execute_azcopy_operation_get_output()
+        print(strout)
+        self.assertTrue(r)
 
         # Downloading the copied file for validation
         validate_dir_name = "validate_copy_single_%dKB_file_from_%s_to_%s_%s" % (sizeInKB, srcType, dstType, customizedFileName)
