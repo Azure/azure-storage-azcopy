@@ -30,37 +30,37 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1)
 
     def test_copy_single_512b_file_from_page_to_block_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="PageBlob", dstBlobType="BlockBlob")
 
     def test_copy_single_512b_file_from_block_to_page_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="BlockBlob", dstBlobType="PageBlob")
 
     def test_copy_single_512b_file_from_page_to_append_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="PageBlob", dstBlobType="AppendBlob")
 
     def test_copy_single_512b_file_from_append_to_page_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="AppendBlob", dstBlobType="PageBlob")
 
     def test_copy_single_512b_file_from_block_to_append_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="BlockBlob", dstBlobType="AppendBlob")
 
     def test_copy_single_512b_file_from_append_to_block_blob(self):
-        src_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="AppendBlob", dstBlobType="BlockBlob")
@@ -647,8 +647,6 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             result = result.add_flags("blob-type", dstBlobType)
 
         r = result.execute_azcopy_copy_command()  # nice "dynamic typing"
-        strout = result.execute_azcopy_operation_get_output()
-        print(strout)
         self.assertTrue(r)
 
         # Downloading the copied file for validation
