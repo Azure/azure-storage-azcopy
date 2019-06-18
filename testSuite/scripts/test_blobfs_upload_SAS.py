@@ -4,18 +4,19 @@ import utility as util
 
 class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
-        self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
-        os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
-        self.cachedAccountName = os.environ['ACCOUNT_NAME']
-        os.environ['ACCOUNT_NAME'] = ''
-        self.cachedAccountKey = os.environ['ACCOUNT_KEY']
-        os.environ['ACCOUNT_KEY'] = ''
+        # self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
+        # os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
+        # self.cachedAccountName = os.environ['ACCOUNT_NAME']
+        # os.environ['ACCOUNT_NAME'] = ''
+        # self.cachedAccountKey = os.environ['ACCOUNT_KEY']
+        # os.environ['ACCOUNT_KEY'] = ''
+        # SAS tokens are preferred w/in azcopy anyway
         util.clean_test_filesystem(util.test_bfs_sas_account_url)
 
     def tearDown(self):
-        os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
-        os.environ['ACCOUNT_NAME'] = self.cachedAccountName
-        os.environ['ACCOUNT_KEY'] = self.cachedAccountKey
+        # os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
+        # os.environ['ACCOUNT_NAME'] = self.cachedAccountName
+        # os.environ['ACCOUNT_KEY'] = self.cachedAccountKey
         util.clean_test_filesystem(util.test_bfs_sas_account_url)
 
     def test_blobfs_sas_upload_1Kb_file(self):
