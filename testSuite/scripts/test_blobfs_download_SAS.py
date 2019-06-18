@@ -27,7 +27,7 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded file
-        file_url = util.get_resource_sas(filename)
+        file_url = util.get_resource_sas_from_bfs(filename)
         result = util.Command("testFile").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
         self.assertTrue(result)
 
@@ -56,7 +56,7 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded file
-        file_url = util.get_resource_sas(filename)
+        file_url = util.get_resource_sas_from_bfs(filename)
         result = util.Command("testFile").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
         self.assertTrue(result)
 
@@ -86,7 +86,7 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded directory
-        dirUrl = util.get_resource_sas(util.test_bfs_sas_account_url)
+        dirUrl = util.get_resource_sas_from_bfs(dir_name)
         result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
             add_flags("is-object-dir", "true").add_flags("recursive", "true").execute_azcopy_copy_command()
         self.assertTrue(result)

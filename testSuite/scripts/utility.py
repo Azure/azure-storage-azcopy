@@ -646,6 +646,13 @@ def get_resource_sas_from_share(resource_name):
     resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
     return resource_sas
 
+def get_resource_sas_from_bfs(resource_name):
+    # Splitting the share URL to add the file or directory name to the SAS
+    url_parts = test_bfs_sas_account_url.split("?")
+    # adding the file or directory name after the share name
+    resource_sas = url_parts[0] + "/" + resource_name + '?' + url_parts[1]
+    return resource_sas
+
 
 # get_resource_sas return the shared access signature for the given resource
 # using the premium storage account container url.
