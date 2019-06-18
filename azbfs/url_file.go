@@ -165,7 +165,7 @@ func (f FileURL) AppendData(ctx context.Context, offset int64, body io.ReadSeeke
 
 // flushes writes previously uploaded data to a file
 // The contentMd5 parameter, if not nil, should represent the MD5 hash that has been computed for the file as whole
-func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte, headers BlobFSHTTPHeaders, retainUncommited bool, closeParameter bool) (*PathUpdateResponse, error) {
+func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byte, headers BlobFSHTTPHeaders, retainUncommittedData bool, closeFile bool) (*PathUpdateResponse, error) {
 	if fileSize < 0 {
 		panic("fileSize must be >= 0")
 	}
@@ -183,7 +183,7 @@ func (f FileURL) FlushData(ctx context.Context, fileSize int64, contentMd5 []byt
 
 	// TransactionalContentMD5 isn't supported currently.
 	return f.fileClient.Update(ctx, PathUpdateActionFlush, f.fileSystemName, f.path, &fileSize,
-		&retainUncommited, &closeParameter, nil, nil,
+		&retainUncommittedData, &closeFile, nil, nil,
 		&headers.CacheControl, &headers.ContentType, &headers.ContentDisposition, &headers.ContentEncoding, &headers.ContentLanguage,
 		md5InBase64, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, &overrideHttpVerb, nil, nil, nil, nil)

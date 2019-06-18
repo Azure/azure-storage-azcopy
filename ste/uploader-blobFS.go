@@ -139,9 +139,8 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 
-	if !thresholdSetup {
-		setupThreshold(int64(u.chunkSize))
-		thresholdSetup = true
+	if flushThreshold == 0 {
+		flushThreshold = int64(u.chunkSize * 7500)
 	}
 
 	h := jptm.BfsDstData(state.LeadingBytes)
@@ -175,28 +174,15 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 	})
 }
 
-var flushThreshold int64 = (1024 * 1024 * 1024) * 20 //20GB
-//TODO: Should a flag be present for the threshold?
-var thresholdSetup bool
-
-func setupThreshold(blockSize int64) {
-	//Find the closest multiple of the block size to the flush threshold
-	m := flushThreshold % blockSize
-
-	if math.Abs(float64(m)) < math.Abs(float64((flushThreshold-m+blockSize)-flushThreshold)) {
-		flushThreshold -= m
-	} else {
-		flushThreshold = (flushThreshold - m) + blockSize
-	}
-}
+var flushThreshold int64 = 0 //20GB
 
 func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
 
 	// flush
 	if jptm.TransferStatus() > 0 {
-		md5Hash, ok := <-u.md5Channel
 		ss := jptm.Info().SourceSize
+		md5Hash, ok := <-u.md5Channel
 		if ok {
 			// Flush incrementally to avoid timeouts on a full flush
 			for i := int64(math.Min(float64(ss), float64(flushThreshold))); i <= ss; i = int64(math.Min(float64(ss), float64(i+flushThreshold))) {
