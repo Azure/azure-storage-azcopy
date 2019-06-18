@@ -30,6 +30,11 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return fmt.Errorf("cannot find source to upload")
 	}
 
+	// if the user specifies a virtual directory ex: /container_name/extra_path
+	// then we should extra_path as a prefix while uploading
+	// temporarily save the path of the container
+	cleanContainerPath := destinationURL.Path
+
 	// when a single file is being uploaded, we need to treat this case differently, as the destinationURL might be a blob
 	if len(listOfFilesAndDirectories) == 1 {
 		f, err := os.Stat(listOfFilesAndDirectories[0])
@@ -64,6 +69,9 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 
 			cleanedSource := strings.Replace(listOfFilesAndDirectories[0], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+			if destinationURL.Path[len(destinationURL.Path)-1:] == `/` {
+				destinationURL.Path = util.generateObjectPath(cleanContainerPath, f.Name())
+			}
 			err = e.addTransfer(common.CopyTransfer{
 				Source:           cleanedSource,
 				Destination:      destinationURL.String(),
@@ -77,10 +85,6 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return e.dispatchFinalPart(cca)
 		}
 	}
-	// if the user specifies a virtual directory ex: /container_name/extra_path
-	// then we should extra_path as a prefix while uploading
-	// temporarily save the path of the container
-	cleanContainerPath := destinationURL.Path
 
 	// If the user has provided the listofFiles explicitly to copy, there is no
 	// need to glob the source and match the patterns.
