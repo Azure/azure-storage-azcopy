@@ -69,10 +69,14 @@ func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
 	numOfSlashes := strings.Count(url.Path[1:], "/")
 	isIPEndpointStyle := util.isIPEndpointStyle(*url)
 
-	if (!isIPEndpointStyle && numOfSlashes == 0) || (isIPEndpointStyle && numOfSlashes == 1) {
-		return true
-	} else if ((!isIPEndpointStyle && numOfSlashes == 1) || (isIPEndpointStyle && numOfSlashes == 2)) && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
-		return true
+	if isIPEndpointStyle {
+		if numOfSlashes <= 2 || strings.HasPrefix(url.Path, `/`) {
+			return true
+		}
+	} else {
+		if numOfSlashes <= 1 || strings.HasPrefix(url.Path, `/`) {
+			return true
+		}
 	}
 	return false
 }

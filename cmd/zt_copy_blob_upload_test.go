@@ -29,7 +29,7 @@ import (
 )
 
 // regular local file->blob upload
-func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobFolder(c *chk.C) {
+func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
