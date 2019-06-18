@@ -42,6 +42,7 @@ type blobFSUploader struct {
 	pacer               *pacer
 	md5Channel          chan []byte
 	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
+	flushThreshold      int64
 }
 
 func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -139,9 +140,7 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 
-	if flushThreshold == 0 {
-		flushThreshold = int64(u.chunkSize * 7500)
-	}
+	u.flushThreshold = int64(u.chunkSize * 7500)
 
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h
@@ -174,8 +173,6 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 	})
 }
 
-var flushThreshold int64 = 0 //20GB
-
 func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
 
@@ -185,7 +182,7 @@ func (u *blobFSUploader) Epilogue() {
 		md5Hash, ok := <-u.md5Channel
 		if ok {
 			// Flush incrementally to avoid timeouts on a full flush
-			for i := int64(math.Min(float64(ss), float64(flushThreshold))); i <= ss; i = int64(math.Min(float64(ss), float64(i+flushThreshold))) {
+			for i := int64(math.Min(float64(ss), float64(u.flushThreshold))); i <= ss; i = int64(math.Min(float64(ss), float64(i+u.flushThreshold))) {
 				// Close only at the end of the file, keep all uncommitted data before then.
 				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders, i != ss, i == ss)
 				if err != nil {
