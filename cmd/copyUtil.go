@@ -64,21 +64,10 @@ func (util copyHandlerUtil) isIPEndpointStyle(url url.URL) bool {
 
 // checks if a given url points to a container, as opposed to a blob or prefix match
 func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
-	// When it's IP endpoint style, if the path contains more than two "/", then it means it points to a blob, and not a container.
-	// When it's not IP endpoint style, if the path contains more than one "/", then it means it points to a blob, and not a container.
-	numOfSlashes := strings.Count(url.Path[1:], "/")
-	isIPEndpointStyle := util.isIPEndpointStyle(*url)
-
-	if isIPEndpointStyle {
-		if numOfSlashes <= 2 || strings.HasPrefix(url.Path, `/`) {
-			return true
-		}
-	} else {
-		if numOfSlashes <= 1 || strings.HasPrefix(url.Path, `/`) {
-			return true
-		}
-	}
-	return false
+	//If there's no slashes after the first, it's a container.
+	//If there's a slash on the end, it's a virtual directory.
+	//Otherwise, it's just a blob.
+	return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
 }
 
 func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
