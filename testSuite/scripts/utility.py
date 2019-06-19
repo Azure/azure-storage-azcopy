@@ -408,7 +408,10 @@ def create_test_html_file(filename):
 
 # creates a dir with given inside test directory
 def create_test_dir(dir_name):
+    # If the directory exists, remove it.
     dir_path = os.path.join(test_directory_path, dir_name)
+    if os.path.isdir(dir_path):
+        shutil.rmtree(dir_path)
     try:
         os.mkdir(dir_path)
     except:
