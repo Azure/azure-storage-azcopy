@@ -25,7 +25,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -55,19 +54,21 @@ func (copyHandlerUtil) numOfWildcardInURL(url url.URL) int {
 	return strings.Count(url.String(), wildCard)
 }
 
-// isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
-// http(s)://IP(:port)/storageaccount/share(||container||etc)/...
-// TODO: Remove this, it can be replaced by SDK's native support for IP endpoint style.
-func (util copyHandlerUtil) isIPEndpointStyle(url url.URL) bool {
-	return net.ParseIP(url.Host) != nil
-}
-
 // checks if a given url points to a container, as opposed to a blob or prefix match
 func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
-	//If there's no slashes after the first, it's a container.
-	//If there's a slash on the end, it's a virtual directory.
-	//Otherwise, it's just a blob.
-	return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
+	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName != "" {
+		//Typical endpoint style
+		//If there's no slashes after the first, it's a container.
+		//If there's a slash on the end, it's a virtual directory/container.
+		//Otherwise, it's just a blob.
+		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
+	} else {
+		//URL endpoint style: https://IP:port/accountname/container
+		//If there's 2 or less slashes after the first, it's a container.
+		//OR If there's a slash on the end, it's a virtual directory/container.
+		//Otherwise, it's just a blob.
+		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 2
+	}
 }
 
 func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
