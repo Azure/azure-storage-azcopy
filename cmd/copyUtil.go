@@ -56,7 +56,7 @@ func (copyHandlerUtil) numOfWildcardInURL(url url.URL) int {
 
 // checks if a given url points to a container, as opposed to a blob or prefix match
 func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
-	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName != "" {
+	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {
 		//Typical endpoint style
 		//If there's no slashes after the first, it's a container.
 		//If there's a slash on the end, it's a virtual directory/container.
