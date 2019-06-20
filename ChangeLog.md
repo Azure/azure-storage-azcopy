@@ -2,6 +2,10 @@
 
 ## Version XX.XX.XX
 
+### New features
+
+1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
+
 ### Bug fix
 
 1. Added error to using Azure Files without a SAS token (invalid auth configuration)
@@ -126,4 +130,3 @@ information, including those needed to set the new headers.
    1. excludedBlobType -> excluded-blob-type
    1. outputRaw (in "list" command) -> output
    1. stdIn-enable (reserved for internal use) -> stdin-enable
-

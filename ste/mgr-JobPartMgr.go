@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/mattn/go-ieproxy"
 	"mime"
 	"net"
 	"net/http"
@@ -90,7 +91,7 @@ const AzCopyMaxIdleConnsPerHost = 500
 func NewAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy: ieproxy.GetProxyFunc(),
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,

@@ -1,4 +1,8 @@
 [[constraint]]
+ name = "github.com/mattn/go-ieproxy"
+ branch = "master"
+
+[[constraint]]
   name = "github.com/Azure/azure-pipeline-go"
   version = "0.1.9"
 
