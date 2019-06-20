@@ -39,7 +39,7 @@ type blockBlobSenderBase struct {
 	destBlockBlobURL azblob.BlockBlobURL
 	chunkSize        uint32
 	numChunks        uint32
-	pacer            *pacer
+	pacer            pacer
 	blockIDs         []string
 	destBlobTier     azblob.AccessTierType
 
@@ -54,7 +54,7 @@ type blockBlobSenderBase struct {
 	muBlockIDs             *sync.Mutex
 }
 
-func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
+func newBlockBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*blockBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count

@@ -38,12 +38,12 @@ type blobFSUploader struct {
 	chunkSize           uint32
 	numChunks           uint32
 	pipeline            pipeline.Pipeline
-	pacer               *pacer
+	pacer               pacer
 	md5Channel          chan []byte
 	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 

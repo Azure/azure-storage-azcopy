@@ -29,7 +29,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"path"
@@ -146,7 +145,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 		jobIDToJobMgr:    newJobIDToJobMgr(),
 		logDir:           azcopyLogPathFolder,
 		planDir:          planDir,
-		pacer:            newPacer(targetRateInMBps * 1024 * 1024),
+		pacer:            newNullAutoPacer(), // TODO replace with token bucket pacer (unless S2S, but maybe even if is S2S)
 		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
 		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),
@@ -291,7 +290,7 @@ type jobsAdmin struct {
 	coordinatorChannels CoordinatorChannels
 	xferChannels        XferChannels
 	appCtx              context.Context
-	pacer               *pacer
+	pacer               pacerAdmin
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
@@ -381,7 +380,7 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 }
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
-	return atomic.LoadInt64(&ja.pacer.bytesTransferred)
+	return ja.pacer.GetTotalTokensIssued()
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {

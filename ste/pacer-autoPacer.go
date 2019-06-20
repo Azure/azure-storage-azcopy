@@ -31,8 +31,8 @@ import (
 	"time"
 )
 
-type autoPacerConsumer interface {
-	pacerConsumer
+type autopacer interface {
+	pacer
 	retryNotificationReceiver
 }
 
@@ -76,7 +76,7 @@ var (
 	shouldPaceOncer     sync.Once
 )
 
-func newPageBlobAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger) autoPacerConsumer {
+func newPageBlobAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger) autopacer {
 
 	shouldPaceOncer.Do(func() {
 		raw := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
@@ -90,7 +90,7 @@ func newPageBlobAutoPacer(ctx context.Context, bytesPerSecond int64, expectedByt
 	}
 }
 
-func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger, logPrefix string) autoPacerConsumer {
+func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger, logPrefix string) autopacer {
 
 	// TODO support an additive increase approach, if/when we use this pacer for account throughput as a whole?
 	//     Why is fairness important there - because there may be other instances of AzCopy hitting the same account,
@@ -105,9 +105,9 @@ func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerReq
 	a := &autoTokenBucketPacer{
 		tokenBucketPacer:       newTokenBucketPacer(ctx, bytesPerSecond, expectedBytesPerRequest),
 		lastPeakBytesPerSecond: float32(bytesPerSecond),
-		done:      make(chan struct{}),
-		logger:    logger,
-		logPrefix: logPrefix,
+		done:                   make(chan struct{}),
+		logger:                 logger,
+		logPrefix:              logPrefix,
 	}
 
 	go a.rateTunerBody(ctx)

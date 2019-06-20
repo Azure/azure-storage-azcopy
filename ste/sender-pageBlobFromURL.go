@@ -35,7 +35,7 @@ type urlToPageBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 
 	destBlobTier := azblob.AccessTierNone
 	// If the source is page blob, preserve source's blob tier.
@@ -69,8 +69,6 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 
-		s2sPacer := newS2SPacer(c.pacer)
-
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
 		c.jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
 		if err := c.filePacer.RequestRightToSend(c.jptm.Context(), adjustedChunkSize); err != nil {
@@ -91,6 +89,6 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
 		}
-		s2sPacer.Done(adjustedChunkSize)
+		c.pacer.ForceAddTotalTokensIssued(adjustedChunkSize)
 	})
 }

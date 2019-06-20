@@ -31,7 +31,7 @@ import (
 )
 
 // general-purpose "any remote persistence location" to local
-func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, df downloaderFactory) {
+func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, df downloaderFactory) {
 	// step 1: create downloader instance for this transfer
 	// We are using a separate instance per transfer, in case some implementations need to hold per-transfer state
 	dl := df()

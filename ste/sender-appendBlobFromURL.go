@@ -35,7 +35,7 @@ type urlToAppendBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	senderBase, err := newAppendBlobSenderBase(jptm, destination, p, pacer, srcInfoProvider)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,6 @@ func newURLToAppendBlobCopier(jptm IJobPartTransferMgr, destination string, p pi
 func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc {
 	appendBlockFromURL := func() {
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		s2sPacer := newS2SPacer(c.pacer)
 
 		// Set the latest service version from sdk as service version in the context, to use AppendBlockFromURL API.
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
@@ -67,7 +66,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return
 		}
-		s2sPacer.Done(adjustedChunkSize)
+		c.pacer.ForceAddTotalTokensIssued(adjustedChunkSize)
 	}
 
 	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)

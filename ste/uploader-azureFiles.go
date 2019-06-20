@@ -39,12 +39,12 @@ type azureFilesUploader struct {
 	chunkSize           uint32
 	numChunks           uint32
 	pipeline            pipeline.Pipeline
-	pacer               *pacer
+	pacer               pacer
 	md5Channel          chan []byte
 	creationTimeHeaders *azfile.FileHTTPHeaders // pointer so default value, nil, is clearly "wrong" and can't be used by accident
 }
 
-func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newAzureFilesUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 

@@ -27,10 +27,17 @@ import (
 	"time"
 )
 
-// pacerConsumer is used by callers whose activity must be controlled to a certain pace
-type pacerConsumer interface {
-	RequestRightToSend(ctx context.Context, bytesToSend int64) error
+// pacer is used by callers whose activity must be controlled to a certain pace
+type pacer interface {
+	RequestRightToSend(ctx context.Context, bytesToSend int64) error // TODO rename to BlockToGetTokens or somthing
+	ReturnTokens(tokensToReturn int64)
+	ForceAddTotalTokensIssued(n int64)
 	Close() error
+}
+
+type pacerAdmin interface {
+	pacer
+	GetTotalTokensIssued() int64
 }
 
 const (
@@ -50,6 +57,7 @@ type tokenBucketPacer struct {
 	atomicTokenBucket          int64
 	atomicTargetBytesPerSecond int64
 	expectedBytesPerRequest    int64
+	atomicTotalTokensIssued    int64
 	done                       chan struct{}
 }
 
@@ -69,6 +77,8 @@ func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedByte
 // RequestRightToSend function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
 func (p *tokenBucketPacer) RequestRightToSend(ctx context.Context, bytesToSend int64) error {
+
+	// block until tokens are available
 	for atomic.AddInt64(&p.atomicTokenBucket, -bytesToSend) < 0 {
 		// by taking our desired count we've moved below zero, which means our allocation is not available
 		// right now, so put back what we asked for, and wait
@@ -80,7 +90,27 @@ func (p *tokenBucketPacer) RequestRightToSend(ctx context.Context, bytesToSend i
 			// keep looping
 		}
 	}
+
+	// record what we issued
+	atomic.AddInt64(&p.atomicTotalTokensIssued, bytesToSend)
+
 	return nil
+}
+
+// ReturnTokens allows a caller to return unused tokens
+func (p *tokenBucketPacer) ReturnTokens(tokensToReturn int64) {
+	if tokensToReturn > 0 {
+		atomic.AddInt64(&p.atomicTokenBucket, tokensToReturn)        // put them back in the bucket
+		atomic.AddInt64(&p.atomicTotalTokensIssued, -tokensToReturn) // deduct them from all-time issued count
+	}
+}
+
+// ForceIncrementTotalTokensIssued allows clients to force an increment to the all-time issued count without
+// actually waiting.  Use by those callers that are not rate-limited by our pacing (and so don't call
+// other methods here) but do need to record their total throughput in our running total.
+// This is a bit of a hack necessary because, for historical reasons, we use pacer to also track total bytes sent. TODO: review
+func (p *tokenBucketPacer) ForceAddTotalTokensIssued(n int64) {
+	atomic.AddInt64(&p.atomicTotalTokensIssued, n)
 }
 
 func (p *tokenBucketPacer) Close() error {
@@ -132,4 +162,8 @@ func (p *tokenBucketPacer) targetBytesPerSecond() int64 {
 
 func (p *tokenBucketPacer) setTargetBytesPerSecond(value int64) {
 	atomic.StoreInt64(&p.atomicTargetBytesPerSecond, value)
+}
+
+func (p *tokenBucketPacer) GetTotalTokensIssued() int64 {
+	return atomic.LoadInt64(&p.atomicTotalTokensIssued)
 }

@@ -33,7 +33,7 @@ type blobDownloader struct {
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
-	filePacer autoPacerConsumer
+	filePacer autopacer
 }
 
 func newBlobDownloader() downloader {
@@ -56,7 +56,7 @@ func (bd *blobDownloader) Epilogue() {
 }
 
 // Returns a chunk-func for blob downloads
-func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
+func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// Control rate of data movement (since page blobs can effectively have per-blob throughput limits)

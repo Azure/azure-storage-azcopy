@@ -11,7 +11,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
-func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+func DeleteBlobPrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 	info := jptm.Info()
 	// Get the source blob url of blob to delete
