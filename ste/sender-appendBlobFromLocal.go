@@ -48,7 +48,7 @@ func (u *appendBlobUploader) Md5Channel() chan<- []byte {
 func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32, reader common.SingleChunkReader, chunkIsWholeFile bool) chunkFunc {
 	appendBlockFromLocal := func() {
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
+		body := newPacedRequestBody(reader, u.pacer)
 		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},

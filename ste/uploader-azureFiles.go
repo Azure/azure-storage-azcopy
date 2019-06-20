@@ -141,7 +141,7 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
+		body := newPacedRequestBody(reader, u.pacer)
 		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)

@@ -25,40 +25,39 @@ import (
 	"sync/atomic"
 )
 
-type liteBodyPacer struct {
+// pacedReadSeeker implements read/seek/close with pacing. (Formerly in file pacer-lite)
+type pacedReadSeeker struct {
 	body io.Reader // Seeking is required to support retries
 	p    *pacer
 }
 
-// creates pacer that's not coupled to MMF (the obsolete non-lite one used memory mapped files)
-func newLiteRequestBodyPacer(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
+func newPacedRequestBody(requestBody io.ReadSeeker, p *pacer) io.ReadSeeker {
 	if p == nil {
-		panic("pr must not be nil")
+		panic("p must not be nil")
 	}
-	return &liteBodyPacer{body: requestBody, p: p}
+	return &pacedReadSeeker{body: requestBody, p: p}
 }
 
-// creates pacer that's not coupled to MMF (the obsolete non-lite one used memory mapped files)
-func newLiteResponseBodyPacer(responseBody io.ReadCloser, p *pacer) io.ReadCloser {
+func newPacedResponseBody(responseBody io.ReadCloser, p *pacer) io.ReadCloser {
 	if p == nil {
-		panic("pr must not be nil")
+		panic("p must not be nil")
 	}
-	return &liteBodyPacer{body: responseBody, p: p}
+	return &pacedReadSeeker{body: responseBody, p: p}
 }
 
-func (lbp *liteBodyPacer) Read(p []byte) (int, error) {
+func (lbp *pacedReadSeeker) Read(p []byte) (int, error) {
 	n, err := lbp.body.Read(p)
 	atomic.AddInt64(&lbp.p.bytesTransferred, int64(n))
 	return n, err
 }
 
 // Seeking is required to support retries
-func (lbp *liteBodyPacer) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
+func (lbp *pacedReadSeeker) Seek(offset int64, whence int) (offsetFromStart int64, err error) {
 	return lbp.body.(io.ReadSeeker).Seek(offset, whence)
 }
 
-// bytesOverTheWire supports Close but the underlying stream may not; if it does, Close will close it.
-func (lbp *liteBodyPacer) Close() error {
+// pacedReadSeeker supports Close but the underlying stream may not; if it does, Close will close it.
+func (lbp *pacedReadSeeker) Close() error {
 	if c, ok := lbp.body.(io.Closer); ok {
 		return c.Close()
 	}

@@ -72,7 +72,7 @@ func (u *blockBlobUploader) generatePutBlock(id common.ChunkID, blockIndex int32
 
 		// step 3: put block to remote
 		u.jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
+		body := newPacedRequestBody(reader, u.pacer)
 		_, err := u.destBlockBlobURL.StageBlock(u.jptm.Context(), encodedBlockID, body, azblob.LeaseAccessConditions{}, nil)
 		if err != nil {
 			u.jptm.FailActiveUpload("Staging block", err)
@@ -104,7 +104,7 @@ func (u *blockBlobUploader) generatePutWholeBlob(id common.ChunkID, blockIndex i
 			u.headersToApply.ContentMD5 = md5Hash
 
 			// Upload the file
-			body := newLiteRequestBodyPacer(reader, u.pacer)
+			body := newPacedRequestBody(reader, u.pacer)
 			_, err = u.destBlockBlobURL.Upload(jptm.Context(), body, u.headersToApply, u.metadataToApply, azblob.BlobAccessConditions{})
 		}
 
