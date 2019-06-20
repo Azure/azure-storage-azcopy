@@ -140,7 +140,7 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 
-	u.flushThreshold = int64(u.chunkSize * 7500)
+	u.flushThreshold = int64(u.chunkSize * ADLSFlushThreshold)
 
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h
@@ -182,7 +182,7 @@ func (u *blobFSUploader) Epilogue() {
 		md5Hash, ok := <-u.md5Channel
 		if ok {
 			// Flush incrementally to avoid timeouts on a full flush
-			for i := int64(math.Min(float64(ss), float64(u.flushThreshold))); i <= ss; i = int64(math.Min(float64(ss), float64(i+u.flushThreshold))) {
+			for i := int64(math.Min(float64(ss), float64(u.flushThreshold))); ; i = int64(math.Min(float64(ss), float64(i+u.flushThreshold))) {
 				// Close only at the end of the file, keep all uncommitted data before then.
 				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders, i != ss, i == ss)
 				if err != nil {
