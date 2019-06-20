@@ -70,6 +70,8 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
+		// Note that this level of control here is specific to the individual page blob, and is additional
+		// to the application-wide pacing that we (optionally) do below when writing the response body.
 		c.jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
 		if err := c.filePacer.RequestRightToSend(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
