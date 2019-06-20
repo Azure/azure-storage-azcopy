@@ -42,7 +42,7 @@ class Command(object):
             # iterating through all the values in dict and combining them.
         if len(self.flags) > 0:
             for key, value in self.flags.items():
-                command += " --" + key + "=" + '"' + value + '"'
+                command += " --" + key + "=" + '"' + str(value) + '"'
         return command
 
     # this api is used to execute a azcopy copy command.
