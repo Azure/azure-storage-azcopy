@@ -7,17 +7,9 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
         self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
-        self.cachedAccountName = os.environ['ACCOUNT_NAME']
-        os.environ['ACCOUNT_NAME'] = ''
-        self.cachedAccountKey = os.environ['ACCOUNT_KEY']
-        os.environ['ACCOUNT_KEY'] = ''
-        util.clean_test_filesystem(util.test_bfs_sas_account_url)
 
     def tearDown(self):
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
-        os.environ['ACCOUNT_NAME'] = self.cachedAccountName
-        os.environ['ACCOUNT_KEY'] = self.cachedAccountKey
-        util.clean_test_filesystem(util.test_bfs_sas_account_url)
 
     def test_blobfs_sas_download_1Kb_file(self):
         # Create file of size 1KB
@@ -30,7 +22,8 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
 
         # Validate the uploaded file
         file_url = util.get_resource_sas_from_bfs(filename)
-        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
+        file_url_nosas = util.test_bfs_account_url + filename
+        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url_nosas).execute_azcopy_verify()
         self.assertTrue(result)
 
         # Delete the local file
@@ -45,7 +38,7 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the downloaded file
-        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
+        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url_nosas).execute_azcopy_verify()
         self.assertTrue(result)
 
     def test_blobfs_sas_download_64MB_file(self):
@@ -58,8 +51,9 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded file
+        file_url_nosas = util.test_bfs_account_url + filename
         file_url = util.get_resource_sas_from_bfs(filename)
-        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
+        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url_nosas).execute_azcopy_verify()
         self.assertTrue(result)
 
         # Delete the local file
@@ -74,7 +68,7 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the downloaded file
-        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
+        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url_nosas).execute_azcopy_verify()
         self.assertTrue(result)
 
     def test_blobfs_sas_download_100_1Kb_file(self):
@@ -89,8 +83,9 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
 
         # Validate the uploaded directory
         dirUrl = util.get_resource_sas_from_bfs(dir_name)
-        result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
-            add_flags("is-object-dir", "true").add_flags("recursive", "true").execute_azcopy_copy_command()
+        dirUrl_nosas = util.test_bfs_account_url + dir_name
+        result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl_nosas). \
+            add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
 
         # Delete the local files
@@ -105,6 +100,6 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the downloaded directory
-        result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
+        result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl_nosas). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
