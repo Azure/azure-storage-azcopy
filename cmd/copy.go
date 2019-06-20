@@ -43,18 +43,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// upload related
-const uploadMaxTries = 5
-const uploadTryTimeout = time.Minute * 10
-const uploadRetryDelay = time.Second * 1
-const uploadMaxRetryDelay = time.Second * 3
-
-// download related
-const downloadMaxTries = 5
-const downloadTryTimeout = time.Minute * 10
-const downloadRetryDelay = time.Second * 1
-const downloadMaxRetryDelay = time.Second * 3
-
 const pipingUploadParallelism = 5
 const pipingDefaultBlockSize = 8 * 1024 * 1024
 
@@ -299,8 +287,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.None() || cooked.contentType != "" || cooked.contentDisposition != "" || cooked.contentLanguage != "" || cooked.contentEncoding != "" || cooked.cacheControl != "" {
-			return cooked, fmt.Errorf("cannot use blob-type, content-type, content-disposition, content-language, content-encoding, or cache-control with ADLS Gen 2")
+		if cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
@@ -571,6 +559,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
@@ -578,18 +568,10 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 	}
 
 	// step 1: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      downloadMaxTries,
-			TryTimeout:    downloadTryTimeout,
-			RetryDelay:    downloadRetryDelay,
-			MaxRetryDelay: downloadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
 
 	// step 2: parse source url
 	u, err := url.Parse(blobUrl)
@@ -599,12 +581,12 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
@@ -617,24 +599,18 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize uint32) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// if no block size is set, then use default value
 	if blockSize == 0 {
 		blockSize = pipingDefaultBlockSize
 	}
 
 	// step 0: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      uploadMaxTries,
-			TryTimeout:    uploadTryTimeout,
-			RetryDelay:    uploadRetryDelay,
-			MaxRetryDelay: uploadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
 
 	// step 1: parse destination url
 	u, err := url.Parse(blobUrl)
@@ -644,7 +620,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
-	_, err = azblob.UploadStreamToBlockBlob(context.TODO(), os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
+	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
 		BufferSize: int(blockSize),
 		MaxBuffers: pipingUploadParallelism,
 	})
@@ -751,6 +727,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		fileParts := azfile.NewFileURLParts(*fromUrl)
 		cca.sourceSAS = fileParts.SAS.Encode()
+		if cca.sourceSAS == "" {
+			return fmt.Errorf("azure files only supports SAS token authentication")
+		}
 		jobPartOrder.SourceSAS = cca.sourceSAS
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
@@ -821,6 +800,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		fileParts := azfile.NewFileURLParts(*toUrl)
 		cca.destinationSAS = fileParts.SAS.Encode()
+		if cca.destinationSAS == "" {
+			return fmt.Errorf("azure files only supports SAS token authentication")
+		}
 		jobPartOrder.DestinationSAS = cca.destinationSAS
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
@@ -1143,7 +1125,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	cpCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size.")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
