@@ -1177,4 +1177,8 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
+
+	// Hide the flush-threshold flag since it is implemented only for CI.
+	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on ADLS gen 2")
+	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 }
