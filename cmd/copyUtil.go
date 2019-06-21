@@ -54,8 +54,8 @@ func (copyHandlerUtil) numOfWildcardInURL(url url.URL) int {
 	return strings.Count(url.String(), wildCard)
 }
 
-// checks if a given url points to a container, as opposed to a blob or prefix match
-func (util copyHandlerUtil) urlIsContainer(url *url.URL) bool {
+// checks if a given url points to a container or virtual directory, as opposed to a blob or prefix match
+func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool {
 	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {
 		//Typical endpoint style
 		//If there's no slashes after the first, it's a container.
@@ -135,7 +135,7 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 }
 
 func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
-	if util.urlIsContainer(url) {
+	if util.urlIsContainerOrVirtualDirectory(url) {
 		return true
 	}
 	// Need to get the resource properties and verify if it is a file or directory
@@ -145,7 +145,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
 	// Azure file share case
-	if util.urlIsContainer(url) {
+	if util.urlIsContainerOrVirtualDirectory(url) {
 		return true
 	}
 

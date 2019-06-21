@@ -111,7 +111,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 				},
 			})
 
-		isContainer := copyHandlerUtil{}.urlIsContainer(resourceURL)
+		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL)
 		isPublicResource := false
 
 		if isContainer {

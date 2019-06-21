@@ -33,24 +33,24 @@ func (s *copyUtilTestSuite) TestUrlIsContainerOrBlob(c *chk.C) {
 	util := copyHandlerUtil{}
 
 	testUrl := url.URL{Path: "/container/dir1"}
-	isContainer := util.urlIsContainer(&testUrl)
+	isContainer := util.urlIsContainerOrVirtualDirectory(&testUrl)
 	c.Assert(isContainer, chk.Equals, false)
 
 	testUrl.Path = "/container/dir1/dir2"
-	isContainer = util.urlIsContainer(&testUrl)
+	isContainer = util.urlIsContainerOrVirtualDirectory(&testUrl)
 	c.Assert(isContainer, chk.Equals, false)
 
 	testUrl.Path = "/container/"
-	isContainer = util.urlIsContainer(&testUrl)
+	isContainer = util.urlIsContainerOrVirtualDirectory(&testUrl)
 	c.Assert(isContainer, chk.Equals, true)
 
 	testUrl.Path = "/container"
-	isContainer = util.urlIsContainer(&testUrl)
+	isContainer = util.urlIsContainerOrVirtualDirectory(&testUrl)
 	c.Assert(isContainer, chk.Equals, true)
 
 	// root container
 	testUrl.Path = "/"
-	isContainer = util.urlIsContainer(&testUrl)
+	isContainer = util.urlIsContainerOrVirtualDirectory(&testUrl)
 	c.Assert(isContainer, chk.Equals, true)
 }
 
@@ -59,8 +59,8 @@ func (s *copyUtilTestSuite) TestIPIsContainerOrBlob(c *chk.C) {
 
 	testIP := url.URL{Host: "127.0.0.1:8256", Path: "/account/container"}
 	testURL := url.URL{Path: "/account/container"}
-	isContainerIP := util.urlIsContainer(&testIP)
-	isContainerURL := util.urlIsContainer(&testURL)
+	isContainerIP := util.urlIsContainerOrVirtualDirectory(&testIP)
+	isContainerURL := util.urlIsContainerOrVirtualDirectory(&testURL)
 	c.Assert(isContainerIP, chk.Equals, true)   // IP endpoints contain the account in the path, making the container the second entry
 	c.Assert(isContainerURL, chk.Equals, false) // URL endpoints do not contain the account in the path, making the container the first entry.
 	//The behaviour isn't too different from here.
