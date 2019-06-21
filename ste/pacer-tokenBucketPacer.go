@@ -59,10 +59,10 @@ const (
 	bucketFillSleepDuration = time.Duration(float32(time.Second) * 0.1)
 
 	// How long to sleep when reading from the bucket and finding there's not enough tokens
-	bucketDrainSleepDuration = time.Duration(float32(time.Second) * 0.5)
+	bucketDrainSleepDuration = time.Duration(float32(time.Second) * 0.333)
 
 	// Controls the max amount by which the contents of the token bucket can build up, unused.
-	maxSecondsToOverpopulateBucket = 5 // suitable for coarse grained, but not for fine-grained pacing
+	maxSecondsToOverpopulateBucket = 2.5 // had 5, when doing coarse-grained pacing. TODO: find best all-round value, or parameterize
 )
 
 // tokenBucketPacer allows us to control the pace of an activity, using a basic token bucket algorithm.
@@ -71,6 +71,7 @@ type tokenBucketPacer struct {
 	atomicTokenBucket          int64
 	atomicTargetBytesPerSecond int64
 	atomicGrandTotal           int64
+	atomicWaitCount            int64
 	expectedBytesPerRequest    int64
 	done                       chan struct{}
 }
@@ -94,13 +95,20 @@ func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCou
 
 	// block until tokens are available
 	for atomic.AddInt64(&p.atomicTokenBucket, -byteCount) < 0 {
+
 		// by taking our desired count we've moved below zero, which means our allocation is not available
-		// right now, so put back what we asked for, and wait
+		// right now, so put back what we asked for, and then wait
 		atomic.AddInt64(&p.atomicTokenBucket, byteCount)
+
+		// vary the wait amount, to reduce risk of any kind of pulsing or synchronization effect, without the perf and
+		// and threadsafety issues of actual random numbers
+		totalWaitsSoFar := atomic.AddInt64(&p.atomicWaitCount, 1)
+		modifiedSleepDuration := time.Duration(float32(bucketDrainSleepDuration) * (float32(totalWaitsSoFar%10) + 5) / 10) // 50 to 150% of bucketDrainSleepDuration
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(bucketDrainSleepDuration):
+		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
 	}
