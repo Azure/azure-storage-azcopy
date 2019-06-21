@@ -380,7 +380,7 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 }
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
-	return ja.pacer.GetTotalTokensIssued()
+	return ja.pacer.GetTotalTraffic()
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {

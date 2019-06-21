@@ -68,7 +68,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 		// something inherent in the nature of REST downloads. So, as at March 2018, we are just living
 		// with it as known issue when downloading paced blobs.
 		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
-		if err := bd.filePacer.RequestRightToSend(jptm.Context(), length); err != nil {
+		if err := bd.filePacer.RequestTrafficAllocation(jptm.Context(), length); err != nil {
 			jptm.FailActiveDownload("Pacing block", err)
 		}
 

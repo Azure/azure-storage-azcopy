@@ -28,7 +28,7 @@ import (
 // nullAutoPacer is a no-op auto pacer. For use in code which may or may not need pacing. When not needed,
 // just use an instance of this type
 type nullAutoPacer struct {
-	atomicTotalTokensIssued int64
+	atomicGrandTotal int64
 }
 
 func newNullAutoPacer() *nullAutoPacer {
@@ -43,19 +43,19 @@ func (a *nullAutoPacer) RetryCallback() {
 	// noop
 }
 
-func (a *nullAutoPacer) RequestRightToSend(ctx context.Context, bytesToSend int64) error {
-	atomic.AddInt64(&a.atomicTotalTokensIssued, bytesToSend)
+func (a *nullAutoPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	atomic.AddInt64(&a.atomicGrandTotal, byteCount) // we track total aggregate throughput, even though we don't do any actual pacing
 	return nil
 }
 
-func (a *nullAutoPacer) ReturnTokens(tokensToReturn int64) {
-	atomic.AddInt64(&a.atomicTotalTokensIssued, -tokensToReturn)
+func (a *nullAutoPacer) UndoRequest(byteCount int64) {
+	atomic.AddInt64(&a.atomicGrandTotal, -byteCount)
 }
 
-func (a *nullAutoPacer) ForceAddTotalTokensIssued(n int64) {
-	atomic.AddInt64(&a.atomicTotalTokensIssued, n)
+func (a *nullAutoPacer) RecordUnpacedTraffic(byteCount int64) {
+	atomic.AddInt64(&a.atomicGrandTotal, byteCount)
 }
 
-func (a *nullAutoPacer) GetTotalTokensIssued() int64 {
-	return atomic.LoadInt64(&a.atomicTotalTokensIssued)
+func (a *nullAutoPacer) GetTotalTraffic() int64 {
+	return atomic.LoadInt64(&a.atomicGrandTotal)
 }

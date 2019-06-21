@@ -66,7 +66,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return
 		}
-		c.pacer.ForceAddTotalTokensIssued(adjustedChunkSize)
+		c.pacer.RecordUnpacedTraffic(adjustedChunkSize)
 	}
 
 	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)

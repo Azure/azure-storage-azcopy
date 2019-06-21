@@ -29,15 +29,29 @@ import (
 
 // pacer is used by callers whose activity must be controlled to a certain pace
 type pacer interface {
-	RequestRightToSend(ctx context.Context, bytesToSend int64) error // TODO rename to BlockToGetTokens or somthing
-	ReturnTokens(tokensToReturn int64)
-	ForceAddTotalTokensIssued(n int64)
+
+	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
+	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
+
+	// UndoRequest reverses a previous request to process n bytes.  Is used when
+	// the caller did not need all of the allocation they previously requested
+	// e.g. when they asked for enough for a big buffer, but never filled it, they would
+	// call this method to return the unused portion.
+	UndoRequest(byteCount int64)
+
+	// RecordUnpacedTraffic is used by callers who bypass the pacing mechanism,
+	// but still which their traffic to be recorded in our running total.
+	RecordUnpacedTraffic(byteCount int64)
+
 	Close() error
 }
 
 type pacerAdmin interface {
 	pacer
-	GetTotalTokensIssued() int64
+
+	// GetTotalTraffic returns the cumulative count of all traffic that has been processed,
+	// both paced (via GetTrafficAllocation minus any UndoRequest's) and unpaced (via RecordUnpacedTraffic)
+	GetTotalTraffic() int64
 }
 
 const (
@@ -56,8 +70,8 @@ const (
 type tokenBucketPacer struct {
 	atomicTokenBucket          int64
 	atomicTargetBytesPerSecond int64
+	atomicGrandTotal           int64
 	expectedBytesPerRequest    int64
-	atomicTotalTokensIssued    int64
 	done                       chan struct{}
 }
 
@@ -74,15 +88,15 @@ func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedByte
 	return p
 }
 
-// RequestRightToSend function is called by goroutines to request right to send a certain amount of bytes.
+// RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
-func (p *tokenBucketPacer) RequestRightToSend(ctx context.Context, bytesToSend int64) error {
+func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
 
 	// block until tokens are available
-	for atomic.AddInt64(&p.atomicTokenBucket, -bytesToSend) < 0 {
+	for atomic.AddInt64(&p.atomicTokenBucket, -byteCount) < 0 {
 		// by taking our desired count we've moved below zero, which means our allocation is not available
 		// right now, so put back what we asked for, and wait
-		atomic.AddInt64(&p.atomicTokenBucket, bytesToSend)
+		atomic.AddInt64(&p.atomicTokenBucket, byteCount)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -92,25 +106,25 @@ func (p *tokenBucketPacer) RequestRightToSend(ctx context.Context, bytesToSend i
 	}
 
 	// record what we issued
-	atomic.AddInt64(&p.atomicTotalTokensIssued, bytesToSend)
+	atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 
 	return nil
 }
 
-// ReturnTokens allows a caller to return unused tokens
-func (p *tokenBucketPacer) ReturnTokens(tokensToReturn int64) {
-	if tokensToReturn > 0 {
-		atomic.AddInt64(&p.atomicTokenBucket, tokensToReturn)        // put them back in the bucket
-		atomic.AddInt64(&p.atomicTotalTokensIssued, -tokensToReturn) // deduct them from all-time issued count
+// UndoRequest allows a caller to return unused tokens
+func (p *tokenBucketPacer) UndoRequest(byteCount int64) {
+	if byteCount > 0 {
+		atomic.AddInt64(&p.atomicTokenBucket, byteCount) // put them back in the bucket
+		atomic.AddInt64(&p.atomicGrandTotal, -byteCount) // deduct them from all-time issued count
 	}
 }
 
-// ForceIncrementTotalTokensIssued allows clients to force an increment to the all-time issued count without
+// RecordUnpacedTraffic allows clients to force an increment to the all-time issued count without
 // actually waiting.  Use by those callers that are not rate-limited by our pacing (and so don't call
 // other methods here) but do need to record their total throughput in our running total.
 // This is a bit of a hack necessary because, for historical reasons, we use pacer to also track total bytes sent. TODO: review
-func (p *tokenBucketPacer) ForceAddTotalTokensIssued(n int64) {
-	atomic.AddInt64(&p.atomicTotalTokensIssued, n)
+func (p *tokenBucketPacer) RecordUnpacedTraffic(byteCount int64) {
+	atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 }
 
 func (p *tokenBucketPacer) Close() error {
@@ -164,6 +178,6 @@ func (p *tokenBucketPacer) setTargetBytesPerSecond(value int64) {
 	atomic.StoreInt64(&p.atomicTargetBytesPerSecond, value)
 }
 
-func (p *tokenBucketPacer) GetTotalTokensIssued() int64 {
-	return atomic.LoadInt64(&p.atomicTotalTokensIssued)
+func (p *tokenBucketPacer) GetTotalTraffic() int64 {
+	return atomic.LoadInt64(&p.atomicGrandTotal)
 }

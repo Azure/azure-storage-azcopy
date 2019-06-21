@@ -71,7 +71,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		// Note that this level of control here is specific to the individual page blob, and is additional
 		// to the application-wide pacing that we (optionally) do below when writing the response body.
 		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
-		if err := u.filePacer.RequestRightToSend(jptm.Context(), reader.Length()); err != nil {
+		if err := u.filePacer.RequestTrafficAllocation(jptm.Context(), reader.Length()); err != nil {
 			jptm.FailActiveUpload("Pacing block", err)
 		}
 

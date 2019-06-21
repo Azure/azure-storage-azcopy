@@ -139,6 +139,6 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
-		c.pacer.ForceAddTotalTokensIssued(adjustedChunkSize)
+		c.pacer.RecordUnpacedTraffic(adjustedChunkSize)
 	})
 }

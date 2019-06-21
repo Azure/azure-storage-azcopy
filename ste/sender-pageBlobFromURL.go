@@ -73,7 +73,7 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		// Note that this level of control here is specific to the individual page blob, and is additional
 		// to the application-wide pacing that we (optionally) do below when writing the response body.
 		c.jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
-		if err := c.filePacer.RequestRightToSend(c.jptm.Context(), adjustedChunkSize); err != nil {
+		if err := c.filePacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 
@@ -91,6 +91,6 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
 		}
-		c.pacer.ForceAddTotalTokensIssued(adjustedChunkSize)
+		c.pacer.RecordUnpacedTraffic(adjustedChunkSize)
 	})
 }

@@ -50,7 +50,7 @@ func (prs *pacedReadSeeker) Read(p []byte) (int, error) {
 	requestedCount := len(p)
 
 	// blocks until we are allowed to process the bytes
-	err := prs.p.RequestRightToSend(context.TODO(), int64(requestedCount))
+	err := prs.p.RequestTrafficAllocation(context.TODO(), int64(requestedCount))
 	if err != nil {
 		return 0, err
 	}
@@ -60,7 +60,7 @@ func (prs *pacedReadSeeker) Read(p []byte) (int, error) {
 
 	// "return" any unused tokens to the pacer (e.g. if we hit eof before the end of our buffer p)
 	excess := requestedCount - n
-	prs.p.ReturnTokens(int64(excess))
+	prs.p.UndoRequest(int64(excess))
 
 	return n, err
 }
