@@ -49,7 +49,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				return fmt.Errorf("for the use of include flag, source needs to be a directory")
 			}
 			// append file name as blob name in case the given URL is a container
-			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
+			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainer(destinationURL)) ||
 				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) {
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
 			}

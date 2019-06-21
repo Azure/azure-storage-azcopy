@@ -130,7 +130,7 @@ func HandleListContainerCommand(source string) (err error) {
 	// get the search prefix to query the service
 	searchPrefix := ""
 	// if the source is container url, then searchPrefix is empty
-	if !util.urlIsContainerOrShare(sourceURL) {
+	if !util.urlIsContainer(sourceURL) {
 		searchPrefix = util.getBlobNameFromURL(sourceURL.Path)
 	}
 	if len(searchPrefix) > 0 {
