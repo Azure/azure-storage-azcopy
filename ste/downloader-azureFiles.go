@@ -77,7 +77,7 @@ func (bd *azureFilesDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, s
 			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(retryReader, pacer), true)
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

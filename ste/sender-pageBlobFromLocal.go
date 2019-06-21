@@ -77,7 +77,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 
 		// send it
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newPacedRequestBody(reader, u.pacer)
+		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
 		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {

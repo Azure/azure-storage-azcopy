@@ -27,30 +27,36 @@ import (
 
 // pacedReadSeeker implements read/seek/close with pacing. (Formerly in file pacer-lite)
 type pacedReadSeeker struct {
+
+	// Although storing ctx in a struct is generally considered an anti-patten, this particular
+	// struct happens to be fairly-short lived (from its users point of view). Basically just for
+	// as long as a takes to read or send a request body.  That's not terribly long, but it is
+	// long enough that we might need to cancel during it, hence the ctx.
+	ctx context.Context
+
 	body io.Reader // Seeking is required to support retries
 	p    pacer
 }
 
-func newPacedRequestBody(requestBody io.ReadSeeker, p pacer) io.ReadSeeker {
+func newPacedRequestBody(ctx context.Context, requestBody io.ReadSeeker, p pacer) io.ReadSeeker {
 	if p == nil {
 		panic("p must not be nil")
 	}
-	return &pacedReadSeeker{body: requestBody, p: p}
+	return &pacedReadSeeker{ctx: ctx, body: requestBody, p: p}
 }
 
-func newPacedResponseBody(responseBody io.ReadCloser, p pacer) io.ReadCloser {
+func newPacedResponseBody(ctx context.Context, responseBody io.ReadCloser, p pacer) io.ReadCloser {
 	if p == nil {
 		panic("p must not be nil")
 	}
-	return &pacedReadSeeker{body: responseBody, p: p}
+	return &pacedReadSeeker{ctx: ctx, body: responseBody, p: p}
 }
 
 func (prs *pacedReadSeeker) Read(p []byte) (int, error) {
-	/*** TODO fix the context here ***/
 	requestedCount := len(p)
 
 	// blocks until we are allowed to process the bytes
-	err := prs.p.RequestTrafficAllocation(context.TODO(), int64(requestedCount))
+	err := prs.p.RequestTrafficAllocation(prs.ctx, int64(requestedCount))
 	if err != nil {
 		return 0, err
 	}

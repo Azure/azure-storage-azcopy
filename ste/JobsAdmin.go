@@ -147,8 +147,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 		targetRateInBytesPerSec := targetRateInMegaBitsPerSec * 1000 * 1000 / 8
 		unusedExpectedCoarseRequestByteCount := uint32(0)
-		// TODO: sort out the context!!!!
-		pacer = newTokenBucketPacer(context.TODO(), targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+		pacer = newTokenBucketPacer(appCtx, targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
 	}
 
 	ja := &jobsAdmin{
