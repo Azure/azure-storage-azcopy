@@ -39,10 +39,6 @@ type pacer interface {
 	// call this method to return the unused portion.
 	UndoRequest(byteCount int64)
 
-	// RecordUnpacedTraffic is used by callers who bypass the pacing mechanism,
-	// but still which their traffic to be recorded in our running total.
-	RecordUnpacedTraffic(byteCount int64)
-
 	Close() error
 }
 
@@ -125,14 +121,6 @@ func (p *tokenBucketPacer) UndoRequest(byteCount int64) {
 		atomic.AddInt64(&p.atomicTokenBucket, byteCount) // put them back in the bucket
 		atomic.AddInt64(&p.atomicGrandTotal, -byteCount) // deduct them from all-time issued count
 	}
-}
-
-// RecordUnpacedTraffic allows clients to force an increment to the all-time issued count without
-// actually waiting.  Use by those callers that are not rate-limited by our pacing (and so don't call
-// other methods here) but do need to record their total throughput in our running total.
-// This is a bit of a hack necessary because, for historical reasons, we use pacer to also track total bytes sent. TODO: review
-func (p *tokenBucketPacer) RecordUnpacedTraffic(byteCount int64) {
-	atomic.AddInt64(&p.atomicGrandTotal, byteCount)
 }
 
 func (p *tokenBucketPacer) Close() error {

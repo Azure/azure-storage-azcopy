@@ -134,11 +134,14 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// Set the latest service version from sdk as service version in the context, to use StageBlockFromURL API
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
 		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
-		c.pacer.RecordUnpacedTraffic(adjustedChunkSize)
 	})
 }

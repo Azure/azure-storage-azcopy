@@ -58,6 +58,10 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 
 		// Set the latest service version from sdk as service version in the context, to use AppendBlockFromURL API.
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
 		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile, adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},
@@ -66,7 +70,6 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return
 		}
-		c.pacer.RecordUnpacedTraffic(adjustedChunkSize)
 	}
 
 	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)

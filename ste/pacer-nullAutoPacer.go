@@ -52,10 +52,6 @@ func (a *nullAutoPacer) UndoRequest(byteCount int64) {
 	atomic.AddInt64(&a.atomicGrandTotal, -byteCount)
 }
 
-func (a *nullAutoPacer) RecordUnpacedTraffic(byteCount int64) {
-	atomic.AddInt64(&a.atomicGrandTotal, byteCount)
-}
-
 func (a *nullAutoPacer) GetTotalTraffic() int64 {
 	return atomic.LoadInt64(&a.atomicGrandTotal)
 }
