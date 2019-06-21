@@ -95,7 +95,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -140,12 +140,23 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
+	// default to a pacer that doesn't actually control the rate
+	// (it just records total throughput, since for historical reasons we do that in the pacer)
+	var pacer pacerAdmin = newNullAutoPacer()
+	if targetRateInMegaBitsPerSec > 0 {
+		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
+		targetRateInBytesPerSec := targetRateInMegaBitsPerSec * 1000 * 1000 / 8
+		unusedExpectedCoarseRequestByteCount := uint32(0)
+		// TODO: sort out the context!!!!
+		pacer = newTokenBucketPacer(context.TODO(), targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+	}
+
 	ja := &jobsAdmin{
 		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr:    newJobIDToJobMgr(),
 		logDir:           azcopyLogPathFolder,
 		planDir:          planDir,
-		pacer:            newNullAutoPacer(), // TODO replace with token bucket pacer (unless S2S, but maybe even if is S2S)
+		pacer:            pacer,
 		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
 		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),

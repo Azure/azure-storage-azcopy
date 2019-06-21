@@ -76,7 +76,7 @@ type tokenBucketPacer struct {
 }
 
 func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerCoarseRequest uint32) *tokenBucketPacer {
-	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond, // seed it immediately with one second's worth, to avoid a sluggish start
+	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
 		done:                       make(chan struct{}),
