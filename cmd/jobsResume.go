@@ -117,7 +117,7 @@ func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 
 		// reset the interval timer and byte count

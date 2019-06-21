@@ -334,7 +334,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		jobDone = summary.JobStatus.IsJobDone()
 
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 		throughput = common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
