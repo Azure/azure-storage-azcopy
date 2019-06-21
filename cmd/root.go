@@ -95,7 +95,7 @@ func Execute(azsAppPathFolder, logPathFolder string, steStartup steStartupFunc) 
 }
 
 func init() {
-	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate in Mega bits per second. If zero or omitted, the rate is not capped.")
+	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
 
 	// Special flag for generating test data
