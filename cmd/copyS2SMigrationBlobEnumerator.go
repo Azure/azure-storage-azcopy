@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
@@ -66,6 +67,9 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 				fileName := gCopyUtil.getFileNameFromPath(e.srcBlobURLPartExtension.BlobName)
 				*e.destURL = urlExtension{*e.destURL}.generateObjectPath(fileName)
 			}
+			if cca.blobType == cca.blobType.PageBlob() && blobProperties.ContentLength()%512 != 0 {
+				return errors.New("page blobs must be a multiple of 512 bytes in length")
+			}
 			err := e.createDestBucket(ctx, *e.destURL, nil)
 			if err != nil {
 				return err
@@ -88,6 +92,9 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	// b: https://<blob-service>/containerprefix*/vd/blob
 	if isAccountLevel, containerPrefix := e.srcBlobURLPartExtension.isBlobAccountLevelSearch(); isAccountLevel {
 		glcm.Info(infoCopyFromAccount)
+		if cca.blobType == cca.blobType.PageBlob() {
+			glcm.Info("Copying entire account to page blobs will fail on files without a content length that is a multiple of 512 bytes")
+		}
 		if !cca.recursive {
 			return fmt.Errorf("cannot copy the entire account without recursive flag. Please use --recursive flag")
 		}
@@ -106,6 +113,9 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		}
 	} else { // Case-3: Source is a blob container or directory
 		glcm.Info(infoCopyFromContainerDirectoryListOfFiles)
+		if cca.blobType == cca.blobType.PageBlob() {
+			glcm.Info("Copying directory to page blobs will fail on files without a content length that is a multiple of 512 bytes")
+		}
 		blobPrefix, blobNamePattern, isWildcardSearch := e.srcBlobURLPartExtension.searchPrefixFromBlobURL()
 		if blobNamePattern == "*" && !cca.recursive && !isWildcardSearch {
 			return fmt.Errorf("cannot copy the entire container or directory without recursive flag. Please use --recursive flag")

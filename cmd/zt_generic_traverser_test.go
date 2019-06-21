@@ -50,7 +50,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
 		// set up the container with a single blob
 		blobList := []string{storedObjectName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 
 		// set up the directory as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)

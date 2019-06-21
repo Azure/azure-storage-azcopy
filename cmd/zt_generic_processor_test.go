@@ -106,7 +106,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 
 	// set up the container with a single blob
 	blobList := []string{"singlefile101"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 	c.Assert(containerURL, chk.NotNil)
 
 	// set up the directory with a single file

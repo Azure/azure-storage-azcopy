@@ -68,7 +68,7 @@ func (s *syncProcessorSuite) TestBlobDeleter(c *chk.C) {
 	// set up the blob to delete
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{blobName})
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{blobName}, blockBlobDefaultData)
 
 	// validate that the blob exists
 	blobURL := containerURL.NewBlobURL(blobName)

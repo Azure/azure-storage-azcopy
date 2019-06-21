@@ -5,9 +5,16 @@
 
 ### Bug fix
 
-1. Added error to using Azure Files without a SAS token (invalid auth configuration)
-1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
-1. `--log-level=none` now drops no logs, and has a listing in `--help`
+1. Added error to using Azure Files without a SAS token (invalid auth configuration).
+1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business.
+1. `--log-level=none` now drops no logs, and has a listing in `--help`.
+1. Fixed bug where piping was not picking up the service version override, making it not work well against Azure Stack.
+1. Fixed a timeout when uploading particularly large files to ADLSG2.
+
+### New features
+
+1. Enabled copying from page/block/append blob to another blob of a different type
+1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
 
 ### New features
 

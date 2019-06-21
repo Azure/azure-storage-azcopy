@@ -43,18 +43,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// upload related
-const uploadMaxTries = 5
-const uploadTryTimeout = time.Minute * 10
-const uploadRetryDelay = time.Second * 1
-const uploadMaxRetryDelay = time.Second * 3
-
-// download related
-const downloadMaxTries = 5
-const downloadTryTimeout = time.Minute * 10
-const downloadRetryDelay = time.Second * 1
-const downloadMaxRetryDelay = time.Second * 3
-
 const pipingUploadParallelism = 5
 const pipingDefaultBlockSize = 8 * 1024 * 1024
 
@@ -376,15 +364,15 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
+		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
+		}
+		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
+		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
-		}
-		// Disabling blob type override.
-		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
-		// and when file and s3 is source, only block blob destination is supported.
-		if cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blob-type is not supported while coping from service to service")
 		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
@@ -571,6 +559,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
@@ -578,18 +568,10 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 	}
 
 	// step 1: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      downloadMaxTries,
-			TryTimeout:    downloadTryTimeout,
-			RetryDelay:    downloadRetryDelay,
-			MaxRetryDelay: downloadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
 
 	// step 2: parse source url
 	u, err := url.Parse(blobUrl)
@@ -599,12 +581,12 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
@@ -617,24 +599,18 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize uint32) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// if no block size is set, then use default value
 	if blockSize == 0 {
 		blockSize = pipingDefaultBlockSize
 	}
 
 	// step 0: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      uploadMaxTries,
-			TryTimeout:    uploadTryTimeout,
-			RetryDelay:    uploadRetryDelay,
-			MaxRetryDelay: uploadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
 
 	// step 1: parse destination url
 	u, err := url.Parse(blobUrl)
@@ -644,7 +620,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
-	_, err = azblob.UploadStreamToBlockBlob(context.TODO(), os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
+	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
 		BufferSize: int(blockSize),
 		MaxBuffers: pipingUploadParallelism,
 	})
@@ -1201,4 +1177,8 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
+
+	// Hide the flush-threshold flag since it is implemented only for CI.
+	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on ADLS gen 2")
+	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 }

@@ -49,6 +49,46 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
         self.assertTrue(result)
 
+    def util_test_blobfs_upload_uneven_multiflush_file(
+        self,
+        explicitFromTo=False):
+        # create test file of size 64MB
+        filename = "test_uneven_multiflush_64MB_file.txt"
+        file_path = util.create_test_file(filename, 64*1024*1024)
+        # Upload the file using AzCopy @ 1MB blocks, 15 block flushes (5 flushes, 4 15 blocks, 1 4 blocks)
+        cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
+            add_flags("block-size-mb", "1").add_flags("flush-threshold", "15").add_flags("log-level", "Info")
+        util.process_oauth_command(
+            cmd,
+            "LocalBlobFS" if explicitFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # Validate the file uploaded
+        fileUrl = util.test_bfs_account_url + filename
+        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
+        self.assertTrue(result)
+
+    def util_test_blobfs_upload_even_multiflush_file(
+            self,
+            explicitFromTo=False):
+        # create test file of size 64MB
+        filename = "test_even_multiflush_64MB_file.txt"
+        file_path = util.create_test_file(filename, 64 * 1024 * 1024)
+        # Upload the file using AzCopy @ 1MB blocks, 16 block flushes (4 16 block flushes)
+        cmd = util.Command("copy").add_arguments(file_path).add_arguments(util.test_bfs_account_url). \
+            add_flags("block-size-mb", "1").add_flags("flush-threshold", "16").add_flags("log-level", "Info")
+        util.process_oauth_command(
+            cmd,
+            "LocalBlobFS" if explicitFromTo else "")
+        result = cmd.execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # Validate the file uploaded
+        fileUrl = util.test_bfs_account_url + filename
+        result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(fileUrl).execute_azcopy_verify()
+        self.assertTrue(result)
+
     def util_test_blobfs_upload_100_1Kb_file(
         self,
         explictFromTo=False):
@@ -80,3 +120,9 @@ class BlobFs_Upload_OAuth_User_Scenarios(unittest.TestCase):
 
     def test_blobfs_upload_100_1Kb_file_with_oauth(self):
         self.util_test_blobfs_upload_100_1Kb_file()
+
+    def test_blobfs_upload_uneven_multiflush_with_oauth(self):
+        self.util_test_blobfs_upload_uneven_multiflush_file()
+
+    def test_blobfs_upload_even_multiflush_with_oauth(self):
+        self.util_test_blobfs_upload_even_multiflush_file()
