@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"net/url"
 	"os"
@@ -75,17 +76,25 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 		os.Exit(1)
 	}
 
+	// Get BFS url parts to test SAS
+	bfsURLParts := azbfs.NewBfsURLParts(*subjectUrl)
+
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test")
+	// If ACCOUNT_NAME or ACCOUNT_KEY is not supplied AND a SAS is not supplied
+	if (name != "" && key != "") && bfsURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test, OR a SAS token should be supplied in the subject URL.")
 		os.Exit(1)
 	}
 	// create the blob fs pipeline
-	c := azbfs.NewSharedKeyCredential(name, key)
-	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+	var p pipeline.Pipeline
+	if bfsURLParts.SAS.Encode() != "" {
+		p = azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	} else {
+		c := azbfs.NewSharedKeyCredential(name, key)
+		p = azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+	}
 
 	// create the file url and download the file Url
 	fileUrl := azbfs.NewFileURL(*subjectUrl, p)
@@ -153,23 +162,31 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 // verifyRemoteDir validates the local directory (object) against the directory
 // on filesystem (subject)
 func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
-	// Get the Account Name and Key variables from environment
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
-	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test")
+	// parse the subject url.
+	subjectUrl, err := url.Parse(tbfsc.Subject)
+	if err != nil {
+		fmt.Println("error parsing the container sas ", tbfsc.Subject)
 		os.Exit(1)
 	}
 
-	// create the pipeline
-	c := azbfs.NewSharedKeyCredential(name, key)
-	p := azbfs.NewPipeline(c, azbfs.PipelineOptions{})
+	//Get BFS url parts to test SAS
+	bfsURLParts := azbfs.NewBfsURLParts(*subjectUrl)
 
-	subjectUrl, err := url.Parse(tbfsc.Subject)
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Error parsing the url %s. failed with error %s", subjectUrl, err.Error()))
+	// Get the Account Name and Key variables from environment
+	name := os.Getenv("ACCOUNT_NAME")
+	key := os.Getenv("ACCOUNT_KEY")
+	// If ACCOUNT_NAME or ACCOUNT_KEY is not supplied AND a SAS is not supplied
+	if (name != "" && key != "") && bfsURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test, OR a SAS token should be supplied in the subject URL.")
 		os.Exit(1)
+	}
+	// create the blob fs pipeline
+	var p pipeline.Pipeline
+	if bfsURLParts.SAS.Encode() != "" {
+		p = azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	} else {
+		c := azbfs.NewSharedKeyCredential(name, key)
+		p = azbfs.NewPipeline(c, azbfs.PipelineOptions{})
 	}
 	// Get the object Info and If the object is not a directory
 	// validation fails since validation has two be done between directories

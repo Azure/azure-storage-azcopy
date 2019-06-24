@@ -6,9 +6,13 @@ class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
         self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
+        self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
+        os.environ['ACCOUNT_KEY'] = ''
+        util.clean_test_filesystem(util.test_bfs_sas_account_url)
 
     def tearDown(self):
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
+        os.environ['ACCOUNT_KEY'] = self.cachedAzCopyAccountKey
 
     def test_blobfs_sas_upload_1Kb_file(self):
         # Create file of size 1KB
@@ -20,7 +24,7 @@ class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded file
-        file_url = util.test_bfs_account_url + filename
+        file_url = util.get_resource_sas_from_bfs(filename)
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
         self.assertTrue(result)
 
@@ -34,7 +38,7 @@ class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded file
-        file_url = util.test_bfs_account_url + filename
+        file_url = util.get_resource_sas_from_bfs(filename)
         result = util.Command("testBlobFS").add_arguments(file_path).add_arguments(file_url).execute_azcopy_verify()
         self.assertTrue(result)
 
@@ -49,7 +53,7 @@ class BlobFs_Upload_SAS_User_Scenarios(unittest.TestCase):
         self.assertTrue(result)
 
         # Validate the uploaded directory
-        dirUrl = util.test_bfs_account_url + dir_name
+        dirUrl = util.get_resource_sas_from_bfs(dir_name)
         result = util.Command("testBlobFS").add_arguments(dir_n_file_path).add_arguments(dirUrl). \
             add_flags("is-object-dir", "true").execute_azcopy_verify()
         self.assertTrue(result)
