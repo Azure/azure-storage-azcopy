@@ -250,7 +250,7 @@ func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
 		os.Exit(1)
 	}
 	// create the blob fs pipeline
-	if bfsURLParts.SAS.Encode() == "" {
+	if bfsURLParts.SAS.Encode() != "" {
 		return azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
 	}
 
