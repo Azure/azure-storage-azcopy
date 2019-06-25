@@ -63,5 +63,19 @@ func (s *copyUtilTestSuite) TestIPIsContainerOrBlob(c *chk.C) {
 	isContainerURL := util.urlIsContainerOrVirtualDirectory(&testURL)
 	c.Assert(isContainerIP, chk.Equals, true)   // IP endpoints contain the account in the path, making the container the second entry
 	c.Assert(isContainerURL, chk.Equals, false) // URL endpoints do not contain the account in the path, making the container the first entry.
-	//The behaviour isn't too different from here.
+
+	testURL.Path = "/account/container/folder"
+	testIP.Path = "/account/container/folder"
+	isContainerIP = util.urlIsContainerOrVirtualDirectory(&testIP)
+	isContainerURL = util.urlIsContainerOrVirtualDirectory(&testURL)
+	c.Assert(isContainerIP, chk.Equals, false)  // IP endpoints contain the account in the path, making the container the second entry
+	c.Assert(isContainerURL, chk.Equals, false) // URL endpoints do not contain the account in the path, making the container the first entry.
+
+	testURL.Path = "/account/container/folder/"
+	testIP.Path = "/account/container/folder/"
+	isContainerIP = util.urlIsContainerOrVirtualDirectory(&testIP)
+	isContainerURL = util.urlIsContainerOrVirtualDirectory(&testURL)
+	c.Assert(isContainerIP, chk.Equals, true)  // IP endpoints contain the account in the path, making the container the second entry
+	c.Assert(isContainerURL, chk.Equals, true) // URL endpoints do not contain the account in the path, making the container the first entry.
+	// The behaviour isn't too different from here.
 }

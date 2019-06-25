@@ -57,17 +57,17 @@ func (copyHandlerUtil) numOfWildcardInURL(url url.URL) int {
 // checks if a given url points to a container or virtual directory, as opposed to a blob or prefix match
 func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool {
 	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {
-		//Typical endpoint style
-		//If there's no slashes after the first, it's a container.
-		//If there's a slash on the end, it's a virtual directory/container.
-		//Otherwise, it's just a blob.
+		// Typical endpoint style
+		// If there's no slashes after the first, it's a container.
+		// If there's a slash on the end, it's a virtual directory/container.
+		// Otherwise, it's just a blob.
 		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
 	} else {
-		//IP endpoint style: https://IP:port/accountname/container
-		//If there's 2 or less slashes after the first, it's a container.
-		//OR If there's a slash on the end, it's a virtual directory/container.
-		//Otherwise, it's just a blob.
-		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 2
+		// IP endpoint style: https://IP:port/accountname/container
+		// If there's 2 or less slashes after the first, it's a container.
+		// OR If there's a slash on the end, it's a virtual directory/container.
+		// Otherwise, it's just a blob.
+		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 1
 	}
 }
 
