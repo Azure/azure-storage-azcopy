@@ -283,7 +283,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct a filesystem URL & pipeline
 		accountName, accountKey := getAccountAndKey()
 		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
-		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().NewDirectoryURL(virDirName + "/").URL() // Service treats this as an individual file without a slash for some reason...
+		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().NewDirectoryURL(virDirName).URL()
 
 		// construct and run a FS traverser
 		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})

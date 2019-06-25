@@ -39,6 +39,10 @@ func (t *blobFSTraverser) getPropertiesIfSingleFile() (*azbfs.PathGetPropertiesR
 		return nil, false
 	}
 
+	if pgr.XMsResourceType() == "directory" {
+		return pgr, false
+	}
+
 	return pgr, true
 }
 
@@ -75,6 +79,11 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 
 	dirUrl := azbfs.NewDirectoryURL(*t.rawURL, t.p)
 	marker := ""
+	searchPrefix := bfsURLParts.DirectoryOrFilePath
+
+	if !strings.HasSuffix(searchPrefix, "/") {
+		searchPrefix += "/"
+	}
 
 	for {
 		dlr, err := dirUrl.ListDirectorySegment(t.ctx, &marker, t.recursive)
@@ -88,7 +97,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 				// TODO: Index file.
 				storedObject := newStoredObject(
 					getObjectNameOnly(*v.Name),
-					strings.TrimPrefix(*v.Name, bfsURLParts.DirectoryOrFilePath),
+					strings.TrimPrefix(*v.Name, searchPrefix),
 					v.LastModifiedTime(),
 					*v.ContentLength,
 					v.ContentMD5(),
