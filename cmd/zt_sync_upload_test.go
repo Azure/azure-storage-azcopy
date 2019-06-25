@@ -43,7 +43,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 
 		// set up the destination container with a single blob
 		dstBlobName := srcFileName
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName})
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up interceptor
@@ -134,7 +134,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIdenticalDestination(c *chk.C) {
 	defer deleteContainer(c, containerURL)
 
 	// wait for 1 second so that the last modified times of the blobs are guaranteed to be newer
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList, blockBlobDefaultData)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -175,8 +175,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithMismatchedDestination(c *chk.C) 
 	extraBlobs := []string{"extraFile1.pdf, extraFile2.txt"}
 	containerURL, containerName := createNewContainer(c, bsu)
 	defer deleteContainer(c, containerURL)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList[0:len(fileList)/2])
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, extraBlobs)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, fileList[0:len(fileList)/2], blockBlobDefaultData)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, extraBlobs, blockBlobDefaultData)
 	expectedOutput := fileList[len(fileList)/2:]
 
 	// set up interceptor

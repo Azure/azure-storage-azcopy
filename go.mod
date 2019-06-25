@@ -12,6 +12,9 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jiacfan/keychain v0.0.0-20180920053336-f2c902a3d807
 	github.com/jiacfan/keyctl v0.0.0-20160328205232-988d05162bc5
+	github.com/kr/pretty v0.1.0
+	github.com/kr/text v0.1.0
+	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149 // indirect
 	github.com/minio/minio-go v6.0.12+incompatible
 	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect

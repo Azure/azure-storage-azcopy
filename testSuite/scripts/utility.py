@@ -42,7 +42,7 @@ class Command(object):
             # iterating through all the values in dict and combining them.
         if len(self.flags) > 0:
             for key, value in self.flags.items():
-                command += " --" + key + "=" + '"' + value + '"'
+                command += " --" + key + "=" + '"' + str(value) + '"'
         return command
 
     # this api is used to execute a azcopy copy command.
@@ -408,7 +408,10 @@ def create_test_html_file(filename):
 
 # creates a dir with given inside test directory
 def create_test_dir(dir_name):
+    # If the directory exists, remove it.
     dir_path = os.path.join(test_directory_path, dir_name)
+    if os.path.isdir(dir_path):
+        shutil.rmtree(dir_path)
     try:
         os.mkdir(dir_path)
     except:

@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"time"
@@ -41,6 +42,7 @@ type blobFSUploader struct {
 	pacer               *pacer
 	md5Channel          chan []byte
 	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
+	flushThreshold      int64
 }
 
 func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
@@ -138,6 +140,8 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
 	jptm := u.jptm
 
+	u.flushThreshold = int64(u.chunkSize * ADLSFlushThreshold)
+
 	h := jptm.BfsDstData(state.LeadingBytes)
 	u.creationTimeHeaders = &h
 	// Create file with the source size
@@ -174,17 +178,24 @@ func (u *blobFSUploader) Epilogue() {
 
 	// flush
 	if jptm.TransferStatus() > 0 {
+		ss := jptm.Info().SourceSize
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			//Type assertions aren't my favorite thing to do but it does work when you need it to.
-			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash, *u.creationTimeHeaders)
-			if err != nil {
-				jptm.FailActiveUpload("Flushing data", err)
-				// don't return, since need cleanup below
+			// Flush incrementally to avoid timeouts on a full flush
+			for i := int64(math.Min(float64(ss), float64(u.flushThreshold))); ; i = int64(math.Min(float64(ss), float64(i+u.flushThreshold))) {
+				// Close only at the end of the file, keep all uncommitted data before then.
+				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders, i != ss, i == ss)
+				if err != nil {
+					jptm.FailActiveUpload("Flushing data", err)
+					break // don't return, since need cleanup below
+				}
+
+				if i == ss {
+					break
+				}
 			}
 		} else {
-			jptm.FailActiveUpload("Getting hash", errNoHash)
-			// don't return, since need cleanup below
+			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
 

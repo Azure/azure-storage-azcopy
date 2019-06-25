@@ -42,7 +42,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 
 		// set up the destination container with a single blob
 		dstBlobName := "whatever"
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName})
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up interceptor
