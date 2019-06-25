@@ -154,7 +154,11 @@ Note that, to be authorized to your Azure Storage account, you must assign your 
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
 Please refer to the examples for more information.`
 
-const loginCmdExample = `Log in interactively with default AAD tenant ID set to common:
+const loginCmdExample = `--NOTICE FOR SETTING ENVIRONMENT VARIABLES:--
+Bear in mind that setting a environment variable from the command line will be readable in your command line history.
+Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.
+
+Log in interactively with default AAD tenant ID set to common:
 - azcopy login
 
 Log in interactively with a specified tenant ID:
@@ -172,18 +176,15 @@ Log in using a VM's user-assigned identity with an Object ID of the service iden
 Log in using a VM's user-assigned identity with a Resource ID of the service identity:
 - azcopy login --identity --identity-resource-id "/subscriptions/<subscriptionId>/resourcegroups/myRG/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myID"
 
---NOTICE FOR THE FOLLOWING EXAMPLES:--
-Bear in mind that setting a environment variable from the command line will be readable in your command line history (on Windows).
-Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.
-
 Log in as a service principal using a client secret:
-- AZCOPY_SPA_CLIENT_SECRET=secret
+- Set the environment variable AZCOPY_SPA_CLIENT_SECRET to the client secret for secret based service principal auth
 - azcopy login --service-principal
 
 Log in as a service principal using a certificate & password:
-- AZCOPY_SPA_CERT_PASSWORD=password
+- Set the environment variable AZCOPY_SPA_CERT_PASSWORD to the certificate's password for cert based service principal auth
 - azcopy login --service-principal --certificate-path /path/to/my/cert
-
+Please treat /path/to/my/cert as a path to a PEM or PKCS12 file-- AzCopy does not reach into the system cert store to obtain your certificate.
+--certificate-path is mandatory when doing cert-based service principal auth.
 `
 
 // ===================================== LOGOUT COMMAND ===================================== //
