@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // concatenates a slice of const values with the specified separator between each item
@@ -405,6 +406,31 @@ type Path struct {
 	Owner       *string `json:"owner,omitempty"`
 	Group       *string `json:"group,omitempty"`
 	Permissions *string `json:"permissions,omitempty"`
+}
+
+func (p Path) LastModifiedTime() time.Time {
+	if p.LastModified == nil {
+		return time.Time{}
+	}
+
+	t, err := time.Parse(time.RFC1123, *p.LastModified)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return t
+}
+
+func (p Path) ContentMD5() []byte {
+	if p.ContentMD5Base64 == nil {
+		return nil
+	}
+
+	md5, err := base64.StdEncoding.DecodeString(*p.ContentMD5Base64)
+	if err != nil {
+		return nil
+	}
+	return md5
 }
 
 // PathCreateResponse ...

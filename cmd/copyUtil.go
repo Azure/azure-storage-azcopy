@@ -372,6 +372,11 @@ func (util copyHandlerUtil) getContainerUrl(blobParts azblob.BlobURLParts) url.U
 	return blobParts.URL()
 }
 
+func (util copyHandlerUtil) getFilesystemUrl(parts azbfs.BfsURLParts) url.URL {
+	parts.DirectoryOrFilePath = ""
+	return parts.URL()
+}
+
 func (util copyHandlerUtil) blobNameFromUrl(blobParts azblob.BlobURLParts) string {
 	return blobParts.BlobName
 }

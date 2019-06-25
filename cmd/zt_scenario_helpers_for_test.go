@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -135,6 +136,28 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+	return
+}
+
+func (scenarioHelper) generateCommonRemoteScenarioForBlobFS(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (pathList []string) {
+	pathList = make([]string, 50)
+
+	for i := 0; i < 10; i++ {
+		_, pathName1 := createNewBfsFile(c, filesystemURL, prefix+"top")
+		_, pathName2 := createNewBfsFile(c, filesystemURL, prefix+"sub1/")
+		_, pathName3 := createNewBfsFile(c, filesystemURL, prefix+"sub2/")
+		_, pathName4 := createNewBfsFile(c, filesystemURL, prefix+"sub1/sub3/sub5")
+		_, pathName5 := createNewBfsFile(c, filesystemURL, prefix+specialNames[i])
+
+		pathList[5*i] = pathName1
+		pathList[5*i+1] = pathName2
+		pathList[5*i+2] = pathName3
+		pathList[5*i+3] = pathName4
+		pathList[5*i+4] = pathName5
+	}
+
+	// sleep a bit so that the paths' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1500)
 	return
 }
@@ -319,6 +342,25 @@ func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.Share
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
 	time.Sleep(time.Millisecond * 1500)
+}
+
+func (scenarioHelper) generateBFSPathsFromList(c *chk.C, filesystemURL azbfs.FileSystemURL, fileList []string) {
+	for _, path := range fileList {
+		file := filesystemURL.NewRootDirectoryURL().NewFileURL(path)
+
+		// Create the file
+		cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+		c.Assert(err, chk.IsNil)
+		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+		aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+		c.Assert(err, chk.IsNil)
+		c.Assert(aResp.StatusCode(), chk.Equals, 202)
+
+		fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+		c.Assert(err, chk.IsNil)
+		c.Assert(fResp.StatusCode(), chk.Equals, 200)
+	}
 }
 
 // Golang does not have sets, so we have to use a map to fulfill the same functionality

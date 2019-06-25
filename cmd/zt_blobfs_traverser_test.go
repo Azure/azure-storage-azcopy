@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © 2019 Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,34 +21,22 @@
 package cmd
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
-type genericTraverserSuite struct{}
+type bfsTraverserSuite struct{}
 
-var _ = chk.Suite(&genericTraverserSuite{})
+var _ = chk.Suite(&bfsTraverserSuite{})
 
 // validate traversing a single Blob, a single Azure File, and a single local file
 // compare that the traversers get consistent results
-func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, shareURL)
-
+func (s *bfsTraverserSuite) TestBfsTraverserWithSingleObject(c *chk.C) {
 	bfsu := getBFSU()
 	filesystemURL, _ := createNewFilesystem(c, bfsu)
 	defer deleteFilesystem(c, filesystemURL)
@@ -57,7 +45,6 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
 		// set up the container with a single blob
 		blobList := []string{storedObjectName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 
 		// set up the directory as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -72,43 +59,6 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		err := localTraverser.traverse(localDummyProcessor.process, nil)
 		c.Assert(err, chk.IsNil)
 		c.Assert(len(localDummyProcessor.record), chk.Equals, 1)
-
-		// construct a blob traverser
-		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		blobTraverser := newBlobTraverser(&rawBlobURLWithSAS, p, ctx, false, func() {})
-
-		// invoke the blob traversal with a dummy processor
-		blobDummyProcessor := dummyProcessor{}
-		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, 1)
-
-		// assert the important info are correct
-		c.Assert(localDummyProcessor.record[0].name, chk.Equals, blobDummyProcessor.record[0].name)
-		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, blobDummyProcessor.record[0].relativePath)
-
-		// Azure File cannot handle names with '/' in them
-		if !strings.Contains(storedObjectName, "/") {
-			// set up the Azure Share with a single file
-			fileList := []string{storedObjectName}
-			scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
-
-			// construct an Azure file traverser
-			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
-			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, func() {})
-
-			// invoke the file traversal with a dummy processor
-			fileDummyProcessor := dummyProcessor{}
-			err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
-			c.Assert(err, chk.IsNil)
-			c.Assert(len(fileDummyProcessor.record), chk.Equals, 1)
-
-			c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, fileDummyProcessor.record[0].relativePath)
-			c.Assert(localDummyProcessor.record[0].name, chk.Equals, fileDummyProcessor.record[0].name)
-		}
 
 		// set up the filesystem with a single file
 		bfsList := []string{storedObjectName}
@@ -133,28 +83,13 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 // validate traversing a container, a share, and a local directory containing the same objects
 // compare that traversers get consistent results
-func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, shareURL)
-
+func (s *bfsTraverserSuite) TestBfsTraverserContainerAndLocalDirectory(c *chk.C) {
 	bfsu := getBFSU()
 	filesystemURL, _ := createNewFilesystem(c, bfsu)
 	defer deleteFilesystem(c, filesystemURL)
 
-	// set up the container with numerous blobs
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
-	c.Assert(containerURL, chk.NotNil)
-
-	// set up an Azure File Share with the same files
-	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
-
 	// set up a filesystem with the same files
-	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlobFS(c, filesystemURL, "")
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
@@ -170,27 +105,6 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		err := localTraverser.traverse(localIndexer.store, nil)
 		c.Assert(err, chk.IsNil)
 
-		// construct a blob traverser
-		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-		blobTraverser := newBlobTraverser(&rawContainerURLWithSAS, p, ctx, isRecursiveOn, func() {})
-
-		// invoke the local traversal with a dummy processor
-		blobDummyProcessor := dummyProcessor{}
-		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-
-		// construct an Azure File traverser
-		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
-
-		// invoke the file traversal with a dummy processor
-		fileDummyProcessor := dummyProcessor{}
-		err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-
 		// construct a directory URL and pipeline
 		accountName, accountKey := getAccountAndKey()
 		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
@@ -201,11 +115,8 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
 
-		// make sure the results are the same
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		for _, storedObject := range append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...) {
+		for _, storedObject := range bfsDummyProcessor.record {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 			c.Assert(present, chk.Equals, true)
@@ -220,29 +131,15 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 // validate traversing a virtual and a local directory containing the same objects
 // compare that blob and local traversers get consistent results
-func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk.C) {
-	bsu := getBSU()
-	containerURL, containerName := createNewContainer(c, bsu)
-	defer deleteContainer(c, containerURL)
-
-	fsu := getFSU()
-	shareURL, shareName := createNewAzureShare(c, fsu)
-	defer deleteShare(c, shareURL)
-
+func (s *bfsTraverserSuite) TestBfsTraverserWithVirtualAndLocalDirectory(c *chk.C) {
 	bfsu := getBFSU()
 	filesystemURL, _ := createNewFilesystem(c, bfsu)
 	defer deleteFilesystem(c, filesystemURL)
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
-	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
-	c.Assert(containerURL, chk.NotNil)
-
-	// set up an Azure File Share with the same files
-	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, fileList)
-
 	// set up the filesystem with the same files
-	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
+	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlobFS(c, filesystemURL, virDirName+"/")
 
 	// set up the destination with a folder that have the exact same files
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -259,42 +156,18 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		err := localTraverser.traverse(localIndexer.store, nil)
 		c.Assert(err, chk.IsNil)
 
-		// construct a blob traverser
-		ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-		p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-		rawVirDirURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, virDirName)
-		blobTraverser := newBlobTraverser(&rawVirDirURLWithSAS, p, ctx, isRecursiveOn, func() {})
-
-		// invoke the local traversal with a dummy processor
-		blobDummyProcessor := dummyProcessor{}
-		err = blobTraverser.traverse(blobDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-
-		// construct an Azure File traverser
-		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
-		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
-
-		// invoke the file traversal with a dummy processor
-		fileDummyProcessor := dummyProcessor{}
-		err = azureFileTraverser.traverse(fileDummyProcessor.process, nil)
-		c.Assert(err, chk.IsNil)
-
 		// construct a filesystem URL & pipeline
 		accountName, accountKey := getAccountAndKey()
 		bfsPipeline := azbfs.NewPipeline(azbfs.NewSharedKeyCredential(accountName, accountKey), azbfs.PipelineOptions{})
-		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().NewDirectoryURL(virDirName + "/").URL() // Service treats this as an individual file without a slash for some reason...
+		rawFilesystemURL := filesystemURL.NewRootDirectoryURL().NewDirectoryURL(virDirName + "/").URL()
 
 		// construct and run a FS traverser
 		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
 
-		// make sure the results are the same
-		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		for _, storedObject := range append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...) {
+		for _, storedObject := range bfsDummyProcessor.record {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 			c.Assert(present, chk.Equals, true)
