@@ -262,6 +262,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 
 	if path.Ext(certPath) == ".pfx" || path.Ext(certPath) == ".pkcs12" || path.Ext(certPath) == ".p12" {
 		pk, cert, err = pkcs12.Decode(certData, certPass)
+
 		if err != nil {
 			return nil, err
 		}
@@ -271,6 +272,26 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		for len(rest) != 0 || pk == nil || cert == nil {
 			if block != nil {
 				switch block.Type {
+				case "ENCRYPTED PRIVATE KEY":
+					if x509.IsEncryptedPEMBlock(block) {
+						data, err := x509.DecryptPEMBlock(block, []byte(certPass))
+
+						if err == nil {
+							pk, err = x509.ParsePKCS8PrivateKey(data)
+
+							if err != nil {
+								return nil, fmt.Errorf("private key has invalid format")
+							}
+						} else {
+							return nil, fmt.Errorf("encrypted private key has invalid format")
+						}
+					}
+				case "RSA PRIVATE KEY":
+					pk, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+
+					if err != nil {
+						return nil, fmt.Errorf("rsa private key has invalid format")
+					}
 				case "PRIVATE KEY":
 					pk, err = x509.ParsePKCS8PrivateKey(block.Bytes)
 
