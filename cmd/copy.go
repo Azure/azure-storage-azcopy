@@ -887,6 +887,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		err = e.enumerate()
+	case common.EFromTo.BlobFSTrash():
+		msg, err := removeBfsResource(cca)
+		if err == nil {
+			glcm.Exit(func(format common.OutputFormat) string {
+				return msg
+			}, common.EExitCode.Success())
+		}
+
+		return err
+
 	case common.EFromTo.BlobBlob():
 		e := copyS2SMigrationBlobEnumerator{
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{

@@ -206,9 +206,9 @@ const makeCmdExample = `
 `
 
 // ===================================== REMOVE COMMAND ===================================== //
-const removeCmdShortDescription = "Delete blobs or files from Azure Storage"
+const removeCmdShortDescription = "Delete entities from Azure Storage Blob/File/ADLS Gen2"
 
-const removeCmdLongDescription = `Delete blobs or files from Azure Storage.`
+const removeCmdLongDescription = `Delete entities from Azure Storage Blob/File/ADLS Gen2.`
 
 const removeCmdExample = `
 Remove a single blob with SAS:
@@ -225,6 +225,12 @@ Remove a subset of blobs in a virtual directory (ex: only jpg and pdf files, or 
 
 Remove an entire virtual directory but exclude certain blobs from the scope (ex: every blob that starts with foo or ends with bar):
   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
+
+Remove a single file from ADLS Gen2 (include/exclude not supported):
+  - azcopy rm "https://[account].dfs.core.windows.net/[container]/[path/to/file]?[SAS]"
+
+Remove a single directory from ADLS Gen2 (include/exclude not supported):
+  - azcopy rm "https://[account].dfs.core.windows.net/[container]/[path/to/directory]?[SAS]"
 `
 
 // ===================================== SYNC COMMAND ===================================== //
