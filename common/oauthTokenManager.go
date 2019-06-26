@@ -350,11 +350,16 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		return nil, fmt.Errorf("please supply either a .pfx, .pkcs12, .p12, or a .pem file containing a private key and a certificate")
 	}
 
+	p, ok := pk.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("only RSA private keys are supported")
+	}
+
 	spt, err := adal.NewServicePrincipalTokenFromCertificate(
 		*oauthConfig,
 		applicationID,
 		cert,
-		pk.(*rsa.PrivateKey),
+		p,
 		Resource,
 	)
 	if err != nil {
