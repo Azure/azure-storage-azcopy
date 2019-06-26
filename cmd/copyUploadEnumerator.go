@@ -30,6 +30,10 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return fmt.Errorf("cannot find source to upload")
 	}
 
+	// If the user specifies a virtual directory, (ex: /container/extra_path)
+	// we should add the extra path as a prefix to the destination.
+	cleanContainerPath := destinationURL.Path
+
 	// when a single file is being uploaded, we need to treat this case differently, as the destinationURL might be a blob
 	if len(listOfFilesAndDirectories) == 1 {
 		f, err := os.Stat(listOfFilesAndDirectories[0])
@@ -45,7 +49,7 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 				return fmt.Errorf("for the use of include flag, source needs to be a directory")
 			}
 			// append file name as blob name in case the given URL is a container
-			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrShare(destinationURL)) ||
+			if (e.FromTo == common.EFromTo.LocalBlob() && util.urlIsContainerOrVirtualDirectory(destinationURL)) ||
 				(e.FromTo == common.EFromTo.LocalFile() && util.urlIsAzureFileDirectory(ctx, destinationURL)) {
 				destinationURL.Path = util.generateObjectPath(destinationURL.Path, f.Name())
 			}
@@ -77,10 +81,6 @@ func (e *copyUploadEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			return e.dispatchFinalPart(cca)
 		}
 	}
-	// if the user specifies a virtual directory ex: /container_name/extra_path
-	// then we should extra_path as a prefix while uploading
-	// temporarily save the path of the container
-	cleanContainerPath := destinationURL.Path
 
 	// If the user has provided the listofFiles explicitly to copy, there is no
 	// need to glob the source and match the patterns.

@@ -34,8 +34,8 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 var once sync.Once
@@ -111,7 +111,7 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 				},
 			})
 
-		isContainer := copyHandlerUtil{}.urlIsContainerOrShare(resourceURL)
+		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL)
 		isPublicResource := false
 
 		if isContainer {
