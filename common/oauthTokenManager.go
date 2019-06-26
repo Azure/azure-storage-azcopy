@@ -24,11 +24,11 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/mattn/go-ieproxy"
 	"io"
 	"io/ioutil"
 	"net"
@@ -39,6 +39,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-ieproxy"
 
 	"golang.org/x/crypto/pkcs12"
 
@@ -188,6 +190,8 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 		return nil, err
 	}
 
+	// Due to the nature of SPA, no refresh token is given.
+	// Thus, no refresh token is copied or needed.
 	oAuthTokenInfo.Token = spt.Token()
 	oAuthTokenInfo.ApplicationID = applicationID
 	oAuthTokenInfo.ServicePrincipalName = true
@@ -224,7 +228,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*ada
 	}
 }
 
-func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
+func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, defaultCert int) (*OAuthTokenInfo, error) {
 	if tenantID == "" {
 		tenantID = DefaultTenantID
 	}
@@ -254,8 +258,9 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 
 	var pk interface{}
 	var cert *x509.Certificate
+	var certs []*x509.Certificate
 
-	if path.Ext(certPath) == ".pfx" {
+	if path.Ext(certPath) == ".pfx" || path.Ext(certPath) == ".pkcs12" || path.Ext(certPath) == ".p12" {
 		pk, cert, err = pkcs12.Decode(certData, certPass)
 		if err != nil {
 			return nil, err
@@ -264,31 +269,64 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		block, rest := pem.Decode(certData)
 
 		for len(rest) != 0 || pk == nil || cert == nil {
-			switch block.Type {
-			case "PRIVATE KEY":
-				pk, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+			if block != nil {
+				switch block.Type {
+				case "PRIVATE KEY":
+					pk, err = x509.ParsePKCS8PrivateKey(block.Bytes)
 
-				if err != nil {
-					return nil, fmt.Errorf("private key has invalid format")
-				}
-			case "CERTIFICATE":
-				cert, err = x509.ParseCertificate(block.Bytes)
+					if err != nil {
+						return nil, fmt.Errorf("private key has invalid format")
+					}
+				case "CERTIFICATE":
+					tmpcert, err := x509.ParseCertificate(block.Bytes)
 
-				if err != nil {
-					return nil, fmt.Errorf("certificate has invalid format")
+					// Skip this certificate if it's invalid or is a CA cert
+					if err == nil && !tmpcert.IsCA {
+						cert = tmpcert
+						certs = append(certs, tmpcert)
+					}
+				default:
+					// Ignore this part of the pem file, don't know what it is.
 				}
-			default:
-				return nil, fmt.Errorf("field " + block.Type + " not expected")
+			} else {
+				break
 			}
 
-			if len(rest) == 0 && (pk == nil || cert == nil) {
-				return nil, fmt.Errorf("could not find the required information (private key & certificate) in the supplied .pem file")
+			if len(rest) == 0 {
+				break
 			}
 
 			block, rest = pem.Decode(rest)
 		}
+
+		if len(rest) == 0 {
+			if len(certs) > 1 {
+				// Multiple non-CA certs. Use LCM to send a prompt.
+				prompt := "Multiple non-CA certificates were found within the supplied PEM file. Please select the signature you would like to use.\n"
+				for k, v := range certs {
+					prompt += fmt.Sprintf("%d: %s\n", k+1, hex.EncodeToString(v.Signature))
+				}
+				prompt += fmt.Sprintf("Which signature would you like to use? [1-%d]: ", len(certs))
+
+				defaultCert, err = strconv.Atoi(lcm.Prompt(prompt))
+				for defaultCert == -1 {
+					if err != nil {
+						continue
+					}
+
+					// Repeatedly prompt until a valid answer is given.
+					defaultCert, err = strconv.Atoi(lcm.Prompt(fmt.Sprintf("Which signature would you like to use? [1-%d]: ", len(certs))))
+				}
+			} else if len(certs) < 1 { // We've already set cert during the search. No need to do it again.
+				return nil, fmt.Errorf("could not find the required information (certificate) in the supplied .pem file")
+			}
+
+			if pk == nil {
+				return nil, fmt.Errorf("could not find the required information (private key) in the supplied .pem file")
+			}
+		}
 	} else {
-		return nil, fmt.Errorf("please supply either a .pfx or a .pem file containing a private key and a certificate")
+		return nil, fmt.Errorf("please supply either a .pfx, .pkcs12, .p12, or a .pem file containing a private key and a certificate")
 	}
 
 	spt, err := adal.NewServicePrincipalTokenFromCertificate(
@@ -314,8 +352,9 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 	oAuthTokenInfo.ApplicationID = applicationID
 	oAuthTokenInfo.ServicePrincipalName = true
 	oAuthTokenInfo.SPNInfo = SPNInfo{
-		Secret:   certPass,
-		CertPath: cpfq,
+		Secret:      certPass,
+		CertPath:    cpfq,
+		DefaultCert: defaultCert, // Save the default cert so we never ask again, turning this into a non-interactive login.
 	}
 
 	return &oAuthTokenInfo, nil
@@ -323,7 +362,9 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 
 //CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
-	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
+	// TODO: Global default cert flag for true non interactive login?
+	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
+	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID, -1)
 
 	if persist && err == nil {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
@@ -337,7 +378,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 
 //GetNewTokenFromCert refreshes a token manually from a certificate.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromCert(ctx context.Context) (*adal.Token, error) {
-	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID, credInfo.SPNInfo.DefaultCert)
 
 	if err != nil {
 		return nil, err
@@ -537,11 +578,14 @@ type IdentityInfo struct {
 	MSIResID string `json:"_identity_msi_res_id"`
 }
 
-//SPNInfo contains info for authenticating with Service Principle Names
+// SPNInfo contains info for authenticating with Service Principal Names
 type SPNInfo struct {
-	//Secret is used for two purposes: The certificate secret, and a client secret.
-	Secret   string `json:"_spn_secret"`
-	CertPath string `json:"_spn_cert_path"`
+	// Secret is used for two purposes: The certificate secret, and a client secret.
+	// The secret is persisted to the JSON file because AAD does not issue a refresh token.
+	// Thus, the original secret is needed to refresh.
+	Secret      string `json:"_spn_secret"`
+	CertPath    string `json:"_spn_cert_path"`
+	DefaultCert int    `json:"_spn_default_cert`
 }
 
 // Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
