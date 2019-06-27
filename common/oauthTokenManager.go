@@ -150,7 +150,7 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 	return oAuthTokenInfo, nil
 }
 
-//secretLoginNoUOTM non-interactively logs in with a client secret.
+// secretLoginNoUOTM non-interactively logs in with a client secret.
 func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID string) (*OAuthTokenInfo, error) {
 	if tenantID == "" {
 		tenantID = DefaultTenantID
@@ -202,7 +202,7 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 	return &oAuthTokenInfo, nil
 }
 
-//SecretLogin is a UOTM shell for secretLoginNoUOTM.
+// SecretLogin is a UOTM shell for secretLoginNoUOTM.
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (*OAuthTokenInfo, error) {
 	oAuthTokenInfo, err := secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID)
 
@@ -216,7 +216,7 @@ func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint
 	return oAuthTokenInfo, nil
 }
 
-//GetNewTokenFromSecret is a refresh shell for secretLoginNoUOTM
+// GetNewTokenFromSecret is a refresh shell for secretLoginNoUOTM
 func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*adal.Token, error) {
 	tokeninfo, err := secretLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
 
@@ -225,6 +225,31 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*ada
 	} else {
 		return &tokeninfo.Token, nil
 	}
+}
+
+// Read a potentially encrypted PKCS block
+func readPKCSBlock(block *pem.Block, secret []byte, parseFunc func([]byte) (interface{}, error)) (pk interface{}, err error) {
+	// Reduce code duplication by baking the parse functions into this
+	if x509.IsEncryptedPEMBlock(block) {
+		data, err := x509.DecryptPEMBlock(block, secret)
+
+		if err == nil {
+			pk, err = parseFunc(data)
+
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		pk, err = parseFunc(block.Bytes)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+	return pk, err
 }
 
 func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
@@ -271,30 +296,26 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 			if block != nil {
 				switch block.Type {
 				case "ENCRYPTED PRIVATE KEY":
-					if x509.IsEncryptedPEMBlock(block) {
-						data, err := x509.DecryptPEMBlock(block, []byte(certPass))
+					pk, err = readPKCSBlock(block, []byte(certPass), x509.ParsePKCS8PrivateKey)
 
-						if err == nil {
-							pk, err = x509.ParsePKCS8PrivateKey(data)
-
-							if err != nil {
-								return nil, fmt.Errorf("private key has invalid format")
-							}
-						} else {
-							return nil, fmt.Errorf("encrypted private key has invalid format")
-						}
+					if err != nil {
+						return nil, fmt.Errorf("encrypted private key block has invalid format OR your cert password may be incorrect")
 					}
 				case "RSA PRIVATE KEY":
-					pk, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+					pkcs1wrap := func(d []byte) (pk interface{}, err error) {
+						return x509.ParsePKCS1PrivateKey(d) // Wrap this so that function signatures agree.
+					}
+
+					pk, err = readPKCSBlock(block, []byte(certPass), pkcs1wrap)
 
 					if err != nil {
-						return nil, fmt.Errorf("rsa private key has invalid format")
+						return nil, fmt.Errorf("rsa private key block has invalid format OR your cert password may be incorrect")
 					}
 				case "PRIVATE KEY":
-					pk, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+					pk, err = readPKCSBlock(block, []byte(certPass), x509.ParsePKCS8PrivateKey)
 
 					if err != nil {
-						return nil, fmt.Errorf("private key has invalid format")
+						return nil, fmt.Errorf("private key block has invalid format")
 					}
 				case "CERTIFICATE":
 					tmpcert, err := x509.ParseCertificate(block.Bytes)
@@ -318,7 +339,8 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		}
 
 		if pk == nil || cert == nil {
-			return nil, fmt.Errorf("could not find the required information (private key) in the supplied .pem file")
+			fmt.Println(pk == nil, cert == nil)
+			return nil, fmt.Errorf("could not find the required information (private key & cert) in the supplied .pem file")
 		}
 	} else {
 		return nil, fmt.Errorf("please supply either a .pfx, .pkcs12, .p12, or a .pem file containing a private key and a certificate")
