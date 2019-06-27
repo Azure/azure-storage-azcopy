@@ -15,10 +15,8 @@
 
 1. Enabled copying from page/block/append blob to another blob of a different type
 1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
-
-### New features
-
 1. Service Principal Authentication is now available under `azcopy login`-- check `azcopy env` for details on client secrets/cert passwords. 
+1. SAS tokens are supported on HNS (Hierarchical Namespace/Azure Data Lake Generation 2) Storage Accounts
 
 ## Version 10.1.2
 

@@ -239,16 +239,21 @@ func cleanFile(fileURLStr string) {
 	}
 }
 
-func createBlobFSPipeline() pipeline.Pipeline {
+func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
 	// Get the Account Name and Key variables from environment
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
+	bfsURLParts := azbfs.NewBfsURLParts(u)
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if name == "" || key == "" {
-		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before cleaning the file system")
+	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
 		os.Exit(1)
 	}
 	// create the blob fs pipeline
+	if bfsURLParts.SAS.Encode() != "" {
+		return azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	}
+
 	c := azbfs.NewSharedKeyCredential(name, key)
 	return azbfs.NewPipeline(c, azbfs.PipelineOptions{})
 }
@@ -262,7 +267,7 @@ func cleanFileSystem(fsURLStr string) {
 		os.Exit(1)
 	}
 
-	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline())
+	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline(*u))
 	_, err = fsURL.Delete(ctx)
 	if err != nil {
 		sErr := err.(azbfs.StorageError)
@@ -291,7 +296,7 @@ func cleanBfsFile(fileURLStr string) {
 		os.Exit(1)
 	}
 
-	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline())
+	fileURL := azbfs.NewFileURL(*u, createBlobFSPipeline(*u))
 	_, err = fileURL.Delete(ctx)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("error deleting the blob FS file, %v", err))

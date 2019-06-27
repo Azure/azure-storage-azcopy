@@ -74,7 +74,7 @@ func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialT
 
 	switch cma.resourceLocation {
 	case common.ELocation.BlobFS():
-		if credentialType, err = getBlobFSCredentialType(); err != nil {
+		if credentialType, err = getBlobFSCredentialType(ctx, cma.resourceURL.String(), false); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.ELocation.Blob():
