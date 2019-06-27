@@ -1,7 +1,8 @@
 module github.com/Azure/azure-storage-azcopy
 
 require (
-	github.com/Azure/azure-pipeline-go v0.1.9
+	// TODO: update pipleline to a new version tag rather than the branch commit, before merge this PR
+	github.com/Azure/azure-pipeline-go v0.1.10-0.20190627050904-93822ffd0d75
 	github.com/Azure/azure-storage-blob-go v0.6.0
 	github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a
 	github.com/Azure/go-autorest v10.15.2+incompatible
@@ -14,7 +15,7 @@ require (
 	github.com/jiacfan/keyctl v0.0.0-20160328205232-988d05162bc5
 	github.com/kr/pretty v0.1.0
 	github.com/kr/text v0.1.0
-	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149 // indirect
+	github.com/mattn/go-ieproxy v0.0.0-20190610004146-91bb50d98149
 	github.com/minio/minio-go v6.0.12+incompatible
 	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/spf13/cobra v0.0.3
