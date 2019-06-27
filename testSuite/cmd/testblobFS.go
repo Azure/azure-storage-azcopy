@@ -83,7 +83,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteFile() {
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
 	// If ACCOUNT_NAME or ACCOUNT_KEY is not supplied AND a SAS is not supplied
-	if (name != "" && key != "") && bfsURLParts.SAS.Encode() == "" {
+	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test, OR a SAS token should be supplied in the subject URL.")
 		os.Exit(1)
 	}
@@ -176,7 +176,7 @@ func (tbfsc TestBlobFSCommand) verifyRemoteDir() {
 	name := os.Getenv("ACCOUNT_NAME")
 	key := os.Getenv("ACCOUNT_KEY")
 	// If ACCOUNT_NAME or ACCOUNT_KEY is not supplied AND a SAS is not supplied
-	if (name != "" && key != "") && bfsURLParts.SAS.Encode() == "" {
+	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
 		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before executing the test, OR a SAS token should be supplied in the subject URL.")
 		os.Exit(1)
 	}
