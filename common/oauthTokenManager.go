@@ -339,7 +339,6 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 		}
 
 		if pk == nil || cert == nil {
-			fmt.Println(pk == nil, cert == nil)
 			return nil, fmt.Errorf("could not find the required information (private key & cert) in the supplied .pem file")
 		}
 	} else {
