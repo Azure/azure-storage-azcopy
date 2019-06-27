@@ -709,8 +709,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			Metadata:                 cca.metadata,
 			NoGuessMimeType:          cca.noGuessMimeType,
 			PreserveLastModifiedTime: cca.preserveLastModifiedTime,
-			PutMd5:              cca.putMd5,
-			MD5ValidationOption: cca.md5ValidationOption,
+			PutMd5:                   cca.putMd5,
+			MD5ValidationOption:      cca.md5ValidationOption,
 		},
 		// source sas is stripped from the source given by the user and it will not be stored in the part plan file.
 		SourceSAS: cca.sourceSAS,
@@ -766,7 +766,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
 		// (a) it also escapes spaces in the source (and we need that done) and
 		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.source, "sig"); redacted {
+		if redacted, _ := common.RedactSecretQueryParam(cca.source, common.SigAzure); redacted {
 			panic("SAS in BlobFS is not yet supported")
 		}
 		fromUrl, err := url.Parse(cca.source)
@@ -834,7 +834,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
 		// (a) it also escapes spaces in the destination (and we need that done) and
 		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.destination, "sig"); redacted {
+		if redacted, _ := common.RedactSecretQueryParam(cca.destination, common.SigAzure); redacted {
 			panic("SAS in BlobFS is not yet supported")
 		}
 		toUrl, err := url.Parse(cca.destination)
