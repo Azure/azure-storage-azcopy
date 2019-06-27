@@ -24,7 +24,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -228,7 +227,7 @@ func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*ada
 	}
 }
 
-func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, defaultCert int) (*OAuthTokenInfo, error) {
+func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
 	if tenantID == "" {
 		tenantID = DefaultTenantID
 	}
@@ -258,7 +257,6 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 
 	var pk interface{}
 	var cert *x509.Certificate
-	var certs []*x509.Certificate
 
 	if path.Ext(certPath) == ".pfx" || path.Ext(certPath) == ".pkcs12" || path.Ext(certPath) == ".p12" {
 		pk, cert, err = pkcs12.Decode(certData, certPass)
@@ -304,7 +302,6 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 					// Skip this certificate if it's invalid or is a CA cert
 					if err == nil && !tmpcert.IsCA {
 						cert = tmpcert
-						certs = append(certs, tmpcert)
 					}
 				default:
 					// Ignore this part of the pem file, don't know what it is.
@@ -320,31 +317,8 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 			block, rest = pem.Decode(rest)
 		}
 
-		if len(rest) == 0 {
-			if len(certs) > 1 {
-				// Multiple non-CA certs. Use LCM to send a prompt.
-				prompt := "Multiple non-CA certificates were found within the supplied PEM file. Please select the signature you would like to use.\n"
-				for k, v := range certs {
-					prompt += fmt.Sprintf("%d: %s\n", k+1, hex.EncodeToString(v.Signature))
-				}
-				prompt += fmt.Sprintf("Which signature would you like to use? [1-%d]: ", len(certs))
-
-				defaultCert, err = strconv.Atoi(lcm.Prompt(prompt))
-				for defaultCert == -1 {
-					if err != nil {
-						continue
-					}
-
-					// Repeatedly prompt until a valid answer is given.
-					defaultCert, err = strconv.Atoi(lcm.Prompt(fmt.Sprintf("Which signature would you like to use? [1-%d]: ", len(certs))))
-				}
-			} else if len(certs) < 1 { // We've already set cert during the search. No need to do it again.
-				return nil, fmt.Errorf("could not find the required information (certificate) in the supplied .pem file")
-			}
-
-			if pk == nil {
-				return nil, fmt.Errorf("could not find the required information (private key) in the supplied .pem file")
-			}
+		if pk == nil || cert == nil {
+			return nil, fmt.Errorf("could not find the required information (private key) in the supplied .pem file")
 		}
 	} else {
 		return nil, fmt.Errorf("please supply either a .pfx, .pkcs12, .p12, or a .pem file containing a private key and a certificate")
@@ -378,9 +352,8 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 	oAuthTokenInfo.ApplicationID = applicationID
 	oAuthTokenInfo.ServicePrincipalName = true
 	oAuthTokenInfo.SPNInfo = SPNInfo{
-		Secret:      certPass,
-		CertPath:    cpfq,
-		DefaultCert: defaultCert, // Save the default cert so we never ask again, turning this into a non-interactive login.
+		Secret:   certPass,
+		CertPath: cpfq,
 	}
 
 	return &oAuthTokenInfo, nil
@@ -390,7 +363,7 @@ func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, appl
 func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
 	// TODO: Global default cert flag for true non interactive login?
 	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
-	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID, -1)
+	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
 
 	if persist && err == nil {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
@@ -404,7 +377,7 @@ func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, 
 
 //GetNewTokenFromCert refreshes a token manually from a certificate.
 func (credInfo *OAuthTokenInfo) GetNewTokenFromCert(ctx context.Context) (*adal.Token, error) {
-	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID, credInfo.SPNInfo.DefaultCert)
+	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
 
 	if err != nil {
 		return nil, err
@@ -609,9 +582,8 @@ type SPNInfo struct {
 	// Secret is used for two purposes: The certificate secret, and a client secret.
 	// The secret is persisted to the JSON file because AAD does not issue a refresh token.
 	// Thus, the original secret is needed to refresh.
-	Secret      string `json:"_spn_secret"`
-	CertPath    string `json:"_spn_cert_path"`
-	DefaultCert int    `json:"_spn_default_cert`
+	Secret   string `json:"_spn_secret"`
+	CertPath string `json:"_spn_cert_path"`
 }
 
 // Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
