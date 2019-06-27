@@ -34,6 +34,9 @@ func (e *copyDownloadBlobFSEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 		return errors.New("cannot parse source URL")
 	}
 
+	// append the SAS query to the newly parsed URL
+	sourceURL = util.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+
 	// parse the given source URL into fsUrlParts, which separates the filesystem name and directory/file path
 	fsUrlParts := azbfs.NewBfsURLParts(*sourceURL)
 

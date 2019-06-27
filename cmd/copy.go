@@ -763,17 +763,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
-		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
-		// (a) it also escapes spaces in the source (and we need that done) and
-		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.source, "sig"); redacted {
-			panic("SAS in BlobFS is not yet supported")
-		}
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
 			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
 		}
 		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
+		cca.sourceSAS = bfsParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		bfsParts.SAS = azbfs.SASQueryParameters{}
 		bfsUrl := bfsParts.URL()
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 
@@ -831,17 +828,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fUrl := fileParts.URL()
 		cca.destination = fUrl.String()
 	case common.ELocation.BlobFS():
-		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
-		// (a) it also escapes spaces in the destination (and we need that done) and
-		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.destination, "sig"); redacted {
-			panic("SAS in BlobFS is not yet supported")
-		}
 		toUrl, err := url.Parse(cca.destination)
 		if err != nil {
 			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
 		}
 		bfsParts := azbfs.NewBfsURLParts(*toUrl)
+		cca.destinationSAS = bfsParts.SAS.Encode()
+		jobPartOrder.DestinationSAS = cca.destinationSAS
+		bfsParts.SAS = azbfs.SASQueryParameters{}
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():

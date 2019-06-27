@@ -136,10 +136,23 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 
 // getBlobFSCredentialType is used to get BlobFS's credential type when user wishes to use OAuth session mode.
 // The verification logic follows following rules:
-// 1. If there is cached session OAuth token, indicating using token credential.
-// 2. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
-// 3. Otherwise use shared key.
-func getBlobFSCredentialType() (common.CredentialType, error) {
+// 1. Check if there is a SAS query appended to the URL
+// 2. If there is cached session OAuth token, indicating using token credential.
+// 3. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
+// 4. Otherwise use shared key.
+func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standaloneSAS bool) (common.CredentialType, error) {
+	resourceURL, err := url.Parse(blobResourceURL)
+	if err != nil {
+		return common.ECredentialType.Unknown(), err
+	}
+
+	//Give preference to explicitly supplied SAS tokens
+	sas := azbfs.NewBfsURLParts(*resourceURL).SAS
+
+	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
+		return common.ECredentialType.Anonymous(), nil
+	}
+
 	if oAuthTokenExists() {
 		return common.ECredentialType.OAuthToken(), nil
 	}
@@ -149,7 +162,7 @@ func getBlobFSCredentialType() (common.CredentialType, error) {
 	if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 		return common.ECredentialType.SharedKey(), nil
 	} else {
-		return common.ECredentialType.Unknown(), errors.New("OAuth token or shared key should be provided for Blob FS")
+		return common.ECredentialType.Unknown(), errors.New("OAuth token, SAS token, or shared key should be provided for Blob FS")
 	}
 }
 
@@ -237,8 +250,12 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		if credentialType, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
-	case common.EFromTo.LocalBlobFS(), common.EFromTo.BlobFSLocal():
-		if credentialType, err = getBlobFSCredentialType(); err != nil {
+	case common.EFromTo.LocalBlobFS():
+		if credentialType, err = getBlobFSCredentialType(ctx, raw.destination, raw.destinationSAS != ""); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
+	case common.EFromTo.BlobFSLocal():
+		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile():
