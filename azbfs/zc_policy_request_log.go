@@ -14,8 +14,8 @@ import (
 )
 
 // constants here, not in common, to avoid circular dependency. Alternative would be to not use the constants here in azbfs.
-const SigAzure = "sig"
-const SigXAmzForAws = "x-amz-signature"
+const SigAzure = "sig"                  // calling code expects this to be lower case
+const SigXAmzForAws = "x-amz-signature" // calling code expects this to be lower case
 
 // RequestLogOptions configures the retry policy's behavior.
 type RequestLogOptions struct {

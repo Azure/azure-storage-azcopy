@@ -1,4 +1,4 @@
-// Copyright Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,6 +22,8 @@ package common
 
 import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"regexp"
+	"strings"
 )
 
 // azCopyLogSanitizer performs string-replacement based log redaction
@@ -40,13 +42,62 @@ func NewAzCopyLogSanitizer() pipeline.LogSanitizer {
 	return &azCopyLogSanitizer{}
 }
 
+var sensitiveQueryStringKeys = []string{
+	strings.ToLower(SigAzure),
+	//omitted because covered by "signature" below strings.ToLower(SigXAmzForAws),
+	"signature", // covers both "signature" and x-amz-signature. The former may be used in AWS authorization headers. Not sure if we ever log those, but may as well redact them if we do
+	"token",     // seems worth removing in case something uses it one day (e.g. if we support a new backend)
+}
+
 // SanitizeLogLine removes credentials and credential-like strings that are expected to exist
 // in material logged by this application.
-// Note: it does not remove whole headers. Specifically, it does not remove
+// Note: it does not remove whole headers. Specifically, it does not remove the entire value of
 // Authorization headers.  Those are assumed to be removed by azure-pipeline-go.
-// It does however remove signatures of the type found in SAS tokens and AWS presigned URLs.
+// It does however remove signatures of the type found in SAS tokens and AWS presigned URLs,
+// plus several other things.
 // The implementation uses a 'to lower' of the raw string, because the alternative (of
 // using case-insensitive regexs) was surprisingly measured as 36 times slower in testing.
-func (s *azCopyLogSanitizer) SanitizeLogLine(raw string) string {
-	return raw // TODO implement
+func (s *azCopyLogSanitizer) SanitizeLogMessage(msg string) string {
+	lowerMsg := strings.ToLower(msg)
+
+	for _, key := range sensitiveQueryStringKeys {
+		// take a quick look, using contains, and then get fancy only if we
+		// find something in the quick look
+		if strings.Contains(lowerMsg, key) {
+			msg = s.redact(msg, key) // must redact from the real (original case) msg, not lowerMsg
+		}
+	}
+
+	return msg
+}
+
+func (s *azCopyLogSanitizer) redact(msg, key string) string {
+
+	// The leading and trailing '-' chars are not in our older redaction code (which will continue to run,
+	// at the point of logging requests etc.)
+	// By including the dashes here we can examine logs (if we ever want to)
+	// to see how many redactions are from here (with the -'s) and how many
+	// are from the old code (without -'s).
+	const redacted = "-REDACTED-"
+
+	return sensitiveRegexMap[key].ReplaceAllString(msg, "$1"+redacted)
+}
+
+// as per https://groups.google.com/forum/#!topic/golang-nuts/3FVAs9dPR8k, this map should be
+// safe for concurrent reads
+var sensitiveRegexMap = make(map[string]*regexp.Regexp)
+
+// init a map of pre-prepared regexes, one for each key
+func init() {
+	for _, key := range sensitiveQueryStringKeys {
+		// We don't care what's before the key (in a query string it will always be ? or &, but that's not
+		// the case in say, an auth header).
+		// Also, for flexibility and robustness we allow : or = as the delimiter, and allow space around it.
+		// We do ASSUME that the value to be redacted will never contain a &. We _think_
+		// that assumption is reasonably for all anticipated values. (Without that
+		// assumption, we'd have to redact query strings all the way to the end of the whole query string.)
+		// Regex has two groups: first gets key and delimiter.
+		// Second group gets as many chars as possible that do not terminate the value.
+		sensitiveRegexMap[key] = regexp.MustCompile("(?i)(?P<key>" + key + "[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)")
+	}
 }
