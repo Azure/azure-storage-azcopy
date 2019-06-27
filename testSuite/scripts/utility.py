@@ -214,6 +214,7 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     # set the filesystem url
     test_bfs_account_url = filesystem_url
     test_bfs_sas_account_url = filesystem_sas_url
+    # test_bfs_sas_account_url is the same place as test_bfs_sas_account_url in CI
     if not clean_test_filesystem(test_bfs_account_url):
         print("failed to clean test filesystem.")
     if not (test_bfs_account_url.endswith("/") and test_bfs_account_url.endwith("\\")):

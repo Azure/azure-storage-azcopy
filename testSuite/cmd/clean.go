@@ -245,8 +245,8 @@ func createBlobFSPipeline(u url.URL) pipeline.Pipeline {
 	key := os.Getenv("ACCOUNT_KEY")
 	bfsURLParts := azbfs.NewBfsURLParts(u)
 	// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
-	if (name != "" && key != "") && bfsURLParts.SAS.Encode() == "" {
-		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set before cleaning the file system")
+	if (name == "" && key == "") && bfsURLParts.SAS.Encode() == "" {
+		fmt.Println("ACCOUNT_NAME and ACCOUNT_KEY should be set, or a SAS token should be supplied before cleaning the file system")
 		os.Exit(1)
 	}
 	// create the blob fs pipeline

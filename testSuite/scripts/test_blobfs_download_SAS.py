@@ -7,9 +7,9 @@ class BlobFs_Download_SAS_User_Scenarios(unittest.TestCase):
     def setUp(self):
         self.cachedAzCopyOAuthTokenInfo = os.environ['AZCOPY_OAUTH_TOKEN_INFO']
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = ''
+        util.clean_test_filesystem(util.test_bfs_account_url)
         self.cachedAzCopyAccountKey = os.environ['ACCOUNT_KEY']
         os.environ['ACCOUNT_KEY'] = ''
-        util.clean_test_filesystem(util.test_bfs_sas_account_url)
 
     def tearDown(self):
         os.environ['AZCOPY_OAUTH_TOKEN_INFO'] = self.cachedAzCopyOAuthTokenInfo
