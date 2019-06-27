@@ -35,6 +35,10 @@ func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
 		expectedSanitized string
 	}{
 		{"string with no secrets", "string with no secrets"},
+
+		// DON'T redact if its not part of a name-value pair
+		{"This is the sig that I have and x=y", "This is the sig that I have and x=y"},
+
 		{"http://foo?sig=somevalue&x=y", "http://foo?sig=-REDACTED-&x=y"},                                         // remainder of query string is preserved
 		{"http://foo?x=y&" + SigAzure + "=somevalue", "http://foo?x=y&sig=-REDACTED-"},                            // basic case
 		{"http://foo?x=y&sig=somevalue\r\nBlah", "http://foo?x=y&sig=-REDACTED-\r\nBlah"},                         // newline after, case preserved in other text
@@ -47,6 +51,12 @@ func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
 		{"Signature = bar;Foo = x", "Signature = -REDACTED-;Foo = x"},                                             // not in a query string, with spaces
 		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                     // not in a query string
 		{"Foo : x, Signature : bar, Other: z", "Foo : x, Signature : -REDACTED-, Other: z"},                       // not in a query string, with commas and spaces
+
+		// two replacements in same string
+		{"http://foo?sig=somevalue and http://bar?sig=othervalue BlahBlah", "http://foo?sig=-REDACTED- and http://bar?sig=-REDACTED- BlahBlah"},
+
+		// word "sig" inside the signature
+		{"http://foo?sig=sigvalue BlahBlah", "http://foo?sig=-REDACTED- BlahBlah"},
 	}
 
 	san := NewAzCopyLogSanitizer()
