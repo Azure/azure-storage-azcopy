@@ -36,9 +36,13 @@ func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
 	}{
 		{"string with no secrets", "string with no secrets"},
 
-		// DON'T redact if its not part of a name-value pair
-		{"This is the sig that I have and x=y", "This is the sig that I have and x=y"},
+		// DON'T redact these
+		{"This is the sig that I have and x=y", "This is the sig that I have and x=y"},     // sig not in a URL
+		{"http://foo/path/with/sig/in/it?x=y", "http://foo/path/with/sig/in/it?x=y"},       // match is not in the QUERY part of a URL
+		{"http://www.signature.example.com/blah", "http://www.signature.example.com/blah"}, // another with match that's not in QUERY part the URL
+		{"http://foo?signatureevent=123&x=y", "http://foo?signatureevent=123&x=y"},         // our keyword (signature) is not the END of the key-value key name
 
+		// DO redact all of the following
 		{"http://foo?sig=somevalue&x=y", "http://foo?sig=-REDACTED-&x=y"},                                         // remainder of query string is preserved
 		{"http://foo?x=y&" + SigAzure + "=somevalue", "http://foo?x=y&sig=-REDACTED-"},                            // basic case
 		{"http://foo?x=y&sig=somevalue\r\nBlah", "http://foo?x=y&sig=-REDACTED-\r\nBlah"},                         // newline after, case preserved in other text
