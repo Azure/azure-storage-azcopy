@@ -424,6 +424,9 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	c.Assert(err, chk.IsNil)
 
 	for _, bucket := range buckets {
+		if strings.Contains(bucket.Name, "elastic") {
+			continue
+		}
 		deleteBucket(c, client, bucket.Name)
 	}
 }

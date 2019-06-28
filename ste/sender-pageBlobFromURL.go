@@ -90,7 +90,8 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			c.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			enrichedContext, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
+			enrichedContext, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, nil,
+			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
