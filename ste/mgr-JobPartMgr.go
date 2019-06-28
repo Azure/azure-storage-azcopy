@@ -126,7 +126,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -147,7 +147,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -163,14 +163,13 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 
 	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
 		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -182,7 +181,6 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		newRetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
@@ -232,7 +230,7 @@ type jobPartMgr struct {
 
 	priority common.JobPriority
 
-	pacer *pacer // Pacer used by chunks when uploading data
+	pacer pacer // Pacer is used to cap throughput
 
 	slicePool common.ByteSlicePooler
 

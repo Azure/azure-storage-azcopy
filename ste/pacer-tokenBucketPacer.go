@@ -27,10 +27,27 @@ import (
 	"time"
 )
 
-// pacerConsumer is used by callers whose activity must be controlled to a certain pace
-type pacerConsumer interface {
-	RequestRightToSend(ctx context.Context, bytesToSend int64) error
+// pacer is used by callers whose activity must be controlled to a certain pace
+type pacer interface {
+
+	// RequestTrafficAllocation blocks until the caller is allowed to process byteCount bytes.
+	RequestTrafficAllocation(ctx context.Context, byteCount int64) error
+
+	// UndoRequest reverses a previous request to process n bytes.  Is used when
+	// the caller did not need all of the allocation they previously requested
+	// e.g. when they asked for enough for a big buffer, but never filled it, they would
+	// call this method to return the unused portion.
+	UndoRequest(byteCount int64)
+
 	Close() error
+}
+
+type pacerAdmin interface {
+	pacer
+
+	// GetTotalTraffic returns the cumulative count of all traffic that has been processed,
+	// both paced (via GetTrafficAllocation minus any UndoRequest's) and unpaced (via RecordUnpacedTraffic)
+	GetTotalTraffic() int64
 }
 
 const (
@@ -38,10 +55,10 @@ const (
 	bucketFillSleepDuration = time.Duration(float32(time.Second) * 0.1)
 
 	// How long to sleep when reading from the bucket and finding there's not enough tokens
-	bucketDrainSleepDuration = time.Duration(float32(time.Second) * 0.5)
+	bucketDrainSleepDuration = time.Duration(float32(time.Second) * 0.333)
 
 	// Controls the max amount by which the contents of the token bucket can build up, unused.
-	maxSecondsToOverpopulateBucket = 5 // suitable for coarse grained, but not for fine-grained pacing
+	maxSecondsToOverpopulateBucket = 2.5 // had 5, when doing coarse-grained pacing. TODO: find best all-round value, or parameterize
 )
 
 // tokenBucketPacer allows us to control the pace of an activity, using a basic token bucket algorithm.
@@ -49,14 +66,16 @@ const (
 type tokenBucketPacer struct {
 	atomicTokenBucket          int64
 	atomicTargetBytesPerSecond int64
+	atomicGrandTotal           int64
+	atomicWaitCount            int64
 	expectedBytesPerRequest    int64
 	done                       chan struct{}
 }
 
-func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32) *tokenBucketPacer {
-	p := &tokenBucketPacer{atomicTokenBucket: int64(expectedBytesPerRequest), // seed it immediately with enough to satisfy one request
+func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerCoarseRequest uint32) *tokenBucketPacer {
+	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
-		expectedBytesPerRequest:    int64(expectedBytesPerRequest),
+		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
 		done:                       make(chan struct{}),
 	}
 
@@ -66,21 +85,42 @@ func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedByte
 	return p
 }
 
-// RequestRightToSend function is called by goroutines to request right to send a certain amount of bytes.
+// RequestTrafficAllocation function is called by goroutines to request right to send a certain amount of bytes.
 // It controls their rate by blocking until they are allowed to proceed
-func (p *tokenBucketPacer) RequestRightToSend(ctx context.Context, bytesToSend int64) error {
-	for atomic.AddInt64(&p.atomicTokenBucket, -bytesToSend) < 0 {
+func (p *tokenBucketPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+
+	// block until tokens are available
+	for atomic.AddInt64(&p.atomicTokenBucket, -byteCount) < 0 {
+
 		// by taking our desired count we've moved below zero, which means our allocation is not available
-		// right now, so put back what we asked for, and wait
-		atomic.AddInt64(&p.atomicTokenBucket, bytesToSend)
+		// right now, so put back what we asked for, and then wait
+		atomic.AddInt64(&p.atomicTokenBucket, byteCount)
+
+		// vary the wait amount, to reduce risk of any kind of pulsing or synchronization effect, without the perf and
+		// and threadsafety issues of actual random numbers
+		totalWaitsSoFar := atomic.AddInt64(&p.atomicWaitCount, 1)
+		modifiedSleepDuration := time.Duration(float32(bucketDrainSleepDuration) * (float32(totalWaitsSoFar%10) + 5) / 10) // 50 to 150% of bucketDrainSleepDuration
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(bucketDrainSleepDuration):
+		case <-time.After(modifiedSleepDuration):
 			// keep looping
 		}
 	}
+
+	// record what we issued
+	atomic.AddInt64(&p.atomicGrandTotal, byteCount)
+
 	return nil
+}
+
+// UndoRequest allows a caller to return unused tokens
+func (p *tokenBucketPacer) UndoRequest(byteCount int64) {
+	if byteCount > 0 {
+		atomic.AddInt64(&p.atomicTokenBucket, byteCount) // put them back in the bucket
+		atomic.AddInt64(&p.atomicGrandTotal, -byteCount) // deduct them from all-time issued count
+	}
 }
 
 func (p *tokenBucketPacer) Close() error {
@@ -132,4 +172,8 @@ func (p *tokenBucketPacer) targetBytesPerSecond() int64 {
 
 func (p *tokenBucketPacer) setTargetBytesPerSecond(value int64) {
 	atomic.StoreInt64(&p.atomicTargetBytesPerSecond, value)
+}
+
+func (p *tokenBucketPacer) GetTotalTraffic() int64 {
+	return atomic.LoadInt64(&p.atomicGrandTotal)
 }

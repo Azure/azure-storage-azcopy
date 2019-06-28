@@ -22,14 +22,16 @@ package ste
 
 import (
 	"context"
+	"sync/atomic"
 )
 
 // nullAutoPacer is a no-op auto pacer. For use in code which may or may not need pacing. When not needed,
 // just use an instance of this type
 type nullAutoPacer struct {
+	atomicGrandTotal int64
 }
 
-func newNullAutoPacer() autoPacerConsumer {
+func newNullAutoPacer() *nullAutoPacer {
 	return &nullAutoPacer{}
 }
 
@@ -41,6 +43,15 @@ func (a *nullAutoPacer) RetryCallback() {
 	// noop
 }
 
-func (a *nullAutoPacer) RequestRightToSend(ctx context.Context, bytesToSend int64) error {
+func (a *nullAutoPacer) RequestTrafficAllocation(ctx context.Context, byteCount int64) error {
+	atomic.AddInt64(&a.atomicGrandTotal, byteCount) // we track total aggregate throughput, even though we don't do any actual pacing
 	return nil
+}
+
+func (a *nullAutoPacer) UndoRequest(byteCount int64) {
+	atomic.AddInt64(&a.atomicGrandTotal, -byteCount)
+}
+
+func (a *nullAutoPacer) GetTotalTraffic() int64 {
+	return atomic.LoadInt64(&a.atomicGrandTotal)
 }

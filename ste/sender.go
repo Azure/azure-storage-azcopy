@@ -53,7 +53,7 @@ type ISenderBase interface {
 	Epilogue()
 }
 
-type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error)
+type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to copy one file from URL to a remote location
@@ -65,7 +65,7 @@ type s2sCopier interface {
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
 }
 
-type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer *pacer) (s2sCopier, error)
+type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer pacer) (s2sCopier, error)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 // Abstraction of the methods needed to upload one file to a remote location

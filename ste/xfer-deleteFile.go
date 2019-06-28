@@ -10,7 +10,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
-func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer) {
+func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer) {
 
 	info := jptm.Info()
 	// Get the source file url of file to delete

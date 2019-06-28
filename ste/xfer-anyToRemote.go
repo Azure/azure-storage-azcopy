@@ -32,7 +32,7 @@ import (
 )
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
-func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	info := jptm.Info()
 	srcSize := info.SourceSize

@@ -36,6 +36,7 @@ var azcopyAppPathFolder string
 var azcopyLogPathFolder string
 var outputFormatRaw string
 var azcopyOutputFormat common.OutputFormat
+var cmdLineCapMegaBitsPerSecond uint32
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -43,7 +44,19 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+}
+
+type steStartupFunc func(cmdLineCapMegaBitsPerSecond int64)
+
+// createPersistentPreRunE bakes steStartupFunc into a function suitable for use as a cobra pre-run function
+func createPersistentPreRunE(steStartupFunc steStartupFunc) func(cmd *cobra.Command, args []string) error {
+
+	return func(cmd *cobra.Command, args []string) error {
+		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
+		// (You can't access parameters before rootCmd.Execute has been called. THat's why we need to delay it here, to the point where
+		// those parameters can safely be used.
+		steStartupFunc(int64(cmdLineCapMegaBitsPerSecond))
+
 		err := azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
 		if err != nil {
@@ -57,7 +70,7 @@ var rootCmd = &cobra.Command{
 		go detectNewVersion()
 
 		return nil
-	},
+	}
 }
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
@@ -65,10 +78,11 @@ var glcm = common.GetLifecycleMgr()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder, logPathFolder string) {
+func Execute(azsAppPathFolder, logPathFolder string, steStartup steStartupFunc) {
 	azcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
 
+	rootCmd.PersistentPreRunE = createPersistentPreRunE(steStartup)
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
@@ -81,6 +95,7 @@ func Execute(azsAppPathFolder, logPathFolder string) {
 }
 
 func init() {
+	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
 
 	// Special flag for generating test data

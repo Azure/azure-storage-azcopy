@@ -39,13 +39,13 @@ type blobFSUploader struct {
 	chunkSize           uint32
 	numChunks           uint32
 	pipeline            pipeline.Pipeline
-	pacer               *pacer
+	pacer               pacer
 	md5Channel          chan []byte
 	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
 	flushThreshold      int64
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 
@@ -164,7 +164,7 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
+		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile, body) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)

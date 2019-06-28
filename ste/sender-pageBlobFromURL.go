@@ -35,7 +35,7 @@ type urlToPageBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 
 	destBlobTier := azblob.AccessTierNone
 	// If the source is page blob, preserve source's blob tier.
@@ -69,12 +69,12 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			return
 		}
 
-		s2sPacer := newS2SPacer(c.pacer)
-
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
+		// Note that this level of control here is specific to the individual page blob, and is additional
+		// to the application-wide pacing that we do with c.pacer
 		c.jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
-		if err := c.filePacer.RequestRightToSend(c.jptm.Context(), adjustedChunkSize); err != nil {
-			c.jptm.FailActiveUpload("Pacing block", err)
+		if err := c.filePacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block (file level)", err)
 		}
 
 		// set the latest service version from sdk as service version in the context, to use UploadPagesFromURL API.
@@ -83,14 +83,17 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion),
 			c.filePacer)
 
-		// upload the page
+		// upload the page (including application of global pacing. We don't have a separate wait reason for global pacing
+		// so just do it inside the S2SCopyOnWire state)
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block (global level)", err)
+		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
 			enrichedContext, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
 		}
-		s2sPacer.Done(adjustedChunkSize)
 	})
 }

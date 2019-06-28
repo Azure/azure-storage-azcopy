@@ -29,7 +29,7 @@ import (
 )
 
 // Creates the right kind of URL to blob copier, based on the blob type of the source
-func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
 	targetBlobType := azblob.BlobBlockBlob // By default use block blob as destination type

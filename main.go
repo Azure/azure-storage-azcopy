@@ -47,7 +47,7 @@ func main() {
 
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)
+		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, func(_ int64) {})
 		return
 	}
 
@@ -62,10 +62,19 @@ func main() {
 	concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
 	concurrentFilesLimit := computeConcurrentFilesLimit(maxFileAndSocketHandles, concurrentConnections)
 
-	err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, 2400, azcopyAppPathFolder, azcopyLogPathFolder)
-	common.PanicIfErr(err)
+	// now we know how we want to start the STE, but create func to defer startup until after cmd line params are parsed
+	// TODO: reviewers, I'm not totally happy with the amount of indirection created by the use of this function.
+	//    Alternatives I thought of were:
+	//    1. Move more of the code that's here into root.go. Maybe that's an option...
+	//    2. Don't use a command line parameter for the cap on transfer rate, do it with an environment variable instead.
+	//       That's possible, but it felt slightly wrong for some reason.
+	//   Thoughts?
+	steStartupFunc := func(cmdLineCapMegaBitsPerSecond int64) {
+		err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, cmdLineCapMegaBitsPerSecond, azcopyAppPathFolder, azcopyLogPathFolder)
+		common.PanicIfErr(err)
+	}
 
-	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder)
+	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, steStartupFunc)
 	glcm.Exit(nil, common.EExitCode.Success())
 }
 
