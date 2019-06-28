@@ -87,6 +87,7 @@ func (al *appLogger) CloseLog() {
 
 func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// TODO consider delete completely to get rid of app logger
+	// TODO: if we DON'T delete, use azCopyLogSanitizer
 	//if al.ShouldLog(loglevel) {
 	//	al.logger.Println(msg)
 	//}
@@ -108,6 +109,7 @@ type jobLogger struct {
 	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
 	appLogger         ILogger
+	sanitizer         pipeline.LogSanitizer
 }
 
 func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, logFileFolder string) ILoggerResetable {
@@ -120,6 +122,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, lo
 		appLogger:         appLogger, // Panics are recorded in the job log AND in the app log
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
 		logFileFolder:     logFileFolder,
+		sanitizer:         NewAzCopyLogSanitizer(),
 	}
 }
 
@@ -161,6 +164,9 @@ func (jl *jobLogger) CloseLog() {
 func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// If the logger for Job is not initialized i.e file is not open
 	// or logger instance is not initialized, then initialize it
+
+	// ensure all secrets are redacted
+	msg = jl.sanitizer.SanitizeLogMessage(msg)
 
 	// Go, and therefore the sdk, defaults to \n for line endings, so if the platform has a different line ending,
 	// we should replace them to ensure readability on the given platform.

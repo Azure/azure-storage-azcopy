@@ -3,6 +3,7 @@ package common
 import (
 	"bufio"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 		progressCache: "",
 		cancelChannel: make(chan os.Signal, 1),
 		outputFormat:  EOutputFormat.Text(), // output text by default
+		logSanitizer:  NewAzCopyLogSanitizer(),
 	}
 
 	// kick off the single routine that processes output
@@ -57,6 +59,7 @@ type lifecycleMgr struct {
 	cancelChannel  chan os.Signal
 	waitEverCalled int32
 	outputFormat   OutputFormat
+	logSanitizer   pipeline.LogSanitizer
 }
 
 func (lcm *lifecycleMgr) SetOutputFormat(format OutputFormat) {
@@ -128,6 +131,9 @@ func (lcm *lifecycleMgr) Progress(o OutputBuilder) {
 }
 
 func (lcm *lifecycleMgr) Info(msg string) {
+
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg) // sometimes error-like text comes through Info, before the final "we've failed, please stop now" signal comes to Error. So we sanitize in both places.
+
 	infoMsg := fmt.Sprintf("INFO: %v", msg)
 
 	lcm.msgQueue <- outputMessage{
@@ -150,6 +156,9 @@ func (lcm *lifecycleMgr) Prompt(msg string) string {
 
 // TODO minor: consider merging with Exit
 func (lcm *lifecycleMgr) Error(msg string) {
+
+	msg = lcm.logSanitizer.SanitizeLogMessage(msg)
+
 	// Check if need to do memory profiling, and do memory profiling accordingly before azcopy exits.
 	lcm.checkAndTriggerMemoryProfiling()
 

@@ -27,6 +27,7 @@ import (
 	"runtime/debug"
 	"time"
 
+  "github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -36,6 +37,8 @@ import (
 var glcm = common.GetLifecycleMgr()
 
 func main() {
+	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure ForceLog logs get secrets redacted
+
 	azcopyAppPathFolder := GetAzCopyAppPath()
 	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())
 	if azcopyLogPathFolder == "" {

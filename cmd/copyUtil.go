@@ -86,9 +86,9 @@ func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam strin
 // TODO: remove this, redactSigQueryParam could be added in SDK
 func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
-	sigFound := strings.Contains(rawQuery, "?sig=")
+	sigFound := strings.Contains(rawQuery, "?"+common.SigAzure+"=")
 	if !sigFound {
-		sigFound = strings.Contains(rawQuery, "&sig=")
+		sigFound = strings.Contains(rawQuery, "&"+common.SigAzure+"=")
 		if !sigFound {
 			return sigFound, rawQuery // [?|&]sig= not found; return same rawQuery passed in (no memory allocation)
 		}
@@ -96,7 +96,7 @@ func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) 
 	// [?|&]sig= found, redact its value
 	values, _ := url.ParseQuery(rawQuery)
 	for name := range values {
-		if strings.EqualFold(name, "sig") {
+		if strings.EqualFold(name, common.SigAzure) {
 			values[name] = []string{"REDACTED"}
 		}
 	}
