@@ -128,7 +128,7 @@ func (s *cmdIntegrationSuite) TestRemoveFile(c *chk.C) {
 	c.Assert(err, chk.IsNil)
 
 	// delete single file
-	fileURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName)
+	fileURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName).NewDirectoryURL(parentDirName).NewFileURL(fileName)
 	raw := getDefaultRemoveRawInput(fileURLWithSAS.String())
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
