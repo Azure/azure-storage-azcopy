@@ -38,6 +38,10 @@ github.com/jiacfan/keyctl v0.0.0-20190628012402-beefb2538fcc h1:Avan19tcPO8Wc0yR
 github.com/jiacfan/keyctl v0.0.0-20190628012402-beefb2538fcc/go.mod h1:GPrz+MB+TkX2uTBDoAKBaGTLTtr2+Y7VwOgEJ7O/jyY=
 github.com/jiacfan/keyctl v0.0.0-20190628025809-cb29ef465419 h1:HPhaxaJ/VfH9G9kIlPQow0zmmn3afa6BlVzvQpmshK0=
 github.com/jiacfan/keyctl v0.0.0-20190628025809-cb29ef465419/go.mod h1:GPrz+MB+TkX2uTBDoAKBaGTLTtr2+Y7VwOgEJ7O/jyY=
+github.com/jiacfan/keyctl v0.0.0-20190628040148-9c65f5bee7e1 h1:aJWLN3jjh952iQzN9dI4aCmph+lEWtrrJbh06wc6Xok=
+github.com/jiacfan/keyctl v0.0.0-20190628040148-9c65f5bee7e1/go.mod h1:GPrz+MB+TkX2uTBDoAKBaGTLTtr2+Y7VwOgEJ7O/jyY=
+github.com/jiacfan/keyctl v0.3.1 h1:mpdRpuFeQHXnApGVvIUSavAxwElf7S4XcdLlCIDCXJA=
+github.com/jiacfan/keyctl v0.3.1/go.mod h1:GPrz+MB+TkX2uTBDoAKBaGTLTtr2+Y7VwOgEJ7O/jyY=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
