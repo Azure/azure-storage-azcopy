@@ -14,6 +14,7 @@ type BfsURLParts struct {
 	FileSystemName      string // File System name, Ex: "myfilesystem"
 	DirectoryOrFilePath string // Path of directory or file, Ex: "mydirectory/myfile"
 	UnparsedParams      string
+	SAS                 SASQueryParameters
 
 	accountName       string // "" if not using IP endpoint style
 	isIPEndpointStyle bool   // Ex: "https://ip/accountname/filesystem"
@@ -74,6 +75,7 @@ func NewBfsURLParts(u url.URL) BfsURLParts {
 
 	// Convert the query parameters to a case-sensitive map & trim whitespace
 	paramsMap := u.Query()
+	up.SAS = newSASQueryParameters(paramsMap, true)
 	up.UnparsedParams = paramsMap.Encode()
 	return up
 }
@@ -94,6 +96,14 @@ func (up BfsURLParts) URL() url.URL {
 	}
 
 	rawQuery := up.UnparsedParams
+
+	sas := up.SAS.Encode()
+	if sas != "" {
+		if len(rawQuery) >= 0 {
+			rawQuery += "&"
+		}
+		rawQuery += sas
+	}
 	u := url.URL{
 		Scheme:   up.Scheme,
 		Host:     up.Host,

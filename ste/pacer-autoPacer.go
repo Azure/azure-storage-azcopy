@@ -105,9 +105,9 @@ func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerReq
 	a := &autoTokenBucketPacer{
 		tokenBucketPacer:       newTokenBucketPacer(ctx, bytesPerSecond, expectedBytesPerRequest),
 		lastPeakBytesPerSecond: float32(bytesPerSecond),
-		done:      make(chan struct{}),
-		logger:    logger,
-		logPrefix: logPrefix,
+		done:                   make(chan struct{}),
+		logger:                 logger,
+		logPrefix:              logPrefix,
 	}
 
 	go a.rateTunerBody(ctx)

@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/go-autorest/autorest/adal"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/go-autorest/autorest/adal"
 	minio "github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
 )
@@ -158,6 +158,8 @@ func refreshBlobToken(ctx context.Context, tokenInfo OAuthTokenInfo, tokenCreden
 
 // CreateBlobFSCredential creates BlobFS credential according to credential info.
 func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, options CredentialOpOptions) azbfs.Credential {
+	cred := azbfs.NewAnonymousCredential()
+
 	switch credInfo.CredentialType {
 	case ECredentialType.OAuthToken():
 		if credInfo.OAuthTokenInfo.IsEmpty() {
@@ -165,7 +167,7 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 		}
 
 		// Create TokenCredential with refresher.
-		return azbfs.NewTokenCredential(
+		cred = azbfs.NewTokenCredential(
 			credInfo.OAuthTokenInfo.AccessToken,
 			func(credential azbfs.TokenCredential) time.Duration {
 				return refreshBlobFSToken(ctx, credInfo.OAuthTokenInfo, credential, options)
@@ -180,13 +182,16 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 			options.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blobfs SharedKey credential"))
 		}
 		// create the shared key credentials
-		return azbfs.NewSharedKeyCredential(name, key)
+		cred = azbfs.NewSharedKeyCredential(name, key)
+
+	case ECredentialType.Anonymous():
+		// do nothing
 
 	default:
 		options.panicError(fmt.Errorf("invalid state, credential type %v is not supported", credInfo.CredentialType))
 	}
 
-	panic("work around the compiling, logic wouldn't reach here")
+	return cred
 }
 
 // CreateS3Credential creates AWS S3 credential according to credential info.
