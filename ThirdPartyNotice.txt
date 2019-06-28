@@ -1,9 +1,11 @@
-------------------------------------------- START OF THIRD PARTY NOTICE -----------------------------------------
+------------------------------------------- START OF THIRD PARTY NOTICE -----------------------------------------
+
 
 THIRD PARTY SOFTWARE NOTICES AND INFORMATION
 Do Not Translate or Localize
 
-This software incorporates material from third parties. Microsoft makes certain 
+This software incorporates material from third parties. Microsoft makes certain 
+
 
 open source code available at http://3rdpartysource.microsoft.com, or you may 
 send a check or money order for US $5.00, including the product name, the open 
@@ -16,7 +18,8 @@ Redmond, WA 98052
 USA
 
 Notwithstanding any other terms, you may reverse engineer this software to the 
-extent required to debug changes to any libraries licensed under the GNU Lesser 
+extent required to debug changes to any libraries licensed under the GNU Lesser 
+
 
 General Public License.
 
@@ -32,6 +35,10 @@ dustin/go-humanize, Copyright (c) 2005-2008  Dustin Sallings <dustin@spy.net>
 mitchellh/go-homedir, Copyright (c) 2013 Mitchell Hashimoto
 konsorten/go-windows-terminal-sequences, Copyright (c) 2017 marvin + konsorten GmbH (open-source@konsorten.de)
 jiacfan/keychain, Copyright (c) 2015 Keybase
+mattn/go-ieproxy, Copyright (c) 2014 mattn
+mattn/go-ieproxy, Copyright (c) 2017 oliverpool
+mattn/go-ieproxy, Copyright (c) 2019 Adele Reed
+
 
 The MIT License (MIT)
 
@@ -57,7 +64,8 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 go-ini/ini, Copyright 2014 Unknwon
 minio/minio-go, Copyright 2015-2017 Minio, Inc.
 census-instrumentation/opencensus-proto
-census-ecosystem/opencensus-go-exporter-ocagent, Copyright 2018, OpenCensus Authors
+census-ecosystem/opencensus-go-exporter-ocagent, Copyright 2018, OpenCensus Authors
+
 
 
 Apache License
@@ -85,7 +93,8 @@ shares, or (iii) beneficial ownership of such entity.
 granted by this License.
 
 "Source" form shall mean the preferred form for making modifications, including but 
-not limited to software source code, documentation source, and configuration files.
+not limited to software source code, documentation source, and configuration files.
+
 
 
 "Object" form shall mean any form resulting from mechanical transformation or translation 
@@ -255,7 +264,8 @@ TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
 IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
 INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS 
 OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS 
-ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
 
 
 **********
@@ -290,6 +300,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 **********
 
------------------------------------------------ END OF THIRD PARTY NOTICE ------------------------------------------
+----------------------------------------------- END OF THIRD PARTY NOTICE ------------------------------------------
+
 
 

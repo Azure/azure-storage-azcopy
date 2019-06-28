@@ -13,6 +13,10 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
+// constants here, not in common, to avoid circular dependency. Alternative would be to not use the constants here in azbfs.
+const SigAzure = "sig"                  // calling code expects this to be lower case
+const SigXAmzForAws = "x-amz-signature" // calling code expects this to be lower case
+
 // RequestLogOptions configures the retry policy's behavior.
 type RequestLogOptions struct {
 	// LogWarningIfTryOverThreshold logs a warning if a tried operation takes longer than the specified
@@ -111,9 +115,9 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 
 func redactSigQueryParam(rawQuery string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
-	sigFound := strings.Contains(rawQuery, "?sig=")
+	sigFound := strings.Contains(rawQuery, "?"+SigAzure+"=")
 	if !sigFound {
-		sigFound = strings.Contains(rawQuery, "&sig=")
+		sigFound = strings.Contains(rawQuery, "&"+SigAzure+"=")
 		if !sigFound {
 			return sigFound, rawQuery // [?|&]sig= not found; return same rawQuery passed in (no memory allocation)
 		}
@@ -121,7 +125,7 @@ func redactSigQueryParam(rawQuery string) (bool, string) {
 	// [?|&]sig= found, redact its value
 	values, _ := url.ParseQuery(rawQuery)
 	for name := range values {
-		if strings.EqualFold(name, "sig") {
+		if strings.EqualFold(name, SigAzure) {
 			values[name] = []string{"REDACTED"}
 		}
 	}

@@ -21,31 +21,34 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
 )
 
-type copyEnumeratorHelperTestSuite struct{}
+type blockSizeFilterSuite struct{}
 
-var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
+var _ = chk.Suite(&blockSizeFilterSuite{})
 
-func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
-	// setup
-	request := common.CopyJobPartOrderRequest{
-		SourceRoot:      "a/b/",
-		DestinationRoot: "y/z/",
+func (s *genericFilterSuite) TestConversions(c *chk.C) {
+
+	testData := []struct {
+		floatMiB         float64
+		expectedBytes    uint32
+		expectedErrorMsg string
+	}{
+		{100, 100 * 1024 * 1024, ""},
+		{1, 1024 * 1024, ""},
+		{0.25, 256 * 1024, ""},
+		{0.000030517578125, 32, ""}, // 32 bytes, extremely small case
+		{-1, 0, "negative block size not allowed"},
+		{0.333, 0, "while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. 0.333000000000 MiB resolves to 349175.808 bytes"},
 	}
 
-	transfer := common.CopyTransfer{
-		Source:      "a/b/c.txt",
-		Destination: "y/z/c.txt",
+	for _, d := range testData {
+		actualBytes, err := blockSizeInBytes(d.floatMiB)
+		if d.expectedErrorMsg != "" {
+			c.Check(err.Error(), chk.Equals, d.expectedErrorMsg)
+		} else {
+			c.Check(actualBytes, chk.Equals, d.expectedBytes)
+		}
 	}
-
-	// execute
-	err := addTransfer(&request, transfer, &cookedCopyCmdArgs{})
-
-	// assert
-	c.Assert(err, chk.IsNil)
-	c.Assert(request.Transfers[0].Source, chk.Equals, "c.txt")
-	c.Assert(request.Transfers[0].Destination, chk.Equals, "c.txt")
 }

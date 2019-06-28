@@ -124,7 +124,7 @@ func (o RetryOptions) calcDelay(try int32) time.Duration { // try is >=1; never 
 
 	// Introduce some jitter:  [0.0, 1.0) / 2 = [0.0, 0.5) + 0.8 = [0.8, 1.3)
 	// For casts and rounding - be careful, as per https://github.com/golang/go/issues/20757
-	delay = time.Duration(float32(delay) * (rand.Float32()/2 + 0.8) ) // NOTE: We want math/rand; not crypto/rand
+	delay = time.Duration(float32(delay) * (rand.Float32()/2 + 0.8)) // NOTE: We want math/rand; not crypto/rand
 	if delay > o.MaxRetryDelay {
 		delay = o.MaxRetryDelay
 	}
@@ -210,7 +210,8 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 					panic(err)
 				}
 				if !tryingPrimary {
-					requestCopy.Request.URL.Host = o.retryReadsFromSecondaryHost()
+					requestCopy.URL.Host = o.retryReadsFromSecondaryHost()
+					requestCopy.Host = o.retryReadsFromSecondaryHost()
 				}
 
 				// Set the server-side timeout query parameter "timeout=[seconds]"
@@ -245,7 +246,7 @@ func NewRetryPolicyFactory(o RetryOptions) pipeline.Factory {
 				switch {
 				case ctx.Err() != nil:
 					action = "NoRetry: Op timeout"
-				case !tryingPrimary && response != nil && response.Response().StatusCode == http.StatusNotFound:
+				case !tryingPrimary && response != nil && response.Response() != nil && response.Response().StatusCode == http.StatusNotFound:
 					// If attempt was against the secondary & it returned a StatusNotFound (404), then
 					// the resource was not found. This may be due to replication delay. So, in this
 					// case, we'll never try the secondary again for this operation.

@@ -1,13 +1,22 @@
+
 # Change Log
 
-## Version XX.XX.XX
+## Version XX.XX.XX 
 
 ### Bug fix
 
-1. Added error to using Azure Files without a SAS token (invalid auth configuration)
-1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business
-1. `--log-level=none` now drops no logs, and has a listing in `--help`
+1. Added error to using Azure Files without a SAS token (invalid auth configuration).
+1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business.
+1. `--log-level=none` now drops no logs, and has a listing in `--help`.
 1. Fixed bug where piping was not picking up the service version override, making it not work well against Azure Stack.
+1. Fixed a timeout when uploading particularly large files to ADLSG2.
+
+### New features
+
+1. Enabled copying from page/block/append blob to another blob of a different type
+1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
+1. Service Principal Authentication is now available under `azcopy login`-- check `azcopy env` for details on client secrets/cert passwords. 
+1. SAS tokens are supported on HNS (Hierarchical Namespace/Azure Data Lake Generation 2) Storage Accounts
 
 ## Version 10.1.2
 
@@ -126,4 +135,3 @@ information, including those needed to set the new headers.
    1. excludedBlobType -> excluded-blob-type
    1. outputRaw (in "list" command) -> output
    1. stdIn-enable (reserved for internal use) -> stdin-enable
-

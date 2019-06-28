@@ -2,6 +2,7 @@ package common
 
 import (
 	"bytes"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"net/http"
 	"net/url"
 	"strings"
@@ -36,17 +37,20 @@ func (u URLExtension) URLWithPlusDecodedInPath() url.URL {
 
 func (u URLExtension) RedactSecretQueryParamForLogging() string {
 	// redact sig= in Azure
-	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, "sig"); ok {
+	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, SigAzure); ok {
 		u.RawQuery = rawQuery
 	}
 
 	// rediact x-amx-signature in S3
-	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, "x-amz-signature"); ok {
+	if ok, rawQuery := RedactSecretQueryParam(u.RawQuery, SigXAmzForAws); ok {
 		u.RawQuery = rawQuery
 	}
 
 	return u.String()
 }
+
+const SigAzure = azbfs.SigAzure
+const SigXAmzForAws = azbfs.SigXAmzForAws
 
 func RedactSecretQueryParam(rawQuery, queryKeyNeedRedact string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?[queryKeyNeedRedact] and &[queryKeyNeedRedact]=

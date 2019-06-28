@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
 )
@@ -43,6 +42,14 @@ func init() {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			loginCmdArgs.certPass = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CertificatePassword())
+			loginCmdArgs.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
+
+			if loginCmdArgs.certPass != "" || loginCmdArgs.clientSecret != "" {
+				glcm.Info(`Bear in mind that setting a environment variable from the command line will be readable in your command line history.
+				Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.`)
+			}
+
 			err := loginCmdArgs.process()
 			if err != nil {
 				return fmt.Errorf("failed to perform login command, %v", err)
@@ -57,12 +64,18 @@ func init() {
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.aadEndpoint, "aad-endpoint", "", "the Azure active directory endpoint to use for OAuth user interactive login")
 	// Use identity which aligns to Azure powershell and CLI.
 	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.identity, "identity", false, "log in using virtual machine's identity, also known as managed service identity (MSI)")
+	// Use SPN certificate to log in.
+	lgCmd.PersistentFlags().BoolVar(&loginCmdArgs.servicePrincipal, "service-principal", false, "log in via SPN (Service Principal Name) using a certificate or a secret. The client secret or certificate password must be placed in the appropriate environment variable. Type AzCopy env to see names and descriptions of environment variables.")
 	// Client ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityClientID, "identity-client-id", "", "client ID of user-assigned identity")
 	// Object ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityObjectID, "identity-object-id", "", "object ID of user-assigned identity")
 	// Resource ID of user-assigned identity.
 	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.identityResourceID, "identity-resource-id", "", "resource ID of user-assigned identity")
+
+	//login with SPN
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.applicationID, "application-id", "", "application ID of user-assigned identity. Required for service principal auth.")
+	lgCmd.PersistentFlags().StringVar(&loginCmdArgs.certPath, "certificate-path", "", "path to certificate for SPN authentication. Required for certificate-based service principal auth.")
 
 	// hide flags
 	// temporaily hide aad-endpoint and support Production environment only.
@@ -74,7 +87,8 @@ type loginCmdArgs struct {
 	tenantID    string
 	aadEndpoint string
 
-	identity bool // Whether to use MSI.
+	identity         bool // Whether to use MSI.
+	servicePrincipal bool
 
 	// Info of VM's user assigned identity, client or object ids of the service identity are required if
 	// your VM has multiple user-assigned managed identities.
@@ -82,16 +96,57 @@ type loginCmdArgs struct {
 	identityClientID   string
 	identityObjectID   string
 	identityResourceID string
+
+	//Requried to sign in with a SPN (Service Principal Name)
+	applicationID string
+	certPath      string
+	certPass      string
+	clientSecret  string
+}
+
+type argValidity struct {
+	Required string
+	Invalid  string
 }
 
 func (lca loginCmdArgs) validate() error {
 	// Only support one kind of oauth login at same time.
-	if lca.identity && lca.tenantID != "" {
-		return errors.New("tenant ID cannot be used with identity")
-	}
+	switch {
+	case lca.identity:
+		if lca.servicePrincipal {
+			return errors.New("you can only log in with one type of auth at once")
+		}
 
-	if !lca.identity && (lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "") {
-		return errors.New("identity client/object/resource ID is only valid when using identity")
+		// Consider only command-line parameters as env vars are a hassle to change and it's not like we'll use them here.
+		if lca.tenantID != "" || lca.applicationID != "" || lca.certPath != "" {
+			return errors.New("tenant ID/application ID/cert path/client secret cannot be used with identity")
+		}
+	case lca.servicePrincipal:
+		if lca.identity {
+			return errors.New("you can only log in with one type of auth at once")
+		}
+
+		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" {
+			return errors.New("identity client/object/resource ID are exclusive to managed service identity auth and are not compatible with service principal auth")
+		}
+
+		if lca.applicationID == "" || (lca.clientSecret == "" && lca.certPath == "") {
+			return errors.New("service principal auth requires an application ID, and client secret/certificate")
+		}
+	default: // OAuth login.
+		// This isn't necessary, but stands as a sanity check. It will never be hit.
+		if lca.servicePrincipal || lca.identity {
+			return errors.New("you can only log in with one type of auth at once")
+		}
+
+		// Consider only command-line parameters as env vars are a hassle to change and it's not like we'll use them here.
+		if lca.applicationID != "" || lca.certPath != "" {
+			return errors.New("application ID and certificate paths are exclusive to service principal auth and are not compatible with OAuth")
+		}
+
+		if lca.identityClientID != "" || lca.identityObjectID != "" || lca.identityResourceID != "" {
+			return errors.New("identity client/object/resource IDs are exclusive to managed service identity auth and are not compatible with OAuth")
+		}
 	}
 
 	return nil
@@ -105,7 +160,24 @@ func (lca loginCmdArgs) process() error {
 
 	uotm := GetUserOAuthTokenManagerInstance()
 	// Persist the token to cache, if login fulfilled successfully.
-	if lca.identity {
+
+	switch {
+	case lca.servicePrincipal:
+
+		if lca.certPath != "" {
+			if _, err := uotm.CertLogin(lca.tenantID, lca.aadEndpoint, lca.certPath, lca.certPass, lca.applicationID, true); err != nil {
+				return err
+			}
+
+			glcm.Info("SPN Auth via cert succeeded.")
+		} else {
+			if _, err := uotm.SecretLogin(lca.tenantID, lca.aadEndpoint, lca.clientSecret, lca.applicationID, true); err != nil {
+				return err
+			}
+
+			glcm.Info("SPN Auth via secret succeeded.")
+		}
+	case lca.identity:
 		if _, err := uotm.MSILogin(context.TODO(), common.IdentityInfo{
 			ClientID: lca.identityClientID,
 			ObjectID: lca.identityObjectID,
@@ -115,7 +187,7 @@ func (lca loginCmdArgs) process() error {
 		}
 		// For MSI login, info success message to user.
 		glcm.Info("Login with identity succeeded.")
-	} else {
+	default:
 		if _, err := uotm.UserLogin(lca.tenantID, lca.aadEndpoint, true); err != nil {
 			return err
 		}

@@ -193,7 +193,7 @@ func (s *FileURLSuite) TestUploadDownloadRoundTrip(c *chk.C) {
 	c.Assert(pResp.Date(), chk.Not(chk.Equals), "")
 
 	// Flush data
-	fResp, err := fileURL.FlushData(context.Background(), 4096, make([]byte, 0), azbfs.BlobFSHTTPHeaders{})
+	fResp, err := fileURL.FlushData(context.Background(), 4096, make([]byte, 0), azbfs.BlobFSHTTPHeaders{}, false, true)
 	c.Assert(err, chk.IsNil)
 	c.Assert(fResp.StatusCode(), chk.Equals, http.StatusOK)
 	c.Assert(fResp.ETag(), chk.Not(chk.Equals), "")
