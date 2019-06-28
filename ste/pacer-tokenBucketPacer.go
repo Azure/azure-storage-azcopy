@@ -57,7 +57,7 @@ func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedByte
 	p := &tokenBucketPacer{atomicTokenBucket: int64(expectedBytesPerRequest), // seed it immediately with enough to satisfy one request
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerRequest),
-		done: make(chan struct{}),
+		done:                       make(chan struct{}),
 	}
 
 	// the pacer runs in a separate goroutine for as long as the ctx lasts

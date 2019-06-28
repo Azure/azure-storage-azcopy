@@ -21,14 +21,15 @@
 package main
 
 import (
-	"github.com/Azure/azure-storage-azcopy/cmd"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"log"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/cmd"
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // get the lifecycle manager to print messages

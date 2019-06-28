@@ -24,6 +24,7 @@ type EnvironmentVariable struct {
 	Name         string
 	DefaultValue string
 	Description  string
+	Hidden       bool
 }
 
 // This array needs to be updated when a new public environment variable is added
@@ -35,9 +36,27 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ShowPerfStates(),
 	EEnvironmentVariable.PacePageBlobs(),
 	EEnvironmentVariable.DefaultServiceApiVersion(),
+	EEnvironmentVariable.ClientSecret(),
+	EEnvironmentVariable.CertificatePassword(),
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
+
+func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SPA_CLIENT_SECRET",
+		Description: "The Azure Active Directory client secret used for Service Principal authentication",
+		Hidden:      true,
+	}
+}
+
+func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_SPA_CERT_PASSWORD",
+		Description: "The password used to decrypt the certificate used for Service Principal authentication.",
+		Hidden:      true,
+	}
+}
 
 func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
@@ -58,7 +77,10 @@ func (EnvironmentVariable) AccountName() EnvironmentVariable {
 }
 
 func (EnvironmentVariable) AccountKey() EnvironmentVariable {
-	return EnvironmentVariable{Name: "ACCOUNT_KEY"}
+	return EnvironmentVariable{
+		Name:   "ACCOUNT_KEY",
+		Hidden: true,
+	}
 }
 
 func (EnvironmentVariable) ProfileCPU() EnvironmentVariable {
@@ -94,6 +116,7 @@ func (EnvironmentVariable) AWSSecretAccessKey() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AWS_SECRET_ACCESS_KEY",
 		Description: "The AWS secret access key for S3 source used in service to service copy.",
+		Hidden:      true,
 	}
 }
 
