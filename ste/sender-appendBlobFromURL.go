@@ -65,7 +65,7 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile, adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
 				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},
-			}, nil)
+			}, azblob.ModifiedAccessConditions{}, nil)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
 			return

@@ -53,8 +53,10 @@ func init() {
 				raw.fromTo = common.EFromTo.BlobTrash().String()
 			} else if srcLocationType == common.ELocation.File() {
 				raw.fromTo = common.EFromTo.FileTrash().String()
+			} else if srcLocationType == common.ELocation.BlobFS() {
+				raw.fromTo = common.EFromTo.BlobFSTrash().String()
 			} else {
-				return fmt.Errorf("invalid source type %s pased to delete. azcopy support removing blobs and files only", srcLocationType.String())
+				return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
 			}
 
 			// Since remove uses the copy command arguments cook, set the blobType to None and validation option
@@ -67,12 +69,12 @@ func init() {
 		Run: func(cmd *cobra.Command, args []string) {
 			cooked, err := raw.cook()
 			if err != nil {
-				glcm.Error("failed to parse user input due to error " + err.Error())
+				glcm.Error("failed to parse user input due to error: " + err.Error())
 			}
 			cooked.commandString = copyHandlerUtil{}.ConstructCommandStringFromArgs()
 			err = cooked.process()
 			if err != nil {
-				glcm.Error("failed to perform copy command due to error " + err.Error())
+				glcm.Error("failed to perform remove command due to error: " + err.Error())
 			}
 
 			glcm.SurrenderControl()

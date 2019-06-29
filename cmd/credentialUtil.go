@@ -246,6 +246,10 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		if credentialType, err = getBlobCredentialType(ctx, raw.source, false, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
+	case common.EFromTo.BlobFSTrash():
+		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
+			return common.ECredentialType.Unknown(), err
+		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.BlobPipe():
 		if credentialType, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err

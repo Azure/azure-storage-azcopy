@@ -1,10 +1,9 @@
 module github.com/Azure/azure-storage-azcopy
 
 require (
-	// TODO: update pipleline to a new version tag rather than the branch commit, before merge this PR
-	github.com/Azure/azure-pipeline-go v0.1.10-0.20190627050904-93822ffd0d75
-	github.com/Azure/azure-storage-blob-go v0.6.0
-	github.com/Azure/azure-storage-file-go v0.0.0-20190108093629-d93e19c84c2a
+	github.com/Azure/azure-pipeline-go v0.2.1
+	github.com/Azure/azure-storage-blob-go v0.7.0
+	github.com/Azure/azure-storage-file-go v0.5.0
 	github.com/Azure/go-autorest v10.15.2+incompatible
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/danieljoos/wincred v1.0.1
