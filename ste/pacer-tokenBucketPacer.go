@@ -72,15 +72,14 @@ type tokenBucketPacer struct {
 	done                       chan struct{}
 }
 
-func newTokenBucketPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerCoarseRequest uint32) *tokenBucketPacer {
+func newTokenBucketPacer(bytesPerSecond int64, expectedBytesPerCoarseRequest uint32) *tokenBucketPacer {
 	p := &tokenBucketPacer{atomicTokenBucket: bytesPerSecond / 4, // seed it immediately with part-of-a-second's worth, to avoid a sluggish start
 		atomicTargetBytesPerSecond: bytesPerSecond,
 		expectedBytesPerRequest:    int64(expectedBytesPerCoarseRequest),
 		done:                       make(chan struct{}),
 	}
 
-	// the pacer runs in a separate goroutine for as long as the ctx lasts
-	go p.pacerBody(ctx)
+	go p.pacerBody()
 
 	return p
 }
@@ -128,13 +127,11 @@ func (p *tokenBucketPacer) Close() error {
 	return nil
 }
 
-func (p *tokenBucketPacer) pacerBody(ctx context.Context) {
+func (p *tokenBucketPacer) pacerBody() {
 	lastTime := time.Now()
 	for {
 
 		select {
-		case <-ctx.Done(): // TODO: review use of context here. Alternative is just to insist that user calls Close when done
-			return
 		case <-p.done:
 			return
 		default:

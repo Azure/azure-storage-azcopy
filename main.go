@@ -23,14 +23,12 @@ package main
 import (
 	"log"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"time"
 
-  "github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/cmd"
 	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // get the lifecycle manager to print messages
@@ -47,7 +45,7 @@ func main() {
 
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, func(_ int64) {})
+		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, 0)
 		return
 	}
 
@@ -59,22 +57,7 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
-	concurrentFilesLimit := computeConcurrentFilesLimit(maxFileAndSocketHandles, concurrentConnections)
-
-	// now we know how we want to start the STE, but create func to defer startup until after cmd line params are parsed
-	// TODO: reviewers, I'm not totally happy with the amount of indirection created by the use of this function.
-	//    Alternatives I thought of were:
-	//    1. Move more of the code that's here into root.go. Maybe that's an option...
-	//    2. Don't use a command line parameter for the cap on transfer rate, do it with an environment variable instead.
-	//       That's possible, but it felt slightly wrong for some reason.
-	//   Thoughts?
-	steStartupFunc := func(cmdLineCapMegaBitsPerSecond int64) {
-		err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, cmdLineCapMegaBitsPerSecond, azcopyAppPathFolder, azcopyLogPathFolder)
-		common.PanicIfErr(err)
-	}
-
-	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, steStartupFunc)
+	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, maxFileAndSocketHandles)
 	glcm.Exit(nil, common.EExitCode.Success())
 }
 
@@ -86,27 +69,4 @@ func configureGC() {
 		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
 		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default
 	}()
-}
-
-// ComputeConcurrentFilesLimit finds a number of concurrently-openable files
-// such that we'll have enough handles left, after using some as network handles
-// TODO: add environment var to optionally allow bringing concurrentFiles down lower
-//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
-//    (update logging
-func computeConcurrentFilesLimit(maxFileAndSocketHandles int, concurrentConnections int) int {
-
-	allowanceForOnGoingEnumeration := 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
-
-	// Compute a very conservative estimate for total number of connections that we may have
-	// To get a conservative estimate we pessimistically assume that the pool of idle conns is full,
-	// but all the ones we are actually using are (by some fluke of timing) not in the pool.
-	// TODO: consider actually SETTING AzCopyMaxIdleConnsPerHost to say, max(0.3 * FileAndSocketHandles, 1000), instead of using the hard-coded value we currently have
-	possibleMaxTotalConcurrentHttpConnections := concurrentConnections + ste.AzCopyMaxIdleConnsPerHost + allowanceForOnGoingEnumeration
-
-	concurrentFilesLimit := maxFileAndSocketHandles - possibleMaxTotalConcurrentHttpConnections
-
-	if concurrentFilesLimit < ste.NumTransferInitiationRoutines {
-		concurrentFilesLimit = ste.NumTransferInitiationRoutines // Set sensible floor, so we don't get negative or zero values if maxFileAndSocketHandles is low
-	}
-	return concurrentFilesLimit
 }

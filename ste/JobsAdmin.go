@@ -147,7 +147,9 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
 		targetRateInBytesPerSec := targetRateInMegaBitsPerSec * 1000 * 1000 / 8
 		unusedExpectedCoarseRequestByteCount := uint32(0)
-		pacer = newTokenBucketPacer(appCtx, targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+		pacer = newTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
+		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
 	}
 
 	ja := &jobsAdmin{

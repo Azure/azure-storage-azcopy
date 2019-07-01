@@ -29,11 +29,13 @@ import (
 	"github.com/spf13/cobra"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 )
 
 var azcopyAppPathFolder string
 var azcopyLogPathFolder string
+var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var azcopyOutputFormat common.OutputFormat
 var cmdLineCapMegaBitsPerSecond uint32
@@ -44,21 +46,18 @@ var rootCmd = &cobra.Command{
 	Use:     "azcopy",
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
-}
-
-type steStartupFunc func(cmdLineCapMegaBitsPerSecond int64)
-
-// createPersistentPreRunE bakes steStartupFunc into a function suitable for use as a cobra pre-run function
-func createPersistentPreRunE(steStartupFunc steStartupFunc) func(cmd *cobra.Command, args []string) error {
-
-	return func(cmd *cobra.Command, args []string) error {
-		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-		// (You can't access parameters before rootCmd.Execute has been called. THat's why we need to delay it here, to the point where
-		// those parameters can safely be used.
-		steStartupFunc(int64(cmdLineCapMegaBitsPerSecond))
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 
 		err := azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
+		if err != nil {
+			return err
+		}
+
+		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
+		concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
+		concurrentFilesLimit := computeConcurrentFilesLimit(azcopyMaxFileAndSocketHandles, concurrentConnections)
+		err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, int64(cmdLineCapMegaBitsPerSecond), azcopyAppPathFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err
 		}
@@ -70,7 +69,7 @@ func createPersistentPreRunE(steStartupFunc steStartupFunc) func(cmd *cobra.Comm
 		go detectNewVersion()
 
 		return nil
-	}
+	},
 }
 
 // hold a pointer to the global lifecycle controller so that commands could output messages and exit properly
@@ -78,11 +77,11 @@ var glcm = common.GetLifecycleMgr()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder, logPathFolder string, steStartup steStartupFunc) {
+func Execute(azsAppPathFolder, logPathFolder string, maxFileAndSocketHandles int) {
 	azcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
+	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 
-	rootCmd.PersistentPreRunE = createPersistentPreRunE(steStartup)
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
 	} else {
@@ -173,4 +172,27 @@ func detectNewVersion() {
 		// output in info mode instead of stderr, as it was crashing CI jobs of some people
 		glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
 	}
+}
+
+// ComputeConcurrentFilesLimit finds a number of concurrently-openable files
+// such that we'll have enough handles left, after using some as network handles
+// TODO: add environment var to optionally allow bringing concurrentFiles down lower
+//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
+//    (update logging
+func computeConcurrentFilesLimit(maxFileAndSocketHandles int, concurrentConnections int) int {
+
+	allowanceForOnGoingEnumeration := 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
+
+	// Compute a very conservative estimate for total number of connections that we may have
+	// To get a conservative estimate we pessimistically assume that the pool of idle conns is full,
+	// but all the ones we are actually using are (by some fluke of timing) not in the pool.
+	// TODO: consider actually SETTING AzCopyMaxIdleConnsPerHost to say, max(0.3 * FileAndSocketHandles, 1000), instead of using the hard-coded value we currently have
+	possibleMaxTotalConcurrentHttpConnections := concurrentConnections + ste.AzCopyMaxIdleConnsPerHost + allowanceForOnGoingEnumeration
+
+	concurrentFilesLimit := maxFileAndSocketHandles - possibleMaxTotalConcurrentHttpConnections
+
+	if concurrentFilesLimit < ste.NumTransferInitiationRoutines {
+		concurrentFilesLimit = ste.NumTransferInitiationRoutines // Set sensible floor, so we don't get negative or zero values if maxFileAndSocketHandles is low
+	}
+	return concurrentFilesLimit
 }

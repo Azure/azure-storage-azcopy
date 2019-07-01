@@ -47,7 +47,7 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
 	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
-		bd.filePacer = newPageBlobAutoPacer(jptm.Context(), pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
+		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 	}
 }
 
