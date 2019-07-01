@@ -145,7 +145,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 
 	// Create file pacer now.  Safe to create now, because we know that if Prologue is called the Epilogue will be to
 	// so we know that the pacer will be closed.  // TODO: consider re-factor xfer-anyToRemote so that epilogue is always called if uploader is constructed, and move this to constructor
-	s.filePacer = newPageBlobAutoPacer(s.jptm.Context(), pageBlobInitialBytesPerSecond, s.ChunkSize(), false, s.jptm.(common.ILogger))
+	s.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, s.ChunkSize(), false, s.jptm.(common.ILogger))
 
 	if s.isInManagedDiskImportExportAccount() {
 		// Target will already exist (and CANNOT be created through the REST API, because

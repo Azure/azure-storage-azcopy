@@ -21,7 +21,6 @@
 package ste
 
 import (
-	"context"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -76,7 +75,7 @@ var (
 	shouldPaceOncer     sync.Once
 )
 
-func newPageBlobAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger) autopacer {
+func newPageBlobAutoPacer(bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger) autopacer {
 
 	shouldPaceOncer.Do(func() {
 		raw := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.PacePageBlobs())
@@ -84,13 +83,13 @@ func newPageBlobAutoPacer(ctx context.Context, bytesPerSecond int64, expectedByt
 	})
 
 	if shouldPacePageBlobs {
-		return newAutoPacer(ctx, bytesPerSecond, expectedBytesPerRequest, isFair, logger, pageBlobThroughputTunerString)
+		return newAutoPacer(bytesPerSecond, expectedBytesPerRequest, isFair, logger, pageBlobThroughputTunerString)
 	} else {
 		return newNullAutoPacer()
 	}
 }
 
-func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger, logPrefix string) autopacer {
+func newAutoPacer(bytesPerSecond int64, expectedBytesPerRequest uint32, isFair bool, logger common.ILogger, logPrefix string) autopacer {
 
 	// TODO support an additive increase approach, if/when we use this pacer for account throughput as a whole?
 	//     Why is fairness important there - because there may be other instances of AzCopy hitting the same account,
@@ -103,14 +102,14 @@ func newAutoPacer(ctx context.Context, bytesPerSecond int64, expectedBytesPerReq
 	}
 
 	a := &autoTokenBucketPacer{
-		tokenBucketPacer:       newTokenBucketPacer(ctx, bytesPerSecond, expectedBytesPerRequest),
+		tokenBucketPacer:       newTokenBucketPacer(bytesPerSecond, expectedBytesPerRequest),
 		lastPeakBytesPerSecond: float32(bytesPerSecond),
 		done:                   make(chan struct{}),
 		logger:                 logger,
 		logPrefix:              logPrefix,
 	}
 
-	go a.rateTunerBody(ctx)
+	go a.rateTunerBody()
 
 	return a
 }
@@ -126,11 +125,9 @@ func (a *autoTokenBucketPacer) RetryCallback() {
 	atomic.AddInt32(&a.atomicRetriesInInterval, 1)
 }
 
-func (a *autoTokenBucketPacer) rateTunerBody(ctx context.Context) {
+func (a *autoTokenBucketPacer) rateTunerBody() {
 	for {
 		select {
-		case <-ctx.Done(): // TODO: review use of context here. Alternative is just to insist that user calls Close when done
-			return
 		case <-a.done:
 			return
 		case <-time.After(tuningIntervalDuration):
