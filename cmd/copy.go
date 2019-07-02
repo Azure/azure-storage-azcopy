@@ -303,13 +303,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	// Do not check for an error on this. Leaving this as true doesn't hurt, as the event never triggers unless it's an s2s copy anyway.
+	// This is thanks to a type assertion attempt.
+	// Atop this, leaving this on board for up/downloads in the future would be useful.
 	cooked.s2sCheckLength = raw.s2sCheckLength
-	// If no location is local, it _must_ be S2S. S2S only works to Blob at the moment.
-	// Therefore, this cannot be incorrectly triggered on ADLSG2 transfers or upload/download.
-	if (cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.From() == common.ELocation.Pipe() ||
-		cooked.fromTo.To() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Pipe()) && cooked.s2sCheckLength {
-		return cooked, errors.New("can only perform length comparison service-to-service")
-	}
 
 	cooked.background = raw.background
 	cooked.acl = raw.acl
