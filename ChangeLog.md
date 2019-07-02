@@ -5,13 +5,13 @@
 
 ### Bug fix
 
+1. Security: Fixed signature redaction in logs to include all error types: the log entries for network failures and HTTP errors could include SAS tokens. In previous releases, the SAS tokens were not always redacted correctly and could be written to the AzCopy log file and also to the Windows Event Log or the Linux Syslog. Now, SAS tokens are correctly redacted when logging those errors.  Note that errors returned by the Storage service itself - such as authentication errors and bad container names – were already redacted correctly
 1. Added error to using Azure Files without a SAS token (invalid auth configuration).
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business.
 1. `--log-level=none` now drops no logs, and has a listing in `--help`.
 1. Fixed bug where piping was not picking up the service version override, making it not work well against Azure Stack.
 1. Fixed a timeout when uploading particularly large files to ADLSG2.
 1. Fixed single wildcard match uploads
-1. Fixed signature redaction in logs to include all error types
 
 ### New features
 
