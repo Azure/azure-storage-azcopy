@@ -46,8 +46,7 @@ func init() {
 			loginCmdArgs.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 
 			if loginCmdArgs.certPass != "" || loginCmdArgs.clientSecret != "" {
-				glcm.Info(`Bear in mind that setting a environment variable from the command line will be readable in your command line history.
-				Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.`)
+				glcm.Info(environmentVariableNotice)
 			}
 
 			err := loginCmdArgs.process()
