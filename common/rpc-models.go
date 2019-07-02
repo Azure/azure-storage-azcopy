@@ -65,6 +65,7 @@ type CopyJobPartOrderRequest struct {
 
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
+	S2SDestLengthValidation        bool
 	S2SInvalidMetadataHandleOption InvalidMetadataHandleOption
 }
 

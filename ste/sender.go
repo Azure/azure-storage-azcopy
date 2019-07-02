@@ -63,6 +63,9 @@ type s2sCopier interface {
 
 	// GenerateCopyFunc returns a func() that will copy the specified portion of the source URL file to the remote location.
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
+
+	// GetDestinationLength returns a integer containing the length of the file at the remote location.
+	GetDestinationLength() (int64, error)
 }
 
 type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer pacer) (s2sCopier, error)

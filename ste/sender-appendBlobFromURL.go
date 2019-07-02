@@ -74,3 +74,13 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 
 	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)
 }
+
+// GetDestinationLength gets the destination length.
+func (c *urlToAppendBlobCopier) GetDestinationLength() (int64, error) {
+	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{})
+	if err != nil {
+		return -1, err
+	}
+
+	return properties.ContentLength(), nil
+}

@@ -95,6 +95,7 @@ type rawCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      string
+	s2sCheckLength           bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
 	blockBlobTier   string
@@ -300,6 +301,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {
 		return cooked, err
+	}
+
+	cooked.s2sCheckLength = raw.s2sCheckLength
+	// If no location is local, it _must_ be S2S. S2S only works to Blob at the moment.
+	// Therefore, this cannot be incorrectly triggered on ADLSG2 transfers or upload/download.
+	if (cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.From() == common.ELocation.Pipe() ||
+		cooked.fromTo.To() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Pipe()) && cooked.s2sCheckLength {
+		return cooked, errors.New("can only perform length comparison service-to-service")
 	}
 
 	cooked.background = raw.background
@@ -509,6 +518,7 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
+	s2sCheckLength           bool
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
@@ -1182,6 +1192,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sCheckLength, "s2s-check-length", true, "Check the length of a file transferred S2S after the transfer. If there is a mismatch, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+

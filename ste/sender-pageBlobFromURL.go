@@ -98,3 +98,13 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 		}
 	})
 }
+
+// GetDestinationLength gets the destination length.
+func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
+	properties, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{})
+	if err != nil {
+		return -1, err
+	}
+
+	return properties.ContentLength(), nil
+}

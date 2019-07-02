@@ -85,6 +85,7 @@ type TransferInfo struct {
 	SrcProperties
 	S2SGetPropertiesInBackend      bool
 	S2SSourceChangeValidation      bool
+	S2SDestLengthValidation        bool
 	S2SInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
 	// Blob
@@ -152,7 +153,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 	src, dst := plan.TransferSrcDstStrings(jptm.transferIndex)
 	dstBlobData := plan.DstBlobData
 
-	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
+	srcHTTPHeaders, srcMetadata, srcBlobType, srcBlobTier, s2sGetPropertiesInBackend, s2sDestLengthValidation, s2sSourceChangeValidation, s2sInvalidMetadataHandleOption :=
 		plan.TransferSrcPropertiesAndMetadata(jptm.transferIndex)
 	srcSAS, dstSAS := jptm.jobPartMgr.SAS()
 	// If the length of destination SAS is greater than 0
@@ -211,6 +212,7 @@ func (jptm *jobPartTransferMgr) Info() TransferInfo {
 		S2SGetPropertiesInBackend:      s2sGetPropertiesInBackend,
 		S2SSourceChangeValidation:      s2sSourceChangeValidation,
 		S2SInvalidMetadataHandleOption: s2sInvalidMetadataHandleOption,
+		S2SDestLengthValidation:        s2sDestLengthValidation,
 		SrcProperties: SrcProperties{
 			SrcHTTPHeaders: srcHTTPHeaders,
 			SrcMetadata:    srcMetadata,

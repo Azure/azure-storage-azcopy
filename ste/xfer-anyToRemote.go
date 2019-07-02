@@ -276,8 +276,9 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 
 // Complete epilogue. Handles both success and failure.
 func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
+	info := jptm.Info()
 	if jptm.TransferStatus() > 0 {
-		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && jptm.Info().S2SSourceChangeValidation) {
+		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
 			lmt, err := sip.GetLastModifiedTime()
 			if err != nil {
@@ -285,6 +286,21 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 			}
 			if lmt.UTC() != jptm.LastModifiedTime().UTC() {
 				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("source modified during transfer"))
+			}
+		}
+	}
+
+	// In theory, due to the limits imposed in copy.go, this should never be true unless it's a S2S transfer.
+	if info.S2SDestLengthValidation {
+		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
+			destLength, err := s2sc.GetDestinationLength()
+
+			if err != nil {
+				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
+			}
+
+			if destLength != jptm.Info().SourceSize {
+				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("destination length does not match source length"))
 			}
 		}
 	}
