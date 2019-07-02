@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -198,6 +199,10 @@ func (u *blobFSUploader) Epilogue() {
 			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
+}
+
+func (u *blobFSUploader) Cleanup() {
+	jptm := u.jptm
 
 	// Cleanup if status is now failed
 	if jptm.TransferStatus() <= 0 {

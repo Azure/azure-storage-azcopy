@@ -150,7 +150,8 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 // GetDestinationLength gets the destination length.
 func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
-	properties, err := c.destBlockBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{})
+	ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{})
 	if err != nil {
 		return -1, err
 	}

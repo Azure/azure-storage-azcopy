@@ -47,10 +47,15 @@ type ISenderBase interface {
 	Prologue(state common.PrologueState)
 
 	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
+	// This should handle any service-specific cleanup.
+	// jptm cleanup is handled in Cleanup() now.
+	Epilogue()
+
+	// Cleanup will be called after epilogue.
 	// Implementation should interact with its jptm to do
 	// post-success processing if transfer has been successful so far,
 	// or post-failure processing otherwise.
-	Epilogue()
+	Cleanup()
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)

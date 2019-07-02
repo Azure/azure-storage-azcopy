@@ -26,9 +26,10 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type appendBlobSenderBase struct {
@@ -143,6 +144,10 @@ func (s *appendBlobSenderBase) Prologue(ps common.PrologueState) {
 }
 
 func (s *appendBlobSenderBase) Epilogue() {
+	// Empty function because you don't have to commit on an append blob
+}
+
+func (s *appendBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
