@@ -37,10 +37,12 @@ func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
 		{"string with no secrets", "string with no secrets"},
 
 		// DON'T redact these
-		{"This is the sig that I have and x=y", "This is the sig that I have and x=y"},     // sig not in a URL
-		{"http://foo/path/with/sig/in/it?x=y", "http://foo/path/with/sig/in/it?x=y"},       // match is not in the QUERY part of a URL
-		{"http://www.signature.example.com/blah", "http://www.signature.example.com/blah"}, // another with match that's not in QUERY part the URL
-		{"http://foo?signatureevent=123&x=y", "http://foo?signatureevent=123&x=y"},         // our keyword (signature) is not the END of the key-value key name
+		{"This is the sig that I have and x=y", "This is the sig that I have and x=y"},                           // sig not in a URL
+		{"http://foo/path/with/sig/in/it?x=y", "http://foo/path/with/sig/in/it?x=y"},                             // match is not in the QUERY part of a URL
+		{"http://www.signature.example.com/blah", "http://www.signature.example.com/blah"},                       // another with match that's not in QUERY part the URL
+		{"http://foo?signatureevent=123&x=y", "http://foo?signatureevent=123&x=y"},                               // our keyword (signature) is not the END of the key-value key name
+		{"http://foo?something=sig&somethingelse=sig", "http://foo?something=sig&somethingelse=sig"},             // sig is the value
+		{"http://foo?something=sigabc&somethingelse=abcsig", "http://foo?something=sigabc&somethingelse=abcsig"}, // sig is inside the value
 
 		// DO redact all of the following
 		{"http://foo?sig=somevalue&x=y", "http://foo?sig=-REDACTED-&x=y"},                                         // remainder of query string is preserved
@@ -49,6 +51,7 @@ func (s *logSanitizerSuite) TestLogSanitizer(c *chk.C) {
 		{"blah\r\nhttp://foo?x=y&sig=somevalue blah", "blah\r\nhttp://foo?x=y&sig=-REDACTED- blah"},               // newline before and something else after
 		{"http://foo?a=b&" + SigXAmzForAws + "=somevalue&x=y", "http://foo?a=b&x-amz-signature=-REDACTED-&x=y"},   // AWS (using our official constant for the key
 		{"http://foo?a=b&X-Amz-siGnature=somevalue&x=y", "http://foo?a=b&X-Amz-siGnature=-REDACTED-&x=y"},         // weird caps
+		{"http://foo?sIg=somevalue&x=y", "http://foo?sIg=-REDACTED-&x=y"},                                         // more weird caps
 		{"http://foo?a=b&someother-signature=somevalue&x=y", "http://foo?a=b&someother-signature=-REDACTED-&x=y"}, // unexpected sig type
 		{"http://foo?x=y&my-token=somevalue", "http://foo?x=y&my-token=-REDACTED-"},                               // name ending in "token"
 		{"Foo=x;Signature=bar", "Foo=x;Signature=-REDACTED-"},                                                     // not in a query string
