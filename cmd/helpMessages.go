@@ -156,10 +156,10 @@ This command will cache encrypted login information for current user using the O
 Please refer to the examples for more information.
 ` + environmentVariableNotice
 
-const environmentVariableNotice = `
-(NOTICE FOR SETTING ENVIRONMENT VARIABLES: Bear in mind that setting an environment variable from the command line
-will be readable in your command line history. For variables that contain credentials, consider clearing these 
-entries from your history or using a small script of sorts to prompt for and set these variables.)`
+const environmentVariableNotice = "(NOTICE FOR SETTING ENVIRONMENT VARIABLES: Bear in mind that setting an environment variable from the command line " +
+	"will be readable in your command line history. " +
+	"For variables that contain credentials, consider clearing these entries from your history " +
+	"or using a small script of sorts to prompt for and set these variables.)"
 
 const loginCmdExample = `Log in interactively with default AAD tenant ID set to common:
 - azcopy login
