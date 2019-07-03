@@ -28,7 +28,7 @@ AzCopy v10 is a command-line utility that you can use to copy data to and from c
 
 For complete guidance, visit any of these articles on the docs.microsoft.com website.
 
-:eight_spoked_asterisk: [Get started with AzCopy](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-v10)
+:eight_spoked_asterisk: [Get started with AzCopy (download links here)](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-v10)
 
 :eight_spoked_asterisk: [Transfer data with AzCopy and blob storage](https://docs.microsoft.com/azure/storage/common/storage-use-azcopy-blobs)
 
