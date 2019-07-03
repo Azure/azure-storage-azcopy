@@ -35,6 +35,17 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 512,
                                                     srcBlobType="PageBlob", dstBlobType="BlockBlob")
 
+    def test_copy_infer_blob_type_from_block_to_page_blob(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, "testS2SVHD.vhd")
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, "testS2SVHD.vhd")
+        self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob", 1024,
+                                                    srcBlobType="BlockBlob")
+
+        # Verify blob type (should be page blob)
+        result = util.Command("testBlob").add_arguments("testS2SVHD.vhd").add_arguments(dst_container_url). \
+            add_flags("blob-type", "PageBlob").execute_azcopy_verify()
+        self.assertTrue(result)
+
     def test_copy_single_512b_file_from_block_to_page_blob(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)

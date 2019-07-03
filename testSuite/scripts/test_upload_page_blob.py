@@ -26,6 +26,23 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
                 add_flags("blob-type","PageBlob").execute_azcopy_verify()
         self.assertTrue(result)
 
+    # Currently, the only auto-detected blob type is page blob.
+    # Copy a VHD without specifying page blob and see what it does.
+    def test_auto_detect_blob_type_vhd(self):
+        file_name = "myVHD.vhd"
+        file_path = util.create_test_fle(file_name, 4 * 1024 * 1024)
+
+        # copy VHD file without specifying page blob. Page blob is inferred for VHD, VHDX, and VMDK
+        destination_sas = util.get_resource_sas(file_name)
+        result = util.Command("copy").add_arguments(file_path).add_arguments(destination_sas).add_flags("log-level","info"). \
+            add_flags("block-size-mb", 4).execute_azcopy_copy_command()
+        self.assertTrue(result)
+
+        # execute validator. Validator will ensure it's a page blob as validator now checks blob type before testing.
+        result = util.Command("testBlob").add_arguments(file_path).add_arguments(destination_sas). \
+            add_flags("blob-type", "PageBlob").execute_azcopy_verify()
+        self.assertTrue(result)
+
     # test_page_blob_upload_1mb_with_sas verifies the azcopy upload of 1mb file
     # as a page blob with sas.
     def test_page_blob_upload_1mb_with_sas(self):
