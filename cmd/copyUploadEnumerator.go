@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -445,6 +447,13 @@ func (e *copyUploadEnumerator) getSymlinkTransferList(symlinkPath, source, paren
 }
 
 func (e *copyUploadEnumerator) addTransfer(transfer common.CopyTransfer, cca *cookedCopyCmdArgs) error {
+	util := copyHandlerUtil{}
+
+	transfer.BlobType = e.BlobAttributes.BlobType.ToAzBlobType()
+	if e.BlobAttributes.BlobType == common.EBlobType.None() || e.BlobAttributes.BlobType == common.EBlobType.Detect() {
+		transfer.BlobType = util.inferBlobType(transfer.Source, azblob.BlobBlockBlob)
+	}
+
 	return addTransfer((*common.CopyJobPartOrderRequest)(e), transfer, cca)
 }
 

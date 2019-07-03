@@ -24,6 +24,8 @@ import (
 	"errors"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -147,4 +149,18 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 
 		body()
 	}
+}
+
+// newBlobUploader detects blob type and creates a uploader manually
+func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+	switch jptm.Info().SrcBlobType {
+	case azblob.BlobBlockBlob:
+		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
+	case azblob.BlobPageBlob:
+		return newPageBlobUploader(jptm, destination, p, pacer, sip)
+	case azblob.BlobAppendBlob:
+		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
+	}
+
+	panic("invalid blob type")
 }

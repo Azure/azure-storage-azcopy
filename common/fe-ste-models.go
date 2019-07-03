@@ -395,6 +395,8 @@ func (BlobType) PageBlob() BlobType { return BlobType(2) }
 
 func (BlobType) AppendBlob() BlobType { return BlobType(3) }
 
+func (BlobType) Detect() BlobType { return BlobType(4) }
+
 func (bt BlobType) String() string {
 	return enum.StringInt(bt, reflect.TypeOf(bt))
 }

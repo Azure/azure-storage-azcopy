@@ -239,6 +239,12 @@ func (e *copyS2SMigrationBlobEnumerator) addTransfersFromContainer(ctx context.C
 
 func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.URL, properties *azblob.BlobProperties, metadata azblob.Metadata,
 	cca *cookedCopyCmdArgs) error {
+	util := copyHandlerUtil{}
+
+	if e.BlobAttributes.BlobType == common.EBlobType.None() || e.BlobAttributes.BlobType == common.EBlobType.Detect() {
+		properties.BlobType = util.inferBlobType(srcURL.Path, properties.BlobType)
+	}
+
 	return e.addTransfer(
 		common.CopyTransfer{
 			Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -260,6 +266,13 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.
 
 func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url.URL, properties *azblob.BlobGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
+	util := copyHandlerUtil{}
+
+	bt := properties.BlobType()
+	if e.BlobAttributes.BlobType == common.EBlobType.None() || e.BlobAttributes.BlobType == common.EBlobType.Detect() {
+		bt = util.inferBlobType(srcURL.Path, bt)
+	}
+
 	return e.addTransfer(
 		common.CopyTransfer{
 			Source:             gCopyUtil.stripSASFromBlobUrl(srcURL).String(),
@@ -273,7 +286,7 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url
 			CacheControl:       properties.CacheControl(),
 			ContentMD5:         properties.ContentMD5(),
 			Metadata:           common.FromAzBlobMetadataToCommonMetadata(properties.NewMetadata()),
-			BlobType:           properties.BlobType(),
+			BlobType:           bt,
 			BlobTier:           e.getAccessTier(azblob.AccessTierType(properties.AccessTier()), cca.s2sPreserveAccessTier),
 		},
 		cca)
