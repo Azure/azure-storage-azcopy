@@ -44,7 +44,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up the destination as a single file
@@ -70,7 +70,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithSingleFile(c *chk.C) {
 		})
 
 		// recreate the blob to have a later last modified time
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		mockedRPC.reset()
 
 		runSyncAndVerify(c, raw, func(err error) {
@@ -160,7 +160,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIdenticalDestination(c *chk.C)
 	})
 
 	// refresh the blobs' last modified time so that they are newer
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 	mockedRPC.reset()
 
 	runSyncAndVerify(c, raw, func(err error) {
@@ -225,7 +225,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeFlag(c *chk.C) {
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -260,7 +260,7 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithExcludeFlag(c *chk.C) {
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up the destination with an empty folder
@@ -295,13 +295,13 @@ func (s *cmdIntegrationSuite) TestSyncDownloadWithIncludeAndExcludeFlag(c *chk.C
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up the destination with an empty folder
@@ -409,7 +409,7 @@ func (s *cmdIntegrationSuite) TestSyncMismatchBlobAndDirectory(c *chk.C) {
 	blobName := "singleblobisbest"
 	blobList := []string{blobName}
 	containerURL, containerName := createNewContainer(c, bsu)
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 	defer deleteContainer(c, containerURL)
 	c.Assert(containerURL, chk.NotNil)
 

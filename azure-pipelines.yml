@@ -1,0 +1,45 @@
+trigger:
+  branches:
+    include:
+      - master
+      - dev
+
+pr:
+  branches:
+    include:
+      - master
+      - dev
+
+jobs:
+  - job: Linux_and_Windows_Builds
+    pool:
+      vmImage: 'ubuntu-16.04'
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.12'
+      - script: |
+          GOARCH=amd64 GOOS=linux go build -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_amd64"
+          GOARCH=amd64 GOOS=linux go build -tags "se_integration" -o "$(Build.ArtifactStagingDirectory)/azcopy_linux_se_amd64"
+          GOARCH=amd64 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_amd64.exe"
+          GOARCH=386 GOOS=windows go build -o "$(Build.ArtifactStagingDirectory)/azcopy_windows_386.exe"
+        displayName: 'Generate builds'
+
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifacts'
+        condition: succeededOrFailed()
+
+  - job: MacOS_Build
+    pool:
+      vmImage: 'xcode9-macos10.13'
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.12'
+      - script: |
+          go build -o "$(Build.ArtifactStagingDirectory)/azcopy_darwin_amd64"
+        displayName: 'Generate builds'
+
+      - task: PublishBuildArtifacts@1
+        displayName: 'Publish Artifacts'
+        condition: succeededOrFailed()

@@ -39,7 +39,7 @@ type pageBlobSenderBase struct {
 	srcSize         int64
 	chunkSize       uint32
 	numChunks       uint32
-	pacer           *pacer
+	pacer           pacer
 	// Headers and other info that we will apply to the destination
 	// object. For S2S, these come from the source service.
 	// When sending local data, they are computed based on
@@ -51,7 +51,7 @@ type pageBlobSenderBase struct {
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
-	filePacer autoPacerConsumer
+	filePacer autopacer
 }
 
 const (
@@ -65,7 +65,7 @@ var (
 	md5NotSupportedInManagedDiskError = errors.New("the Content-MD5 hash is not supported for managed disk uploads")
 )
 
-func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
+func newPageBlobSenderBase(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider ISourceInfoProvider, inferredAccessTierType azblob.AccessTierType) (*pageBlobSenderBase, error) {
 	transferInfo := jptm.Info()
 
 	// compute chunk count
@@ -145,7 +145,7 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 
 	// Create file pacer now.  Safe to create now, because we know that if Prologue is called the Epilogue will be to
 	// so we know that the pacer will be closed.  // TODO: consider re-factor xfer-anyToRemote so that epilogue is always called if uploader is constructed, and move this to constructor
-	s.filePacer = newPageBlobAutoPacer(s.jptm.Context(), pageBlobInitialBytesPerSecond, s.ChunkSize(), false, s.jptm.(common.ILogger))
+	s.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, s.ChunkSize(), false, s.jptm.(common.ILogger))
 
 	if s.isInManagedDiskImportExportAccount() {
 		// Target will already exist (and CANNOT be created through the REST API, because

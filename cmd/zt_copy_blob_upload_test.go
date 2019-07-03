@@ -29,6 +29,65 @@ import (
 )
 
 // regular local file->blob upload
+func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
+		// set up the source as a single file
+		srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+		fileList := []string{srcFileName}
+		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+
+		// set up the destination container with a single blob
+		dstBlobName := "testfolder/"
+
+		// set up interceptor
+		mockedRPC := interceptor{}
+		Rpc = mockedRPC.intercept
+		mockedRPC.init()
+
+		// construct the raw input to simulate user input
+		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, dstBlobName)
+		raw := getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawBlobURLWithSAS.String())
+
+		// the blob was created after the file, so no sync should happen
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// Validate that the destination is the file name (within the folder).
+			// The destination being the folder *was* the issue in the past.
+			// The service would just name the file as the folder if we didn't explicitly specify it.
+			c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+			d, err := url.PathUnescape(mockedRPC.transfers[0].Destination) //Unescape the destination, as we have special characters.
+			c.Assert(err, chk.IsNil)
+			c.Assert(d, chk.Equals, srcFileName)
+		})
+
+		// clean the RPC for the next test
+		mockedRPC.reset()
+
+		// now target the destination container, the result should be the same
+		rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+		raw = getDefaultCopyRawInput(filepath.Join(srcDirName, srcFileName), rawContainerURLWithSAS.String())
+
+		// the file was created after the blob, so no sync should happen
+		runCopyAndVerify(c, raw, func(err error) {
+			c.Assert(err, chk.IsNil)
+
+			// verify explicitly since the source and destination names will be different:
+			// the source is "" since the given URL points to the blob itself
+			// the destination should be the blob name, since the given local path points to the parent dir
+			c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
+
+			c.Assert(mockedRPC.transfers[0].Source, chk.Equals, "")
+			c.Assert(mockedRPC.transfers[0].Destination, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+url.PathEscape(srcFileName))
+		})
+	}
+}
+
+// regular local file->blob upload
 func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 	bsu := getBSU()
 	containerURL, containerName := createNewContainer(c, bsu)
@@ -42,7 +101,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 
 		// set up the destination container with a single blob
 		dstBlobName := "whatever"
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName})
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, []string{dstBlobName}, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up interceptor

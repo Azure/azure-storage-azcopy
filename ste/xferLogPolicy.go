@@ -18,6 +18,8 @@ import (
 // Because V10 SDK supports flexibility for injecting customized logging policy,
 // and considering redact x-amz-signature's request header for logging is not a general demand for Azure Storage Blob Go SDK.
 // TODO: Further discuss whether to add callback into RequestLogOptions for Azure Storage Blob Go SDK.
+// TODO: (new) consider also the relationship between the above comment and todos, and the new LogSanitizer
+//    Do we really need this copied version of the blob Storage SDK file now?
 
 // RequestLogOptions configures the retry policy's behavior.
 type RequestLogOptions struct {
@@ -60,7 +62,7 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			tryDuration := tryEnd.Sub(tryStart)
 			opDuration := tryEnd.Sub(operationStart)
 
-			logLevel, forceLog := pipeline.LogInfo, false // Default logging information
+			logLevel, forceLog, httpError := pipeline.LogInfo, false, false // Default logging information
 
 			// If the response took too long, we'll upgrade to warning.
 			if o.LogWarningIfTryOverThreshold > 0 && tryDuration > o.LogWarningIfTryOverThreshold {
@@ -71,9 +73,9 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			if err == nil { // We got a response from the service
 				sc := response.Response().StatusCode
 				if ((sc >= 400 && sc <= 499) && sc != http.StatusNotFound && sc != http.StatusConflict && sc != http.StatusPreconditionFailed && sc != http.StatusRequestedRangeNotSatisfiable) || (sc >= 500 && sc <= 599) {
-					logLevel, forceLog = pipeline.LogError, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
-				} else {
-					// For other status codes, we leave the level as is.
+					logLevel, forceLog, httpError = pipeline.LogError, true, true // Promote to Error any 4xx (except those listed is an error) or any 5xx
+				} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
+					httpError = true
 				}
 			} else { // This error did not get an HTTP response from the service; upgrade the severity to Error
 				logLevel, forceLog = pipeline.LogError, true
@@ -98,8 +100,10 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				}
 
 				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err)
-				if logLevel <= pipeline.LogError {
-					b.Write(stack()) // For errors (or lower levels), we append the stack trace (an expensive operation)
+				//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
+				//for a set of harmless errors. HTTP requests ultimately will be retried.
+				if logLevel <= pipeline.LogError && !httpError {
+					b.Write(stack())
 				}
 				msg := b.String()
 
@@ -118,7 +122,7 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 func prepareRequestForLogging(request pipeline.Request) *http.Request {
 	req := request
 	rawQuery := req.URL.RawQuery
-	sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, "sig")
+	sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, common.SigAzure)
 
 	if sigRedacted {
 		// Make copy so we don't destroy the query parameters we actually need to send in the request
@@ -156,8 +160,8 @@ func prepareRequestForServiceLogging(request pipeline.Request) *http.Request {
 		url, err := url.Parse(req.Header.Get(key))
 		if err == nil {
 			rawQuery := url.RawQuery
-			sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, "sig")
-			xAmzSignatureRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, "x-amz-signature")
+			sigRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, common.SigAzure)
+			xAmzSignatureRedacted, rawQuery := common.RedactSecretQueryParam(rawQuery, common.SigXAmzForAws)
 
 			if sigRedacted || xAmzSignatureRedacted {
 				url.RawQuery = rawQuery

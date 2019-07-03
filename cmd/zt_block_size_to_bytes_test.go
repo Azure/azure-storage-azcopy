@@ -18,26 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ste
+package cmd
 
 import (
-	"sync/atomic"
+	chk "gopkg.in/check.v1"
 )
 
-// s2sPacer is currently only used to calculate average transfer speed.
-type s2sPacer struct {
-	p *pacer
-}
+type blockSizeFilterSuite struct{}
 
-// creates S2S pacer for speed calculation
-func newS2SPacer(p *pacer) *s2sPacer {
-	if p == nil {
-		panic("p must not be nil")
+var _ = chk.Suite(&blockSizeFilterSuite{})
+
+func (s *genericFilterSuite) TestConversions(c *chk.C) {
+
+	testData := []struct {
+		floatMiB         float64
+		expectedBytes    uint32
+		expectedErrorMsg string
+	}{
+		{100, 100 * 1024 * 1024, ""},
+		{1, 1024 * 1024, ""},
+		{0.25, 256 * 1024, ""},
+		{0.000030517578125, 32, ""}, // 32 bytes, extremely small case
+		{-1, 0, "negative block size not allowed"},
+		{0.333, 0, "while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. 0.333000000000 MiB resolves to 349175.808 bytes"},
 	}
-	return &s2sPacer{p: p}
-}
 
-// Done adds bytes transferred.
-func (s2sp *s2sPacer) Done(n int64) {
-	atomic.AddInt64(&s2sp.p.bytesTransferred, int64(n))
+	for _, d := range testData {
+		actualBytes, err := blockSizeInBytes(d.floatMiB)
+		if d.expectedErrorMsg != "" {
+			c.Check(err.Error(), chk.Equals, d.expectedErrorMsg)
+		} else {
+			c.Check(actualBytes, chk.Equals, d.expectedBytes)
+		}
+	}
 }

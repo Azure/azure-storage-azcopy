@@ -23,6 +23,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"time"
@@ -33,16 +34,18 @@ import (
 )
 
 type blobFSUploader struct {
-	jptm       IJobPartTransferMgr
-	fileURL    azbfs.FileURL
-	chunkSize  uint32
-	numChunks  uint32
-	pipeline   pipeline.Pipeline
-	pacer      *pacer
-	md5Channel chan []byte
+	jptm                IJobPartTransferMgr
+	fileURL             azbfs.FileURL
+	chunkSize           uint32
+	numChunks           uint32
+	pipeline            pipeline.Pipeline
+	pacer               pacer
+	md5Channel          chan []byte
+	creationTimeHeaders *azbfs.BlobFSHTTPHeaders
+	flushThreshold      int64
 }
 
-func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 
 	info := jptm.Info()
 
@@ -135,8 +138,14 @@ func (u *blobFSUploader) RemoteFileExists() (bool, error) {
 }
 
 func (u *blobFSUploader) Prologue(state common.PrologueState) {
+	jptm := u.jptm
+
+	u.flushThreshold = int64(u.chunkSize * ADLSFlushThreshold)
+
+	h := jptm.BfsDstData(state.LeadingBytes)
+	u.creationTimeHeaders = &h
 	// Create file with the source size
-	_, err := u.fileURL.Create(u.jptm.Context()) // note that "create" actually calls "create path"
+	_, err := u.fileURL.Create(u.jptm.Context(), h) // note that "create" actually calls "create path"
 	if err != nil {
 		u.jptm.FailActiveUpload("Creating file", err)
 		return
@@ -155,7 +164,7 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
+		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile, body) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
@@ -169,16 +178,24 @@ func (u *blobFSUploader) Epilogue() {
 
 	// flush
 	if jptm.TransferStatus() > 0 {
+		ss := jptm.Info().SourceSize
 		md5Hash, ok := <-u.md5Channel
 		if ok {
-			_, err := u.fileURL.FlushData(jptm.Context(), jptm.Info().SourceSize, md5Hash)
-			if err != nil {
-				jptm.FailActiveUpload("Flushing data", err)
-				// don't return, since need cleanup below
+			// Flush incrementally to avoid timeouts on a full flush
+			for i := int64(math.Min(float64(ss), float64(u.flushThreshold))); ; i = int64(math.Min(float64(ss), float64(i+u.flushThreshold))) {
+				// Close only at the end of the file, keep all uncommitted data before then.
+				_, err := u.fileURL.FlushData(jptm.Context(), i, md5Hash, *u.creationTimeHeaders, i != ss, i == ss)
+				if err != nil {
+					jptm.FailActiveUpload("Flushing data", err)
+					break // don't return, since need cleanup below
+				}
+
+				if i == ss {
+					break
+				}
 			}
 		} else {
-			jptm.FailActiveUpload("Getting hash", errNoHash)
-			// don't return, since need cleanup below
+			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
 

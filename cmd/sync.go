@@ -47,7 +47,7 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSizeMB         uint32
+	blockSizeMB         float64
 	logVerbosity        string
 	include             string
 	exclude             string
@@ -58,10 +58,6 @@ type rawSyncCmdArgs struct {
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
 	// otherwise the user is prompted to make a decision
 	deleteDestination string
-}
-
-func (raw *rawSyncCmdArgs) blockSizeInBytes() uint32 {
-	return raw.blockSizeMB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MB
 }
 
 func (raw *rawSyncCmdArgs) parsePatterns(pattern string) (cookedPatterns []string) {
@@ -115,12 +111,17 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// generate a new job ID
 	cooked.jobID = common.NewJobID()
 
-	cooked.blockSize = raw.blockSizeInBytes()
+	var err error
+	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
+	if err != nil {
+		return cooked, err
+	}
+
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.recursive = raw.recursive
 
 	// determine whether we should prompt the user to delete extra files
-	err := cooked.deleteDestination.Parse(raw.deleteDestination)
+	err = cooked.deleteDestination.Parse(raw.deleteDestination)
 	if err != nil {
 		return cooked, err
 	}
@@ -334,7 +335,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		jobDone = summary.JobStatus.IsJobDone()
 
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(1024*1024))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 		throughput = common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
 
@@ -507,10 +508,10 @@ func init() {
 
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
-	syncCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size.")
+	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
+	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
 	syncCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")

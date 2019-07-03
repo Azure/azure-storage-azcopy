@@ -3,6 +3,7 @@ package ste
 import (
 	"context"
 	"fmt"
+	"github.com/mattn/go-ieproxy"
 	"mime"
 	"net"
 	"net/http"
@@ -90,7 +91,7 @@ const AzCopyMaxIdleConnsPerHost = 500
 func NewAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy: ieproxy.GetProxyFunc(),
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,
@@ -125,7 +126,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -146,7 +147,7 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -162,14 +163,13 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 
 	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
 		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p *pacer, client *http.Client) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -181,7 +181,6 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		newRetryNotificationPolicyFactory(), // record that a retry status was returned
 		c,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
 	}
@@ -207,8 +206,9 @@ type jobPartMgr struct {
 	planMMF *JobPartPlanMMF // This Job part plan's MMF
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
-	blobHTTPHeaders azblob.BlobHTTPHeaders
-	fileHTTPHeaders azfile.FileHTTPHeaders
+	blobHTTPHeaders   azblob.BlobHTTPHeaders
+	fileHTTPHeaders   azfile.FileHTTPHeaders
+	blobFSHTTPHeaders azbfs.BlobFSHTTPHeaders
 
 	// Additional data shared by all of this Job Part's transfers; initialized when this jobPartMgr is created
 	blockBlobTier common.BlockBlobTier
@@ -230,7 +230,7 @@ type jobPartMgr struct {
 
 	priority common.JobPriority
 
-	pacer *pacer // Pacer used by chunks when uploading data
+	pacer pacer // Pacer is used to cap throughput
 
 	slicePool common.ByteSlicePooler
 
@@ -264,6 +264,14 @@ func (jpm *jobPartMgr) ScheduleTransfers(jobCtx context.Context) {
 	dstData := plan.DstBlobData
 
 	jpm.blobHTTPHeaders = azblob.BlobHTTPHeaders{
+		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
+		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
+		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
+		ContentLanguage:    string(dstData.ContentLanguage[:dstData.ContentLanguageLength]),
+		CacheControl:       string(dstData.CacheControl[:dstData.CacheControlLength]),
+	}
+
+	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{
 		ContentType:        string(dstData.ContentType[:dstData.ContentTypeLength]),
 		ContentEncoding:    string(dstData.ContentEncoding[:dstData.ContentEncodingLength]),
 		ContentDisposition: string(dstData.ContentDisposition[:dstData.ContentDispositionLength]),
@@ -538,6 +546,13 @@ func (jpm *jobPartMgr) fileDstData(fullFilePath string, dataFileToXfer []byte) (
 	return azfile.FileHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.fileHTTPHeaders.ContentLanguage, ContentEncoding: jpm.fileHTTPHeaders.ContentEncoding, ContentDisposition: jpm.fileHTTPHeaders.ContentDisposition, CacheControl: jpm.fileHTTPHeaders.CacheControl}, jpm.fileMetadata
 }
 
+func (jpm *jobPartMgr) bfsDstData(fullFilePath string, dataFileToXfer []byte) (headers azbfs.BlobFSHTTPHeaders) {
+	if jpm.planMMF.Plan().DstBlobData.NoGuessMimeType || dataFileToXfer == nil {
+		return jpm.blobFSHTTPHeaders
+	}
+	return azbfs.BlobFSHTTPHeaders{ContentType: jpm.inferContentType(fullFilePath, dataFileToXfer), ContentLanguage: jpm.blobFSHTTPHeaders.ContentLanguage, ContentEncoding: jpm.blobFSHTTPHeaders.ContentEncoding, ContentDisposition: jpm.blobFSHTTPHeaders.ContentDisposition, CacheControl: jpm.blobFSHTTPHeaders.CacheControl}
+}
+
 func (jpm *jobPartMgr) inferContentType(fullFilePath string, dataFileToXfer []byte) string {
 	if guessedType := mime.TypeByExtension(filepath.Ext(fullFilePath)); guessedType != "" {
 		return guessedType
@@ -587,6 +602,7 @@ func (jpm *jobPartMgr) Close() {
 	jpm.blobMetadata = azblob.Metadata{}
 	jpm.fileHTTPHeaders = azfile.FileHTTPHeaders{}
 	jpm.fileMetadata = azfile.Metadata{}
+	jpm.blobFSHTTPHeaders = azbfs.BlobFSHTTPHeaders{}
 	jpm.preserveLastModifiedTime = false
 	// TODO: Delete file?
 	/*if err := os.Remove(jpm.planFile.Name()); err != nil {

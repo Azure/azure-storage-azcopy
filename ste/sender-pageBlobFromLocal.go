@@ -34,7 +34,7 @@ type pageBlobUploader struct {
 	md5Channel chan []byte
 }
 
-func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, sip ISourceInfoProvider) (ISenderBase, error) {
+func newPageBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 	senderBase, err := newPageBlobSenderBase(jptm, destination, p, pacer, sip, azblob.AccessTierNone)
 	if err != nil {
 		return nil, err
@@ -68,14 +68,16 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		}
 
 		// control rate of sending (since page blobs can effectively have per-blob throughput limits)
+		// Note that this level of control here is specific to the individual page blob, and is additional
+		// to the application-wide pacing that we (optionally) do below when writing the response body.
 		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
-		if err := u.filePacer.RequestRightToSend(jptm.Context(), reader.Length()); err != nil {
+		if err := u.filePacer.RequestTrafficAllocation(jptm.Context(), reader.Length()); err != nil {
 			jptm.FailActiveUpload("Pacing block", err)
 		}
 
 		// send it
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
-		body := newLiteRequestBodyPacer(reader, u.pacer)
+		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
 		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {

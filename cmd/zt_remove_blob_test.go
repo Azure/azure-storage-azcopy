@@ -34,7 +34,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 	for _, blobName := range []string{"top/mid/low/singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up interceptor
@@ -44,7 +44,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 
 		// construct the raw input to simulate user input
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String(), true)
+		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 
 		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
@@ -72,7 +72,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -117,7 +117,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
-	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -158,7 +158,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -168,7 +168,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.include = includeString
 	raw.recursive = true
 
@@ -191,7 +191,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 
 	// add special blobs that we wish to exclude
 	blobsToExclude := []string{"notGood.pdf", "excludeSub/lame.jpeg", "exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
 	excludeString := "*.pdf;*.jpeg;exactName"
 
 	// set up interceptor
@@ -201,7 +201,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.exclude = excludeString
 	raw.recursive = true
 
@@ -224,13 +224,13 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
 	includeString := "*.pdf;*.jpeg;exactName"
 
 	// add special blobs that we wish to exclude
 	// note that the excluded files also match the include string
 	blobsToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToExclude, blockBlobDefaultData)
 	excludeString := "so*;not*;exactName"
 
 	// set up interceptor
@@ -240,7 +240,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.include = includeString
 	raw.exclude = excludeString
 	raw.recursive = true

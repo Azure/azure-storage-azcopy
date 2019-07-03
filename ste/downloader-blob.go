@@ -33,7 +33,7 @@ type blobDownloader struct {
 	// what type of page blob it is (e.g. premium) and can be significantly lower than the blob account limit.
 	// Using a automatic pacer here lets us find the right rate for this particular page blob, at which
 	// we won't be trying to move the faster than the Service wants us to.
-	filePacer autoPacerConsumer
+	filePacer autopacer
 }
 
 func newBlobDownloader() downloader {
@@ -47,7 +47,7 @@ func (bd *blobDownloader) Prologue(jptm IJobPartTransferMgr) {
 	if jptm.Info().SrcBlobType == azblob.BlobPageBlob {
 		// page blobs need a file-specific pacer
 		// See comments in uploader-pageBlob for the reasons, since the same reasons apply are are explained there
-		bd.filePacer = newPageBlobAutoPacer(jptm.Context(), pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
+		bd.filePacer = newPageBlobAutoPacer(pageBlobInitialBytesPerSecond, jptm.Info().BlockSize, false, jptm.(common.ILogger))
 	}
 }
 
@@ -56,17 +56,19 @@ func (bd *blobDownloader) Epilogue() {
 }
 
 // Returns a chunk-func for blob downloads
-func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
+func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// Control rate of data movement (since page blobs can effectively have per-blob throughput limits)
-		// Note that the resulting throughput is somewhat ragged for downloads, and does not track the
+		// Note that this level of control here is specific to the individual page blob, and is additional
+		// to the application-wide pacing that we (optionally) do below when reading the response body.
+		// Note also that the resulting throughput is somewhat ragged for downloads, and does not track the
 		// pacer's target rate as closely as it does for uploads. Presumably this is just because its
 		// hard to accurately control throughput from the receiving end. I.e. not a pacer bug, but just
 		// something inherent in the nature of REST downloads. So, as at March 2018, we are just living
 		// with it as known issue when downloading paced blobs.
 		jptm.LogChunkStatus(id, common.EWaitReason.FilePacer())
-		if err := bd.filePacer.RequestRightToSend(jptm.Context(), length); err != nil {
+		if err := bd.filePacer.RequestTrafficAllocation(jptm.Context(), length); err != nil {
 			jptm.FailActiveDownload("Pacing block", err)
 		}
 
@@ -101,7 +103,7 @@ func (bd *blobDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipe
 			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newLiteResponseBodyPacer(retryReader, pacer), true)
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

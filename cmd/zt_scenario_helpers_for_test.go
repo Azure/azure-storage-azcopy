@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -35,7 +36,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 )
 
 const defaultFileSize = 1024
@@ -162,13 +163,71 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 }
 
 // create the demanded blobs
-func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string) {
+func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
 		blob := containerURL.NewBlockBlobURL(blobName)
-		cResp, err := blob.Upload(ctx, strings.NewReader(blockBlobDefaultData), azblob.BlobHTTPHeaders{},
+		cResp, err := blob.Upload(ctx, strings.NewReader(data), azblob.BlobHTTPHeaders{},
 			nil, azblob.BlobAccessConditions{})
 		c.Assert(err, chk.IsNil)
 		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+}
+
+func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
+	for _, blobName := range blobList {
+		//Create the blob (PUT blob)
+		blob := containerURL.NewPageBlobURL(blobName)
+		cResp, err := blob.Create(ctx,
+			int64(len(data)),
+			0,
+			azblob.BlobHTTPHeaders{
+				ContentType: "text/random",
+			},
+			azblob.Metadata{},
+			azblob.BlobAccessConditions{},
+		)
+		c.Assert(err, chk.IsNil)
+		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+		//Create the page (PUT page)
+		uResp, err := blob.UploadPages(ctx,
+			0,
+			strings.NewReader(data),
+			azblob.PageBlobAccessConditions{},
+			nil,
+		)
+		c.Assert(err, chk.IsNil)
+		c.Assert(uResp.StatusCode(), chk.Equals, 201)
+	}
+
+	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
+	time.Sleep(time.Millisecond * 1500)
+}
+
+func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
+	for _, blobName := range blobList {
+		//Create the blob (PUT blob)
+		blob := containerURL.NewAppendBlobURL(blobName)
+		cResp, err := blob.Create(ctx,
+			azblob.BlobHTTPHeaders{
+				ContentType: "text/random",
+			},
+			azblob.Metadata{},
+			azblob.BlobAccessConditions{},
+		)
+		c.Assert(err, chk.IsNil)
+		c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+		//Append a block (PUT block)
+		uResp, err := blob.AppendBlock(ctx,
+			strings.NewReader(data),
+			azblob.AppendBlobAccessConditions{},
+			nil)
+		c.Assert(err, chk.IsNil)
+		c.Assert(uResp.StatusCode(), chk.Equals, 201)
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
@@ -304,6 +363,13 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
 	c.Assert(err, chk.IsNil)
 
 	return getServiceURLWithSAS(c, *credential).URL()
+}
+
+func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
+
+	return getAdlsServiceURLWithSAS(c, *credential)
 }
 
 func (scenarioHelper) getBlobServiceURL(c *chk.C) azblob.ServiceURL {
@@ -491,10 +557,14 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 	}
 }
 
-func getDefaultRemoveRawInput(src string, targetingBlob bool) rawCopyCmdArgs {
+func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	fromTo := common.EFromTo.BlobTrash()
-	if !targetingBlob {
+	srcURL, _ := url.Parse(src)
+
+	if strings.Contains(srcURL.Host, "file") {
 		fromTo = common.EFromTo.FileTrash()
+	} else if strings.Contains(srcURL.Host, "dfs") {
+		fromTo = common.EFromTo.BlobFSTrash()
 	}
 
 	return rawCopyCmdArgs{

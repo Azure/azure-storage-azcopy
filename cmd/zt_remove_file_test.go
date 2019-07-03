@@ -44,7 +44,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleFile(c *chk.C) {
 
 		// construct the raw input to simulate user input
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
-		raw := getDefaultRemoveRawInput(rawFileURLWithSAS.String(), true)
+		raw := getDefaultRemoveRawInput(rawFileURLWithSAS.String())
 
 		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
@@ -72,7 +72,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderShare(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String(), false)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -117,7 +117,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesUnderDirectory(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawDirectoryURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, dirName)
-	raw := getDefaultRemoveRawInput(rawDirectoryURLWithSAS.String(), false)
+	raw := getDefaultRemoveRawInput(rawDirectoryURLWithSAS.String())
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -168,7 +168,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String(), false)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
 	raw.include = includeString
 	raw.recursive = true
 
@@ -201,7 +201,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String(), false)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
 	raw.exclude = excludeString
 	raw.recursive = true
 
@@ -240,7 +240,7 @@ func (s *cmdIntegrationSuite) TestRemoveFilesWithIncludeAndExcludeFlag(c *chk.C)
 
 	// construct the raw input to simulate user input
 	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String(), false)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
 	raw.include = includeString
 	raw.exclude = excludeString
 	raw.recursive = true

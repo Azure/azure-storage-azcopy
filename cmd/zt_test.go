@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
 	"net/url"
@@ -40,7 +41,7 @@ import (
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 )
 
 // Hookup to the testing framework
@@ -55,6 +56,9 @@ const (
 	containerPrefix      = "container"
 	blobPrefix           = "blob"
 	blockBlobDefaultData = "AzCopy Random Test Data"
+	//512 bytes of alphanumeric random data
+	pageBlobDefaultData   = "lEYvPHhS2c9T7DDNtM7f0gccgbqe7DMYByLj7d1XS6jV5Y0Cuiz5i86e5llkBwzCahnR4n1MUvfpniNBxgRgJ4oNk8oaIlCevtsPaCZgOMpKdPohp7yYTfawiz8MtHlTwM8OmfgngbH2BNiqtSFEx9GArvkwkVF0dPoG6RRBug0BqHiWyMd0mZifrBTneG13bqKg7A8EjRmBHIqCMGoxOYo1ufojJjYKiv8dfBYGib4pNpfrcxlEWrMKEPcgs3YG3AGg2lIKrMVs7yWnSzwqeEnl9oMFjdwc7XB2e7y2IH1JLt8CzaYgW6qvaPzhFXWbUkIJ6KznQAaKExJt9my625REjn8G4WT5tfo82J2gpdJNAveaF1O09Irjb93Yg07CfeSOrUBo4WwORrfJ60O4nc3MWWvHT2CsJ4b3MtjtVR0nb084SQpRycXPSF9rMympZrwmP0mutBYCVOEWDjsaLOQJoHo2UOiBD2sM5rm4N5mqt0mEInyGO8pKnV7NKn0N"
+	appendBlobDefaultData = "AzCopy Random Append Test Data"
 
 	bucketPrefix      = "s3bucket"
 	objectPrefix      = "s3object"
@@ -73,15 +77,20 @@ const (
 // Will truncate the end of the test name, if there is not enough room for it, followed by the time-based suffix,
 // with a non-zero maxLen.
 func generateName(prefix string, maxLen int) string {
-	// These next lines up through the for loop are obtaining and walking up the stack
-	// trace to extrat the test name, which is stored in name
-	pc := make([]uintptr, 10)
-	runtime.Callers(0, pc)
-	f := runtime.FuncForPC(pc[0])
-	name := f.Name()
-	for i := 0; !strings.Contains(name, "Suite"); i++ { // The tests are all scoped to the suite, so this ensures getting the actual test name
-		f = runtime.FuncForPC(pc[i])
-		name = f.Name()
+	// The following lines step up the stack find the name of the test method
+	// Note: the way to do this changed in go 1.12, refer to release notes for more info
+	var pcs [10]uintptr
+	n := runtime.Callers(1, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	name := "TestFoo" // default stub "Foo" is used if anything goes wrong with this procedure
+	for {
+		frame, more := frames.Next()
+		if strings.Contains(frame.Func.Name(), "Suite") {
+			name = frame.Func.Name()
+			break
+		} else if !more {
+			break
+		}
 	}
 	funcNameStart := strings.Index(name, "Test")
 	name = name[funcNameStart+len("Test"):] // Just get the name of the test and not any of the garbage at the beginning
@@ -142,6 +151,13 @@ func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.Containe
 	container = bsu.NewContainerURL(name)
 
 	return container, name
+}
+
+func getFileSystemURL(c *chk.C, bsu azbfs.ServiceURL) (fileSystemURL azbfs.FileSystemURL, name string) {
+	name = generateContainerName()
+	fileSystemURL = bsu.NewFileSystemURL(name)
+
+	return fileSystemURL, name
 }
 
 func getBlockBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
@@ -224,6 +240,30 @@ func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.Conta
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
 	return container, name
+}
+
+func getBfsSU() azbfs.ServiceURL {
+	name, key := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", name))
+
+	credential := azbfs.NewSharedKeyCredential(name, key)
+	pipeline := azbfs.NewPipeline(credential, azbfs.PipelineOptions{})
+	return azbfs.NewServiceURL(*u, pipeline)
+}
+
+func createNewFileSystem(c *chk.C, bsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
+	fs, name = getFileSystemURL(c, bsu)
+
+	cResp, err := fs.Create(ctx)
+	c.Assert(err, chk.IsNil)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+	return fs, name
+}
+
+func deleteFileSystem(c *chk.C, fs azbfs.FileSystemURL) {
+	resp, err := fs.Delete(ctx)
+	c.Assert(err, chk.IsNil)
+	c.Assert(resp.StatusCode(), chk.Equals, 202)
 }
 
 func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
@@ -384,6 +424,9 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	c.Assert(err, chk.IsNil)
 
 	for _, bucket := range buckets {
+		if strings.Contains(bucket.Name, "elastic") {
+			continue
+		}
 		deleteBucket(c, client, bucket.Name)
 	}
 }
@@ -530,4 +573,26 @@ func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareNa
 
 	// TODO perhaps we need a global default pipeline
 	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
+}
+
+func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
+	sasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 }

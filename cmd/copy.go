@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"math"
 
 	"io"
 	"net/url"
@@ -43,20 +44,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// upload related
-const uploadMaxTries = 5
-const uploadTryTimeout = time.Minute * 10
-const uploadRetryDelay = time.Second * 1
-const uploadMaxRetryDelay = time.Second * 3
-
-// download related
-const downloadMaxTries = 5
-const downloadTryTimeout = time.Minute * 10
-const downloadRetryDelay = time.Second * 1
-const downloadMaxRetryDelay = time.Second * 3
-
 const pipingUploadParallelism = 5
 const pipingDefaultBlockSize = 8 * 1024 * 1024
+
+// For networking throughput in Mbps, (and only for networking), we divide by 1000*1000 (not 1024 * 1024) because
+// networking is traditionally done in base 10 units (not base 2).
+// E.g. "gigabit ethernet" means 10^9 bits/sec, not 2^30. So by using base 10 units
+// we give the best correspondence to the sizing of the user's network pipes.
+// See https://networkengineering.stackexchange.com/questions/3628/iec-or-si-units-binary-prefixes-used-for-network-measurement
+// NOTE that for everything else in the app (e.g. sizes of files) we use the base 2 units (i.e. 1024 * 1024) because
+// for RAM and disk file sizes, it is conventional to use the power-of-two-based units.
+const base10Mega = 1000 * 1000
 
 const pipeLocation = "~pipe~"
 
@@ -86,7 +84,7 @@ type rawCopyCmdArgs struct {
 	forceWrite bool
 
 	// options from flags
-	blockSizeMB              uint32
+	blockSizeMB              float64
 	metadata                 string
 	contentType              string
 	contentEncoding          string
@@ -140,8 +138,27 @@ func (raw *rawCopyCmdArgs) parsePatterns(pattern string) (cookedPatterns []strin
 	return
 }
 
-func (raw rawCopyCmdArgs) blockSizeInBytes() uint32 {
-	return raw.blockSizeMB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MB
+// blocSizeInBytes converts a FLOATING POINT number of MiB, to a number of bytes
+// A non-nil error is returned if the conversion is not possible to do accurately (e.g. it comes out of a fractional number of bytes)
+// The purpose of using floating point is to allow specialist users (e.g. those who want small block sizes to tune their read IOPS)
+// to use fractions of a MiB. E.g.
+// 0.25 = 256 KiB
+// 0.015625 = 16 KiB
+func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
+	if rawBlockSizeInMiB < 0 {
+		return 0, errors.New("negative block size not allowed")
+	}
+	rawSizeInBytes := rawBlockSizeInMiB * 1024 * 1024 // internally we use bytes, but users' convenience the command line uses MiB
+	if rawSizeInBytes > math.MaxUint32 {
+		return 0, errors.New("block size too big for uint32")
+	}
+	const epsilon = 0.001 // arbitrarily using a tolerance of 1000th of a byte
+	_, frac := math.Modf(rawSizeInBytes)
+	isWholeNumber := frac < epsilon || frac > 1.0-epsilon // frac is very close to 0 or 1, so rawSizeInBytes is (very close to) an integer
+	if !isWholeNumber {
+		return 0, fmt.Errorf("while fractional numbers of MiB are allowed as the block size, the fraction must result to a whole number of bytes. %.12f MiB resolves to %.3f bytes", rawBlockSizeInMiB, rawSizeInBytes)
+	}
+	return uint32(math.Round(rawSizeInBytes)), nil
 }
 
 // validates and transform raw input into cooked input
@@ -162,7 +179,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
-	cooked.blockSize = raw.blockSizeInBytes()
+
+	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
+	if err != nil {
+		return cooked, err
+	}
 
 	// parse the given blob type.
 	err = cooked.blobType.Parse(raw.blobType)
@@ -172,8 +193,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	// If the given blobType is AppendBlob, block-size-mb should not be greater than
 	// 4MB.
-	if cooked.blobType == common.EBlobType.AppendBlob() &&
-		raw.blockSizeInBytes() > common.MaxAppendBlobBlockSize {
+	if cookedSize, _ := blockSizeInBytes(raw.blockSizeMB); cooked.blobType == common.EBlobType.AppendBlob() && cookedSize > common.MaxAppendBlobBlockSize {
 		return cooked, fmt.Errorf("block size cannot be greater than 4MB for AppendBlob blob type")
 	}
 
@@ -299,8 +319,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.None() || cooked.contentType != "" || cooked.contentDisposition != "" || cooked.contentLanguage != "" || cooked.contentEncoding != "" || cooked.cacheControl != "" {
-			return cooked, fmt.Errorf("cannot use blob-type, content-type, content-disposition, content-language, content-encoding, or cache-control with ADLS Gen 2")
+		if cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
@@ -376,15 +396,15 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
+		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
+		}
+		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
+		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
 			cooked.pageBlobTier != common.EPageBlobTier.None() {
 			return cooked, fmt.Errorf("blob-tier is not supported while copying from sevice to service")
-		}
-		// Disabling blob type override.
-		// i.e. not support block -> append/page, append -> block/page, page -> append/block,
-		// and when file and s3 is source, only block blob destination is supported.
-		if cooked.blobType != common.EBlobType.None() {
-			return cooked, fmt.Errorf("blob-type is not supported while coping from service to service")
 		}
 		if cooked.noGuessMimeType {
 			return cooked, fmt.Errorf("no-guess-mime-type is not supported while copying from service to service")
@@ -571,6 +591,8 @@ func (cca *cookedCopyCmdArgs) processRedirectionCopy() error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// step 0: check the Stdout before uploading
 	_, err := os.Stdout.Stat()
 	if err != nil {
@@ -578,18 +600,10 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 	}
 
 	// step 1: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      downloadMaxTries,
-			TryTimeout:    downloadTryTimeout,
-			RetryDelay:    downloadRetryDelay,
-			MaxRetryDelay: downloadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
 
 	// step 2: parse source url
 	u, err := url.Parse(blobUrl)
@@ -599,12 +613,12 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 
 	// step 3: start download
 	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+	blobStream, err := blobURL.Download(ctx, 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
 	if err != nil {
 		return fmt.Errorf("fatal: cannot download blob due to error: %s", err.Error())
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: pipe everything into Stdout
@@ -617,24 +631,18 @@ func (cca *cookedCopyCmdArgs) processRedirectionDownload(blobUrl string) error {
 }
 
 func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize uint32) error {
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+
 	// if no block size is set, then use default value
 	if blockSize == 0 {
 		blockSize = pipingDefaultBlockSize
 	}
 
 	// step 0: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      uploadMaxTries,
-			TryTimeout:    uploadTryTimeout,
-			RetryDelay:    uploadRetryDelay,
-			MaxRetryDelay: uploadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(ctx, common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return err
+	}
 
 	// step 1: parse destination url
 	u, err := url.Parse(blobUrl)
@@ -644,7 +652,7 @@ func (cca *cookedCopyCmdArgs) processRedirectionUpload(blobUrl string, blockSize
 
 	// step 2: leverage high-level call in Blob SDK to upload stdin in parallel
 	blockBlobUrl := azblob.NewBlockBlobURL(*u, p)
-	_, err = azblob.UploadStreamToBlockBlob(context.TODO(), os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
+	_, err = azblob.UploadStreamToBlockBlob(ctx, os.Stdin, blockBlobUrl, azblob.UploadStreamToBlockBlobOptions{
 		BufferSize: int(blockSize),
 		MaxBuffers: pipingUploadParallelism,
 	})
@@ -751,6 +759,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		fileParts := azfile.NewFileURLParts(*fromUrl)
 		cca.sourceSAS = fileParts.SAS.Encode()
+		if cca.sourceSAS == "" {
+			return fmt.Errorf("azure files only supports SAS token authentication")
+		}
 		jobPartOrder.SourceSAS = cca.sourceSAS
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
@@ -761,17 +772,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
-		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
-		// (a) it also escapes spaces in the source (and we need that done) and
-		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.source, "sig"); redacted {
-			panic("SAS in BlobFS is not yet supported")
-		}
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
 			return fmt.Errorf("error parsing the source url %s. Failed with error %s", fromUrl.String(), err.Error())
 		}
 		bfsParts := azbfs.NewBfsURLParts(*fromUrl)
+		cca.sourceSAS = bfsParts.SAS.Encode()
+		jobPartOrder.SourceSAS = cca.sourceSAS
+		bfsParts.SAS = azbfs.SASQueryParameters{}
 		bfsUrl := bfsParts.URL()
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 
@@ -821,22 +829,22 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 		fileParts := azfile.NewFileURLParts(*toUrl)
 		cca.destinationSAS = fileParts.SAS.Encode()
+		if cca.destinationSAS == "" {
+			return fmt.Errorf("azure files only supports SAS token authentication")
+		}
 		jobPartOrder.DestinationSAS = cca.destinationSAS
 		fileParts.SAS = azfile.SASQueryParameters{}
 		fUrl := fileParts.URL()
 		cca.destination = fUrl.String()
 	case common.ELocation.BlobFS():
-		// as at April 2019 we don't actually support SAS for BlobFS, but here we similar processing as the others because
-		// (a) it also escapes spaces in the destination (and we need that done) and
-		// (b) if we ever do start supporting SASs for BlobFS, we don't want to forget to add code here to correctly process them
-		if redacted, _ := common.RedactSecretQueryParam(cca.destination, "sig"); redacted {
-			panic("SAS in BlobFS is not yet supported")
-		}
 		toUrl, err := url.Parse(cca.destination)
 		if err != nil {
 			return fmt.Errorf("error parsing the destination url %s. Failed with error %s", toUrl.String(), err.Error())
 		}
 		bfsParts := azbfs.NewBfsURLParts(*toUrl)
+		cca.destinationSAS = bfsParts.SAS.Encode()
+		jobPartOrder.DestinationSAS = cca.destinationSAS
+		bfsParts.SAS = azbfs.SASQueryParameters{}
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
@@ -879,6 +887,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		err = e.enumerate()
+	case common.EFromTo.BlobFSTrash():
+		msg, err := removeBfsResource(cca)
+		if err == nil {
+			glcm.Exit(func(format common.OutputFormat) string {
+				return msg
+			}, common.EExitCode.Success())
+		}
+
+		return err
+
 	case common.EFromTo.BlobBlob():
 		e := copyS2SMigrationBlobEnumerator{
 			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
@@ -1001,7 +1019,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 
 	var computeThroughput = func() float64 {
 		// compute the average throughput for the last time interval
-		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(1024*1024))
+		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 
 		// reset the interval timer and byte count
@@ -1143,8 +1161,8 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
 		"this flag is not applicable for copying data from non azure-service to service. More than one blob should be separated by ';' ")
 	// options change how the transfers are performed
-	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), and ERROR(only failed requests).")
-	cpCmd.PersistentFlags().Uint32Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size.")
+	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
+	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
@@ -1195,4 +1213,8 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
+
+	// Hide the flush-threshold flag since it is implemented only for CI.
+	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on ADLS gen 2")
+	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
 }

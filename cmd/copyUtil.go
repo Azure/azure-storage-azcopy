@@ -25,7 +25,6 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
-	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -55,26 +54,21 @@ func (copyHandlerUtil) numOfWildcardInURL(url url.URL) int {
 	return strings.Count(url.String(), wildCard)
 }
 
-// isIPEndpointStyle checkes if URL's host is IP, in this case the storage account endpoint will be composed as:
-// http(s)://IP(:port)/storageaccount/share(||container||etc)/...
-// TODO: Remove this, it can be replaced by SDK's native support for IP endpoint style.
-func (util copyHandlerUtil) isIPEndpointStyle(url url.URL) bool {
-	return net.ParseIP(url.Host) != nil
-}
-
-// checks if a given url points to a container, as opposed to a blob or prefix match
-func (util copyHandlerUtil) urlIsContainerOrShare(url *url.URL) bool {
-	// When it's IP endpoint style, if the path contains more than two "/", then it means it points to a blob, and not a container.
-	// When it's not IP endpoint style, if the path contains more than one "/", then it means it points to a blob, and not a container.
-	numOfSlashes := strings.Count(url.Path[1:], "/")
-	isIPEndpointStyle := util.isIPEndpointStyle(*url)
-
-	if (!isIPEndpointStyle && numOfSlashes == 0) || (isIPEndpointStyle && numOfSlashes == 1) {
-		return true
-	} else if ((!isIPEndpointStyle && numOfSlashes == 1) || (isIPEndpointStyle && numOfSlashes == 2)) && strings.HasSuffix(url.Path, "/") { // this checks if container_name/ was given
-		return true
+// checks if a given url points to a container or virtual directory, as opposed to a blob or prefix match
+func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool {
+	if azblob.NewBlobURLParts(*url).IPEndpointStyleInfo.AccountName == "" {
+		// Typical endpoint style
+		// If there's no slashes after the first, it's a container.
+		// If there's a slash on the end, it's a virtual directory/container.
+		// Otherwise, it's just a blob.
+		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
+	} else {
+		// IP endpoint style: https://IP:port/accountname/container
+		// If there's 2 or less slashes after the first, it's a container.
+		// OR If there's a slash on the end, it's a virtual directory/container.
+		// Otherwise, it's just a blob.
+		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") <= 1
 	}
-	return false
 }
 
 func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam string) *url.URL {
@@ -92,9 +86,9 @@ func (util copyHandlerUtil) appendQueryParamToUrl(url *url.URL, queryParam strin
 // TODO: remove this, redactSigQueryParam could be added in SDK
 func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) {
 	rawQuery = strings.ToLower(rawQuery) // lowercase the string so we can look for ?sig= and &sig=
-	sigFound := strings.Contains(rawQuery, "?sig=")
+	sigFound := strings.Contains(rawQuery, "?"+common.SigAzure+"=")
 	if !sigFound {
-		sigFound = strings.Contains(rawQuery, "&sig=")
+		sigFound = strings.Contains(rawQuery, "&"+common.SigAzure+"=")
 		if !sigFound {
 			return sigFound, rawQuery // [?|&]sig= not found; return same rawQuery passed in (no memory allocation)
 		}
@@ -102,7 +96,7 @@ func (util copyHandlerUtil) redactSigQueryParam(rawQuery string) (bool, string) 
 	// [?|&]sig= found, redact its value
 	values, _ := url.ParseQuery(rawQuery)
 	for name := range values {
-		if strings.EqualFold(name, "sig") {
+		if strings.EqualFold(name, common.SigAzure) {
 			values[name] = []string{"REDACTED"}
 		}
 	}
@@ -141,7 +135,7 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 }
 
 func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
-	if util.urlIsContainerOrShare(url) {
+	if util.urlIsContainerOrVirtualDirectory(url) {
 		return true
 	}
 	// Need to get the resource properties and verify if it is a file or directory
@@ -151,7 +145,7 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 
 func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
 	// Azure file share case
-	if util.urlIsContainerOrShare(url) {
+	if util.urlIsContainerOrVirtualDirectory(url) {
 		return true
 	}
 

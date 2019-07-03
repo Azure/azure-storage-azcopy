@@ -54,7 +54,9 @@ func (e *copyDownloadFileEnumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			}
 			return e.dispatchFinalPart(cca)
 		} else {
-			handleSingleFileValidationErrorForAzureFile(err)
+			if isFatal := handleSingleFileValidationErrorForAzureFile(err); isFatal {
+				return err
+			}
 		}
 	}
 

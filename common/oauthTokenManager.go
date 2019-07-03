@@ -22,7 +22,10 @@ package common
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -30,9 +33,15 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-ieproxy"
+
+	"golang.org/x/crypto/pkcs12"
 
 	"github.com/Azure/go-autorest/autorest/adal"
 )
@@ -67,7 +76,7 @@ func NewUserOAuthTokenManagerInstance(credCacheOptions CredCacheOptions) *UserOA
 func newAzcopyHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy: ieproxy.GetProxyFunc(),
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
 			Dial /*Context*/ : (&net.Dialer{
 				Timeout:   30 * time.Second,
@@ -141,6 +150,263 @@ func (uotm *UserOAuthTokenManager) MSILogin(ctx context.Context, identityInfo Id
 	return oAuthTokenInfo, nil
 }
 
+// secretLoginNoUOTM non-interactively logs in with a client secret.
+func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID string) (*OAuthTokenInfo, error) {
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+
+	if activeDirectoryEndpoint == "" {
+		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
+	}
+
+	if applicationID == "" {
+		return nil, fmt.Errorf("please supply your OWN application ID")
+	}
+
+	oAuthTokenInfo := OAuthTokenInfo{
+		Tenant:                  tenantID,
+		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
+	}
+
+	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	spt, err := adal.NewServicePrincipalToken(
+		*oauthConfig,
+		applicationID,
+		secret,
+		Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = spt.Refresh()
+	if err != nil {
+		return nil, err
+	}
+
+	// Due to the nature of SPA, no refresh token is given.
+	// Thus, no refresh token is copied or needed.
+	oAuthTokenInfo.Token = spt.Token()
+	oAuthTokenInfo.ApplicationID = applicationID
+	oAuthTokenInfo.ServicePrincipalName = true
+	oAuthTokenInfo.SPNInfo = SPNInfo{
+		Secret:   secret,
+		CertPath: "",
+	}
+
+	return &oAuthTokenInfo, nil
+}
+
+// SecretLogin is a UOTM shell for secretLoginNoUOTM.
+func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (*OAuthTokenInfo, error) {
+	oAuthTokenInfo, err := secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID)
+
+	if persist {
+		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return oAuthTokenInfo, nil
+}
+
+// GetNewTokenFromSecret is a refresh shell for secretLoginNoUOTM
+func (credInfo *OAuthTokenInfo) GetNewTokenFromSecret(ctx context.Context) (*adal.Token, error) {
+	tokeninfo, err := secretLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+
+	if err != nil {
+		return nil, err
+	} else {
+		return &tokeninfo.Token, nil
+	}
+}
+
+// Read a potentially encrypted PKCS block
+func readPKCSBlock(block *pem.Block, secret []byte, parseFunc func([]byte) (interface{}, error)) (pk interface{}, err error) {
+	// Reduce code duplication by baking the parse functions into this
+	if x509.IsEncryptedPEMBlock(block) {
+		data, err := x509.DecryptPEMBlock(block, secret)
+
+		if err == nil {
+			pk, err = parseFunc(data)
+
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	} else {
+		pk, err = parseFunc(block.Bytes)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+	return pk, err
+}
+
+func certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string) (*OAuthTokenInfo, error) {
+	if tenantID == "" {
+		tenantID = DefaultTenantID
+	}
+
+	if activeDirectoryEndpoint == "" {
+		activeDirectoryEndpoint = DefaultActiveDirectoryEndpoint
+	}
+
+	if applicationID == "" {
+		return nil, fmt.Errorf("please supply your OWN application ID")
+	}
+
+	oAuthTokenInfo := OAuthTokenInfo{
+		Tenant:                  tenantID,
+		ActiveDirectoryEndpoint: activeDirectoryEndpoint,
+	}
+
+	oauthConfig, err := adal.NewOAuthConfig(activeDirectoryEndpoint, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	certData, err := ioutil.ReadFile(certPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var pk interface{}
+	var cert *x509.Certificate
+
+	if path.Ext(certPath) == ".pfx" || path.Ext(certPath) == ".pkcs12" || path.Ext(certPath) == ".p12" {
+		pk, cert, err = pkcs12.Decode(certData, certPass)
+
+		if err != nil {
+			return nil, err
+		}
+	} else if path.Ext(certPath) == ".pem" {
+		block, rest := pem.Decode(certData)
+
+		for len(rest) != 0 || pk == nil || cert == nil {
+			if block != nil {
+				switch block.Type {
+				case "ENCRYPTED PRIVATE KEY":
+					pk, err = readPKCSBlock(block, []byte(certPass), x509.ParsePKCS8PrivateKey)
+
+					if err != nil {
+						return nil, fmt.Errorf("encrypted private key block has invalid format OR your cert password may be incorrect")
+					}
+				case "RSA PRIVATE KEY":
+					pkcs1wrap := func(d []byte) (pk interface{}, err error) {
+						return x509.ParsePKCS1PrivateKey(d) // Wrap this so that function signatures agree.
+					}
+
+					pk, err = readPKCSBlock(block, []byte(certPass), pkcs1wrap)
+
+					if err != nil {
+						return nil, fmt.Errorf("rsa private key block has invalid format OR your cert password may be incorrect")
+					}
+				case "PRIVATE KEY":
+					pk, err = readPKCSBlock(block, []byte(certPass), x509.ParsePKCS8PrivateKey)
+
+					if err != nil {
+						return nil, fmt.Errorf("private key block has invalid format")
+					}
+				case "CERTIFICATE":
+					tmpcert, err := x509.ParseCertificate(block.Bytes)
+
+					// Skip this certificate if it's invalid or is a CA cert
+					if err == nil && !tmpcert.IsCA {
+						cert = tmpcert
+					}
+				default:
+					// Ignore this part of the pem file, don't know what it is.
+				}
+			} else {
+				break
+			}
+
+			if len(rest) == 0 {
+				break
+			}
+
+			block, rest = pem.Decode(rest)
+		}
+
+		if pk == nil || cert == nil {
+			return nil, fmt.Errorf("could not find the required information (private key & cert) in the supplied .pem file")
+		}
+	} else {
+		return nil, fmt.Errorf("please supply either a .pfx, .pkcs12, .p12, or a .pem file containing a private key and a certificate")
+	}
+
+	p, ok := pk.(*rsa.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("only RSA private keys are supported")
+	}
+
+	spt, err := adal.NewServicePrincipalTokenFromCertificate(
+		*oauthConfig,
+		applicationID,
+		cert,
+		p,
+		Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	err = spt.Refresh()
+	if err != nil {
+		return nil, err
+	}
+
+	cpfq, _ := filepath.Abs(certPath)
+
+	oAuthTokenInfo.Token = spt.Token()
+	oAuthTokenInfo.RefreshToken = oAuthTokenInfo.Token.RefreshToken
+	oAuthTokenInfo.ApplicationID = applicationID
+	oAuthTokenInfo.ServicePrincipalName = true
+	oAuthTokenInfo.SPNInfo = SPNInfo{
+		Secret:   certPass,
+		CertPath: cpfq,
+	}
+
+	return &oAuthTokenInfo, nil
+}
+
+//CertLogin non-interactively logs in using a specified certificate, certificate password, and activedirectory endpoint.
+func (uotm *UserOAuthTokenManager) CertLogin(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID string, persist bool) (*OAuthTokenInfo, error) {
+	// TODO: Global default cert flag for true non interactive login?
+	// (Also could be useful if the user has multiple certificates they want to switch between in the same file.)
+	oAuthTokenInfo, err := certLoginNoUOTM(tenantID, activeDirectoryEndpoint, certPath, certPass, applicationID)
+
+	if persist && err == nil {
+		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return oAuthTokenInfo, err
+}
+
+//GetNewTokenFromCert refreshes a token manually from a certificate.
+func (credInfo *OAuthTokenInfo) GetNewTokenFromCert(ctx context.Context) (*adal.Token, error) {
+	tokeninfo, err := certLoginNoUOTM(credInfo.Tenant, credInfo.ActiveDirectoryEndpoint, credInfo.SPNInfo.CertPath, credInfo.SPNInfo.Secret, credInfo.ApplicationID)
+
+	if err != nil {
+		return nil, err
+	} else {
+		return &tokeninfo.Token, nil
+	}
+}
+
 // UserLogin interactively logins in with specified tenantID and activeDirectoryEndpoint, persist indicates whether to
 // cache the token on local disk.
 func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint string, persist bool) (*OAuthTokenInfo, error) {
@@ -170,7 +436,12 @@ func (uotm *UserOAuthTokenManager) UserLogin(tenantID, activeDirectoryEndpoint s
 	}
 
 	// Display the authentication message
-	fmt.Println(*deviceCode.Message)
+	fmt.Println(*deviceCode.Message + "\n")
+
+	if tenantID == "" || tenantID == "common" {
+		fmt.Println("INFO: Logging in under the \"Common\" tenant. This will log the account in under its home tenant.")
+		fmt.Println("INFO: If you plan to use AzCopy with a B2B account (where the account's home tenant is separate from the tenant of the target storage account), please sign in under the target tenant with --tenant-id")
+	}
 
 	// Wait here until the user is authenticated
 	// TODO: check if adal Go SDK has new method which supports context, currently ctrl-C can stop the login in console interactively.
@@ -307,8 +578,11 @@ type OAuthTokenInfo struct {
 	Tenant                  string `json:"_tenant"`
 	ActiveDirectoryEndpoint string `json:"_ad_endpoint"`
 	TokenRefreshSource      string `json:"_token_refresh_source"`
+	ApplicationID           string `json:"_application_id"`
 	Identity                bool   `json:"_identity"`
 	IdentityInfo            IdentityInfo
+	ServicePrincipalName    bool `json:"_spn"`
+	SPNInfo                 SPNInfo
 	// Note: ClientID should be only used for internal integrations through env var with refresh token.
 	// It indicates the Application ID assigned to your app when you registered it with Azure AD.
 	// In this case AzCopy refresh token on behalf of caller.
@@ -322,6 +596,15 @@ type IdentityInfo struct {
 	ClientID string `json:"_identity_client_id"`
 	ObjectID string `json:"_identity_object_id"`
 	MSIResID string `json:"_identity_msi_res_id"`
+}
+
+// SPNInfo contains info for authenticating with Service Principal Names
+type SPNInfo struct {
+	// Secret is used for two purposes: The certificate secret, and a client secret.
+	// The secret is persisted to the JSON file because AAD does not issue a refresh token.
+	// Thus, the original secret is needed to refresh.
+	Secret   string `json:"_spn_secret"`
+	CertPath string `json:"_spn_cert_path"`
 }
 
 // Validate validates identity info, at most only one of clientID, objectID or MSI resource ID could be set.
@@ -350,6 +633,14 @@ func (credInfo *OAuthTokenInfo) Refresh(ctx context.Context) (*adal.Token, error
 
 	if credInfo.Identity {
 		return credInfo.GetNewTokenFromMSI(ctx)
+	}
+
+	if credInfo.ServicePrincipalName {
+		if credInfo.SPNInfo.CertPath != "" {
+			return credInfo.GetNewTokenFromCert(ctx)
+		} else {
+			return credInfo.GetNewTokenFromSecret(ctx)
+		}
 	}
 
 	return credInfo.RefreshTokenWithUserCredential(ctx)

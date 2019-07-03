@@ -24,18 +24,21 @@ import (
 	"bytes"
 	"context"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
-	"time"
 )
 
 var azcopyAppPathFolder string
 var azcopyLogPathFolder string
+var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var azcopyOutputFormat common.OutputFormat
+var cmdLineCapMegaBitsPerSecond uint32
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -44,8 +47,17 @@ var rootCmd = &cobra.Command{
 	Short:   rootCmdShortDescription,
 	Long:    rootCmdLongDescription,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+
 		err := azcopyOutputFormat.Parse(outputFormatRaw)
 		glcm.SetOutputFormat(azcopyOutputFormat)
+		if err != nil {
+			return err
+		}
+
+		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
+		concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
+		concurrentFilesLimit := computeConcurrentFilesLimit(azcopyMaxFileAndSocketHandles, concurrentConnections)
+		err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, int64(cmdLineCapMegaBitsPerSecond), azcopyAppPathFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err
 		}
@@ -65,9 +77,10 @@ var glcm = common.GetLifecycleMgr()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder, logPathFolder string) {
+func Execute(azsAppPathFolder, logPathFolder string, maxFileAndSocketHandles int) {
 	azcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
+	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 
 	if err := rootCmd.Execute(); err != nil {
 		glcm.Error(err.Error())
@@ -81,6 +94,7 @@ func Execute(azsAppPathFolder, logPathFolder string) {
 }
 
 func init() {
+	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
 
 	// Special flag for generating test data
@@ -111,18 +125,10 @@ func detectNewVersion() {
 	}
 
 	// step 1: initialize pipeline
-	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{
-		Retry: azblob.RetryOptions{
-			Policy:        azblob.RetryPolicyExponential,
-			MaxTries:      1,               // try a single time, if network is not available, just fail fast
-			TryTimeout:    time.Second * 3, // don't wait for too long
-			RetryDelay:    downloadRetryDelay,
-			MaxRetryDelay: downloadMaxRetryDelay,
-		},
-		Telemetry: azblob.TelemetryOptions{
-			Value: common.UserAgent,
-		},
-	})
+	p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+	if err != nil {
+		return
+	}
 
 	// step 2: parse source url
 	u, err := url.Parse(versionMetadataUrl)
@@ -137,7 +143,7 @@ func detectNewVersion() {
 		return
 	}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: downloadMaxTries})
+	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
 	defer blobBody.Close()
 
 	// step 4: read newest version str
@@ -166,4 +172,27 @@ func detectNewVersion() {
 		// output in info mode instead of stderr, as it was crashing CI jobs of some people
 		glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
 	}
+}
+
+// ComputeConcurrentFilesLimit finds a number of concurrently-openable files
+// such that we'll have enough handles left, after using some as network handles
+// TODO: add environment var to optionally allow bringing concurrentFiles down lower
+//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
+//    (update logging
+func computeConcurrentFilesLimit(maxFileAndSocketHandles int, concurrentConnections int) int {
+
+	allowanceForOnGoingEnumeration := 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
+
+	// Compute a very conservative estimate for total number of connections that we may have
+	// To get a conservative estimate we pessimistically assume that the pool of idle conns is full,
+	// but all the ones we are actually using are (by some fluke of timing) not in the pool.
+	// TODO: consider actually SETTING AzCopyMaxIdleConnsPerHost to say, max(0.3 * FileAndSocketHandles, 1000), instead of using the hard-coded value we currently have
+	possibleMaxTotalConcurrentHttpConnections := concurrentConnections + ste.AzCopyMaxIdleConnsPerHost + allowanceForOnGoingEnumeration
+
+	concurrentFilesLimit := maxFileAndSocketHandles - possibleMaxTotalConcurrentHttpConnections
+
+	if concurrentFilesLimit < ste.NumTransferInitiationRoutines {
+		concurrentFilesLimit = ste.NumTransferInitiationRoutines // Set sensible floor, so we don't get negative or zero values if maxFileAndSocketHandles is low
+	}
+	return concurrentFilesLimit
 }

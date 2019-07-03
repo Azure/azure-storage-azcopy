@@ -36,7 +36,7 @@ func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
 	for _, blobName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the container with a single blob
 		blobList := []string{blobName}
-		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList)
+		scenarioHelper{}.generateBlobsFromList(c, containerURL, blobList, blockBlobDefaultData)
 		c.Assert(containerURL, chk.NotNil)
 
 		// set up the destination as a single file
@@ -186,7 +186,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// add special blobs that we wish to include
 	blobsToInclude := []string{"important.pdf", "includeSub/amazing.pdf", "includeSub/wow/amazing.pdf"}
-	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude)
+	scenarioHelper{}.generateBlobsFromList(c, containerURL, blobsToInclude, blockBlobDefaultData)
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
