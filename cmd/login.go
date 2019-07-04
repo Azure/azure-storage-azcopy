@@ -23,9 +23,9 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 func init() {
@@ -51,7 +51,10 @@ func init() {
 
 			err := loginCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform login command, %v", err)
+				// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
+				prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
+				prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
+				glcm.Error("Failed to perform login command: \n" + prettyErr)
 			}
 			return nil
 		},
