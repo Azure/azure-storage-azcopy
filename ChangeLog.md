@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.2.1
+
+### Bug fix
+
+1. Fixed outputting error message for SPN login failures.
+
 ## Version 10.2.0
 
 ### Bug fix

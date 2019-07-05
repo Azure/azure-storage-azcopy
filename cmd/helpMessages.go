@@ -38,6 +38,7 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
   - /etc/apache/mime.types
 
 On Windows, MIME types are extracted from the registry. This feature can be turned off with the help of a flag. Please refer to the flag section.
+
 ` + environmentVariableNotice
 
 const copyCmdExample = `Upload a single file using OAuth authentication. Please use 'azcopy login' command first if you aren't logged in yet:
@@ -115,6 +116,7 @@ Copy all buckets in a S3 region with access key to blob account with SAS:
 const envCmdShortDescription = "Shows the environment variables that can configure AzCopy's behavior"
 
 const envCmdLongDescription = `Shows the environment variables that can configure AzCopy's behavior.
+
 ` + environmentVariableNotice
 
 // ===================================== JOBS COMMAND ===================================== //
@@ -154,12 +156,13 @@ const loginCmdLongDescription = `Log in to Azure Active Directory to access Azur
 Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
 Please refer to the examples for more information.
+
 ` + environmentVariableNotice
 
-const environmentVariableNotice = `
-(NOTICE FOR SETTING ENVIRONMENT VARIABLES: Bear in mind that setting an environment variable from the command line
-will be readable in your command line history. For variables that contain credentials, consider clearing these 
-entries from your history or using a small script of sorts to prompt for and set these variables.)`
+const environmentVariableNotice = "(NOTICE FOR SETTING ENVIRONMENT VARIABLES: Bear in mind that setting an environment variable from the command line " +
+	"will be readable in your command line history. " +
+	"For variables that contain credentials, consider clearing these entries from your history " +
+	"or using a small script of sorts to prompt for and set these variables.)"
 
 const loginCmdExample = `Log in interactively with default AAD tenant ID set to common:
 - azcopy login
