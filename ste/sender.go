@@ -160,7 +160,7 @@ func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pi
 		return newPageBlobUploader(jptm, destination, p, pacer, sip)
 	case azblob.BlobAppendBlob:
 		return newAppendBlobUploader(jptm, destination, p, pacer, sip)
+	default:
+		return newBlockBlobUploader(jptm, destination, p, pacer, sip) // If no blob type was inferred, assume block blob.
 	}
-
-	panic("invalid blob type")
 }

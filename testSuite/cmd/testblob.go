@@ -458,7 +458,6 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 
 	// getting the shared access signature of the resource.
 	sourceSas := testBlobCmd.Subject
-	fmt.Println("source sas ", sourceSas)
 	sourceURL, err := url.Parse(sourceSas)
 	if err != nil {
 		fmt.Println(fmt.Sprintf("Error parsing the blob url source %s", testBlobCmd.Object))
