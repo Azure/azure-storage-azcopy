@@ -23,6 +23,7 @@ package common
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"path"
 	"sync/atomic"
@@ -32,7 +33,7 @@ import (
 // Identifies a chunk. Always create with NewChunkID
 type ChunkID struct {
 	Name         string
-	OffsetInFile int64
+	offsetInFile int64
 
 	// What is this chunk's progress currently waiting on?
 	// Must be a pointer, because the ChunkID itself is a struct.
@@ -58,9 +59,20 @@ func NewChunkID(name string, offsetInFile int64) ChunkID {
 	zeroNotificationState := int32(0)
 	return ChunkID{
 		Name:                     name,
-		OffsetInFile:             offsetInFile,
+		offsetInFile:             offsetInFile,
 		waitReasonIndex:          &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
 		completionNotifiedToJptm: &zeroNotificationState,
+	}
+}
+
+func NewPseudoChunkIDForWholeFile(name string) ChunkID {
+	dummyWaitReasonIndex := int32(0)
+	alreadyNotifiedNotificationState := int32(1) // so that these can never be notified to jptm's (doing so would be an error, because they are not real chunks)
+	return ChunkID{
+		Name:                     name,
+		offsetInFile:             math.MinInt64,         // very negative, clearly not a real offset
+		waitReasonIndex:          &dummyWaitReasonIndex, // must initialize, so don't get nil pointer on usage
+		completionNotifiedToJptm: &alreadyNotifiedNotificationState,
 	}
 }
 
@@ -68,6 +80,13 @@ func (id ChunkID) SetCompletionNotificationSent() {
 	if atomic.SwapInt32(id.completionNotifiedToJptm, 1) != 0 {
 		panic("cannot complete the same chunk twice")
 	}
+}
+
+func (id ChunkID) OffsetInFile() int64 {
+	if id.offsetInFile < 0 {
+		panic("Attempt to get negative file offset") // protects us against any mis-use of "pseudo chunks" with negative offsets
+	}
+	return id.offsetInFile
 }
 
 var EWaitReason = WaitReason{0, ""}
@@ -80,6 +99,8 @@ type WaitReason struct {
 }
 
 // Head (below) has index between GB and Body, just so the ordering is numerical ascending during typical chunk lifetime for both upload and download
+// We use just the first letters of these when displaying perf states as we run (if enabled)
+// so try to keep the first letters unique (except for Done and Cancelled, which are not displayed, and so may duplicate the first letter of something else)
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
 func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
 func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
@@ -93,10 +114,11 @@ func (WaitReason) PriorChunk() WaitReason           { return WaitReason{9, "Prio
 func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
 func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
 func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{13, "Done"} }              // not waiting on anything. Chunk is done.
+func (WaitReason) Epilogue() WaitReason             { return WaitReason{13, "Epilogue"} }          // File-level epilogue processing (e.g. Commit block list, or other final operation on local or remote object (e.g. flush))
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{14, "Done"} }              // not waiting on anything. Chunk is done.
 // NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
 // the need to also change numWaitReasons()
-func (WaitReason) Cancelled() WaitReason { return WaitReason{14, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
+func (WaitReason) Cancelled() WaitReason { return WaitReason{15, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -124,6 +146,8 @@ var uploadWaitReasons = []WaitReason{
 
 	// This is the actual network activity
 	EWaitReason.Body(), // header is not separated out for uploads, so is implicitly included here
+
+	EWaitReason.Epilogue(),
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
@@ -157,6 +181,8 @@ var downloadWaitReasons = []WaitReason{
 
 	// The actual disk write
 	EWaitReason.DiskIO(),
+
+	EWaitReason.Epilogue(),
 	// Plus Done/cancelled, which are not included here because not wanted for GetCounts
 }
 
@@ -170,6 +196,8 @@ var s2sCopyWaitReasons = []WaitReason{
 
 	// Start to send Put*FromURL, then S2S copy will start in service side, and Azcopy will wait the response which indicates copy get finished.
 	EWaitReason.S2SCopyOnWire(),
+
+	EWaitReason.Epilogue(),
 }
 
 func (wr WaitReason) String() string {
@@ -277,7 +305,7 @@ func (csl *chunkStatusLogger) main(chunkLogPath string) {
 			csl.flushDone <- struct{}{}
 			continue // TODO can become break (or be moved to later if we close unsaved entries, once we figure out how we got stuff written to us after CloseLog was called)
 		}
-		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile, x.reason, x.waitStart))
+		_, _ = w.WriteString(fmt.Sprintf("%s,%d,%s,%s\n", x.Name, x.OffsetInFile(), x.reason, x.waitStart))
 		if alwaysFlushFromNowOn {
 			// TODO: remove when we figure out how we got stuff written to us after CloseLog was called. For now, this should handle those cases (if they still exist)
 			doFlush()

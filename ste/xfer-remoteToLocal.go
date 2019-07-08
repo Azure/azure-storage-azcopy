@@ -203,6 +203,11 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
 
+	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
+	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+
 	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {
 

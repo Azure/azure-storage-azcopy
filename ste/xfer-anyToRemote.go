@@ -276,6 +276,11 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 
 // Complete epilogue. Handles both success and failure.
 func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
+	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
+	pseudoId := common.NewPseudoChunkIDForWholeFile(jptm.Info().Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+
 	if jptm.TransferStatus() > 0 {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && jptm.Info().S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
