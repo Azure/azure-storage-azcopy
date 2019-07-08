@@ -102,23 +102,24 @@ type WaitReason struct {
 // We use just the first letters of these when displaying perf states as we run (if enabled)
 // so try to keep the first letters unique (except for Done and Cancelled, which are not displayed, and so may duplicate the first letter of something else)
 func (WaitReason) Nothing() WaitReason              { return WaitReason{0, "Nothing"} }            // not waiting for anything
-func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{1, "RAM"} }                // waiting for enough RAM to schedule the chunk
-func (WaitReason) WorkerGR() WaitReason             { return WaitReason{2, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
-func (WaitReason) FilePacer() WaitReason            { return WaitReason{3, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
-func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{4, "Head"} }               // waiting to finish downloading the HEAD
-func (WaitReason) Body() WaitReason                 { return WaitReason{5, "Body"} }               // waiting to finish sending/receiving the BODY
-func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{6, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
-func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{7, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
-func (WaitReason) Sorting() WaitReason              { return WaitReason{8, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
-func (WaitReason) PriorChunk() WaitReason           { return WaitReason{9, "Prior"} }              // waiting on a prior chunk to arrive (before this one can be saved)
-func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{10, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
-func (WaitReason) DiskIO() WaitReason               { return WaitReason{11, "DiskIO"} }            // waiting on disk read/write to complete
-func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{12, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
-func (WaitReason) Epilogue() WaitReason             { return WaitReason{13, "Epilogue"} }          // File-level epilogue processing (e.g. Commit block list, or other final operation on local or remote object (e.g. flush))
-func (WaitReason) ChunkDone() WaitReason            { return WaitReason{14, "Done"} }              // not waiting on anything. Chunk is done.
+func (WaitReason) CreateLocalFile() WaitReason      { return WaitReason{1, "CreateLocalFile"} }    // creating the local file
+func (WaitReason) RAMToSchedule() WaitReason        { return WaitReason{2, "RAM"} }                // waiting for enough RAM to schedule the chunk
+func (WaitReason) WorkerGR() WaitReason             { return WaitReason{3, "Worker"} }             // waiting for a goroutine to start running our chunkfunc
+func (WaitReason) FilePacer() WaitReason            { return WaitReason{4, "FilePacer"} }          // waiting until the file-level pacer says its OK to process another chunk
+func (WaitReason) HeaderResponse() WaitReason       { return WaitReason{5, "Head"} }               // waiting to finish downloading the HEAD
+func (WaitReason) Body() WaitReason                 { return WaitReason{6, "Body"} }               // waiting to finish sending/receiving the BODY
+func (WaitReason) BodyReReadDueToMem() WaitReason   { return WaitReason{7, "BodyReRead-LowRam"} }  //waiting to re-read the body after a forced-retry due to low RAM
+func (WaitReason) BodyReReadDueToSpeed() WaitReason { return WaitReason{8, "BodyReRead-TooSlow"} } // waiting to re-read the body after a forced-retry due to a slow chunk read (without low RAM)
+func (WaitReason) Sorting() WaitReason              { return WaitReason{9, "Sorting"} }            // waiting for the writer routine, in chunkedFileWriter, to pick up this chunk and sort it into sequence
+func (WaitReason) PriorChunk() WaitReason           { return WaitReason{10, "Prior"} }             // waiting on a prior chunk to arrive (before this one can be saved)
+func (WaitReason) QueueToWrite() WaitReason         { return WaitReason{11, "Queue"} }             // prior chunk has arrived, but is not yet written out to disk
+func (WaitReason) DiskIO() WaitReason               { return WaitReason{12, "DiskIO"} }            // waiting on disk read/write to complete
+func (WaitReason) S2SCopyOnWire() WaitReason        { return WaitReason{13, "S2SCopyOnWire"} }     // waiting for S2S copy on wire get finished. extra status used only by S2S copy
+func (WaitReason) Epilogue() WaitReason             { return WaitReason{14, "Epilogue"} }          // File-level epilogue processing (e.g. Commit block list, or other final operation on local or remote object (e.g. flush))
+func (WaitReason) ChunkDone() WaitReason            { return WaitReason{15, "Done"} }              // not waiting on anything. Chunk is done.
 // NOTE: when adding new statuses please renumber to make Cancelled numerically the last, to avoid
 // the need to also change numWaitReasons()
-func (WaitReason) Cancelled() WaitReason { return WaitReason{15, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
+func (WaitReason) Cancelled() WaitReason { return WaitReason{16, "Cancelled"} } // transfer was cancelled.  All chunks end with either Done or Cancelled.
 
 // TODO: consider change the above so that they don't create new struct on every call?  Is that necessary/useful?
 //     Note: reason it's not using the normal enum approach, where it only has a number, is to try to optimize
@@ -155,6 +156,7 @@ var uploadWaitReasons = []WaitReason{
 // See comment on uploadWaitReasons for rationale.
 var downloadWaitReasons = []WaitReason{
 	// Done by the transfer initiation function (i.e. chunkfunc creation loop)
+	EWaitReason.CreateLocalFile(),
 	EWaitReason.RAMToSchedule(),
 
 	// Waiting for a work Goroutine to pick up the chunkfunc and execute it.
