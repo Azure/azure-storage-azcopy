@@ -291,8 +291,7 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	}
 
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
-
-	// In theory, due to the limits imposed in copy.go, this should never be true unless it's a S2S transfer.
+	
 	if info.S2SDestLengthValidation {
 		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
 			destLength, err := s2sc.GetDestinationLength()
