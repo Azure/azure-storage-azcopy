@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // copyS2SMigrationBlobEnumerator enumerates blob source, and submit request for copy blob to N,
@@ -53,6 +55,69 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 
 	if err := e.initEnumerator(ctx, cca); err != nil {
 		return err
+	}
+
+	sourceURLParts := azblob.NewBlobURLParts(*e.sourceURL)
+	if sourceURLParts.SAS.Encode() == "" {
+		// Grab OAuth token and craft pipeline to create user delegation SAS token
+		hasToken, err := GetUserOAuthTokenManagerInstance().HasCachedToken()
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("no viable form of auth present on source: couldn't get cached token: %s", err))
+		}
+
+		if !hasToken {
+			return errors.New("no viable form of auth present on source: no cached token present")
+		}
+
+		OAuthToken, err := GetUserOAuthTokenManagerInstance().GetTokenInfo(ctx)
+
+		if OAuthToken == nil || err != nil {
+			return errors.New(fmt.Sprintf("no viable form of auth present on source: couldn't load OAuth token: %s", err))
+		}
+
+		udkp, err := createBlobPipeline(ctx, common.CredentialInfo{
+			CredentialType: common.ECredentialType.OAuthToken(),
+			OAuthTokenInfo: *OAuthToken,
+		})
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("no viable form of auth present on source: couldn't create blob pipeline: %s", err))
+		}
+
+		// Attempt to create a user delegation SAS token and append it to the source.
+		rawURL := *e.sourceURL
+		rawURL.Path = ""
+		currentTime := time.Now()
+		tomorrow := currentTime.Add(time.Hour*24)
+
+		sourceServiceURL := azblob.NewServiceURL(rawURL, udkp)
+		udc, err := sourceServiceURL.GetUserDelegationCredential(ctx, azblob.NewKeyInfo(currentTime, tomorrow), nil, nil)
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("no viable form of auth present on source: failed to create user delegation credential: %s", err))
+		}
+
+		SASValues := azblob.BlobSASSignatureValues{
+			Protocol: azblob.SASProtocolHTTPS,
+			StartTime: currentTime,
+			ExpiryTime: tomorrow,
+			Permissions: "rl",
+			ContainerName: sourceURLParts.ContainerName,
+		}
+
+		SASParams, err := SASValues.NewSASQueryParameters(udc)
+
+		if err != nil {
+			return errors.New(fmt.Sprintf("no viable form of auth present on source: failed to create user delegation SAS token: %s", err))
+		}
+
+		// Yes all of these have to be set. Consistency would be nice.
+		sourceURLParts.SAS = SASParams
+		*e.sourceURL = sourceURLParts.URL()
+		e.SourceSAS = SASParams.Encode()
+		e.srcBlobURLPartExtension = blobURLPartsExtension{ sourceURLParts } // For directories
+		cca.sourceSAS = SASParams.Encode()
 	}
 
 	// Case-1: Source is a single blob
