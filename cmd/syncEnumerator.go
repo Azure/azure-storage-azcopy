@@ -113,8 +113,13 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 	includeFilters := buildIncludeFilters(cca.include)
 	excludeFilters := buildExcludeFilters(cca.exclude)
 
+	includeAttrFilters := buildIncludeAttrFilters(cca.includeFileAttributes, sourceTraverser.fullPath)
+	excludeAttrFilters := buildExcludeAttrFilters(cca.excludeFileAttributes, sourceTraverser.fullPath)
+
 	// set up the filters in the right order
-	filters := append(includeFilters, excludeFilters...)
+	filters := append(includeFilters, includeAttrFilters...)
+	filters = append(filters, excludeFilters...)
+	filters = append(filters, excludeAttrFilters...)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
