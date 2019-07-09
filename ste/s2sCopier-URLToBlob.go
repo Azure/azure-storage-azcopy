@@ -40,7 +40,7 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 
 	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user
 
-	if blobTypeOverride != common.EBlobType.None() {
+	if blobTypeOverride != common.EBlobType.None() && blobTypeOverride != common.EBlobType.Detect() {
 		targetBlobType = blobTypeOverride.ToAzBlobType()
 
 		if jptm.ShouldLog(pipeline.LogInfo) { // To save fmt.Sprintf
