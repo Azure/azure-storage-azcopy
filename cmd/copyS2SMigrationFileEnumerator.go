@@ -246,6 +246,14 @@ func (e *copyS2SMigrationFileEnumerator) addTransfersFromDirectory(ctx context.C
 
 func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer(srcURL, destURL url.URL, properties *azfile.FileGetPropertiesResponse,
 	cca *cookedCopyCmdArgs) error {
+	util := copyHandlerUtil{}
+
+	bt := e.BlobAttributes.BlobType.ToAzBlobType()
+	if e.BlobAttributes.BlobType == common.EBlobType.Detect() || e.BlobAttributes.BlobType == common.EBlobType.None() {
+		bt = util.inferBlobType(srcURL.Path, bt)
+		fmt.Println(bt)
+	}
+
 	return e.addTransfer(common.CopyTransfer{
 		Source:             gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
 		Destination:        gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
@@ -257,16 +265,25 @@ func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer(srcURL, destURL url.
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
 		ContentMD5:         properties.ContentMD5(),
-		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata())},
+		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+		BlobType:           bt},
 		cca)
 }
 
 func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer2(srcURL, destURL url.URL, properties *azfile.FileProperty,
 	cca *cookedCopyCmdArgs) error {
+	util := copyHandlerUtil{}
+
+	bt := e.BlobAttributes.BlobType.ToAzBlobType()
+	if e.BlobAttributes.BlobType == common.EBlobType.Detect() || e.BlobAttributes.BlobType == common.EBlobType.None() {
+		bt = util.inferBlobType(srcURL.Path, bt)
+	}
+
 	return e.addTransfer(common.CopyTransfer{
 		Source:      gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
 		Destination: gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
-		SourceSize:  properties.ContentLength},
+		SourceSize:  properties.ContentLength,
+		BlobType:    bt},
 		cca)
 }
 

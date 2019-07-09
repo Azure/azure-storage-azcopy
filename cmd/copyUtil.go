@@ -52,12 +52,11 @@ const wildCard = "*"
 var inferExtensions = map[string]azblob.BlobType{
 	".vhd":  azblob.BlobPageBlob,
 	".vhdx": azblob.BlobPageBlob,
-	".vmdk": azblob.BlobPageBlob,
 }
 
 // infers a blob type from the extension specified.
 func (copyHandlerUtil) inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
-	if b, ok := inferExtensions[filepath.Ext(filename)]; ok {
+	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
 		return b
 	}
 

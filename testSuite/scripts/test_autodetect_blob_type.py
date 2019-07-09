@@ -7,7 +7,7 @@ class Autodetect_Blob_Type_Scenario(unittest.TestCase):
     # Currently, the only auto-detected blob type is page blob.
     # Copy a VHD without specifying page blob and see what it does.
     def test_auto_detect_blob_type_vhd(self):
-        file_name = "myVHD.vhd"
+        file_name = "myVHD.vHd" # awkward capitalization to see if azcopy catches it
         file_path = util.create_test_file(file_name, 4 * 1024 * 1024)
 
         # copy VHD file without specifying page blob. Page blob is inferred for VHD, VHDX, and VMDK
@@ -49,7 +49,7 @@ class Autodetect_Blob_Type_Scenario(unittest.TestCase):
         self.assertTrue(result)
 
         result = util.Command("copy").add_arguments(src_container_url).add_arguments(dst_container_url). \
-            add_flags("log-level", "info").execute_azcopy_copy_command()  # Blob type in this case will be inferred.
+            add_flags("log-level", "info").add_flags("blob-type", "detect").execute_azcopy_copy_command()  # Blob type in this case will be inferred.
         self.assertTrue(result)
 
         # Verify blob type (should be page blob)

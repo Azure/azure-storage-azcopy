@@ -32,7 +32,7 @@ import (
 func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
-	targetBlobType := azblob.BlobBlockBlob // By default use block blob as destination type
+	targetBlobType := jptm.Info().SrcBlobType // By default use block blob as destination type
 
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		targetBlobType = blobSrcInfoProvider.BlobType()

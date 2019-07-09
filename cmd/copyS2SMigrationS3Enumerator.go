@@ -332,6 +332,12 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.URL, objectInfo *minio.ObjectInfo,
 	cca *cookedCopyCmdArgs) error {
 	oie := common.ObjectInfoExtension{ObjectInfo: *objectInfo}
+	util := copyHandlerUtil{}
+
+	bt := e.BlobAttributes.BlobType.ToAzBlobType()
+	if e.BlobAttributes.BlobType == common.EBlobType.Detect() || e.BlobAttributes.BlobType == common.EBlobType.None() {
+		bt = util.inferBlobType(srcURL.Path, bt)
+	}
 
 	copyTransfer := common.CopyTransfer{
 		Source:             srcURL.String(),
@@ -344,7 +350,8 @@ func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.
 		ContentLanguage:    oie.ContentLanguage(),
 		CacheControl:       oie.CacheControl(),
 		ContentMD5:         oie.ContentMD5(),
-		Metadata:           oie.NewCommonMetadata()}
+		Metadata:           oie.NewCommonMetadata(),
+		BlobType:           bt}
 
 	return e.addTransfer(copyTransfer, cca)
 }

@@ -241,7 +241,7 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer(srcURL, destURL url.
 	cca *cookedCopyCmdArgs) error {
 	util := copyHandlerUtil{}
 
-	if e.BlobAttributes.BlobType == common.EBlobType.None() || e.BlobAttributes.BlobType == common.EBlobType.Detect() {
+	if e.BlobAttributes.BlobType == common.EBlobType.Detect() {
 		properties.BlobType = util.inferBlobType(srcURL.Path, properties.BlobType)
 	}
 
@@ -269,7 +269,7 @@ func (e *copyS2SMigrationBlobEnumerator) addBlobToNTransfer2(srcURL, destURL url
 	util := copyHandlerUtil{}
 
 	bt := properties.BlobType()
-	if e.BlobAttributes.BlobType == common.EBlobType.None() || e.BlobAttributes.BlobType == common.EBlobType.Detect() {
+	if e.BlobAttributes.BlobType == common.EBlobType.Detect() {
 		bt = util.inferBlobType(srcURL.Path, bt)
 	}
 
