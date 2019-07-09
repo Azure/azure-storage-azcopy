@@ -23,7 +23,7 @@ Copies source data to a destination location. The supported directions are:
   - local <-> Azure Blob (SAS or OAuth authentication)
   - local <-> Azure File (Share/directory SAS authentication)
   - local <-> ADLS Gen 2 (SAS, OAuth, or SharedKey authentication)
-  - Azure Blob (SAS or public) <-> Azure Blob (SAS or OAuth authentication)
+  - Azure Blob (SAS, Public, or OAuth) <-> Azure Blob (SAS or OAuth authentication)
   - Azure File (SAS) -> Azure Block Blob (SAS or OAuth authentication)
   - AWS S3 (Access Key) -> Azure Block Blob (SAS or OAuth authentication)
 
