@@ -176,7 +176,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # be the main OAuth one, to simplify OAuth setup
         dst_container_url = util.get_object_without_sas(util.test_oauth_container_url, self.bucket_name)
         self.util_test_copy_single_file_from_x_to_x(src_container_url, "Blob", dst_container_url, "Blob",
-                                                    17 * 1024 * 1024, True)
+                                                    sizeInKB=17 * 1024 * 1024, dstOAuth=True)
 
 
     ##################################
