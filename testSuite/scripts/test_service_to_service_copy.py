@@ -627,8 +627,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             srcBlobType="",
             dstBlobType="",
             dstOAuth=False,
-            srcOAuth=False):
-        # create source bucket
+            srcOAuth=False):        # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
         self.assertTrue(result)
@@ -639,7 +638,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         else:
             filename = "test_" + str(sizeInKB) + "kb_copy.txt"
         file_path = util.create_test_file(filename, sizeInKB)
-        if srcType == "S3" or srcOAuth:
+        if srcType == "S3":
             srcFileURL = util.get_object_without_sas(srcBucketURL, filename)
         else:
             srcFileURL = util.get_object_sas(srcBucketURL, filename)
@@ -652,6 +651,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         # Upload file.
         self.util_upload_to_src(file_path, srcType, srcFileURL, blobType=srcBlobType)
+
+        if srcOAuth:
+            srcFileURL = util.get_object_without_sas(srcBucketURL, filename)
 
         # Copy file using azcopy from srcURL to destURL
         result = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
