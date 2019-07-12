@@ -49,20 +49,6 @@ var gCopyUtil = copyHandlerUtil{}
 
 const wildCard = "*"
 
-var inferExtensions = map[string]azblob.BlobType{
-	".vhd":  azblob.BlobPageBlob,
-	".vhdx": azblob.BlobPageBlob,
-}
-
-// infers a blob type from the extension specified.
-func (copyHandlerUtil) inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
-	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
-		return b
-	}
-
-	return defaultBlobType
-}
-
 // checks whether a given url contains a prefix pattern
 func (copyHandlerUtil) numOfWildcardInURL(url url.URL) int {
 	return strings.Count(url.String(), wildCard)

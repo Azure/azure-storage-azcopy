@@ -153,7 +153,17 @@ func createChunkFunc(setDoneStatusOnExit bool, jptm IJobPartTransferMgr, id comm
 
 // newBlobUploader detects blob type and creates a uploader manually
 func newBlobUploader(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
-	switch jptm.Info().SrcBlobType {
+	override := jptm.BlobTypeOverride()
+	intendedType := override.ToAzBlobType()
+
+	if override == common.EBlobType.None() || override == common.EBlobType.Detect() {
+		intendedType = inferBlobType(jptm.Info().Source, azblob.BlobBlockBlob)
+		// jptm.LogTransferInfo(fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source , intendedType))
+		// TODO: Log these? @JohnRusk and @zezha-msft this creates quite a bit of spam in the logs but is important info.
+		// TODO: Perhaps we should log it only if it isn't a block blob?
+	}
+
+	switch intendedType {
 	case azblob.BlobBlockBlob:
 		return newBlockBlobUploader(jptm, destination, p, pacer, sip)
 	case azblob.BlobPageBlob:

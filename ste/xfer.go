@@ -22,9 +22,13 @@ package ste
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -97,4 +101,18 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
+}
+
+var inferExtensions = map[string]azblob.BlobType{
+	".vhd":  azblob.BlobPageBlob,
+	".vhdx": azblob.BlobPageBlob,
+}
+
+// infers a blob type from the extension specified.
+func inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
+	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
+		return b
+	}
+
+	return defaultBlobType
 }
