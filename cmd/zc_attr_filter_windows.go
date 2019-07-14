@@ -21,7 +21,7 @@
 package cmd
 
 import (
-	"path"
+	"path/filepath"
 	"syscall"
 	"strings"
 )
@@ -38,7 +38,7 @@ func (f *excludeAttrFilter) doesSupportThisOS() (msg string, supported bool) {
 }
 
 func (f *excludeAttrFilter) doesPass(storedObject storedObject) bool {
-	fileName := path.Join(f.filePath, storedObject.name)
+	fileName := filepath.Join(f.filePath, storedObject.name)
 	lpFileName, err := syscall.UTF16PtrFromString(fileName)
 
 	// If it fails to retrive the pointer from file path, let the filter pass
@@ -113,7 +113,7 @@ func (f *includeAttrFilter) doesSupportThisOS() (msg string, supported bool) {
 }
 
 func (f *includeAttrFilter) doesPass(storedObject storedObject) bool {
-	fileName := path.Join(f.filePath, storedObject.name)
+	fileName := filepath.Join(f.filePath, storedObject.name)
 	lpFileName, err := syscall.UTF16PtrFromString(fileName)
 
 	// If it fails to retrive the pointer from file path, let the filter pass
