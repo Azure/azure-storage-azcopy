@@ -48,6 +48,14 @@ const (
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
+func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	c.Assert(err, chk.IsNil)
+
+	// Cleanup the source S3 account
+	cleanS3Account(c, s3Client)
+}
+
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
@@ -372,9 +380,6 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
 
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
-
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
@@ -415,9 +420,6 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	specificRegion := "us-west-2"
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
-
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
