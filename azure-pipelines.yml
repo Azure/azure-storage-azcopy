@@ -1,7 +1,14 @@
 trigger:
   branches:
     include:
-      - fp_filter_file_attributes
+      - dev
+      - master
+
+pr:
+  branches:
+    include:
+      - dev
+      - master
 
 jobs:
   - job: Linux_and_Windows_Builds
