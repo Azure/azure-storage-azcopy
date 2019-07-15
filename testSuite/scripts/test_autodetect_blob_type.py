@@ -96,7 +96,7 @@ class Autodetect_Blob_Type_Scenario(unittest.TestCase):
             add_flags("log-level", "info").execute_azcopy_copy_command()  # Blob type will be detected as block.
         self.assertTrue(result)
 
-        # Verify blob type (should be page blob)
+        # Verify blob type (should be block blob)
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(dst_container_url). \
-            add_flags("blob-type", "PageBlob").execute_azcopy_verify()
+            add_flags("blob-type", "BlockBlob").execute_azcopy_verify()
         self.assertTrue(result)
