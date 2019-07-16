@@ -879,11 +879,23 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
 		fmt.Println("Scanning...")
 		transfers := 0
-		traverser := initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, cca.recursive, func(){transfers++})
+		var traverser resourceTraverser
+
+		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, cca.recursive, func(){transfers++})
+		if err != nil {
+			return err
+		}
+
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
+			src, err := cca.findObject(cca.fromTo.From(), cca.source, object.relativePath)
+
+			if err != nil {
+				return err
+			}
+
 			transfer := common.CopyTransfer{
-				Source: filepath.Join(trimWildcards(cca.source), object.relativePath),
+				Source: src,
 				Destination: "/" + strings.TrimSuffix(object.relativePath, object.name) + object.name,
 				LastModifiedTime: object.lastModifiedTime,
 				SourceSize: object.size,
@@ -969,6 +981,28 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	return nil
+}
+
+func (cca *cookedCopyCmdArgs) initSrcPipeline(ctx context.Context) (p pipeline.Pipeline, err error) {
+	switch cca.fromTo.From() {
+	case common.ELocation.Blob():
+		p, err = createBlobPipeline(ctx, cca.credentialInfo)
+	}
+
+	return
+}
+
+func (cca *cookedCopyCmdArgs) findObject(origin common.Location, basePath string, relativePath string) (string, error) {
+	if relativePath == "" {
+		return basePath, nil
+	}
+
+	switch origin {
+	case common.ELocation.Local():
+		return filepath.Join(trimWildcards(basePath), relativePath), nil
+	default:
+		return "", fmt.Errorf("cannot find object from origin %s", origin)
+	}
 }
 
 // Initialize the modular filters outside of copy to increase readability.

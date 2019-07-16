@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"context"
+	"errors"
 	"strings"
 	"time"
 )
@@ -73,7 +74,7 @@ type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
 }
 
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, pipeline *pipeline.Pipeline, recursive bool, incrementEnumerationCounter func()) resourceTraverser {
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, pipeline *pipeline.Pipeline, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 
 	/*
@@ -96,10 +97,10 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			output = newLocalTraverser(source, recursive, incrementEnumerationCounter)
 		}
 	default:
-		return nil
+		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}
 
-	return output
+	return output, nil
 }
 
 // given a storedObject, process it accordingly
