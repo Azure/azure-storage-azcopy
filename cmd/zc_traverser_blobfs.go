@@ -1,3 +1,22 @@
+// Copyright © 2019 Microsoft <wastore@microsoft.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 package cmd
 
 import (
@@ -5,6 +24,8 @@ import (
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
+
 	"net/url"
 	"strings"
 	"time"
@@ -63,7 +84,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 	if isFile {
 		storedObject := newStoredObject(
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
-			"",
+			"", // relative path makes no sense when the full path already points to the file
 			t.parseLMT(pathProperties.LastModified()),
 			pathProperties.ContentLength(),
 			pathProperties.ContentMD5(),
@@ -81,8 +102,8 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 	marker := ""
 	searchPrefix := bfsURLParts.DirectoryOrFilePath
 
-	if !strings.HasSuffix(searchPrefix, "/") {
-		searchPrefix += "/"
+	if !strings.HasSuffix(searchPrefix, common.AZCOPY_PATH_SEPARATOR_STRING) {
+		searchPrefix += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
 	for {
@@ -94,7 +115,6 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 
 		for _, v := range dlr.Paths {
 			if v.IsDirectory == nil {
-				// TODO: Index file.
 				storedObject := newStoredObject(
 					getObjectNameOnly(*v.Name),
 					strings.TrimPrefix(*v.Name, searchPrefix),
