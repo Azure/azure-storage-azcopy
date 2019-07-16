@@ -20,7 +20,33 @@
 
 package cmd
 
-import "path"
+import (
+	"path"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
+)
+
+// Design explanation:
+/*
+Blob type exclusion is required as a part of the copy enumerators refactor. This would be used in Download and S2S scenarios.
+In order to make the actual filter speed faster, a map is opted for instead of a list.
+This map is used effectively as a hash set. If an item exists in the set, it does not pass the filter.
+
+I'm not going to get into the specifics of why this is faster, but know that it's O(1) time compared to O(n) time, where n is the number of blob types excluded.
+*/
+type excludeBlobTypeFilter struct {
+	blobTypes map[azblob.BlobType]bool
+}
+
+func (f *excludeBlobTypeFilter) doesPass(object storedObject) bool {
+	if _, ok := f.blobTypes[object.blobType]; !ok {
+		// For readability purposes, focus on returning false.
+		// Basically, the statement says "If the blob type is not present in the list, the object passes the filters."
+		return true
+	}
+
+	return false
+}
 
 type excludeFilter struct {
 	pattern string

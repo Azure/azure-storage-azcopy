@@ -971,8 +971,29 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	return nil
 }
 
+// Initialize the modular filters outside of copy to increase readability.
 func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
+
+	if len(cca.includePatterns) != 0 {
+		filters = append(filters, &includeFilter{patterns:cca.includePatterns})
+	}
+
+	if len(cca.excludePatterns) != 0 {
+		for _,v := range cca.excludePatterns {
+			filters = append(filters, &excludeFilter{pattern:v})
+		}
+	}
+
+	if len(cca.excludeBlobType) != 0 {
+		excludeSet := map[azblob.BlobType]bool{}
+
+		for _,v := range cca.excludeBlobType {
+			excludeSet[v] = true
+		}
+
+		filters = append(filters, &excludeBlobTypeFilter{blobTypes:excludeSet})
+	}
 
 	return filters
 }
