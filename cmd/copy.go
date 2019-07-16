@@ -25,23 +25,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"math"
-
 	"io"
+	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"io/ioutil"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/spf13/cobra"
 )
 
 const pipingUploadParallelism = 5
@@ -736,6 +737,20 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
 	switch from {
+	case common.ELocation.Local():
+		tmpSrc, err := filepath.Abs(cca.source)
+		if err != nil {
+			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
+		}
+		cca.source = tmpSrc
+
+		// If we've gotten this far and it fails, it's probably a wildcard check.
+		fi, err := os.Stat(cca.source)
+		if err == nil {
+			if fi.IsDir() && !cca.recursive {
+				return errors.New("cannot transfer folder without --recursive")
+			}
+		}
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -857,13 +872,35 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob():
-		fallthrough
-	case common.EFromTo.LocalBlobFS():
-		fallthrough
-	case common.EFromTo.LocalFile():
-		e := copyUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
+	case common.EFromTo.LocalBlob(),
+		 common.EFromTo.LocalBlobFS(),
+		 common.EFromTo.LocalFile():
+		// TODO: Count files enumerated during scanning.
+		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
+		fmt.Println("Scanning...")
+		transfers := 0
+		traverser := initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, cca.recursive, func(){transfers++})
+		filters := cca.initModularFilters()
+		processor := func(object storedObject) error {
+			transfer := common.CopyTransfer{
+				Source: filepath.Join(trimWildcards(cca.source), object.relativePath),
+				Destination: "/" + strings.TrimSuffix(object.relativePath, object.name) + object.name,
+				LastModifiedTime: object.lastModifiedTime,
+				SourceSize: object.size,
+			}
+
+			return addTransfer(&jobPartOrder, transfer, cca)
+		}
+		finalizer := func() error {
+			if transfers == 0 {
+				return errors.New("cannot find source to upload")
+			}
+
+			return dispatchFinalPart(&jobPartOrder, cca)
+		}
+
+		e := newCopyEnumerator(traverser, filters, processor, finalizer)
+		err = e.enumerate()
 	case common.EFromTo.BlobLocal():
 		e := copyDownloadBlobEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
@@ -932,6 +969,12 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	return nil
+}
+
+func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
+	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
+
+	return filters
 }
 
 // wraps call to lifecycle manager to wait for the job to complete

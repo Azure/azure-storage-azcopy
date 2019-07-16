@@ -22,7 +22,9 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"context"
 	"strings"
 	"time"
 )
@@ -69,6 +71,35 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
+}
+
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, pipeline *pipeline.Pipeline, recursive bool, incrementEnumerationCounter func()) resourceTraverser {
+	var output resourceTraverser
+
+	/*
+	Required support:
+	PR1: Local -> Blob/File/BlobFS ===YOU ARE HERE===
+		Only Local traverser required. Overwrite checks occur in STE.
+	PR2: Blob/File/BlobFS -> Local
+		Blob, File, BlobFS traversers required.
+	PR3: Blob/File -> BlobFS
+		Nothing new.
+	PR4/5: S3 -> BlobFS
+		Add S3 traverser.
+	*/
+
+	switch location {
+	case common.ELocation.Local():
+		if strings.Index(source, "*") != -1 {
+			output = newGlobTraverser(source, recursive, incrementEnumerationCounter)
+		} else {
+			output = newLocalTraverser(source, recursive, incrementEnumerationCounter)
+		}
+	default:
+		return nil
+	}
+
+	return output
 }
 
 // given a storedObject, process it accordingly

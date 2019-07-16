@@ -320,7 +320,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransfersFromBucket(ctx context.Contex
 	if err != nil {
 		// Handle the error that fail to list objects in bucket due to Location mismatch, which is caused by source endpoint doesn't match S3 buckets' regions
 		if strings.Contains(err.Error(), "301 response missing Location header") {
-			glcm.Info(fmt.Sprintf("skip enumerating the bucket %q, as it's not in the region specified by source URL", bucketName))
+			glcm.Info(fmt.Sprintf("skip enumerating the bucket %q	, as it's not in the region specified by source URL", bucketName))
 		} else {
 			return err
 		}
