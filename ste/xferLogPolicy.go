@@ -96,7 +96,14 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
 					httpError = true
 				}
-			} else { // This error did not get an HTTP response from the service; upgrade the severity to Error
+			} else if isContextCancelledError(err) {
+				// No point force-logging these, and probably, for clarity of the log, no point in even logging unless at debug level
+				// Otherwise, when lots of go-routines are running, and one fails with a real error, the rest obscure the log with their
+				// context canceled logging. If there's no real error, just user-requested cancellation,
+				// that's is visible by cancelled status shown in end-of-log summary.
+				logLevel, forceLog = pipeline.LogDebug, false
+			} else {
+				// This error did not get an HTTP response from the service; upgrade the severity to Error
 				logLevel, forceLog = pipeline.LogError, true
 			}
 
@@ -136,6 +143,27 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			return response, err
 		}
 	})
+}
+
+func isContextCancelledError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if err == context.Canceled {
+		return true
+	}
+
+	cause := pipeline.Cause(err)
+	if cause == context.Canceled {
+		return true
+	}
+
+	if uErr, ok := cause.(*url.Error); ok {
+		return isContextCancelledError(uErr.Err)
+	}
+
+	return false
 }
 
 func prepareRequestForLogging(request pipeline.Request) *http.Request {
