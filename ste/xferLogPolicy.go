@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"runtime"
 	"strings"
@@ -56,10 +57,28 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			}
 
 			// Set the time for this particular retry operation and then Do the operation.
-			tryStart := time.Now()
-			response, err = next.Do(ctx, request) // Make the request
+			// The time we gather here is a measure of service responsiveness, and as such it shouldn't
+			// include the time taken to transfer the body. For downloads, that's easy,
+			// since Do returns before the body is processed.  For uploads, its trickier, because
+			// the body transferring is inside Do. So we use an http trace, so we can time
+			// from the time we finished sending the request (including any body).
+			var endRequestWrite time.Time
+			haveEndWrite := false
+			tracedContext := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+				WroteRequest: func(w httptrace.WroteRequestInfo) {
+					endRequestWrite = time.Now()
+					haveEndWrite = true
+				},
+			})
+			tryBeginAwaitResponse := time.Now()
+
+			response, err = next.Do(tracedContext, request) // Make the request
+
 			tryEnd := time.Now()
-			tryDuration := tryEnd.Sub(tryStart)
+			if haveEndWrite {
+				tryBeginAwaitResponse = endRequestWrite // adjust to the time we really started waiting for the response
+			}
+			tryDuration := tryEnd.Sub(tryBeginAwaitResponse)
 			opDuration := tryEnd.Sub(operationStart)
 
 			logLevel, forceLog, httpError := pipeline.LogInfo, false, false // Default logging information
