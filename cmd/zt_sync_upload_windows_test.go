@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,6 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
 	filesToExclude := []string{"file1.pdf", "file2.txt", "file3"}
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToExclude)
 	attrList := []string{"H", "I", "C"}
-	// exclude files with H, I and S attributes
 	excludeAttrsStr := "H;I;S"
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToExclude, attrList)
 
@@ -66,8 +65,8 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 	// add special files with attributes that we wish to include
 	filesToInclude := []string{"file1.txt", "file2.pdf", "file3.pdf"}
 	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, filesToInclude)
-	includeAttrsStr := "H;I"
-	attrList := []string{"H", "I"}
+	attrList := []string{"H", "I", "C"}
+	includeAttrsStr := "H;I;S"
 	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, filesToInclude, attrList)
 
 	// set up the destination as an empty container
@@ -86,5 +85,77 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 	runSyncAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateUploadTransfersAreScheduled(c, "", "", filesToInclude, mockedRPC)
+	})
+}
+
+// Asserting that name filter and attribute filter are ANDed
+// Create one file that matches only the name filter
+// Create one file that matches only the attribute filter
+// Create one file that matches both
+// Only the last file should be transferred
+func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *chk.C) {
+	bsu := getBSU()
+
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+
+	fileList := []string{"file1.txt", "file2.png", "file3.txt"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+	includeString := "*.txt"
+	includeAttrsStr := "H;I;S"
+	attrList := []string{"H", "I", "C"}
+	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, fileList[1:], attrList)
+
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
+	raw.includeFileAttributes = includeAttrsStr
+	raw.include = includeString
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateUploadTransfersAreScheduled(c, "", "", fileList[2:], mockedRPC)
+	})
+}
+
+// Asserting that name filter and attribute filter are ANDed
+// Create one file that matches only the name filter
+// Create one file that matches only the attribute filter
+// Create one file that matches both
+// None of them should be transferred
+func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *chk.C) {
+	bsu := getBSU()
+
+	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	commonFileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
+
+	fileList := []string{"file1.bin", "file2.png", "file3.bin"}
+	scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
+	excludeString := "*.bin"
+	excludeAttrsStr := "H;I;S"
+	attrList := []string{"H", "I", "C"}
+	scenarioHelper{}.setAttributesForLocalFiles(c, srcDirName, fileList[1:], attrList)
+
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultSyncRawInput(srcDirName, rawContainerURLWithSAS.String())
+	raw.excludeFileAttributes = excludeAttrsStr
+	raw.exclude = excludeString
+
+	runSyncAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		validateUploadTransfersAreScheduled(c, "", "", commonFileList, mockedRPC)
 	})
 }

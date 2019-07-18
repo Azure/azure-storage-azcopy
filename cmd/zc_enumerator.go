@@ -186,7 +186,7 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 		for _, filter := range filters {
 			msg, supported := filter.doesSupportThisOS()
 			if !supported {
-				glcm.Info(msg)
+				glcm.Error(msg)
 			}
 			if !filter.doesPass(storedObject) {
 				return false

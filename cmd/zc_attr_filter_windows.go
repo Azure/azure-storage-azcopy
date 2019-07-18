@@ -1,4 +1,4 @@
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -26,42 +26,41 @@ import (
 	"strings"
 )
 
-type excludeAttrFilter struct {
-	fileAttributes uint32
-	filePath       string
+type attrFilter struct {
+	fileAttributes  uint32
+	filePath        string
+	isIncludeFilter bool
 }
 
-func (f *excludeAttrFilter) doesSupportThisOS() (msg string, supported bool) {
+func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
 	msg = ""
 	supported = true
 	return
 }
 
-func (f *excludeAttrFilter) doesPass(storedObject storedObject) bool {
+// TODO: review handling of filename for long path support
+func (f *attrFilter) doesPass(storedObject storedObject) bool {
 	fileName := filepath.Join(f.filePath, storedObject.name)
-	lpFileName, err := syscall.UTF16PtrFromString(fileName)
-
-	// If it fails to retrive the pointer from file path, let the filter pass
-	if err != nil {
-		return true
-	}
-
+	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
 	attributes, err := syscall.GetFileAttributes(lpFileName)
 
+	// If it fails to get file attributes,
+	// let the filter pass
 	if err != nil {
 		return true
 	}
 
 	// if a file shares one or more attributes with the ones provided by the filter,
-	// exclude this file
+	// it's a match. Return the appropriate boolean value if there's a match.
+	// Otherwise return the opposite value.
 	if attributes & f.fileAttributes > 0 {
-		return false
+		return f.isIncludeFilter
 	}
 
-	return true
+	return !f.isIncludeFilter
 }
 
-func buildExcludeAttrFilters(attributes []string, fullPath string) []objectFilter {
+func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool) []objectFilter {
 	var fileAttributes uint32
 	filters := make([]objectFilter, 0)
 	// Available attributes (NTFS) include:
@@ -96,70 +95,7 @@ func buildExcludeAttrFilters(attributes []string, fullPath string) []objectFilte
 
 	// Don't append the filter if there is no attributes given
 	if fileAttributes > 0 {
-		filters = append(filters, &excludeAttrFilter{fileAttributes: fileAttributes, filePath: fullPath})
-	}
-	return filters
-}
-
-type includeAttrFilter struct {
-	fileAttributes uint32
-	filePath       string
-}
-
-func (f *includeAttrFilter) doesSupportThisOS() (msg string, supported bool) {
-	msg = ""
-	supported = true
-	return
-}
-
-func (f *includeAttrFilter) doesPass(storedObject storedObject) bool {
-	fileName := filepath.Join(f.filePath, storedObject.name)
-	lpFileName, err := syscall.UTF16PtrFromString(fileName)
-
-	// If it fails to retrive the pointer from file path, let the filter pass
-	if err != nil {
-		return true
-	}
-
-	attributes, err := syscall.GetFileAttributes(lpFileName)
-
-	// If the storedObject has invalid file attributes, let the filter pass
-	if err != nil {
-		return true
-	}
-
-	// if a file shares one or more attributes with the ones provided by the filter,
-	// include this file
-	if attributes & f.fileAttributes > 0 {
-		return true
-	}
-
-	return false
-}
-
-func buildIncludeAttrFilters(attributes []string, fullPath string) []objectFilter {
-	var fileAttributes uint32
-	filters := make([]objectFilter, 0)
-	fileAttributeMap := map[string]uint32 {
-		"R" : 1,
-		"A" : 32,
-		"S" : 4,
-		"H" : 2,
-		"C" : 2048,
-		"N" : 128,
-		"E" : 16384,
-		"T" : 256,
-		"O" : 4096,
-		"I" : 8192,
-	}
-
-	for _, attribute := range attributes {
-		fileAttributes |= fileAttributeMap[strings.ToUpper(attribute)]
-	}
-
-	// Don't append the filter if there is no attributes given
-	if fileAttributes > 0 {
-		filters = append(filters, &includeAttrFilter{fileAttributes: fileAttributes, filePath: fullPath})
+		filters = append(filters, &attrFilter{fileAttributes: fileAttributes, filePath: fullPath, isIncludeFilter: isIncludeFilter})
 	}
 	return filters
 }

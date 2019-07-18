@@ -1,6 +1,6 @@
-// +build linux darwin
+// +build !windows
 
-// Copyright © 2017 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,52 +22,24 @@
 
 package cmd
 
-type excludeAttrFilter struct {
-	fileAttributes uint32
-	filePath       string
-}
+type attrFilter struct {}
 
-func (f *excludeAttrFilter) doesSupportThisOS() (msg string, supported bool) {
-	msg = "'exclude-attributes' is not supported on this OS. This option will be ignored."
+func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = "'include-attributes' and 'exclude-attributes' are not supported on this OS. Abort."
 	supported = false
 	return
 }
 
-func (f *excludeAttrFilter) doesPass(storedObject storedObject) bool {
+func (f *attrFilter) doesPass(storedObject storedObject) bool {
 	// ignore this option on Unix systems
 	return true
 }
 
-func buildExcludeAttrFilters(attributes []string, fullPath string) []objectFilter {
+func buildAttrFilters(attributes []string, fullPath string, resultIfMatch bool) []objectFilter {
 	// ignore this option on Unix systems
 	filters := make([]objectFilter, 0)
 	if len(attributes) > 0 {
-		filters = append(filters, &excludeAttrFilter{fileAttributes: 0, filePath: fullPath})
-	}
-	return filters
-}
-
-type includeAttrFilter struct {
-	fileAttributes uint32
-	filePath       string
-}
-
-func (f *includeAttrFilter) doesSupportThisOS() (msg string, supported bool) {
-	msg = "'include-attributes' is not supported on this OS. This option will be ignored."
-	supported = false
-	return
-}
-
-func (f *includeAttrFilter) doesPass(storedObject storedObject) bool {
-	// ignore this option on Unix systems
-	return true
-}
-
-func buildIncludeAttrFilters(attributes []string, fullPath string) []objectFilter {
-	// ignore this option on Unix systems
-	filters := make([]objectFilter, 0)
-	if len(attributes) > 0 {
-		filters = append(filters, &includeAttrFilter{fileAttributes: 0, filePath: fullPath})
+		filters = append(filters, &attrFilter{})
 	}
 	return filters
 }
