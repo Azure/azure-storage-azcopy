@@ -102,7 +102,7 @@ func verifyFileDirUpload(testFileCmd TestFileCommand) {
 	// parse the subject url.
 	sasURL, err := url.Parse(testFileCmd.Subject)
 	if err != nil {
-		fmt.Println("fail to parse the container sas ", testFileCmd.Subject)
+		// fmt.Println("fail to parse the container sas ", testFileCmd.Subject)
 		os.Exit(1)
 	}
 
@@ -123,7 +123,7 @@ func validateAzureDirWithLocalFile(curAzureDirURL azfile.DirectoryURL, baseAzure
 		// look for all files that in current directory
 		listFile, err := curAzureDirURL.ListFilesAndDirectoriesSegment(context.Background(), marker, azfile.ListFilesAndDirectoriesOptions{})
 		if err != nil {
-			fmt.Println(fmt.Sprintf("fail to list files and directories inside the directory. Please check the directory sas, %v", err))
+			// fmt.Println(fmt.Sprintf("fail to list files and directories inside the directory. Please check the directory sas, %v", err))
 			os.Exit(1)
 		}
 
@@ -252,7 +252,7 @@ func verifySingleFileUpload(testFileCmd TestFileCommand) {
 	// getting the shared access signature of the resource.
 	sourceURL, err := url.Parse(testFileCmd.Subject)
 	if err != nil {
-		fmt.Println(fmt.Sprintf("Error parsing the file url source %s", testFileCmd.Object))
+		// fmt.Println(fmt.Sprintf("Error parsing the file url source %s", testFileCmd.Object))
 		os.Exit(1)
 	}
 

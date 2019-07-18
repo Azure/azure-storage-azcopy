@@ -251,7 +251,7 @@ func getFSU() azfile.ServiceURL {
 	return azfile.NewServiceURL(*u, pipeline)
 }
 
-func getBFSU() azbfs.ServiceURL {
+func GetBFSSU() azbfs.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
 	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName))
 
@@ -460,6 +460,9 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	c.Assert(err, chk.IsNil)
 
 	for _, bucket := range buckets {
+		if strings.Contains(bucket.Name, "elastic") {
+			continue
+		}
 		deleteBucket(c, client, bucket.Name)
 	}
 }
@@ -606,4 +609,26 @@ func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareNa
 
 	// TODO perhaps we need a global default pipeline
 	return azfile.NewShareURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
+}
+
+func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) azbfs.ServiceURL {
+	sasQueryParams, err := azbfs.AccountSASSignatureValues{
+		Protocol:      azbfs.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	// construct the url from scratch
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.dfs.core.windows.net/?%s",
+		credential.AccountName(), qp)
+
+	// convert the raw url and validate it was parsed successfully
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 }

@@ -44,7 +44,7 @@ func (s *cmdIntegrationSuite) TestRemoveSingleBlob(c *chk.C) {
 
 		// construct the raw input to simulate user input
 		rawBlobURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, blobList[0])
-		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String(), true)
+		raw := getDefaultRemoveRawInput(rawBlobURLWithSAS.String())
 
 		runCopyAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
@@ -72,7 +72,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderContainer(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -117,7 +117,7 @@ func (s *cmdIntegrationSuite) TestRemoveBlobsUnderVirtualDir(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawVirtualDirectoryURLWithSAS := scenarioHelper{}.getRawBlobURLWithSAS(c, containerName, vdirName)
-	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawVirtualDirectoryURLWithSAS.String())
 	raw.recursive = true
 
 	runCopyAndVerify(c, raw, func(err error) {
@@ -168,7 +168,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.include = includeString
 	raw.recursive = true
 
@@ -201,7 +201,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.exclude = excludeString
 	raw.recursive = true
 
@@ -240,7 +240,7 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 
 	// construct the raw input to simulate user input
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
-	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String(), true)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
 	raw.include = includeString
 	raw.exclude = excludeString
 	raw.recursive = true

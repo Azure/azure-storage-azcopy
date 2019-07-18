@@ -46,7 +46,7 @@ func (bd *blobFSDownloader) Epilogue() {
 
 // Returns a chunk-func for ADLS gen2 downloads
 
-func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer *pacer) chunkFunc {
+func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPipeline pipeline.Pipeline, destWriter common.ChunkedFileWriter, id common.ChunkID, length int64, pacer pacer) chunkFunc {
 	return createDownloadChunkFunc(jptm, id, func() {
 
 		// step 1: Downloading the file from range startIndex till (startIndex + adjustedChunkSize)
@@ -82,7 +82,7 @@ func (bd *blobFSDownloader) GenerateDownloadFunc(jptm IJobPartTransferMgr, srcPi
 			NotifyFailedRead: common.NewReadLogFunc(jptm, u),
 		})
 		defer retryReader.Close()
-		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newLiteResponseBodyPacer(retryReader, pacer), true)
+		err = destWriter.EnqueueChunk(jptm.Context(), id, length, newPacedResponseBody(jptm.Context(), retryReader, pacer), true)
 		if err != nil {
 			jptm.FailActiveDownload("Enqueuing chunk", err)
 			return

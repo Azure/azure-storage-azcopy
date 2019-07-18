@@ -36,7 +36,7 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 )
 
 const defaultFileSize = 1024
@@ -406,6 +406,13 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
 	return getServiceURLWithSAS(c, *credential).URL()
 }
 
+func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	credential := azbfs.NewSharedKeyCredential(accountName, accountKey)
+
+	return getAdlsServiceURLWithSAS(c, *credential)
+}
+
 func (scenarioHelper) getBlobServiceURL(c *chk.C) azblob.ServiceURL {
 	accountName, accountKey := getAccountAndKey()
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
@@ -591,10 +598,14 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 	}
 }
 
-func getDefaultRemoveRawInput(src string, targetingBlob bool) rawCopyCmdArgs {
+func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 	fromTo := common.EFromTo.BlobTrash()
-	if !targetingBlob {
+	srcURL, _ := url.Parse(src)
+
+	if strings.Contains(srcURL.Host, "file") {
 		fromTo = common.EFromTo.FileTrash()
+	} else if strings.Contains(srcURL.Host, "dfs") {
+		fromTo = common.EFromTo.BlobFSTrash()
 	}
 
 	return rawCopyCmdArgs{

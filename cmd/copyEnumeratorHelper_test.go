@@ -32,12 +32,12 @@ var _ = chk.Suite(&copyEnumeratorHelperTestSuite{})
 func (s *copyEnumeratorHelperTestSuite) TestAddTransferPathRootsTrimmed(c *chk.C) {
 	// setup
 	request := common.CopyJobPartOrderRequest{
-		SourceRoot: "a/b/",
+		SourceRoot:      "a/b/",
 		DestinationRoot: "y/z/",
 	}
 
 	transfer := common.CopyTransfer{
-		Source: "a/b/c.txt",
+		Source:      "a/b/c.txt",
 		Destination: "y/z/c.txt",
 	}
 

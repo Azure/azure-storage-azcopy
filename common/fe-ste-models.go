@@ -43,7 +43,7 @@ const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
-	Dev_Null                     = "/dev/null"
+	Dev_Null                     = os.DevNull
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
@@ -329,17 +329,20 @@ var EFromTo = FromTo(0)
 // represents the to location
 type FromTo uint16
 
-func (FromTo) Unknown() FromTo     { return FromTo(0) }
-func (FromTo) LocalBlob() FromTo   { return FromTo(fromToValue(ELocation.Local(), ELocation.Blob())) }
-func (FromTo) LocalFile() FromTo   { return FromTo(fromToValue(ELocation.Local(), ELocation.File())) }
-func (FromTo) BlobLocal() FromTo   { return FromTo(fromToValue(ELocation.Blob(), ELocation.Local())) }
-func (FromTo) FileLocal() FromTo   { return FromTo(fromToValue(ELocation.File(), ELocation.Local())) }
-func (FromTo) BlobPipe() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Pipe())) }
-func (FromTo) PipeBlob() FromTo    { return FromTo(fromToValue(ELocation.Pipe(), ELocation.Blob())) }
-func (FromTo) FilePipe() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Pipe())) }
-func (FromTo) PipeFile() FromTo    { return FromTo(fromToValue(ELocation.Pipe(), ELocation.File())) }
-func (FromTo) BlobTrash() FromTo   { return FromTo(fromToValue(ELocation.Blob(), ELocation.Unknown())) }
-func (FromTo) FileTrash() FromTo   { return FromTo(fromToValue(ELocation.File(), ELocation.Unknown())) }
+func (FromTo) Unknown() FromTo   { return FromTo(0) }
+func (FromTo) LocalBlob() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.Blob())) }
+func (FromTo) LocalFile() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.File())) }
+func (FromTo) BlobLocal() FromTo { return FromTo(fromToValue(ELocation.Blob(), ELocation.Local())) }
+func (FromTo) FileLocal() FromTo { return FromTo(fromToValue(ELocation.File(), ELocation.Local())) }
+func (FromTo) BlobPipe() FromTo  { return FromTo(fromToValue(ELocation.Blob(), ELocation.Pipe())) }
+func (FromTo) PipeBlob() FromTo  { return FromTo(fromToValue(ELocation.Pipe(), ELocation.Blob())) }
+func (FromTo) FilePipe() FromTo  { return FromTo(fromToValue(ELocation.File(), ELocation.Pipe())) }
+func (FromTo) PipeFile() FromTo  { return FromTo(fromToValue(ELocation.Pipe(), ELocation.File())) }
+func (FromTo) BlobTrash() FromTo { return FromTo(fromToValue(ELocation.Blob(), ELocation.Unknown())) }
+func (FromTo) FileTrash() FromTo { return FromTo(fromToValue(ELocation.File(), ELocation.Unknown())) }
+func (FromTo) BlobFSTrash() FromTo {
+	return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Unknown()))
+}
 func (FromTo) LocalBlobFS() FromTo { return FromTo(fromToValue(ELocation.Local(), ELocation.BlobFS())) }
 func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(), ELocation.Local())) }
 func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }

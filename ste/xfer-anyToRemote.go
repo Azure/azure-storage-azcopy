@@ -32,7 +32,7 @@ import (
 )
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
-func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
+func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
 
 	info := jptm.Info()
 	srcSize := info.SourceSize
@@ -81,7 +81,8 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer *pacer, se
 			return
 		}
 		if exists {
-			jptm.LogSendError(info.Source, info.Destination, "File already exists", 0)
+			// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
 			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to always use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
 			jptm.ReportTransferDone()
 			return

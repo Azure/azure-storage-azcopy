@@ -20,7 +20,15 @@
 
 package cmd
 
-import "github.com/Azure/azure-storage-file-go/azfile"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"net/url"
+	"strings"
+)
 
 // provide an enumerator that lists a given blob resource (could be a blob or virtual dir)
 // and schedule delete transfers to remove them
@@ -108,4 +116,90 @@ func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
 		*s = (*s)[:l-1]
 		return &e, true
 	}
+}
+
+// TODO move after ADLS/Blob interop goes public
+// TODO this simple remove command is only here to support the scenario temporarily
+// Ultimately, this code can be merged into the newRemoveBlobEnumerator
+func removeBfsResource(cca *cookedCopyCmdArgs) (successMessage string, err error) {
+	ctx := context.Background()
+
+	// return an error if the unsupported options are passed in
+	if len(cca.includePatterns)+len(cca.excludePatterns) > 0 {
+		return "", errors.New("include/exclude options are not supported")
+	}
+
+	// create bfs pipeline
+	p, err := createBlobFSPipeline(ctx, cca.credentialInfo)
+	if err != nil {
+		return "", err
+	}
+
+	// attempt to parse the source url
+	sourceURL, err := url.Parse(cca.source)
+	if err != nil {
+		return "", errors.New("cannot parse source URL")
+	}
+
+	// append the SAS query to the newly parsed URL
+	sourceURL = gCopyUtil.appendQueryParamToUrl(sourceURL, cca.sourceSAS)
+
+	// parse the given source URL into parts, which separates the filesystem name and directory/file path
+	urlParts := azbfs.NewBfsURLParts(*sourceURL)
+
+	// patterns are not supported
+	if strings.Contains(urlParts.DirectoryOrFilePath, "*") {
+		return "", errors.New("pattern matches are not supported in this command")
+	}
+
+	// deleting a filesystem
+	if urlParts.DirectoryOrFilePath == "" {
+		fsURL := azbfs.NewFileSystemURL(*sourceURL, p)
+		_, err := fsURL.Delete(ctx)
+		return "Successfully removed the filesystem " + urlParts.FileSystemName, err
+	}
+
+	// we do not know if the source is a file or a directory
+	// we assume it is a directory and get its properties
+	directoryURL := azbfs.NewDirectoryURL(*sourceURL, p)
+	props, err := directoryURL.GetProperties(ctx)
+	if err != nil {
+		return "", fmt.Errorf("cannot verify resource due to error: %s", err)
+	}
+
+	// if the source URL is actually a file
+	// then we should short-circuit and simply remove that file
+	if strings.EqualFold(props.XMsResourceType(), "file") {
+		fileURL := directoryURL.NewFileUrl()
+		_, err := fileURL.Delete(ctx)
+
+		if err == nil {
+			return "Successfully removed file: " + urlParts.DirectoryOrFilePath, nil
+		}
+
+		return "", err
+	}
+
+	// otherwise, remove the directory and follow the continuation token if necessary
+	// initialize an empty continuation marker
+	marker := ""
+
+	// remove the directory
+	// loop will continue until the marker received in the response is empty
+	for {
+		removeResp, err := directoryURL.Delete(ctx, &marker, cca.recursive)
+		if err != nil {
+			return "", fmt.Errorf("cannot remove the given resource due to error: %s", err)
+		}
+
+		// update the continuation token for the next call
+		marker = removeResp.XMsContinuation()
+
+		// determine whether listing should be done
+		if marker == "" {
+			break
+		}
+	}
+
+	return "Successfully removed directory: " + urlParts.DirectoryOrFilePath, nil
 }

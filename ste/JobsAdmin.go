@@ -29,7 +29,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"path"
@@ -96,7 +95,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMBps int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -141,12 +140,24 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
+	// default to a pacer that doesn't actually control the rate
+	// (it just records total throughput, since for historical reasons we do that in the pacer)
+	var pacer pacerAdmin = newNullAutoPacer()
+	if targetRateInMegaBitsPerSec > 0 {
+		// use the "networking mega" (based on powers of 10, not powers of 2, since that's what mega means in networking context)
+		targetRateInBytesPerSec := targetRateInMegaBitsPerSec * 1000 * 1000 / 8
+		unusedExpectedCoarseRequestByteCount := uint32(0)
+		pacer = newTokenBucketPacer(targetRateInBytesPerSec, unusedExpectedCoarseRequestByteCount)
+		// Note: as at July 2019, we don't currently have a shutdown method/event on JobsAdmin where this pacer
+		// could be shut down. But, it's global anyway, so we just leave it running until application exit.
+	}
+
 	ja := &jobsAdmin{
 		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr:    newJobIDToJobMgr(),
 		logDir:           azcopyLogPathFolder,
 		planDir:          planDir,
-		pacer:            newPacer(targetRateInMBps * 1024 * 1024),
+		pacer:            pacer,
 		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
 		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),
@@ -291,7 +302,7 @@ type jobsAdmin struct {
 	coordinatorChannels CoordinatorChannels
 	xferChannels        XferChannels
 	appCtx              context.Context
-	pacer               *pacer
+	pacer               pacerAdmin
 	slicePool           common.ByteSlicePooler
 	cacheLimiter        common.CacheLimiter
 	fileCountLimiter    common.CacheLimiter
@@ -381,7 +392,7 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 }
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
-	return atomic.LoadInt64(&ja.pacer.bytesTransferred)
+	return ja.pacer.GetTotalTraffic()
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {

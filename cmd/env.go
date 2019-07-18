@@ -20,6 +20,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var showSensitive = false
+
 // envCmd represents the env command
 var envCmd = &cobra.Command{
 	Use:   "env",
@@ -27,8 +29,13 @@ var envCmd = &cobra.Command{
 	Long:  envCmdLongDescription,
 	Run: func(cmd *cobra.Command, args []string) {
 		for _, env := range common.VisibleEnvironmentVariables {
+			val := glcm.GetEnvironmentVariable(env)
+			if env.Hidden && !showSensitive {
+				val = "REDACTED"
+			}
+
 			glcm.Info(fmt.Sprintf("Name: %s\nCurrent Value: %s\nDescription: %s\n",
-				env.Name, glcm.GetEnvironmentVariable(env), env.Description))
+				env.Name, val, env.Description))
 		}
 
 		glcm.Exit(nil, common.EExitCode.Success())
@@ -36,5 +43,6 @@ var envCmd = &cobra.Command{
 }
 
 func init() {
+	envCmd.PersistentFlags().BoolVar(&showSensitive, "show-sensitive", false, "Show sensitive/secret environment variables")
 	rootCmd.AddCommand(envCmd)
 }

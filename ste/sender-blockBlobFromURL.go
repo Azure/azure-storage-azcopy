@@ -36,7 +36,7 @@ type urlToBlockBlobCopier struct {
 	srcURL url.URL
 }
 
-func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer *pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+func newURLToBlockBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
 	// Get blob tier, by default set none.
 	destBlobTier := azblob.AccessTierNone
 	// If the source is block blob, preserve source's blob tier.
@@ -131,15 +131,18 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 
 		// step 3: put block to remote
 		c.jptm.LogChunkStatus(id, common.EWaitReason.S2SCopyOnWire())
-		s2sPacer := newS2SPacer(c.pacer)
 
 		// Set the latest service version from sdk as service version in the context, to use StageBlockFromURL API
 		ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
-		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL, id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{})
+
+		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
+			c.jptm.FailActiveUpload("Pacing block", err)
+		}
+		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
+			id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
-		s2sPacer.Done(adjustedChunkSize)
 	})
 }
