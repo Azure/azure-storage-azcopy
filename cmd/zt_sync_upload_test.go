@@ -71,6 +71,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithSingleFile(c *chk.C) {
 		runSyncAndVerify(c, raw, func(err error) {
 			c.Assert(err, chk.IsNil)
 
+			// if source and destination already point to files, the relative path is an empty string ""
 			validateUploadTransfersAreScheduled(c, "", "", []string{""}, mockedRPC)
 		})
 	}

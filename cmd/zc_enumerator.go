@@ -71,6 +71,10 @@ type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
 }
 
+// an optional callback for resourceTraverser which can manipulate the stored object before it goes through filters
+// and gets passed to the processor
+type preProcessingCallback func(storedObject) storedObject
+
 // given a storedObject, process it accordingly
 type objectProcessor func(storedObject storedObject) error
 

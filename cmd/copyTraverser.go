@@ -23,17 +23,19 @@ package cmd
 import (
 	"context"
 	"errors"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
 	"strings"
 )
 
-func newBlobTraverserForRemove(cca *cookedCopyCmdArgs) (t *blobTraverser, err error) {
+// TODO implement for local and ADLS Gen2
+func newBlobTraverserForCopy(targetURL string, targetSAS string, credential common.CredentialInfo, recursive bool) (t *blobTraverser, err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	rawURL, err := url.Parse(cca.source)
-	if err == nil && cca.sourceSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
+	rawURL, err := url.Parse(targetURL)
+	if err == nil && targetSAS != "" {
+		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, targetSAS)
 	}
 
 	if err != nil {
@@ -41,23 +43,23 @@ func newBlobTraverserForRemove(cca *cookedCopyCmdArgs) (t *blobTraverser, err er
 	}
 
 	if strings.Contains(rawURL.Path, "*") {
-		return nil, errors.New("illegal URL, no pattern matching allowed for remove command")
+		return nil, errors.New("illegal URL, no pattern matching allowed")
 	}
 
-	p, err := createBlobPipeline(ctx, cca.credentialInfo)
+	p, err := createBlobPipeline(ctx, credential)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	return newBlobTraverser(rawURL, p, ctx, cca.recursive, nil), nil
+	return newBlobTraverser(rawURL, p, ctx, recursive, nil), nil
 }
 
-func newFileTraverserForRemove(cca *cookedCopyCmdArgs) (t *fileTraverser, err error) {
+func newFileTraverserForCopy(targetURL string, targetSAS string, credential common.CredentialInfo, recursive bool) (t *fileTraverser, err error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	rawURL, err := url.Parse(cca.source)
-	if err == nil && cca.sourceSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
+	rawURL, err := url.Parse(targetURL)
+	if err == nil && targetSAS != "" {
+		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, targetSAS)
 	}
 
 	if err != nil {
@@ -65,13 +67,13 @@ func newFileTraverserForRemove(cca *cookedCopyCmdArgs) (t *fileTraverser, err er
 	}
 
 	if strings.Contains(rawURL.Path, "*") {
-		return nil, errors.New("illegal URL, no pattern matching allowed for remove command")
+		return nil, errors.New("illegal URL, no pattern matching allowed")
 	}
 
-	p, err := createFilePipeline(ctx, cca.credentialInfo)
+	p, err := createFilePipeline(ctx, credential)
 	if err != nil {
-		return
+		return nil, err
 	}
 
-	return newFileTraverser(rawURL, p, ctx, cca.recursive, nil), nil
+	return newFileTraverser(rawURL, p, ctx, recursive, nil), nil
 }

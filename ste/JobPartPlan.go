@@ -117,14 +117,16 @@ func (jpph *JobPartPlanHeader) TransferSrcDstStrings(transferIndex uint32) (sour
 	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) // Address of Job Part Plan + this transfer's src string offset
 	sh.Len = int(jppt.SrcLength)
 	sh.Cap = sh.Len
+	srcRelative := string(srcSlice)
 
 	dstSlice := []byte{}
 	sh = (*reflect.SliceHeader)(unsafe.Pointer(&dstSlice))
 	sh.Data = uintptr(unsafe.Pointer(jpph)) + uintptr(jppt.SrcOffset) + uintptr(jppt.SrcLength) // Address of Job Part Plan + this transfer's src string offset + length of this transfer's src string
 	sh.Len = int(jppt.DstLength)
 	sh.Cap = sh.Len
+	dstRelative := string(dstSlice)
 
-	return srcRoot + string(srcSlice), dstRoot + string(dstSlice)
+	return common.GenerateFullPath(srcRoot, srcRelative), common.GenerateFullPath(dstRoot, dstRelative)
 }
 
 func (jpph *JobPartPlanHeader) getString(offset int64, length int16) string {
