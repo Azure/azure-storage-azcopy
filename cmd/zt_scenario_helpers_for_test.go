@@ -57,6 +57,23 @@ var specialNames = []string{
 	"як вас звати",
 }
 
+// note: this is to emulate the list-of-files flag
+func (scenarioHelper) generateListOfFiles(c *chk.C, fileList []string) (path string) {
+	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	c.Assert(err, chk.IsNil)
+
+	// create the file
+	path = common.GenerateFullPath(parentDirName, generateName("listy", 0))
+	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
+	c.Assert(err, chk.IsNil)
+
+	// pipe content into it
+	content := strings.Join(fileList, "\n")
+	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
+	c.Assert(err, chk.IsNil)
+	return
+}
+
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil)

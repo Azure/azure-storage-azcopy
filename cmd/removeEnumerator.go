@@ -21,63 +21,41 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
+	"os"
 	"strings"
 )
 
-// provide an enumerator that lists a given blob resource (could be a blob or virtual dir)
+// provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
-// TODO consider merging with newRemoveFileEnumerator
-func newRemoveBlobEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
-	sourceTraverser, err := newBlobTraverserForRemove(cca)
+func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
+	var sourceTraverser resourceTraverser
+
+	if len(cca.listOfFilesLocation) > 0 {
+		sourceTraverser = newListTraverser(cca.source, cca.sourceSAS, cca.credentialInfo, cca.recursive,
+			cca.listOfFilesLocation, cca.fromTo.From())
+	} else if cca.fromTo == common.EFromTo.BlobTrash() {
+		sourceTraverser, err = newBlobTraverserForCopy(cca.source, cca.sourceSAS, cca.credentialInfo, cca.recursive)
+	} else if cca.fromTo == common.EFromTo.FileTrash() {
+		sourceTraverser, err = newFileTraverserForCopy(cca.source, cca.sourceSAS, cca.credentialInfo, cca.recursive)
+	} else {
+		return nil, errors.New("this type of resource is not yet supported")
+	}
+
+	// report failure to create traverser
 	if err != nil {
 		return nil, err
 	}
 
-	// check if we are targeting a single blob
-	_, isSingleBlob := sourceTraverser.getPropertiesIfSingleBlob()
-
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isSingleBlob)
-	includeFilters := buildIncludeFilters(cca.includePatterns)
-	excludeFilters := buildExcludeFilters(cca.excludePatterns)
-
-	// set up the filters in the right order
-	filters := append(includeFilters, excludeFilters...)
-
-	finalize := func() error {
-		jobInitiated, err := transferScheduler.dispatchFinalPart()
-		if err != nil {
-			return err
-		}
-
-		if !jobInitiated {
-			glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
-		}
-
-		return nil
-	}
-
-	return newCopyEnumerator(sourceTraverser, filters, transferScheduler.scheduleCopyTransfer, finalize), nil
-}
-
-// provide an enumerator that lists a given Azure File resource (could be a file or dir)
-// and schedule delete transfers to remove them
-// note that for a directory to be removed, it has to be emptied first
-func newRemoveFileEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
-	sourceTraverser, err := newFileTraverserForRemove(cca)
-	if err != nil {
-		return nil, err
-	}
-
-	// check if we are targeting a single blob
-	_, isSingleFile := sourceTraverser.getPropertiesIfSingleFile()
-
-	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart, isSingleFile)
+	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 	includeFilters := buildIncludeFilters(cca.includePatterns)
 	excludeFilters := buildExcludeFilters(cca.excludePatterns)
 
@@ -120,13 +98,18 @@ func (s *directoryStack) Pop() (*azfile.DirectoryURL, bool) {
 
 // TODO move after ADLS/Blob interop goes public
 // TODO this simple remove command is only here to support the scenario temporarily
-// Ultimately, this code can be merged into the newRemoveBlobEnumerator
-func removeBfsResource(cca *cookedCopyCmdArgs) (successMessage string, err error) {
+// Ultimately, this code can be merged into the newRemoveEnumerator
+func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err error) {
 	ctx := context.Background()
 
 	// return an error if the unsupported options are passed in
 	if len(cca.includePatterns)+len(cca.excludePatterns) > 0 {
 		return "", errors.New("include/exclude options are not supported")
+	}
+
+	// patterns are not supported
+	if strings.Contains(cca.source, "*") {
+		return "", errors.New("pattern matches are not supported in this command")
 	}
 
 	// create bfs pipeline
@@ -147,21 +130,56 @@ func removeBfsResource(cca *cookedCopyCmdArgs) (successMessage string, err error
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
 
-	// patterns are not supported
-	if strings.Contains(urlParts.DirectoryOrFilePath, "*") {
-		return "", errors.New("pattern matches are not supported in this command")
+	if len(cca.listOfFilesLocation) == 0 {
+		return removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
 	}
 
+	// list of files is given, record the parent path
+	parentPath := urlParts.DirectoryOrFilePath
+	successCount := 0
+	f, err := os.Open(cca.listOfFilesLocation)
+	if err != nil {
+		return "", fmt.Errorf("unable to open %s to retrieve the required list of entities to transfer", cca.listOfFilesLocation)
+	}
+	defer f.Close()
+
+	// spawn a scanner to read the list of entities one line at a time
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		childPath := scanner.Text()
+
+		// remove the child path
+		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
+		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+		if err != nil {
+			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
+		} else {
+			glcm.Info(successMessage)
+			successCount += 1
+		}
+	}
+
+	// in case the list of entities was not read properly, we can no longer continue enumeration
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("unable to scan %s to retrieve the required list of entities to transfer", cca.listOfFilesLocation)
+	}
+
+	return fmt.Sprintf("Successfully removed %v entities.", successCount), nil
+}
+
+// TODO move after ADLS/Blob interop goes public
+// TODO this simple remove command is only here to support the scenario temporarily
+func removeSingleBfsResource(urlParts azbfs.BfsURLParts, p pipeline.Pipeline, ctx context.Context, recursive bool) (successMessage string, err error) {
 	// deleting a filesystem
 	if urlParts.DirectoryOrFilePath == "" {
-		fsURL := azbfs.NewFileSystemURL(*sourceURL, p)
+		fsURL := azbfs.NewFileSystemURL(urlParts.URL(), p)
 		_, err := fsURL.Delete(ctx)
 		return "Successfully removed the filesystem " + urlParts.FileSystemName, err
 	}
 
 	// we do not know if the source is a file or a directory
 	// we assume it is a directory and get its properties
-	directoryURL := azbfs.NewDirectoryURL(*sourceURL, p)
+	directoryURL := azbfs.NewDirectoryURL(urlParts.URL(), p)
 	props, err := directoryURL.GetProperties(ctx)
 	if err != nil {
 		return "", fmt.Errorf("cannot verify resource due to error: %s", err)
@@ -187,7 +205,7 @@ func removeBfsResource(cca *cookedCopyCmdArgs) (successMessage string, err error
 	// remove the directory
 	// loop will continue until the marker received in the response is empty
 	for {
-		removeResp, err := directoryURL.Delete(ctx, &marker, cca.recursive)
+		removeResp, err := directoryURL.Delete(ctx, &marker, recursive)
 		if err != nil {
 			return "", fmt.Errorf("cannot remove the given resource due to error: %s", err)
 		}

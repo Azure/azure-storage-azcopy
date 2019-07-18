@@ -23,6 +23,7 @@ package cmd
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
+	"net/url"
 	"strings"
 )
 
@@ -248,5 +249,67 @@ func (s *cmdIntegrationSuite) TestRemoveWithIncludeAndExcludeFlag(c *chk.C) {
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
 		validateDownloadTransfersAreScheduled(c, "", "", blobsToInclude, mockedRPC)
+	})
+}
+
+// note: list-of-files flag is used
+func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
+	bsu := getBSU()
+	vdirName := "megadir"
+
+	// set up the container with numerous blobs and a vdir
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+	c.Assert(containerURL, chk.NotNil)
+	blobListPart1 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
+	blobListPart2 := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, vdirName+"/")
+	blobList := append(blobListPart1, blobListPart2...)
+	c.Assert(len(blobList), chk.Not(chk.Equals), 0)
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRemoveRawInput(rawContainerURLWithSAS.String())
+	raw.recursive = true
+
+	// make the input for list-of-files
+	listOfFiles := append(blobListPart1, vdirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(blobList))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, blobList, mockedRPC)
+	})
+
+	// turn off recursive, this time only top blobs should be deleted
+	raw.recursive = false
+	mockedRPC.reset()
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(mockedRPC.transfers), chk.Not(chk.Equals), len(blobList))
+
+		for _, transfer := range mockedRPC.transfers {
+			source, err := url.PathUnescape(transfer.Source)
+			c.Assert(err, chk.IsNil)
+
+			// if the transfer is under the given dir, make sure only the top level files were scheduled
+			if strings.HasPrefix(source, vdirName) {
+				trimmedSource := strings.TrimPrefix(source, vdirName+"/")
+				c.Assert(strings.Contains(trimmedSource, common.AZCOPY_PATH_SEPARATOR_STRING), chk.Equals, false)
+			}
+		}
 	})
 }

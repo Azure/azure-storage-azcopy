@@ -213,15 +213,23 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// file names to include explicitly and include file may mention the pattern.
 	// This could conflict enumerating the files to queue up for transfer.
 	if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
-		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
+		return cooked, fmt.Errorf("both list-of-files and include flag were provided." +
+			"Only one of them is allowed at a time")
 	}
 
-	// If the user provided the list of files explicitly to be copied, then parse the argument
-	// The user passes the location of json file which will have the list of files to be copied.
-	// The "json file" is chosen as input because there is limit on the number of characters that
-	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
-	// any limit on the number of files that can be copied.
-	if len(raw.listOfFilesToCopy) > 0 {
+	// new implementation of list-of-files only works for remove command for now
+	if raw.fromTo == common.EFromTo.BlobTrash().String() || raw.fromTo == common.EFromTo.FileTrash().String() ||
+		raw.fromTo == common.EFromTo.BlobFSTrash().String() {
+		cooked.listOfFilesLocation = raw.listOfFilesToCopy
+	} else if len(raw.listOfFilesToCopy) > 0 {
+
+		// TODO remove this legacy implementation
+		// If the user provided the list of files explicitly to be copied, then parse the argument
+		// The user passes the location of json file which will have the list of files to be copied.
+		// The "json file" is chosen as input because there is limit on the number of characters that
+		// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
+		// any limit on the number of files that can be copied.
+
 		jsonFile, err := os.Open(raw.listOfFilesToCopy)
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
@@ -486,11 +494,12 @@ type cookedCopyCmdArgs struct {
 	excludePatterns []string
 
 	// filters from flags
-	listOfFilesToCopy []string
-	recursive         bool
-	followSymlinks    bool
-	withSnapshots     bool
-	forceWrite        bool
+	listOfFilesToCopy   []string
+	listOfFilesLocation string
+	recursive           bool
+	followSymlinks      bool
+	withSnapshots       bool
+	forceWrite          bool
 
 	// options from flags
 	blockSize uint32
@@ -874,21 +883,18 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		e := copyDownloadBlobFSEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
 	case common.EFromTo.BlobTrash():
-		e, createErr := newRemoveBlobEnumerator(cca)
-		if createErr != nil {
-			return createErr
-		}
-
-		err = e.enumerate()
+		fallthrough
 	case common.EFromTo.FileTrash():
-		e, createErr := newRemoveFileEnumerator(cca)
+		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
 			return createErr
 		}
 
 		err = e.enumerate()
+
 	case common.EFromTo.BlobFSTrash():
-		msg, err := removeBfsResource(cca)
+		// TODO merge with BlobTrash case
+		msg, err := removeBfsResources(cca)
 		if err == nil {
 			glcm.Exit(func(format common.OutputFormat) string {
 				return msg
