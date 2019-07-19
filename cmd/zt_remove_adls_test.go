@@ -36,8 +36,8 @@ func (s *cmdIntegrationSuite) TestRemoveFilesystem(c *chk.C) {
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	// set up the filesystem to be deleted
-	bfsServiceURL := getBfsSU()
-	fsURL, fsName := createNewFileSystem(c, bfsServiceURL)
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
 
 	// set up directory + file as children of the filesystem to delete
 	dirURL := fsURL.NewDirectoryURL(generateName("dir", 0))
@@ -69,9 +69,9 @@ func (s *cmdIntegrationSuite) TestRemoveDirectory(c *chk.C) {
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	// set up the file system
-	bfsServiceURL := getBfsSU()
-	fsURL, fsName := createNewFileSystem(c, bfsServiceURL)
-	defer deleteFileSystem(c, fsURL)
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+	defer deleteFilesystem(c, fsURL)
 
 	// set up the directory to be deleted
 	dirName := generateName("dir", 0)
@@ -111,9 +111,9 @@ func (s *cmdIntegrationSuite) TestRemoveFile(c *chk.C) {
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	// set up the file system
-	bfsServiceURL := getBfsSU()
-	fsURL, fsName := createNewFileSystem(c, bfsServiceURL)
-	defer deleteFileSystem(c, fsURL)
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+	defer deleteFilesystem(c, fsURL)
 
 	// set up the parent of the file to be deleted
 	parentDirName := generateName("dir", 0)
