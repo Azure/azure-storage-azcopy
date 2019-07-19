@@ -891,8 +891,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
 			transfers++
-			src := cca.findObject(true, cca.source, object)
-			dst := cca.findObject(false, cca.destination, object)
+			src := cca.findObject(true, object)
+			// Why hand in the source on the destination? Because we need to adjust the path for the source if there's no wildcard.
+			dst := cca.findObject(false, object)
 
 			transfer := common.CopyTransfer{
 				Source:           src,
@@ -992,18 +993,32 @@ func (cca *cookedCopyCmdArgs) initSrcPipeline(ctx context.Context) (p pipeline.P
 	return
 }
 
-func (cca *cookedCopyCmdArgs) findObject(source bool, basePath string, object storedObject) string {
+func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (relativePath string) {
 	if object.relativePath == "" {
 		// If we're finding an object from the source, it returns "" if it's already got it.
 		// If we're finding an object on the destination and we get "", we need to hand it the object name.
 		if source {
-			return ""
+			relativePath = ""
 		} else {
-			return "/" + object.name
+			relativePath = "/" + object.name
 		}
+
+		return // No adjustments needed because the object is explicitly specified.
 	}
 
-	return "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+	// If it's out here, the source is a folder (or wildcard) of some kind.
+
+	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+
+	if !source && !strings.Contains(cca.source, "*") {
+		// We ONLY need to do this adjustment to the destination.
+		// The source SAS has already been removed. No need to convert it to a URL or whatever.
+		// Save to a directory
+		sepsplits := strings.Split(strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1), "/")
+		relativePath = "/" + sepsplits[len(sepsplits)-1] + relativePath
+	}
+
+	return
 }
 
 // Initialize the modular filters outside of copy to increase readability.
