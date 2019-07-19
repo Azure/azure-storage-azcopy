@@ -23,6 +23,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
@@ -30,7 +31,8 @@ import (
 )
 
 // TODO implement for local and ADLS Gen2
-func newBlobTraverserForCopy(targetURL string, targetSAS string, credential common.CredentialInfo, recursive bool) (t *blobTraverser, err error) {
+func newTraverserForCopy(targetURL string, targetSAS string, targetType common.Location,
+	credential common.CredentialInfo, recursive bool) (resourceTraverser, error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
 	rawURL, err := url.Parse(targetURL)
@@ -39,41 +41,29 @@ func newBlobTraverserForCopy(targetURL string, targetSAS string, credential comm
 	}
 
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if strings.Contains(rawURL.Path, "*") {
 		return nil, errors.New("illegal URL, no pattern matching allowed")
 	}
 
-	p, err := createBlobPipeline(ctx, credential)
-	if err != nil {
-		return nil, err
+	switch targetType {
+	case common.ELocation.Blob():
+		p, err := createBlobPipeline(ctx, credential)
+		if err != nil {
+			return nil, err
+		}
+
+		return newBlobTraverser(rawURL, p, ctx, recursive, nil), nil
+	case common.ELocation.File():
+		p, err := createFilePipeline(ctx, credential)
+		if err != nil {
+			return nil, err
+		}
+
+		return newFileTraverser(rawURL, p, ctx, recursive, nil), nil
+	default:
+		return nil, fmt.Errorf("traverser not implemented for type %s", targetType)
 	}
-
-	return newBlobTraverser(rawURL, p, ctx, recursive, nil), nil
-}
-
-func newFileTraverserForCopy(targetURL string, targetSAS string, credential common.CredentialInfo, recursive bool) (t *fileTraverser, err error) {
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	rawURL, err := url.Parse(targetURL)
-	if err == nil && targetSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, targetSAS)
-	}
-
-	if err != nil {
-		return
-	}
-
-	if strings.Contains(rawURL.Path, "*") {
-		return nil, errors.New("illegal URL, no pattern matching allowed")
-	}
-
-	p, err := createFilePipeline(ctx, credential)
-	if err != nil {
-		return nil, err
-	}
-
-	return newFileTraverser(rawURL, p, ctx, recursive, nil), nil
 }

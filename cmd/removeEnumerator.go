@@ -40,14 +40,16 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	var sourceTraverser resourceTraverser
 
 	if len(cca.listOfFilesLocation) > 0 {
-		sourceTraverser = newListTraverser(cca.source, cca.sourceSAS, cca.credentialInfo, cca.recursive,
-			cca.listOfFilesLocation, cca.fromTo.From())
-	} else if cca.fromTo == common.EFromTo.BlobTrash() {
-		sourceTraverser, err = newBlobTraverserForCopy(cca.source, cca.sourceSAS, cca.credentialInfo, cca.recursive)
-	} else if cca.fromTo == common.EFromTo.FileTrash() {
-		sourceTraverser, err = newFileTraverserForCopy(cca.source, cca.sourceSAS, cca.credentialInfo, cca.recursive)
+		f, err := os.Open(cca.listOfFilesLocation)
+		if err != nil {
+			return nil, fmt.Errorf("unable to open %s to retrieve the required list of entities to transfer", cca.listOfFilesLocation)
+		}
+
+		sourceTraverser = newListTraverser(cca.source, cca.sourceSAS, cca.fromTo.From(), cca.credentialInfo,
+			cca.recursive, f)
 	} else {
-		return nil, errors.New("this type of resource is not yet supported")
+		sourceTraverser, err = newTraverserForCopy(cca.source, cca.sourceSAS, cca.fromTo.From(),
+			cca.credentialInfo, cca.recursive)
 	}
 
 	// report failure to create traverser

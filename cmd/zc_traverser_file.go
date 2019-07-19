@@ -39,14 +39,6 @@ type fileTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
-
-	// an optional callback which can manipulate the stored object before it goes through filters
-	// and gets passed to the processor
-	preProcessingCallback preProcessingCallback
-}
-
-func (t *fileTraverser) setPreProcessingCallback(callback preProcessingCallback) {
-	t.preProcessingCallback = callback
 }
 
 func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesResponse, bool) {
@@ -80,10 +72,6 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()
-			}
-
-			if t.preProcessingCallback != nil {
-				storedObject = t.preProcessingCallback(storedObject)
 			}
 
 			return processIfPassedFilters(filters, storedObject, processor)
@@ -129,10 +117,6 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()
-				}
-
-				if t.preProcessingCallback != nil {
-					storedObject = t.preProcessingCallback(storedObject)
 				}
 
 				processErr := processIfPassedFilters(filters, storedObject, processor)
