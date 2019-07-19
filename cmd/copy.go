@@ -209,21 +209,27 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-	// file names to include explicitly and include file may mention the pattern.
-	// This could conflict enumerating the files to queue up for transfer.
-	if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
-		return cooked, fmt.Errorf("both list-of-files and include flag were provided." +
-			"Only one of them is allowed at a time")
-	}
 
-	// new implementation of list-of-files only works for remove command for now
-	if raw.fromTo == common.EFromTo.BlobTrash().String() || raw.fromTo == common.EFromTo.FileTrash().String() ||
-		raw.fromTo == common.EFromTo.BlobFSTrash().String() {
+	// Note: new implementation of list-of-files only works for remove command for now
+	if raw.fromTo == common.EFromTo.BlobTrash().String() || raw.fromTo == common.EFromTo.FileTrash().String() {
+		cooked.listOfFilesLocation = raw.listOfFilesToCopy
+	} else if raw.fromTo == common.EFromTo.BlobFSTrash().String() {
+		if len(raw.listOfFilesToCopy) > 0 && (len(raw.include) > 0 || len(raw.exclude) > 0) {
+			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
+		}
+
 		cooked.listOfFilesLocation = raw.listOfFilesToCopy
 	} else if len(raw.listOfFilesToCopy) > 0 {
+		// TODO remove this legacy implementation after copy enumerator refactoring
 
-		// TODO remove this legacy implementation
+		// User can provide either listOfFilesToCopy or include since listOFFiles mentions
+		// file names to include explicitly and include file may mention the pattern.
+		// This could conflict enumerating the files to queue up for transfer.
+		if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
+			return cooked, fmt.Errorf("both list-of-files and include flag were provided." +
+				"Only one of them is allowed at a time")
+		}
+
 		// If the user provided the list of files explicitly to be copied, then parse the argument
 		// The user passes the location of json file which will have the list of files to be copied.
 		// The "json file" is chosen as input because there is limit on the number of characters that

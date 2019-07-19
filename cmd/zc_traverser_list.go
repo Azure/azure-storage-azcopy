@@ -60,7 +60,7 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 
 	// in case the list of entities was not read properly, we can no longer continue enumeration
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("unable to scan the required list of entities to transfer due to error: %s", err)
+		return fmt.Errorf("unable to scan the required list of entities due to error: %s", err)
 	}
 
 	// close the reader before returning

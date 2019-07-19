@@ -314,3 +314,61 @@ func (s *cmdIntegrationSuite) TestRemoveListOfFilesAndDirectories(c *chk.C) {
 		}
 	})
 }
+
+// include and exclude flag can work together to limit the scope of the delete
+func (s *cmdIntegrationSuite) TestRemoveListOfFilesWithIncludeAndExclude(c *chk.C) {
+	fsu := getFSU()
+	dirName := "megadir"
+
+	// set up the share with numerous files
+	shareURL, shareName := createNewAzureShare(c, fsu)
+	c.Assert(shareURL, chk.NotNil)
+	defer deleteShare(c, shareURL)
+	individualFilesList := scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, "")
+	scenarioHelper{}.generateCommonRemoteScenarioForAzureFile(c, shareURL, dirName+"/")
+
+	// add special files that we wish to include
+	filesToInclude := []string{"important.pdf", "includeSub/amazing.jpeg"}
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, filesToInclude)
+	includeString := "*.pdf;*.jpeg;exactName"
+
+	// add special files that we wish to exclude
+	// note that the excluded files also match the include string
+	filesToExclude := []string{"sorry.pdf", "exclude/notGood.jpeg", "exactName", "sub/exactName"}
+	scenarioHelper{}.generateAzureFilesFromList(c, shareURL, filesToExclude)
+	excludeString := "so*;not*;exactName"
+
+	// set up interceptor
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	// construct the raw input to simulate user input
+	rawShareURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
+	raw := getDefaultRemoveRawInput(rawShareURLWithSAS.String())
+	raw.recursive = true
+	raw.include = includeString
+	raw.exclude = excludeString
+
+	// make the input for list-of-files
+	listOfFiles := append(individualFilesList, dirName)
+
+	// add some random files that don't actually exist
+	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
+
+	// add files to both include and exclude
+	listOfFiles = append(listOfFiles, filesToInclude...)
+	listOfFiles = append(listOfFiles, filesToExclude...)
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		// validate that the right number of transfers were scheduled
+		c.Assert(len(mockedRPC.transfers), chk.Equals, len(filesToInclude))
+
+		// validate that the right transfers were sent
+		validateRemoveTransfersAreScheduled(c, true, filesToInclude, mockedRPC)
+	})
+}

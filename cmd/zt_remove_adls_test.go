@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
+	"strings"
 )
 
 func (s *cmdIntegrationSuite) TestRemoveFilesystem(c *chk.C) {
@@ -195,5 +196,51 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectories(c *chk.C) 
 		// make sure the filesystem did not get deleted
 		_, err = fsURL.GetProperties(ctx)
 		c.Assert(err, chk.IsNil)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesWithIncludeExclude(c *chk.C) {
+	// invoke the interceptor so lifecycle manager does not shut down the tests
+	mockedRPC := interceptor{}
+	mockedRPC.init()
+	ctx := context.Background()
+
+	// get service SAS for raw input
+	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
+
+	// set up the file system
+	bfsServiceURL := getBfsSU()
+	fsURL, fsName := createNewFileSystem(c, bfsServiceURL)
+	defer deleteFileSystem(c, fsURL)
+
+	// set up the second file to be deleted, it sits at the top level
+	fileName := generateName("file", 0)
+	fileURL := fsURL.NewRootDirectoryURL().NewFileURL(fileName)
+	_, err := fileURL.Create(ctx, azbfs.BlobFSHTTPHeaders{})
+	c.Assert(err, chk.IsNil)
+
+	// make the input for list-of-files
+	listOfFiles := []string{fileName}
+
+	// attempt to use an include flag
+	fileURLWithSAS := serviceURLWithSAS.NewFileSystemURL(fsName)
+	raw := getDefaultRemoveRawInput(fileURLWithSAS.String())
+	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
+	raw.include = "file*"
+
+	// and it should fail
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(strings.Contains(err.Error(), "include"), chk.Equals, true)
+	})
+
+	// attempt to use an exclude flag
+	raw.include = ""
+	raw.exclude = "file*"
+
+	// and it should fail
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.NotNil)
+		c.Assert(strings.Contains(err.Error(), "exclude"), chk.Equals, true)
 	})
 }

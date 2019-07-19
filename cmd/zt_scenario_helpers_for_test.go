@@ -525,7 +525,10 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		verifier(err)
+		return
+	}
 
 	// the enumeration ends when process() returns
 	err = cooked.process()
