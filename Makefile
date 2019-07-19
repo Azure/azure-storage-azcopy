@@ -5,10 +5,6 @@ define with_docker
 	WORK_DIR=$(WORK_DIR) docker-compose run $(2) --rm $(PROJECT_NAME) $(1)
 endef
 
-define with_docker_and_travis_wait
-	WORK_DIR=$(WORK_DIR) travis_wait docker-compose run $(2) --rm $(PROJECT_NAME) $(1)
-endef
-
 login: setup ## get a shell into the container
 	WORK_DIR=$(WORK_DIR) docker-compose run --rm --entrypoint /bin/bash $(PROJECT_NAME)
 
@@ -24,7 +20,7 @@ docker-clean: docker-compose
 setup: clean docker-build ## setup environment for development
 
 test: setup ## run go tests
-	ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) $(call with_docker_and_travis_wait,go test -race -short -cover ./cmd ./common ./ste ./azbfs, -e ACCOUNT_NAME -e ACCOUNT_KEY -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
+	ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) $(call with_docker,go test -race -short -cover ./cmd ./common ./ste ./azbfs, -e ACCOUNT_NAME -e ACCOUNT_KEY -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
 
 build: setup ## build binaries for the project
     # the environment variables need to be passed into the container explicitly
