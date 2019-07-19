@@ -281,6 +281,7 @@ func (s *cmdIntegrationSuite) TestRemoveListOfBlobsAndVirtualDirs(c *chk.C) {
 
 	// add some random files that don't actually exist
 	listOfFiles = append(listOfFiles, "WUTAMIDOING")
+	listOfFiles = append(listOfFiles, "DONTKNOW")
 	raw.listOfFilesToCopy = scenarioHelper{}.generateListOfFiles(c, listOfFiles)
 
 	runCopyAndVerify(c, raw, func(err error) {
