@@ -103,7 +103,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c *chk.C, dirPath string, fil
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath string, prefix string) (fileList []string) {
@@ -125,7 +125,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -153,7 +153,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -197,7 +197,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -212,7 +212,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -243,7 +243,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -270,7 +270,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
@@ -303,7 +303,7 @@ func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, file
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 // make 50 objects with random names
@@ -339,7 +339,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -358,7 +358,7 @@ func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.Share
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c *chk.C, filesystemURL azbfs.FileSystemURL, fileList []string) {
