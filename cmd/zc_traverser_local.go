@@ -70,7 +70,6 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 			var seenPaths = make(map[string]bool)
 
 			for len(walkQueue) > 0 {
-				fmt.Println("queue length:", len(walkQueue))
 				queueItem := walkQueue[0]
 				walkQueue = walkQueue[1:] // Handle queue as a sliding window over an array
 				err = filepath.Walk(queueItem.fullPath, func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -83,25 +82,21 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					computedRelativePath = cleanLocalPath(filepath.Join(queueItem.relativeBase, computedRelativePath))
 					computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-					fmt.Println(fileInfo.Name(), fileInfo.Mode(), os.ModeSymlink, fileInfo.Mode()&os.ModeSymlink != 0)
 					if fileInfo.Mode()&os.ModeSymlink != 0 {
-						fmt.Println("Following symlinks", t.followSymlinks)
 						if t.followSymlinks { // Follow the symlink, add it to the computed relative path.
 							result, err := filepath.EvalSymlinks(filePath)
 
 							if err != nil {
-								fmt.Println("Failed to follow symlink")
+								glcm.Info(fmt.Sprintf("Failed to open symlink %s: %s", filePath, err))
 								return nil
 							}
 
 							result, err = filepath.Abs(result)
 
 							if err != nil {
-								fmt.Println("Failed to get absolute value of resolved link")
+								fmt.Println(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
 								return nil
 							}
-
-							fmt.Println(result)
 
 							if _, ok := seenPaths[result]; !ok {
 								walkQueue = append(walkQueue, walkItem{
