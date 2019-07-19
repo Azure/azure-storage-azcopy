@@ -21,13 +21,15 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"context"
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -74,27 +76,36 @@ type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
 }
 
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, pipeline *pipeline.Pipeline, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+// source, location, recursive, and incrementEnumerationCounter are always required.
+// ctx, pipeline are only required for remote resources.
+// followSymlinks is only required for local resources (defaults to false)
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, pipeline *pipeline.Pipeline, followSymlinks *bool, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 
 	/*
-	Required support:
-	PR1: Local -> Blob/File/BlobFS ===YOU ARE HERE===
-		Only Local traverser required. Overwrite checks occur in STE.
-	PR2: Blob/File/BlobFS -> Local
-		Blob, File, BlobFS traversers required.
-	PR3: Blob/File -> BlobFS
-		Nothing new.
-	PR4/5: S3 -> BlobFS
-		Add S3 traverser.
+		Required support:
+		PR1: Local -> Blob/File/BlobFS ===YOU ARE HERE===
+			Only Local traverser required. Overwrite checks occur in STE.
+		PR2: Blob/File/BlobFS -> Local
+			Blob, File, BlobFS traversers required.
+		PR3: Blob/File -> BlobFS
+			Nothing new.
+		PR4/5: S3 -> BlobFS
+			Add S3 traverser.
 	*/
 
 	switch location {
 	case common.ELocation.Local():
+		toFollow := false
+		if followSymlinks != nil {
+			toFollow = *followSymlinks
+		}
+
 		if strings.Index(source, "*") != -1 {
-			output = newGlobTraverser(source, recursive, incrementEnumerationCounter)
+			// TODO: Replace me with Ze's list traverser.
+			output = newGlobTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		} else {
-			output = newLocalTraverser(source, recursive, incrementEnumerationCounter)
+			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")

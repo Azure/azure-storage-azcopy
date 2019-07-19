@@ -32,8 +32,9 @@ import (
 )
 
 type localTraverser struct {
-	fullPath  string
-	recursive bool
+	fullPath       string
+	recursive      bool
+	followSymlinks bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
@@ -56,28 +57,72 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 	} else {
 		if t.recursive {
-			err = filepath.Walk(t.fullPath, func(filePath string, fileInfo os.FileInfo, fileError error) error {
-				if fileError != nil {
-					glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
-					return nil
-				}
+			// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
+			// So, what is the plan of attack?
+			// Because we can't create endless channels, we create an array instead and use it as a queue.
+			// Furthermore, we use a map as a hashset to avoid re-walking any paths we already know.
+			type walkItem struct {
+				fullPath     string // We need the full, symlink-resolved path to walk against
+				relativeBase string // We also need the relative base path we found the symlink at.
+			}
 
-				// skip the subdirectories
-				if fileInfo.IsDir() {
-					return nil
-				}
+			var walkQueue = []walkItem{{fullPath: t.fullPath, relativeBase: ""}}
+			var seenPaths = make(map[string]bool)
 
-				t.incrementEnumerationCounter()
+			for len(walkQueue) > 0 {
+				fmt.Println("queue length:", len(walkQueue))
+				queueItem := walkQueue[0]
+				walkQueue = walkQueue[1:] // Handle queue as a sliding window over an array
+				err = filepath.Walk(queueItem.fullPath, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+					if fileError != nil {
+						glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+						return nil
+					}
 
-				// the relative path needs to be computed from the full path
-				computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), t.fullPath)
+					computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
+					computedRelativePath = cleanLocalPath(filepath.Join(queueItem.relativeBase, computedRelativePath))
+					computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				// leading path separators are trimmed away
-				computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+					fmt.Println(fileInfo.Name(), fileInfo.Mode(), os.ModeSymlink, fileInfo.Mode()&os.ModeSymlink != 0)
+					if fileInfo.Mode()&os.ModeSymlink != 0 {
+						fmt.Println("Following symlinks", t.followSymlinks)
+						if t.followSymlinks { // Follow the symlink, add it to the computed relative path.
+							result, err := filepath.EvalSymlinks(filePath)
 
-				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
-					fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
-			})
+							if err != nil {
+								fmt.Println("Failed to follow symlink")
+								return nil
+							}
+
+							result, err = filepath.Abs(result)
+
+							if err != nil {
+								fmt.Println("Failed to get absolute value of resolved link")
+								return nil
+							}
+
+							fmt.Println(result)
+
+							if _, ok := seenPaths[result]; !ok {
+								walkQueue = append(walkQueue, walkItem{
+									fullPath:     result,
+									relativeBase: computedRelativePath,
+								})
+							}
+							seenPaths[result] = true
+						}
+
+						return nil
+					} else {
+						if fileInfo.IsDir() {
+							return nil
+						}
+
+						return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
+							fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
+					}
+				})
+			}
 
 			return
 		} else {
@@ -128,10 +173,11 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	return fileInfo, true, nil
 }
 
-func newLocalTraverser(fullPath string, recursive bool, incrementEnumerationCounter func()) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
+		followSymlinks:              followSymlinks,
 		incrementEnumerationCounter: incrementEnumerationCounter}
 	return &traverser
 }

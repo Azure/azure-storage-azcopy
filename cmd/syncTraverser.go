@@ -29,6 +29,11 @@ import (
 	"sync/atomic"
 )
 
+// TODO: Get rid of highly situational constructors.
+// Why? Because they create a MASSIVE amount of code duplication for a very specific situation.
+// We're repeating the mistakes of copy, just in a different place.
+// This is going to be more painful to clean up the longer we wait to do this, and the more we keep using these.
+// PLEASE, do not create any more of these. In the future, use initResourceTraverser.
 func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTraverser, error) {
 	var fullPath string
 
@@ -54,7 +59,10 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 		atomic.AddUint64(counterAddr, 1)
 	}
 
-	traverser := newLocalTraverser(fullPath, cca.recursive, incrementEnumerationCounter)
+	// TODO: Implement this flag (followSymlinks).
+	// It's extra work and would require testing at the moment, hence why I didn't do it.
+	// Though in hindsight, copy is already getting this testing so, your choice.
+	traverser := newLocalTraverser(fullPath, cca.recursive, false, incrementEnumerationCounter)
 
 	return traverser, nil
 }

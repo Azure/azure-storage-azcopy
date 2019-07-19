@@ -751,6 +751,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 				return errors.New("cannot transfer folder without --recursive")
 			}
 		}
+
+		jobPartOrder.SourceRoot = cleanLocalPath(trimWildcards(tmpSrc))
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -873,32 +875,30 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(),
-		 common.EFromTo.LocalBlobFS(),
-		 common.EFromTo.LocalFile():
+		common.EFromTo.LocalBlobFS(),
+		common.EFromTo.LocalFile():
 		// TODO: Count files enumerated during scanning.
 		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
 		fmt.Println("Scanning...")
 		transfers := 0
 		var traverser resourceTraverser
 
-		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, cca.recursive, func(){transfers++})
+		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, cca.recursive, func() { transfers++ })
 		if err != nil {
 			return err
 		}
 
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
-			src, err := cca.findObject(cca.fromTo.From(), cca.source, object.relativePath)
-
-			if err != nil {
-				return err
-			}
+			transfers++
+			src := cca.findObject(true, cca.source, object)
+			dst := cca.findObject(false, cca.destination, object)
 
 			transfer := common.CopyTransfer{
-				Source: src,
-				Destination: "/" + strings.TrimSuffix(object.relativePath, object.name) + object.name,
+				Source:           src,
+				Destination:      dst,
 				LastModifiedTime: object.lastModifiedTime,
-				SourceSize: object.size,
+				SourceSize:       object.size,
 			}
 
 			return addTransfer(&jobPartOrder, transfer, cca)
@@ -992,17 +992,18 @@ func (cca *cookedCopyCmdArgs) initSrcPipeline(ctx context.Context) (p pipeline.P
 	return
 }
 
-func (cca *cookedCopyCmdArgs) findObject(origin common.Location, basePath string, relativePath string) (string, error) {
-	if relativePath == "" {
-		return basePath, nil
+func (cca *cookedCopyCmdArgs) findObject(source bool, basePath string, object storedObject) string {
+	if object.relativePath == "" {
+		// If we're finding an object from the source, it returns "" if it's already got it.
+		// If we're finding an object on the destination and we get "", we need to hand it the object name.
+		if source {
+			return ""
+		} else {
+			return "/" + object.name
+		}
 	}
 
-	switch origin {
-	case common.ELocation.Local():
-		return filepath.Join(trimWildcards(basePath), relativePath), nil
-	default:
-		return "", fmt.Errorf("cannot find object from origin %s", origin)
-	}
+	return "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 }
 
 // Initialize the modular filters outside of copy to increase readability.
@@ -1010,23 +1011,23 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
 
 	if len(cca.includePatterns) != 0 {
-		filters = append(filters, &includeFilter{patterns:cca.includePatterns})
+		filters = append(filters, &includeFilter{patterns: cca.includePatterns})
 	}
 
 	if len(cca.excludePatterns) != 0 {
-		for _,v := range cca.excludePatterns {
-			filters = append(filters, &excludeFilter{pattern:v})
+		for _, v := range cca.excludePatterns {
+			filters = append(filters, &excludeFilter{pattern: v})
 		}
 	}
 
 	if len(cca.excludeBlobType) != 0 {
 		excludeSet := map[azblob.BlobType]bool{}
 
-		for _,v := range cca.excludeBlobType {
+		for _, v := range cca.excludeBlobType {
 			excludeSet[v] = true
 		}
 
-		filters = append(filters, &excludeBlobTypeFilter{blobTypes:excludeSet})
+		filters = append(filters, &excludeBlobTypeFilter{blobTypes: excludeSet})
 	}
 
 	return filters
