@@ -8,9 +8,12 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -82,12 +85,12 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 		Transport: &http.Transport{
 			Proxy: ieproxy.GetProxyFunc(),
 			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
-			Dial /*Context*/ : (&net.Dialer{
+			Dial /*Context*/ : newDialRateLimiter(&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
 			}).Dial, /*Context*/
-			MaxIdleConns:           0,        // No limit
+			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
@@ -99,6 +102,31 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 			//ExpectContinueTimeout:  time.Duration{},
 		},
 	}
+}
+
+// Prevents too many dials happening at once, because we've observed that that increases the thread
+// count in the app, to several times more than is actually necessary - presumably due to a blocking OS
+// call somewhere. It's tidier to avoid creating those excess OS threads.
+type dialRateLimiter struct {
+	dialer *net.Dialer
+	sem    *semaphore.Weighted
+}
+
+func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
+	return &dialRateLimiter{
+		dialer,
+		semaphore.NewWeighted(int64(5 * runtime.NumCPU())), // TODO: review this, does it start us up fast enough?
+	}
+}
+
+func (d *dialRateLimiter) Dial(network, address string) (net.Conn, error) {
+	err := d.sem.Acquire(context.Background(), 1)
+	if err != nil {
+		return nil, err
+	}
+	defer d.sem.Release(1)
+
+	return d.dialer.Dial(network, address)
 }
 
 // newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
