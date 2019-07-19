@@ -95,7 +95,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrentFilesLimit int, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -119,7 +119,8 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 
 	// Create suicide channel which is used to scale back on the number of workers
-	suicideCh := make(chan SuicideJob, concurrentConnections)
+	// TODO: IIRC, this is on longer used as of early 2019. Check that, and remove it?
+	suicideCh := make(chan SuicideJob, concurrency.MainPoolSize)
 
 	planDir := path.Join(azcopyAppPathFolder, "plans")
 	if err := os.Mkdir(planDir, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
@@ -153,6 +154,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	}
 
 	ja := &jobsAdmin{
+		concurrency:      concurrency,
 		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr:    newJobIDToJobMgr(),
 		logDir:           azcopyLogPathFolder,
@@ -160,7 +162,7 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 		pacer:            pacer,
 		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
-		fileCountLimiter: common.NewCacheLimiter(int64(concurrentFilesLimit)),
+		fileCountLimiter: common.NewCacheLimiter(int64(concurrency.MaxOpenFiles)),
 		appCtx:           appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
@@ -188,19 +190,17 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process chunks
-	for cc := 0; cc < concurrentConnections; cc++ {
+	for cc := 0; cc < concurrency.MainPoolSize; cc++ {
 		go ja.chunkProcessor(cc)
 	}
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < NumTransferInitiationRoutines; cc++ {
+	for cc := 0; cc < concurrency.TransferInitiationPoolSize; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }
-
-const NumTransferInitiationRoutines = 64 // TODO make this configurable
 
 // QueueJobParts puts the given JobPartManager into the partChannel
 // from where this JobPartMgr will be picked by a routine and
@@ -294,6 +294,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
+	concurrency   ConcurrencySettings
 	logger        common.ILoggerCloser
 	jobIDToJobMgr jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
@@ -363,7 +364,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
+			return newJobMgr(ja.concurrency, ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
 		})
 }
 
