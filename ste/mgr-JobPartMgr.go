@@ -84,12 +84,11 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy: ieproxy.GetProxyFunc(),
-			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
-			Dial /*Context*/ : newDialRateLimiter(&net.Dialer{
+			DialContext: newDialRateLimiter(&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).DialContext,
 			MaxIdleConns:           0, // No limit
 			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
@@ -113,20 +112,21 @@ type dialRateLimiter struct {
 }
 
 func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
+	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
 	return &dialRateLimiter{
 		dialer,
-		semaphore.NewWeighted(int64(5 * runtime.NumCPU())), // TODO: review this, does it start us up fast enough?
+		semaphore.NewWeighted(int64(concurrentDialsPerCpu * runtime.NumCPU())),
 	}
 }
 
-func (d *dialRateLimiter) Dial(network, address string) (net.Conn, error) {
+func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	err := d.sem.Acquire(context.Background(), 1)
 	if err != nil {
 		return nil, err
 	}
 	defer d.sem.Release(1)
 
-	return d.dialer.Dial(network, address)
+	return d.dialer.DialContext(ctx, network, address)
 }
 
 // newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.
