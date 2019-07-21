@@ -69,22 +69,20 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 		MaxOpenFiles:               getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize),
 	}
 
-	// Set the max idle connections that we allow (if there are any more idle connections
+	// Set the max idle connections that we allow. If there are any more idle connections
 	// than this, they will be closed, and then will result in creation of new connections
-	// later if needed).
-	// Set this number equal to the largest size the main pool can ever be. Why?
-	// Because it if its substantially less, there's an issue ine momentary dips in processing,
-	// when lots of goroutines just happen to a point in their processing where they
-	// are not using a TCP connection. In those dips, if this number is too low, connections
-	// get closed. Then, moments later, connections are needed again and must be re-created.
-	// In extreme cases, this can result in a pathological situation
+	// later if needed. In AzCopy, they almost always will be needed soon after, so better to
+	// keep them open.
+	// So set this number high so that that will not happen.
+	// (Previously, when using Dial instead of DialContext, there was an added benefit of keeping
+	// this value high, which was that, without it being high, all the extra dials,
+	// to compensate for the closures, were causing a pathological situation
 	// where lots and lots of OS threads get created during the creation of new connections
 	// (presumably due to some blocking OS call in dial) and the app hits Go's default
 	// limit of 10,000 OS threads, and panics and shuts down.  This has been observed
 	// on Windows when this value was set to 500 but there were 1000 to 2000 goroutines in the
-	// main pool size.
-	// By setting this number equal to the max possible pool size, we are guaranteed to avoid that
-	// problem
+	// main pool size.  Using DialContext appears to mitigate that issue, so the value
+	// we compute here is really just to reduce unneeded make and break of connections)
 	s.MaxIdleConnections = maxMainPoolSize
 
 	return s

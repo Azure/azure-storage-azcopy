@@ -106,6 +106,7 @@ func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 // Prevents too many dials happening at once, because we've observed that that increases the thread
 // count in the app, to several times more than is actually necessary - presumably due to a blocking OS
 // call somewhere. It's tidier to avoid creating those excess OS threads.
+// Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
 type dialRateLimiter struct {
 	dialer *net.Dialer
 	sem    *semaphore.Weighted
