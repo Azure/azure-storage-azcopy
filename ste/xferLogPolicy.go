@@ -47,8 +47,8 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 		return func(ctx context.Context, request pipeline.Request) (response pipeline.Response, err error) {
 			try++ // The first try is #1 (not #0)
 
-			// Log the outgoing request as informational
-			if po.ShouldLog(pipeline.LogInfo) {
+			// Log the outgoing request if at debug log level
+			if po.ShouldLog(pipeline.LogDebug) {
 				b := &bytes.Buffer{}
 				fmt.Fprintf(b, "==> OUTGOING REQUEST (Try=%d)\n", try)
 				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), nil, nil)
@@ -99,7 +99,12 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 					}
 				}
 
-				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err)
+				if forceLog || err != nil || po.ShouldLog(pipeline.LogDebug) {
+					pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err) // only write full headers if debugging or error
+				} else {
+					writeRequestAsOneLine(b, prepareRequestForLogging(request))
+				}
+
 				//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
 				//for a set of harmless errors. HTTP requests ultimately will be retried.
 				if logLevel <= pipeline.LogError && !httpError {
@@ -117,6 +122,10 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			return response, err
 		}
 	})
+}
+
+func writeRequestAsOneLine(b *bytes.Buffer, request *http.Request) {
+	fmt.Fprint(b, "   "+request.Method+" "+request.URL.String()+"\n")
 }
 
 func prepareRequestForLogging(request pipeline.Request) *http.Request {
