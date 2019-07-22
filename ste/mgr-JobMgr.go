@@ -110,11 +110,15 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 }
 
 func (jm *jobMgr) logConcurrencyParameters() {
+	concurrencySuffix := "Based on CPU count. Set AZCOPY_CONCURRENCY_VALUE to override."
+	if jm.concurrency.MainPoolSizeIsUserSpecified {
+		concurrencySuffix = "From AZCOPY_CONCURRENCY_VALUE environment variable"
+	}
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB", float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent operations (AZCOPY_CONCURRENCY_VALUE): %d", jm.concurrency.MainPoolSize))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d", jm.concurrency.MaxOpenFiles))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d", jm.concurrency.TransferInitiationPoolSize))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB (auto-computed)", float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent operations: %d (%s)", jm.concurrency.MainPoolSize, concurrencySuffix))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)", jm.concurrency.MaxOpenFiles))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (hard-coded)", jm.concurrency.TransferInitiationPoolSize))
 }
 
 // jobMgr represents the runtime information for a Job

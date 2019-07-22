@@ -34,6 +34,9 @@ type ConcurrencySettings struct {
 	// (i.e. executes chunkfuncs)
 	MainPoolSize int
 
+	// MainPoolSizeIsUserSpecified shows if MainPoolSize was specifically requested by the user
+	MainPoolSizeIsUserSpecified bool
+
 	// TransferInitiationPoolSize is the size of the auxiliary goroutine pool that initiates transfers
 	// (i.e. creates chunkfuncs)
 	TransferInitiationPoolSize int
@@ -60,13 +63,14 @@ const defaultTransferInitiationPoolSize = 64
 // machine where we are running
 func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 
-	initialMainPoolSize := getMainPoolSize()
+	initialMainPoolSize, wasFromEnv := getMainPoolSize()
 	maxMainPoolSize := initialMainPoolSize // one day we may compute a higher value for this, and dynamically grow the pool with this as a cap
 
 	s := ConcurrencySettings{
-		MainPoolSize:               initialMainPoolSize,
-		TransferInitiationPoolSize: defaultTransferInitiationPoolSize,
-		MaxOpenFiles:               getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize),
+		MainPoolSize:                initialMainPoolSize,
+		MainPoolSizeIsUserSpecified: wasFromEnv,
+		TransferInitiationPoolSize:  defaultTransferInitiationPoolSize,
+		MaxOpenFiles:                getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize),
 	}
 
 	// Set the max idle connections that we allow. If there are any more idle connections
@@ -88,7 +92,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 	return s
 }
 
-func getMainPoolSize() int {
+func getMainPoolSize() (n int, isFromEnv bool) {
 	concurrencyValueOverride := os.Getenv("AZCOPY_CONCURRENCY_VALUE")
 	if concurrencyValueOverride != "" {
 		val, err := strconv.ParseInt(concurrencyValueOverride, 10, 64)
@@ -96,23 +100,23 @@ func getMainPoolSize() int {
 			log.Fatalf("error parsing the env AZCOPY_CONCURRENCY_VALUE %q failed with error %v",
 				concurrencyValueOverride, err)
 		}
-		return int(val)
+		return int(val), true
 	}
 
 	numOfCPUs := runtime.NumCPU()
 
 	// fix the concurrency value for smaller machines
 	if numOfCPUs <= 4 {
-		return 32
+		return 32, false
 	}
 
-	// for machines that are extremely powerful, fix to 300 to avoid running out of file descriptors
+	// for machines that are extremely powerful, fix to 300 (previously this was to avoid running out of file descriptors, but we have another solution to that now)
 	if 16*numOfCPUs > 300 {
-		return 300
+		return 300, false
 	}
 
 	// for moderately powerful machines, compute a reasonable number
-	return 16 * numOfCPUs
+	return 16 * numOfCPUs, false
 }
 
 // getMaxOpenFiles finds a number of concurrently-openable files
