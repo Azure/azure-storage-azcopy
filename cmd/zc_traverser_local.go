@@ -103,6 +103,8 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 									fullPath:     result,
 									relativeBase: computedRelativePath,
 								})
+							} else {
+								glcm.Info(fmt.Sprintf("Ignored recursive symlink at %s", filePath))
 							}
 							seenPaths[result] = true
 						}

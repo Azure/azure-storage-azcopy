@@ -1018,6 +1018,21 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (rela
 		relativePath = "/" + sepsplits[len(sepsplits)-1] + relativePath
 	}
 
+	// Ensure that encoding only occurs on Windows, to a local destination.
+	if common.OS_PATH_SEPARATOR == "\\" && !source && cca.fromTo.To() == common.ELocation.Local() {
+		// Encode unsupported characters.
+		invalidChars := `<>\/:"|?*` + string(0x00) // ASCII NUL is unsupported.
+		paths := strings.Split(relativePath, "/")
+		for k, v := range paths {
+			for _, c := range strings.Split(invalidChars, "") {
+				paths[k] = strings.ReplaceAll(v, c, "_")
+			}
+			paths[k] = strings.TrimSpace(v)
+		}
+
+		relativePath = strings.Join(paths, "/")
+	}
+
 	return
 }
 
