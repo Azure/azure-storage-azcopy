@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -36,26 +35,23 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 			return err
 		}
 
-		err = processIfPassedFilters(filters, newStoredObject(
-			objectName,
-			"", // No need for relative path when we already know the object location
-			oi.LastModified,
-			oi.Size,
-			nil,
-			blobTypeNA,
-		), processor)
+		err = processIfPassedFilters(
+			filters,
+			newStoredObject(
+				objectName,
+				"", // We already know the exact path -- No need.
+				oi.LastModified,
+				oi.Size,
+				nil,
+				blobTypeNA,
+				""), // We already know the bucket name -- no need.
+			processor)
 
 		if err != nil {
 			return err
 		}
 
 		return nil
-	}
-
-	// Check if the resource is a service level URL
-	if t.s3URLParts.IsServiceSyntactically() {
-		// TODO: Let's just figure this one out later.
-		return errors.New("service-level enumeration is not allowed")
 	}
 
 	searchPrefix, _, wildcard := t.s3URLParts.searchObjectPrefixAndPatternFromS3URL()
@@ -87,8 +83,7 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 				objectInfo.LastModified,
 				objectInfo.Size,
 				nil,
-				blobTypeNA,
-			),
+				blobTypeNA, ""), // We already know the bucket name -- no need.
 			processor)
 
 		if err != nil {

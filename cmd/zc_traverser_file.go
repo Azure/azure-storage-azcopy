@@ -63,12 +63,12 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 		if isFile {
 			storedObject := newStoredObject(
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
-				"", // relative path makes no sense when the full path already points to the file
+				"", // We already know the exact path -- No need.
 				fileProperties.LastModified(),
 				fileProperties.ContentLength(),
 				fileProperties.ContentMD5(),
 				blobTypeNA,
-			)
+				"") // We already know the container name -- no need.
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

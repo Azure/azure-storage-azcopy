@@ -63,12 +63,12 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	if isBlob {
 		storedObject := newStoredObject(
 			getObjectNameOnly(blobUrlParts.BlobName),
-			"", // relative path makes no sense when the full path already points to the file
+			"", // We already know the object's location -- no need.
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),
 			blobProperties.BlobType(),
-		)
+			"") // We already know the container -- no need.
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -121,7 +121,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				*blobInfo.Properties.ContentLength,
 				blobInfo.Properties.ContentMD5,
 				blobInfo.Properties.BlobType,
-			)
+				"") // We already know the container name -- no need.
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

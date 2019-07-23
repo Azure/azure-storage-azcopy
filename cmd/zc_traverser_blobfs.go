@@ -84,12 +84,12 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 	if isFile {
 		storedObject := newStoredObject(
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
-			"", // relative path makes no sense when the full path already points to the file
+			"", // We already know the exact location of the file. No need for a relative path.
 			t.parseLMT(pathProperties.LastModified()),
 			pathProperties.ContentLength(),
 			pathProperties.ContentMD5(),
 			blobTypeNA,
-		)
+			"") // We already know the container name -- no need.
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -122,7 +122,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 					*v.ContentLength,
 					v.ContentMD5(),
 					blobTypeNA,
-				)
+					"") // We already know the container name -- no need.
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

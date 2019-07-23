@@ -49,9 +49,17 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
 		t.incrementEnumerationCounter()
-		err = processIfPassedFilters(filters, newStoredObject(singleFileInfo.Name(),
-			"", // relative path makes no sense when the full path already points to the file
-			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA), processor)
+		err = processIfPassedFilters(
+			filters,
+			newStoredObject(
+				singleFileInfo.Name(),
+				"", // We already know the exact path -- no need.
+				singleFileInfo.ModTime(),
+				singleFileInfo.Size(),
+				nil,
+				blobTypeNA,
+				""), // We already know the container name -- no need.
+			processor)
 		return
 
 	} else {
@@ -75,8 +83,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				// leading path separators are trimmed away
 				computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
-					fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
+				return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath, fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA, ""), processor)
 			})
 
 			return
@@ -94,7 +101,17 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				}
 
 				t.incrementEnumerationCounter()
-				err = processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
+				err = processIfPassedFilters(
+					filters,
+					newStoredObject(
+						singleFile.Name(),
+						singleFile.Name(),
+						singleFile.ModTime(),
+						singleFile.Size(),
+						nil,
+						blobTypeNA,
+						""), // We already know the container name -- no need.
+					processor)
 
 				if err != nil {
 					return err

@@ -43,6 +43,8 @@ type storedObject struct {
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
 	relativePath string
+	// container source, only included by account traversers.
+	containerName string
 }
 
 const (
@@ -54,7 +56,7 @@ func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) b
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
-func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType) storedObject {
+func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType, containerName string) storedObject {
 	return storedObject{
 		name:             name,
 		relativePath:     relativePath,
@@ -62,6 +64,7 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 		size:             size,
 		md5:              md5,
 		blobType:         blobType,
+		containerName:    containerName,
 	}
 }
 
