@@ -25,9 +25,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"io/ioutil"
+	"math/rand"
 	"net/url"
 	"os"
 	"runtime"
@@ -35,9 +34,10 @@ import (
 	"testing"
 	"time"
 
-	chk "gopkg.in/check.v1"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/ste"
 
-	"math/rand"
+	chk "gopkg.in/check.v1"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -68,6 +68,9 @@ const (
 	sharePrefix                 = "share"
 	azureFilePrefix             = "azfile"
 	defaultAzureFileSizeInBytes = 1000
+
+	blobfsPrefix                 = "blobfs"
+	defaultBlobFSFileSizeInBytes = 1000
 )
 
 // This function generates an entity name by concatenating the passed prefix,
@@ -135,6 +138,10 @@ func generateShareName() string {
 	return generateName(sharePrefix, 63)
 }
 
+func generateFilesystemName() string {
+	return generateName(blobfsPrefix, 63)
+}
+
 func getShareURL(c *chk.C, fsu azfile.ServiceURL) (share azfile.ShareURL, name string) {
 	name = generateShareName()
 	share = fsu.NewShareURL(name)
@@ -146,6 +153,10 @@ func generateAzureFileName() string {
 	return generateName(azureFilePrefix, 0)
 }
 
+func generateBfsFileName() string {
+	return generateName(blobfsPrefix, 0)
+}
+
 func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	name = generateContainerName()
 	container = bsu.NewContainerURL(name)
@@ -153,11 +164,11 @@ func getContainerURL(c *chk.C, bsu azblob.ServiceURL) (container azblob.Containe
 	return container, name
 }
 
-func getFileSystemURL(c *chk.C, bsu azbfs.ServiceURL) (fileSystemURL azbfs.FileSystemURL, name string) {
-	name = generateContainerName()
-	fileSystemURL = bsu.NewFileSystemURL(name)
+func getFilesystemURL(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
+	name = generateFilesystemName()
+	filesystem = bfssu.NewFileSystemURL(name)
 
-	return fileSystemURL, name
+	return
 }
 
 func getBlockBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
@@ -165,6 +176,13 @@ func getBlockBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (bl
 	blob = container.NewBlockBlobURL(name)
 
 	return blob, name
+}
+
+func getBfsFileURL(c *chk.C, filesystemURL azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
+	name = prefix + generateBfsFileName()
+	file = filesystemURL.NewRootDirectoryURL().NewFileURL(name)
+
+	return
 }
 
 func getAppendBlobURL(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.AppendBlobURL, name string) {
@@ -233,6 +251,15 @@ func getFSU() azfile.ServiceURL {
 	return azfile.NewServiceURL(*u, pipeline)
 }
 
+func GetBFSSU() azbfs.ServiceURL {
+	accountName, accountKey := getAccountAndKey()
+	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", accountName))
+
+	cred := azbfs.NewSharedKeyCredential(accountName, accountKey)
+	pipeline := azbfs.NewPipeline(cred, azbfs.PipelineOptions{})
+	return azbfs.NewServiceURL(*u, pipeline)
+}
+
 func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.ContainerURL, name string) {
 	container, name = getContainerURL(c, bsu)
 
@@ -242,28 +269,31 @@ func createNewContainer(c *chk.C, bsu azblob.ServiceURL) (container azblob.Conta
 	return container, name
 }
 
-func getBfsSU() azbfs.ServiceURL {
-	name, key := getAccountAndKey()
-	u, _ := url.Parse(fmt.Sprintf("https://%s.dfs.core.windows.net/", name))
+func createNewFilesystem(c *chk.C, bfssu azbfs.ServiceURL) (filesystem azbfs.FileSystemURL, name string) {
+	filesystem, name = getFilesystemURL(c, bfssu)
 
-	credential := azbfs.NewSharedKeyCredential(name, key)
-	pipeline := azbfs.NewPipeline(credential, azbfs.PipelineOptions{})
-	return azbfs.NewServiceURL(*u, pipeline)
-}
-
-func createNewFileSystem(c *chk.C, bsu azbfs.ServiceURL) (fs azbfs.FileSystemURL, name string) {
-	fs, name = getFileSystemURL(c, bsu)
-
-	cResp, err := fs.Create(ctx)
+	cResp, err := filesystem.Create(ctx)
 	c.Assert(err, chk.IsNil)
 	c.Assert(cResp.StatusCode(), chk.Equals, 201)
-	return fs, name
+	return
 }
 
-func deleteFileSystem(c *chk.C, fs azbfs.FileSystemURL) {
-	resp, err := fs.Delete(ctx)
+func createNewBfsFile(c *chk.C, filesystem azbfs.FileSystemURL, prefix string) (file azbfs.FileURL, name string) {
+	file, name = getBfsFileURL(c, filesystem, prefix)
+
+	// Create the file
+	cResp, err := file.Create(ctx, azbfs.BlobFSHTTPHeaders{})
 	c.Assert(err, chk.IsNil)
-	c.Assert(resp.StatusCode(), chk.Equals, 202)
+	c.Assert(cResp.StatusCode(), chk.Equals, 201)
+
+	aResp, err := file.AppendData(ctx, 0, strings.NewReader(string(make([]byte, defaultBlobFSFileSizeInBytes))))
+	c.Assert(err, chk.IsNil)
+	c.Assert(aResp.StatusCode(), chk.Equals, 202)
+
+	fResp, err := file.FlushData(ctx, defaultBlobFSFileSizeInBytes, nil, azbfs.BlobFSHTTPHeaders{}, false, true)
+	c.Assert(err, chk.IsNil)
+	c.Assert(fResp.StatusCode(), chk.Equals, 200)
+	return
 }
 
 func createNewBlockBlob(c *chk.C, container azblob.ContainerURL, prefix string) (blob azblob.BlockBlobURL, name string) {
@@ -329,6 +359,12 @@ func createNewPageBlob(c *chk.C, container azblob.ContainerURL, prefix string) (
 
 func deleteContainer(c *chk.C, container azblob.ContainerURL) {
 	resp, err := container.Delete(ctx, azblob.ContainerAccessConditions{})
+	c.Assert(err, chk.IsNil)
+	c.Assert(resp.StatusCode(), chk.Equals, 202)
+}
+
+func deleteFilesystem(c *chk.C, filesystem azbfs.FileSystemURL) {
+	resp, err := filesystem.Delete(ctx)
 	c.Assert(err, chk.IsNil)
 	c.Assert(resp.StatusCode(), chk.Equals, 202)
 }

@@ -119,3 +119,24 @@ func (bs ByteSliceExtension) RemoveBOM() []byte {
 	// UTF8
 	return bytes.TrimPrefix(bs.ByteSlice, []byte("\xef\xbb\xbf"))
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+// it's possible that enumerators didn't form rootPath and childPath correctly for them to be combined plainly
+// so we must behave defensively and make sure the full path is correct
+func GenerateFullPath(rootPath, childPath string) string {
+	rootPath = strings.TrimSuffix(rootPath, AZCOPY_PATH_SEPARATOR_STRING)
+	childPath = strings.TrimPrefix(childPath, AZCOPY_PATH_SEPARATOR_STRING)
+
+	if rootPath == "" {
+		return childPath
+	}
+
+	// if the childPath is empty, it means the rootPath already points to the desired entity
+	if childPath == "" {
+		return rootPath
+	}
+
+	// otherwise, make sure a path separator is inserted between the rootPath if necessary
+	return rootPath + AZCOPY_PATH_SEPARATOR_STRING + childPath
+}

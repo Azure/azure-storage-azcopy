@@ -229,6 +229,13 @@ Remove a subset of blobs in a virtual directory (ex: only jpg and pdf files, or 
 Remove an entire virtual directory but exclude certain blobs from the scope (ex: every blob that starts with foo or ends with bar):
   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
 
+Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
+  - file content:
+	dir1/dir2
+	blob1
+	blob2
+
 Remove a single file from ADLS Gen2 (include/exclude not supported):
   - azcopy rm "https://[account].dfs.core.windows.net/[container]/[path/to/file]?[SAS]"
 
