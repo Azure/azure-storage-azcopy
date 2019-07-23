@@ -42,6 +42,9 @@ type storedObject struct {
 
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
+	// note that sometimes the rootDir given by the user turns out to be a single file
+	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
+	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
 	relativePath string
 }
 

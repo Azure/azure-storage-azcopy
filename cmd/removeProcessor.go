@@ -22,11 +22,10 @@ package cmd
 
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
-	"strings"
 )
 
 // extract the right info from cooked arguments and instantiate a generic copy transfer processor from it
-func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart int, isSingleFile bool) *copyTransferProcessor {
+func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart int) *copyTransferProcessor {
 	copyJobTemplate := &common.CopyJobPartOrderRequest{
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
@@ -39,10 +38,6 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 
 		// flags
 		LogLevel: cca.logVerbosity,
-	}
-
-	if !isSingleFile && !strings.HasSuffix(copyJobTemplate.SourceRoot, common.AZCOPY_PATH_SEPARATOR_STRING) {
-		copyJobTemplate.SourceRoot += common.AZCOPY_PATH_SEPARATOR_STRING
 	}
 
 	reportFirstPart := func() { cca.waitUntilJobCompletion(false) }
