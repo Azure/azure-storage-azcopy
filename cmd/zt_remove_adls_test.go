@@ -151,9 +151,9 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesAndDirectories(c *chk.C) 
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	// set up the file system
-	bfsServiceURL := getBfsSU()
-	fsURL, fsName := createNewFileSystem(c, bfsServiceURL)
-	defer deleteFileSystem(c, fsURL)
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+	defer deleteFilesystem(c, fsURL)
 
 	// set up the first file to be deleted, it sits inside top level dir
 	parentDirName := generateName("dir", 0)
@@ -209,9 +209,9 @@ func (s *cmdIntegrationSuite) TestRemoveListOfALDSFilesWithIncludeExclude(c *chk
 	serviceURLWithSAS := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c)
 
 	// set up the file system
-	bfsServiceURL := getBfsSU()
-	fsURL, fsName := createNewFileSystem(c, bfsServiceURL)
-	defer deleteFileSystem(c, fsURL)
+	bfsServiceURL := GetBFSSU()
+	fsURL, fsName := createNewFilesystem(c, bfsServiceURL)
+	defer deleteFilesystem(c, fsURL)
 
 	// set up the second file to be deleted, it sits at the top level
 	fileName := generateName("file", 0)
