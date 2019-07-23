@@ -211,10 +211,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// Note: new implementation of list-of-files only works for remove command for now
-	if raw.fromTo == common.EFromTo.BlobTrash().String() || raw.fromTo == common.EFromTo.FileTrash().String() {
+	if cooked.fromTo == common.EFromTo.BlobTrash() || cooked.fromTo == common.EFromTo.FileTrash() {
 		cooked.listOfFilesLocation = raw.listOfFilesToCopy
-	} else if raw.fromTo == common.EFromTo.BlobFSTrash().String() {
-		if len(raw.listOfFilesToCopy) > 0 && (len(raw.include) > 0 || len(raw.exclude) > 0) {
+	} else if cooked.fromTo == common.EFromTo.BlobFSTrash() {
+		// Note: when the ADLS Gen2 interop happens eventually, we should keep the current blob implementation
+		// so that users can still use include/exclude flags,
+		// and we can shift to the new directory delete API (equivalent to the current bfs implementation)
+		// if no include/exclude is supplied.
+		if len(raw.include) > 0 || len(raw.exclude) > 0 {
 			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 		}
 
@@ -888,9 +892,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.EFromTo.BlobFSLocal():
 		e := copyDownloadBlobFSEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-	case common.EFromTo.BlobTrash():
-		fallthrough
-	case common.EFromTo.FileTrash():
+	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
 			return createErr

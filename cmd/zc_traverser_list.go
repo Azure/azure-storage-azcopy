@@ -42,13 +42,7 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 		//         the relative path returned by the child traverser would be "grandchild1"
 		//         it should be "child2/grandchild1" instead
 		preProcessor := func(object storedObject) error {
-			if object.relativePath == "" {
-				// if the child is a single file
-				object.relativePath = childPath
-			} else {
-				object.relativePath = common.GenerateFullPath(childPath, object.relativePath)
-			}
-
+			object.relativePath = common.GenerateFullPath(childPath, object.relativePath)
 			return processor(object)
 		}
 
