@@ -467,6 +467,36 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 	}
 }
 
+func cleanBlobAccount(c *chk.C, serviceURL azblob.ServiceURL) {
+	marker := azblob.Marker{}
+	for marker.NotDone() {
+		resp, err := serviceURL.ListContainersSegment(ctx, marker, azblob.ListContainersSegmentOptions{})
+		c.Assert(err, chk.IsNil)
+
+		for _, v := range resp.ContainerItems {
+			_, err = serviceURL.NewContainerURL(v.Name).Delete(ctx, azblob.ContainerAccessConditions{})
+			c.Assert(err, chk.IsNil)
+		}
+
+		marker = resp.NextMarker
+	}
+}
+
+func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
+	marker := azfile.Marker{}
+	for marker.NotDone() {
+		resp, err := serviceURL.ListSharesSegment(ctx, marker, azfile.ListSharesOptions{})
+		c.Assert(err, chk.IsNil)
+
+		for _, v := range resp.ShareItems {
+			_, err = serviceURL.NewShareURL(v.Name).Delete(ctx, azfile.DeleteSnapshotsOptionNone)
+			c.Assert(err, chk.IsNil)
+		}
+
+		marker = resp.NextMarker
+	}
+}
+
 func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
 	accountNameEnvVar := accountType + "ACCOUNT_NAME"
 	accountKeyEnvVar := accountType + "ACCOUNT_KEY"
@@ -567,7 +597,7 @@ func getContainerURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential, con
 	return azblob.NewContainerURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
 }
 
-func getServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblob.ServiceURL {
+func getBlobServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblob.ServiceURL {
 	sasQueryParams, err := azblob.AccountSASSignatureValues{
 		Protocol:      azblob.SASProtocolHTTPS,
 		ExpiryTime:    time.Now().Add(48 * time.Hour),
@@ -587,6 +617,25 @@ func getServiceURLWithSAS(c *chk.C, credential azblob.SharedKeyCredential) azblo
 	c.Assert(err, chk.IsNil)
 
 	return azblob.NewServiceURL(*fullURL, azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{}))
+}
+
+func getFileServiceURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential) azfile.ServiceURL {
+	sasQueryParams, err := azfile.AccountSASSignatureValues{
+		Protocol:      azfile.SASProtocolHTTPS,
+		ExpiryTime:    time.Now().Add(48 * time.Hour),
+		Permissions:   azfile.AccountSASPermissions{Read: true, List: true, Write: true, Delete: true, Add: true, Create: true, Update: true, Process: true}.String(),
+		Services:      azfile.AccountSASServices{File: true, Blob: true, Queue: true}.String(),
+		ResourceTypes: azfile.AccountSASResourceTypes{Service: true, Container: true, Object: true}.String(),
+	}.NewSASQueryParameters(&credential)
+	c.Assert(err, chk.IsNil)
+
+	qp := sasQueryParams.Encode()
+	rawURL := fmt.Sprintf("https://%s.file.core.windows.net/?%s", credential.AccountName(), qp)
+
+	fullURL, err := url.Parse(rawURL)
+	c.Assert(err, chk.IsNil)
+
+	return azfile.NewServiceURL(*fullURL, azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{}))
 }
 
 func getShareURLWithSAS(c *chk.C, credential azfile.SharedKeyCredential, shareName string) azfile.ShareURL {

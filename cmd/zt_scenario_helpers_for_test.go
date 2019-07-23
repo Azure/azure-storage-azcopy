@@ -184,6 +184,35 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 	return
 }
 
+func (s scenarioHelper) generateBlobContainersAndBlobsFromLists(c *chk.C, serviceURL azblob.ServiceURL, containerList []string, blobList []string, data string) {
+	for _, containerName := range containerList {
+		curl := serviceURL.NewContainerURL(containerName)
+		_, err := curl.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
+		c.Assert(err, chk.IsNil)
+
+		s.generateBlobsFromList(c, curl, blobList, data)
+	}
+}
+
+func (s scenarioHelper) generateFileSharesAndFilesFromLists(c *chk.C, serviceURL azfile.ServiceURL, shareList []string, fileList []string, data string) {
+	for _, shareName := range shareList {
+		surl := serviceURL.NewShareURL(shareName)
+		_, err := surl.Create(ctx, azfile.Metadata{}, 0)
+		c.Assert(err, chk.IsNil)
+
+		s.generateAzureFilesFromList(c, surl, fileList)
+	}
+}
+
+func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
+	for _, bucketName := range bucketList {
+		err := s3Client.MakeBucket(bucketName, "")
+		c.Assert(err, chk.IsNil)
+
+		s.generateObjects(c, s3Client, bucketName, objectList)
+	}
+}
+
 // create the demanded blobs
 func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
 	for _, blobName := range blobList {
@@ -403,7 +432,15 @@ func (scenarioHelper) getRawBlobServiceURLWithSAS(c *chk.C) url.URL {
 	credential, err := azblob.NewSharedKeyCredential(accountName, accountKey)
 	c.Assert(err, chk.IsNil)
 
-	return getServiceURLWithSAS(c, *credential).URL()
+	return getBlobServiceURLWithSAS(c, *credential).URL()
+}
+
+func (scenarioHelper) getRawFileServiceURLWithSAS(c *chk.C) url.URL {
+	accountName, accountKey := getAccountAndKey()
+	credential, err := azfile.NewSharedKeyCredential(accountName, accountKey)
+	c.Assert(err, chk.IsNil)
+
+	return getFileServiceURLWithSAS(c, *credential).URL()
 }
 
 func (scenarioHelper) getRawAdlsServiceURLWithSAS(c *chk.C) azbfs.ServiceURL {
