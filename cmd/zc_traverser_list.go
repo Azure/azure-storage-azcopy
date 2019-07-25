@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"io"
 	"net/url"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
@@ -61,7 +63,7 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 	return l.listReader.Close()
 }
 
-func newListTraverser(parent string, parentSAS string, parentType common.Location, credential common.CredentialInfo,
+func newListTraverser(parent string, parentSAS string, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context,
 	recursive bool, listReader io.ReadCloser) resourceTraverser {
 	var traverserGenerator childTraverserGenerator
 
@@ -71,7 +73,9 @@ func newListTraverser(parent string, parentSAS string, parentType common.Locatio
 		childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
 
 		// construct traverser that goes through child
-		traverser, err := newTraverserForCopy(childURL.String(), parentSAS, parentType, credential, recursive)
+		source := copyHandlerUtil{}.appendQueryParamToUrl(childURL, parentSAS).String()
+
+		traverser, err := initResourceTraverser(source, parentType, ctx, credential, nil, nil, recursive, func() {})
 		if err != nil {
 			return nil, err
 		}

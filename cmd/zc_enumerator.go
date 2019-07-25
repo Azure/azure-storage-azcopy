@@ -23,6 +23,11 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -82,20 +87,41 @@ type resourceTraverser interface {
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, pipeline *pipeline.Pipeline, followSymlinks *bool, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listOfFilesLocation *string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
+	var p *pipeline.Pipeline
 
-	/*
-		Required support:
-		PR1: Local -> Blob/File/BlobFS ===YOU ARE HERE===
-			Only Local traverser required. Overwrite checks occur in STE.
-		PR2: Blob/File/BlobFS -> Local
-			Blob, File, BlobFS traversers required.
-		PR3: Blob/File -> BlobFS
-			Nothing new.
-		PR4/5: S3 -> BlobFS
-			Add S3 traverser.
-	*/
+	if location == common.ELocation.Local() {
+		source = cleanLocalPath(source)
+	}
+
+	if ctx != nil && credential != nil {
+		tmppipe, err := initPipeline(*ctx, location, *credential)
+
+		if err != nil {
+			return nil, err
+		}
+
+		p = &tmppipe
+	}
+
+	if listOfFilesLocation != nil && *listOfFilesLocation != "" {
+		splitsrc := strings.Split(source, "?")
+		sas := ""
+
+		if len(splitsrc) > 1 {
+			sas = splitsrc[1]
+		}
+
+		f, err := os.Open(*listOfFilesLocation)
+
+		if err != nil {
+			return nil, err
+		}
+
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, f)
+		return output, nil
+	}
 
 	switch location {
 	case common.ELocation.Local():
@@ -105,11 +131,57 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		}
 
 		if strings.Index(source, "*") != -1 {
-			// TODO: Replace me with Ze's list traverser.
-			output = newGlobTraverser(source, recursive, toFollow, incrementEnumerationCounter)
+			basePath := trimWildcards(source)
+			matches, err := filepath.Glob(source)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to glob: %s", err)
+			}
+
+			// A channel really would be preferable for this kind of behaviour but whatever.
+			strToRead := ""
+
+			for _, v := range matches {
+				strToRead += strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath) + "\n"
+			}
+
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, ioutil.NopCloser(strings.NewReader(strToRead)))
 		} else {
 			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}
+	case common.ELocation.Blob():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil || p == nil {
+			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
+		}
+
+		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+	case common.ELocation.File():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil || p == nil {
+			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
+		}
+
+		output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+	case common.ELocation.BlobFS():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil || p == nil {
+			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
+		}
+
+		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}

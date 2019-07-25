@@ -7,9 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/s3utils"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // copyS2SMigrationS3Enumerator enumerates S3 source, and submits request for copy S3 to Blob and etc.

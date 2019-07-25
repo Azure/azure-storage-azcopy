@@ -65,7 +65,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, func() {})
+		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, false, func() {})
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -162,7 +162,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, func() {})
+		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, false, func() {})
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -251,7 +251,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, func() {})
+		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func() {})
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation

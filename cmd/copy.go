@@ -212,7 +212,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// Note: new implementation of list-of-files only works for remove command for now
-	if cooked.fromTo == common.EFromTo.BlobTrash() || cooked.fromTo == common.EFromTo.FileTrash() {
+	if cooked.fromTo == common.EFromTo.BlobTrash() || cooked.fromTo == common.EFromTo.FileTrash() || cooked.fromTo.From() == common.ELocation.Local() {
 		cooked.listOfFilesLocation = raw.listOfFilesToCopy
 	} else if cooked.fromTo == common.EFromTo.BlobFSTrash() {
 		// Note: when the ADLS Gen2 interop happens eventually, we should keep the current blob implementation
@@ -268,42 +268,50 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 	}
 
-	// initialize the include map which contains the list of files to be included
-	// parse the string passed in include flag
-	// more than one file are expected to be separated by ';'
-	cooked.legacyInclude = make(map[string]int)
-	if len(raw.legacyInclude) > 0 {
-		files := strings.Split(raw.legacyInclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
+	// TODO: When further in the refactor, just check this against a map
+	// ... so I don't have to write 50 thousand assertions.
+	if cooked.fromTo.From() != common.ELocation.Local() {
+		// initialize the include map which contains the list of files to be included
+		// parse the string passed in include flag
+		// more than one file are expected to be separated by ';'
+		cooked.legacyInclude = make(map[string]int)
+		if len(raw.legacyInclude) > 0 {
+			files := strings.Split(raw.legacyInclude, ";")
+			for index := range files {
+				// If split of the include string leads to an empty string
+				// not include that string
+				if len(files[index]) == 0 {
+					continue
+				}
+				// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
+				// this replacement is done to handle the windows file paths where path separator "\\"
+				includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				cooked.legacyInclude[includePath] = index
 			}
-			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.legacyInclude[includePath] = index
 		}
-	}
 
-	// initialize the exclude map which contains the list of files to be excluded
-	// parse the string passed in exclude flag
-	// more than one file are expected to be separated by ';'
-	cooked.legacyExclude = make(map[string]int)
-	if len(raw.legacyExclude) > 0 {
-		files := strings.Split(raw.legacyExclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
+		// initialize the exclude map which contains the list of files to be excluded
+		// parse the string passed in exclude flag
+		// more than one file are expected to be separated by ';'
+		cooked.legacyExclude = make(map[string]int)
+		if len(raw.legacyExclude) > 0 {
+			files := strings.Split(raw.legacyExclude, ";")
+			for index := range files {
+				// If split of the include string leads to an empty string
+				// not include that string
+				if len(files[index]) == 0 {
+					continue
+				}
+				// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
+				// this replacement is done to handle the windows file paths where path separator "\\"
+				excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				cooked.legacyExclude[excludePath] = index
 			}
-			// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.legacyExclude[excludePath] = index
 		}
+	} else {
+		// I do not like this implementation whatsoever, but just for now, we need to circumvent the legacy include and excludes.
+		raw.include = raw.legacyInclude
+		raw.exclude = raw.legacyExclude
 	}
 
 	cooked.metadata = raw.metadata
@@ -761,7 +769,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		if err != nil {
 			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
 		}
-		cca.source = tmpSrc
 
 		// If we've gotten this far and it fails, it's probably a wildcard check.
 		fi, err := os.Stat(cca.source)
@@ -772,6 +779,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		jobPartOrder.SourceRoot = cleanLocalPath(trimWildcards(tmpSrc))
+		cca.source = cleanLocalPath(tmpSrc)
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -898,11 +906,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.LocalFile():
 		// TODO: Count files enumerated during scanning.
 		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
-		fmt.Println("Scanning...")
 		transfers := 0
 		var traverser resourceTraverser
 
-		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, cca.recursive, func() { transfers++ })
+		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() { transfers++ })
 		if err != nil {
 			return err
 		}
@@ -998,23 +1005,38 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	return nil
 }
 
-func (cca *cookedCopyCmdArgs) initSrcPipeline(ctx context.Context) (p pipeline.Pipeline, err error) {
-	switch cca.fromTo.From() {
+// TODO: include this within initResourceTraverser?
+func initPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo) (p pipeline.Pipeline, err error) {
+	switch location {
+	case common.ELocation.Local():
+		return nil, nil
 	case common.ELocation.Blob():
-		p, err = createBlobPipeline(ctx, cca.credentialInfo)
+		p, err = createBlobPipeline(ctx, credential)
+	case common.ELocation.File():
+		p, err = createFilePipeline(ctx, credential)
+	case common.ELocation.BlobFS():
+		p, err = createBlobFSPipeline(ctx, credential)
+	default:
+		err = fmt.Errorf("can't produce new pipeline for location %s", location)
 	}
 
 	return
 }
 
 func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (relativePath string) {
+	// source is a EXACT path to the file.
 	if object.relativePath == "" {
 		// If we're finding an object from the source, it returns "" if it's already got it.
-		// If we're finding an object on the destination and we get "", we need to hand it the object name.
+		// If we're finding an object on the destination and we get "", we need to hand it the object name (if it's pointing to a folder)
 		if source {
 			relativePath = ""
 		} else {
-			relativePath = "/" + object.name
+			isDir := copyHandlerUtil{}.objectIsContainerOrDirectory(cca.destination, cca.fromTo.To())
+			if isDir {
+				relativePath = "/" + object.name
+			} else {
+				relativePath = ""
+			}
 		}
 
 		return // No adjustments needed because the object is explicitly specified.

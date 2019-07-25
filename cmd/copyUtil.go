@@ -134,6 +134,28 @@ func (util copyHandlerUtil) ConstructCommandStringFromArgs() string {
 	return s.String()
 }
 
+func (util copyHandlerUtil) objectIsContainerOrDirectory(object string, location common.Location) bool {
+	switch location {
+	case common.ELocation.Local():
+		fi, err := os.Stat(object)
+
+		if err != nil {
+			return false
+		}
+
+		return fi.IsDir()
+	default:
+		obj, err := url.Parse(object)
+
+		if err != nil {
+			return false
+		}
+
+		// All of the other implementations just call this one anyway.
+		return util.urlIsContainerOrVirtualDirectory(obj)
+	}
+}
+
 func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
 	if util.urlIsContainerOrVirtualDirectory(url) {
 		return true

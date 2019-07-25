@@ -28,6 +28,8 @@ import (
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+
 	"github.com/Azure/azure-storage-file-go/azfile"
 	"net/url"
 	"os"
@@ -39,18 +41,18 @@ import (
 func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
 	var sourceTraverser resourceTraverser
 
-	if len(cca.listOfFilesLocation) > 0 {
-		f, err := os.Open(cca.listOfFilesLocation)
-		if err != nil {
-			return nil, fmt.Errorf("unable to open %s to retrieve the required list of entities to transfer", cca.listOfFilesLocation)
-		}
+	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
+	rawURL, err := url.Parse(cca.source)
 
-		sourceTraverser = newListTraverser(cca.source, cca.sourceSAS, cca.fromTo.From(), cca.credentialInfo,
-			cca.recursive, f)
-	} else {
-		sourceTraverser, err = newTraverserForCopy(cca.source, cca.sourceSAS, cca.fromTo.From(),
-			cca.credentialInfo, cca.recursive)
+	if err != nil {
+		return nil, err
 	}
+
+	if cca.sourceSAS != "" {
+		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
+	}
+
+	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, &cca.listOfFilesLocation, cca.recursive, func() {})
 
 	// report failure to create traverser
 	if err != nil {
