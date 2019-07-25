@@ -151,6 +151,9 @@ func cleanContainer(container string) {
 	p := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
 	containerUrl := azblob.NewContainerURL(*containerSas, p)
 
+	// Create the container. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
+	_, _ = containerUrl.Create(context.Background(), azblob.Metadata{}, azblob.PublicAccessNone)
+
 	// perform a list blob
 	for marker := (azblob.Marker{}); marker.NotDone(); {
 		// look for all blobs that start with the prefix, so that if a blob is under the virtual directory, it will show up
@@ -201,6 +204,9 @@ func cleanShare(shareURLStr string) {
 
 	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	shareURL := azfile.NewShareURL(*u, p)
+
+	// Create the share. This will fail if it's already present but this saves us the pain of a container being missing for one reason or another.
+	_, _ = shareURL.Create(context.Background(), azfile.Metadata{}, 0)
 
 	_, err = shareURL.Delete(context.Background(), azfile.DeleteSnapshotsOptionInclude)
 	if err != nil {
@@ -268,14 +274,9 @@ func cleanFileSystem(fsURLStr string) {
 	}
 
 	fsURL := azbfs.NewFileSystemURL(*u, createBlobFSPipeline(*u))
-	_, err = fsURL.Delete(ctx)
-	if err != nil {
-		sErr := err.(azbfs.StorageError)
-		if sErr != nil && sErr.Response().StatusCode != http.StatusNotFound {
-			fmt.Println(fmt.Sprintf("error deleting the file system for cleaning, %v", err))
-			os.Exit(1)
-		}
-	}
+	// Instead of error checking the delete, error check the create.
+	// If the filesystem is deleted somehow, this recovers us from CI hell.
+	_, _ = fsURL.Delete(ctx)
 
 	// Sleep seconds to wait the share deletion got succeeded
 	time.Sleep(45 * time.Second)
