@@ -392,7 +392,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # create 10 files inside the sub-dir
         sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
 
-        # uploading the directory with 2 files in the include flag.
+        # uploading the directory with 2 file names (4 files) in the include flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
             .add_flags("include", "test101024_2.txt;test101024_3.txt").add_flags("output-type",
@@ -404,8 +404,8 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing output in Json format')
-        # Number of successful transfer should be 2 and there should be not a failed transfer
-        self.assertEquals(x.TransfersCompleted, 2)
+        # Number of successful transfer should be 4 and there should be not a failed transfer
+        self.assertEquals(x.TransfersCompleted, 4)
         self.assertEquals(x.TransfersFailed, 0)
 
         # uploading the directory with sub-dir in the include flag.
@@ -435,7 +435,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         # create 10 files inside the sub-dir
         sub_dir_n_file_path = util.create_test_n_files(1024, 10, sub_dir_name)
 
-        # uploading the directory with 2 files in the exclude flag.
+        # uploading the directory with 2 file names (4 total) in the exclude flag.
         result = util.Command("copy").add_arguments(dir_n_files_path).add_arguments(util.test_container_url). \
             add_flags("recursive", "true").add_flags("log-level", "info") \
             .add_flags("exclude", "test101024_2.txt;test101024_3.txt").add_flags("output-type",
@@ -447,10 +447,10 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        # Number of successful transfer should be 18 and there should be not failed transfer
-        # Since total number of files inside dir_exclude_flag_set_upload is 20 and 2 files are set
-        # to exclude, so total number of transfer should be 18
-        self.assertEquals(x.TransfersCompleted, 18)
+        # Number of successful transfer should be 16 and there should be not failed transfer
+        # Since total number of files inside dir_exclude_flag_set_upload is 20 and 4 files are set
+        # to exclude, so total number of transfer should be 16
+        self.assertEquals(x.TransfersCompleted, 16)
         self.assertEquals(x.TransfersFailed, 0)
 
         # uploading the directory with sub-dir in the exclude flag.
