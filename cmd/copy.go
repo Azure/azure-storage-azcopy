@@ -1024,6 +1024,36 @@ func initPipeline(ctx context.Context, location common.Location, credential comm
 }
 
 func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (relativePath string) {
+	var pathEncodeRules = func(path string) string {
+		loc := common.ELocation.Unknown()
+
+		if source {
+			loc = cca.fromTo.From()
+		} else {
+			loc = cca.fromTo.To()
+		}
+		pathParts := strings.Split(path, "/")
+
+		// Encode disallowed characters on windows. Retain this functionality on other OSes.
+		// TODO: Inform tests of this
+		if loc == common.ELocation.Local() {
+			invalidChars := `<>\/:"|?*` + string(0x00)
+
+			for _, c := range strings.Split(invalidChars, "") {
+				for k, p := range pathParts {
+					pathParts[k] = strings.ReplaceAll(p, c, url.PathEscape(c))
+				}
+			}
+		} else {
+			for k, p := range pathParts {
+				pathParts[k] = url.PathEscape(p)
+			}
+		}
+
+		path = strings.Join(pathParts, "/")
+		return path
+	}
+
 	// source is a EXACT path to the file.
 	if object.relativePath == "" {
 		// If we're finding an object from the source, it returns "" if it's already got it.
@@ -1039,7 +1069,7 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (rela
 			}
 		}
 
-		return // No adjustments needed because the object is explicitly specified.
+		return pathEncodeRules(relativePath)
 	}
 
 	// If it's out here, the source is a folder (or wildcard) of some kind.
@@ -1050,26 +1080,10 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (rela
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
-		sepsplits := strings.Split(strings.Replace(cca.source, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1), "/")
-		relativePath = "/" + sepsplits[len(sepsplits)-1] + relativePath
+		relativePath = "/" + filepath.Base(cca.source) + relativePath
 	}
 
-	// Ensure that encoding only occurs on Windows, to a local destination.
-	if common.OS_PATH_SEPARATOR == "\\" && !source && cca.fromTo.To() == common.ELocation.Local() {
-		// Encode unsupported characters.
-		invalidChars := `<>\/:"|?*` + string(0x00) // ASCII NUL is unsupported.
-		paths := strings.Split(relativePath, "/")
-		for k, v := range paths {
-			for _, c := range strings.Split(invalidChars, "") {
-				paths[k] = strings.ReplaceAll(v, c, "_")
-			}
-			paths[k] = strings.TrimSpace(v)
-		}
-
-		relativePath = strings.Join(paths, "/")
-	}
-
-	return
+	return pathEncodeRules(relativePath)
 }
 
 // Initialize the modular filters outside of copy to increase readability.

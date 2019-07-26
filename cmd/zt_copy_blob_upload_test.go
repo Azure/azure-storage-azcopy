@@ -62,7 +62,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.
 			c.Assert(len(mockedRPC.transfers), chk.Equals, 1)
 			d, err := url.PathUnescape(mockedRPC.transfers[0].Destination) //Unescape the destination, as we have special characters.
 			c.Assert(err, chk.IsNil)
-			c.Assert(d, chk.Equals, srcFileName)
+			c.Assert(d, chk.Equals, common.AZCOPY_PATH_SEPARATOR_STRING+srcFileName)
 		})
 
 		// clean the RPC for the next test

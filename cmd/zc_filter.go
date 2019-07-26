@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"path"
+	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -53,7 +54,12 @@ type excludeFilter struct {
 }
 
 func (f *excludeFilter) doesPass(storedObject storedObject) bool {
-	matched, err := path.Match(f.pattern, storedObject.name)
+	checkItem := storedObject.name
+	if strings.Contains(f.pattern, "/") {
+		checkItem = storedObject.relativePath
+	}
+
+	matched, err := path.Match(f.pattern, checkItem)
 
 	// if the pattern failed to match with an error, then we assume the pattern is invalid
 	// and let it pass
@@ -96,7 +102,12 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 	}
 
 	for _, pattern := range f.patterns {
-		matched, err := path.Match(pattern, storedObject.name)
+		checkItem := storedObject.name
+		if strings.Contains(pattern, "/") {
+			checkItem = storedObject.relativePath
+		}
+
+		matched, err := path.Match(pattern, checkItem)
 
 		// if the pattern failed to match with an error, then we assume the pattern is invalid
 		// and ignore it
