@@ -60,11 +60,9 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 	sourceURLParts := azblob.NewBlobURLParts(*e.sourceURL)
 	if sourceURLParts.SAS.Encode() == "" {
 		// Grab OAuth token and craft pipeline to create user delegation SAS token
-		hasToken, err := GetUserOAuthTokenManagerInstance().HasCachedToken()
+		hasToken, _ := GetUserOAuthTokenManagerInstance().HasCachedToken()
 
-		if err != nil {
-			return errors.New(fmt.Sprintf("no viable form of auth present on source: couldn't get cached token: %s", err))
-		}
+		hasToken = hasToken || common.EnvVarOAuthTokenInfoExists()
 
 		if !hasToken {
 			return errors.New("no viable form of auth present on source: no cached token present")
@@ -89,7 +87,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		rawURL := *e.sourceURL
 		rawURL.Path = ""
 		currentTime := time.Now()
-		tomorrow := currentTime.Add(time.Hour*24)
+		tomorrow := currentTime.Add(time.Hour * 24)
 
 		sourceServiceURL := azblob.NewServiceURL(rawURL, udkp)
 		udc, err := sourceServiceURL.GetUserDelegationCredential(ctx, azblob.NewKeyInfo(currentTime, tomorrow), nil, nil)
@@ -99,10 +97,10 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		}
 
 		SASValues := azblob.BlobSASSignatureValues{
-			Protocol: azblob.SASProtocolHTTPS,
-			StartTime: currentTime,
-			ExpiryTime: tomorrow,
-			Permissions: "rl",
+			Protocol:      azblob.SASProtocolHTTPS,
+			StartTime:     currentTime,
+			ExpiryTime:    tomorrow,
+			Permissions:   "rl",
 			ContainerName: sourceURLParts.ContainerName,
 		}
 
@@ -116,7 +114,7 @@ func (e *copyS2SMigrationBlobEnumerator) enumerate(cca *cookedCopyCmdArgs) error
 		sourceURLParts.SAS = SASParams
 		*e.sourceURL = sourceURLParts.URL()
 		e.SourceSAS = SASParams.Encode()
-		e.srcBlobURLPartExtension = blobURLPartsExtension{ sourceURLParts } // For directories
+		e.srcBlobURLPartExtension = blobURLPartsExtension{sourceURLParts} // For directories
 		cca.sourceSAS = SASParams.Encode()
 	}
 
