@@ -230,10 +230,10 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
         test_oauth_container_url = test_oauth_container_url + "/"
     
-    # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
-    test_oauth_container_validate_sas_url = container_oauth_validate
-    if not clean_test_container(test_oauth_container_validate_sas_url):
-        print("failed to clean OAuth SAS validation container.")
+    # No need to do cleanup on oauth validation URL.
+    # Removed this cleanup step because we use a container SAS.
+    # Therefore, we'd delete the container successfully with the container level SAS
+    # and just not be able to re-make it with the container SAS
 
     test_premium_account_contaier_url = premium_container_sas
     if not clean_test_container(test_premium_account_contaier_url):
