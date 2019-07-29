@@ -1001,6 +1001,7 @@ func (PerfConstraint) Unknown() PerfConstraint         { return PerfConstraint(0
 func (PerfConstraint) Disk() PerfConstraint            { return PerfConstraint(1) }
 func (PerfConstraint) Service() PerfConstraint         { return PerfConstraint(2) }
 func (PerfConstraint) PageBlobService() PerfConstraint { return PerfConstraint(3) }
+func (PerfConstraint) CPU() PerfConstraint     	       { return PerfConstraint(4) }
 
 // others will be added in future
 
