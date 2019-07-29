@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -134,9 +135,13 @@ func initJobsAdmin(appCtx context.Context, concurrentConnections int, concurrent
 	// Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
 	// count 100 MB towards this limit, but actually consume 128 MB)
 	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
+	maxTotalGB := float32(16) // Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
+	if strconv.IntSize == 32 {
+		maxTotalGB = 1 // 32-bit apps can only address 2 GB, and best to leave plenty for needs outside our cache (e.g. running the app itself)
+	}
 	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
-	if gbToUse > 16 {
-		gbToUse = 16 // cap it. Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
+	if gbToUse > maxTotalGB {
+		gbToUse = maxTotalGB // cap it.
 	}
 	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
 
