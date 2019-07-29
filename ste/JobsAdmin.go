@@ -110,6 +110,9 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		panic("initJobsAdmin was already called once")
 	}
 
+	// let our CPU monitor self-calibrate before we start doing any real work
+	cpuMon := common.NewCalibratedCpuUsageMonitor()
+
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
 	// parts channel. Any JobPart which comes from FE and partChannel is full,
@@ -152,6 +155,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		slicePool:                common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:             common.NewCacheLimiter(maxRamBytesToUse),
 		fileCountLimiter:         common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
+		cpuMonitor:               cpuMon,
 		appCtx:                   appCtx,
 		commandLineMbpsCap:       targetRateInMegaBitsPerSec,
 		provideBenchmarkResults:  providePerfAdvice,
@@ -460,6 +464,7 @@ type jobsAdmin struct {
 	concurrencyTuner            ConcurrencyTuner
 	commandLineMbpsCap          int64
 	provideBenchmarkResults     bool
+	cpuMonitor          common.CPUMonitor
 }
 
 type CoordinatorChannels struct {
@@ -520,7 +525,7 @@ func (ja *jobsAdmin) JobMgrEnsureExists(jobID common.JobID,
 	return ja.jobIDToJobMgr.EnsureExists(jobID,
 		func() IJobMgr {
 			// Return existing or new IJobMgr to caller
-			return newJobMgr(ja.concurrency, ja.logger, jobID, ja.appCtx, level, commandString, ja.logDir)
+			return newJobMgr(ja.concurrency, ja.logger, jobID, ja.appCtx, ja.cpuMonitor, level, commandString, ja.logDir)
 		})
 }
 

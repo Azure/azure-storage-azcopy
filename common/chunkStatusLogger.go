@@ -232,14 +232,16 @@ type chunkStatusLogger struct {
 	outputEnabled                   bool
 	unsavedEntries                  chan *chunkWaitState
 	flushDone                       chan struct{}
+	cpuMonitor                      CPUMonitor
 }
 
-func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
+func NewChunkStatusLogger(jobID JobID, cpuMon CPUMonitor, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
 		unsavedEntries: make(chan *chunkWaitState, 1000000),
 		flushDone:      make(chan struct{}),
+		cpuMonitor:     cpuMon,
 	}
 	if enableOutput {
 		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
@@ -399,6 +401,9 @@ func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection, rc 
 
 	case td == ETransferDirection.Download() && csl.isDownloadDiskConstrained():
 		return EPerfConstraint.Disk()
+
+	case csl.cpuMonitor.CPUContentionExists():
+		return EPerfConstraint.CPU()
 
 	default:
 		return EPerfConstraint.Unknown()
