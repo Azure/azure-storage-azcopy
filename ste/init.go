@@ -443,6 +443,10 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			}
 		}
 	})
+
+	// Add on byte count from files in flight, to get a more accurate running total
+	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+
 	// This is added to let FE to continue fetching the Job Progress Summary
 	// in case of resume. In case of resume, the Job is already completely
 	// ordered so the progress summary should be fetched until all job parts
@@ -575,6 +579,10 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 			}
 		}
 	})
+
+	// Add on byte count from files in flight, to get a more accurate running total
+	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+
 	// This is added to let FE to continue fetching the Job Progress Summary
 	// in case of resume. In case of resume, the Job is already completely
 	// ordered so the progress summary should be fetched until all job parts

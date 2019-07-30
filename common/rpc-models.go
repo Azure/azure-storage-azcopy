@@ -143,9 +143,13 @@ type ListJobSummaryResponse struct {
 	TransfersCompleted uint32
 	TransfersFailed    uint32
 	TransfersSkipped   uint32
-	BytesOverWire      uint64
-	// sum of the size of transfer completed successfully so far.
+
+	// includes bytes sent in retries (i.e. has double counting, if there are retries)
+	BytesOverWire uint64
+
+	// does not include bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
 	TotalBytesTransferred uint64
+
 	// sum of the total transfer enumerated so far.
 	TotalBytesEnumerated uint64
 	FailedTransfers      []TransferDetail
@@ -162,19 +166,23 @@ type ListSyncJobSummaryResponse struct {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
-	CompleteJobOrdered       bool
-	JobStatus                JobStatus
-	CopyTotalTransfers       uint32
-	CopyTransfersCompleted   uint32
-	CopyTransfersFailed      uint32
-	BytesOverWire            uint64
+	CompleteJobOrdered     bool
+	JobStatus              JobStatus
+	CopyTotalTransfers     uint32
+	CopyTransfersCompleted uint32
+	CopyTransfersFailed    uint32
+
+	// includes bytes sent in retries (i.e. has double counting, if there are retries)
+	BytesOverWire uint64
+
 	DeleteTotalTransfers     uint32
 	DeleteTransfersCompleted uint32
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
 	PerfConstraint           PerfConstraint
 	PerfStrings              []string `json:"-"`
-	// sum of the size of transfer completed successfully so far.
+
+	// does not include bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
 	TotalBytesTransferred uint64
 	// sum of the total transfer enumerated so far.
 	TotalBytesEnumerated uint64
