@@ -43,16 +43,32 @@ type blobTraverser struct {
 }
 
 func (t *blobTraverser) isDirectory() bool {
-	blobURL := azblob.NewBlobURL(*t.rawURL, t.p)
-	blobProps, blobPropertiesErr := blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
-
-	// if there was no problem getting the properties, it means that we are looking at a single blob
-	if blobPropertiesErr == nil && gCopyUtil.doesBlobRepresentAFolder(blobProps.NewMetadata()) {
-		return true
+	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+	if isDirDirect {
+		return isDirDirect
 	}
 
-	// Folders don't appear on normal blob storage
-	if blobPropertiesErr != nil {
+	// To find out if it's a directory or a individual blob, let's try to list from it.
+	blobURLParts := blobURLPartsExtension{azblob.NewBlobURLParts(*t.rawURL)}
+
+	rawContainerURL := blobURLParts.getContainerURL()
+	searchPrefix := blobURLParts.BlobName
+
+	// If this is a single blob, ensure it doesn't get included in the search.
+	if !strings.HasSuffix(searchPrefix, "/") {
+		searchPrefix += "/"
+	}
+
+	containerURL := azblob.NewContainerURL(rawContainerURL, t.p)
+	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{})
+
+	if err != nil {
+		return false
+	}
+
+	// If items exist in the search, this IS a virtual directory.
+	// Virtual directories aren't otherwise possible in blob storage.
+	if len(resp.Segment.BlobItems) > 0 {
 		return true
 	}
 
