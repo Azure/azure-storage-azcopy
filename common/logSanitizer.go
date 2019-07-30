@@ -43,7 +43,7 @@ func NewAzCopyLogSanitizer() pipeline.LogSanitizer {
 }
 
 var sensitiveQueryStringKeys = []string{
-	strings.ToLower(SigAzure),
+	"sig", // was strings.ToLower(SigAzure), but that isn't fully init-order-safe, see init() method below
 	//omitted because covered by "signature" below strings.ToLower(SigXAmzForAws),
 	"signature", // covers both "signature" and x-amz-signature. The former may be used in AWS authorization headers. Not sure if we ever log those, but may as well redact them if we do
 	"token",     // seems worth removing in case something uses it one day (e.g. if we support a new backend)
@@ -89,6 +89,7 @@ var sensitiveRegexMap = make(map[string]*regexp.Regexp)
 
 // init a map of pre-prepared regexes, one for each key
 func init() {
+	mapContainsAzureSig := false
 	for _, key := range sensitiveQueryStringKeys {
 		// We don't care what's before the key (in a query string it will always be ? or &, but that's not
 		// the case in say, an auth header).
@@ -99,5 +100,19 @@ func init() {
 		// Regex has two groups: first gets key and delimiter.
 		// Second group gets as many chars as possible that do not terminate the value.
 		sensitiveRegexMap[key] = regexp.MustCompile("(?i)(?P<key>" + key + "[ \t]*[:=][ \t]*)(?P<value>[^& ,;\t\n\r]+)")
+
+		// see comment below
+		if key == strings.ToLower(SigAzure) {
+			mapContainsAzureSig = true
+		}
+	}
+
+	// Double check.
+	// We can't directly do strings.ToLower(SigAzure) in the declaration of
+	// sensitiveRegexMap itself, since it won't be ready if something else logs before that
+	// initialization has happened (as can be the case e.g. init of lifecylemanager).
+	// So we just check here to make sure we have something that matches that constant.
+	if !mapContainsAzureSig {
+		panic("sensitiveQueryStrings is misconfigured and does not contain Azure sign")
 	}
 }
