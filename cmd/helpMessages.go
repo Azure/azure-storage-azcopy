@@ -290,3 +290,10 @@ Sync an entire directory but exclude certain files from the scope (ex: every fil
 
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
 `
+
+const docCmdShortDescription = "Generates documentation for the tool in Markdown format"
+
+const docCmdLongDescription = `Generates documentation for the tool in Markdown format, and stores them in the designated location.
+
+By default, the files are stored in a folder named 'doc' inside the current directory.
+`
