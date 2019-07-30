@@ -906,17 +906,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.LocalFile():
 		// TODO: Count files enumerated during scanning.
 		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
-		transfers := 0
 		var traverser resourceTraverser
 
-		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() { transfers++ })
+		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() {})
 		if err != nil {
 			return err
 		}
 
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
-			transfers++
 			src := cca.findObject(true, object)
 			// Why hand in the source on the destination? Because we need to adjust the path for the source if there's no wildcard.
 			dst := cca.findObject(false, object)
@@ -931,7 +929,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			return addTransfer(&jobPartOrder, transfer, cca)
 		}
 		finalizer := func() error {
-			if transfers == 0 {
+			if len(jobPartOrder.Transfers) == 0 {
 				return errors.New("cannot find source to upload")
 			}
 
