@@ -100,6 +100,9 @@ func Execute(azsAppPathFolder, logPathFolder string, maxFileAndSocketHandles int
 }
 
 func init() {
+	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
+	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+
 	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
 
