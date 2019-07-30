@@ -40,6 +40,16 @@ type localTraverser struct {
 	incrementEnumerationCounter func()
 }
 
+func (t *localTraverser) isDirectory() bool {
+	props, err := os.Stat(t.fullPath)
+
+	if err != nil {
+		return false
+	}
+
+	return props.IsDir()
+}
+
 func (t *localTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 

@@ -42,6 +42,23 @@ type blobTraverser struct {
 	incrementEnumerationCounter func()
 }
 
+func (t *blobTraverser) isDirectory() bool {
+	blobURL := azblob.NewBlobURL(*t.rawURL, t.p)
+	blobProps, blobPropertiesErr := blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
+
+	// if there was no problem getting the properties, it means that we are looking at a single blob
+	if blobPropertiesErr == nil && gCopyUtil.doesBlobRepresentAFolder(blobProps.NewMetadata()) {
+		return true
+	}
+
+	// Folders don't appear on normal blob storage
+	if blobPropertiesErr != nil {
+		return true
+	}
+
+	return false
+}
+
 func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool) {
 	blobURL := azblob.NewBlobURL(*t.rawURL, t.p)
 	blobProps, blobPropertiesErr := blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})

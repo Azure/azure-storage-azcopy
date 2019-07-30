@@ -770,12 +770,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
 		}
 
-		// If we've gotten this far and it fails, it's probably a wildcard check.
-		fi, err := os.Stat(cca.source)
-		if err == nil && fi.IsDir() && !cca.recursive {
-			return errors.New("cannot transfer folder without --recursive")
-		}
-
 		jobPartOrder.SourceRoot = cleanLocalPath(trimWildcards(tmpSrc))
 		cca.source = cleanLocalPath(tmpSrc)
 	case common.ELocation.Blob():
@@ -909,6 +903,12 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() {})
 		if err != nil {
 			return err
+		}
+
+		isDir := traverser.isDirectory()
+
+		if isDir && !cca.recursive {
+			return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
 		}
 
 		filters := cca.initModularFilters()

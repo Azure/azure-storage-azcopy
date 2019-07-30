@@ -19,6 +19,10 @@ type listTraverser struct {
 
 type childTraverserGenerator func(childPath string) (resourceTraverser, error)
 
+func (l *listTraverser) isDirectory() bool {
+	return false
+}
+
 func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	// spawn a scanner to read the list of entities one line at a time
 	scanner := bufio.NewScanner(l.listReader)

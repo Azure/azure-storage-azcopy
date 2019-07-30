@@ -41,6 +41,21 @@ type fileTraverser struct {
 	incrementEnumerationCounter func()
 }
 
+func (t *fileTraverser) isDirectory() bool {
+	_, isFile := t.getPropertiesIfSingleFile()
+
+	if !isFile {
+		dirURL := azfile.NewDirectoryURL(*t.rawURL, t.p)
+		_, err := dirURL.GetProperties(t.ctx)
+
+		if err != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesResponse, bool) {
 	fileURL := azfile.NewFileURL(*t.rawURL, t.p)
 	fileProps, filePropertiesErr := fileURL.GetProperties(t.ctx)

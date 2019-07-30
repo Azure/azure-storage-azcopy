@@ -52,19 +52,33 @@ func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Contex
 	return
 }
 
-func (t *blobFSTraverser) getPropertiesIfSingleFile() (*azbfs.PathGetPropertiesResponse, bool) {
+func (t *blobFSTraverser) isDirectory() bool {
+	pgr, _, err := t.getPropertiesIfSingleFile()
+
+	if err != nil {
+		return copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+	}
+
+	if pgr.XMsResourceType() == "directory" {
+		return true
+	}
+
+	return false
+}
+
+func (t *blobFSTraverser) getPropertiesIfSingleFile() (*azbfs.PathGetPropertiesResponse, bool, error) {
 	pathURL := azbfs.NewFileURL(*t.rawURL, t.p)
 	pgr, err := pathURL.GetProperties(t.ctx)
 
 	if err != nil {
-		return nil, false
+		return nil, false, err
 	}
 
 	if pgr.XMsResourceType() == "directory" {
-		return pgr, false
+		return pgr, false, nil
 	}
 
-	return pgr, true
+	return pgr, true, nil
 }
 
 func (_ *blobFSTraverser) parseLMT(t string) time.Time {
@@ -80,7 +94,7 @@ func (_ *blobFSTraverser) parseLMT(t string) time.Time {
 func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	bfsURLParts := azbfs.NewBfsURLParts(*t.rawURL)
 
-	pathProperties, isFile := t.getPropertiesIfSingleFile()
+	pathProperties, isFile, _ := t.getPropertiesIfSingleFile()
 	if isFile {
 		storedObject := newStoredObject(
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),

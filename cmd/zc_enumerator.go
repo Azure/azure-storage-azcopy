@@ -82,6 +82,7 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
+	isDirectory() bool
 }
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
