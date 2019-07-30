@@ -772,10 +772,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		// If we've gotten this far and it fails, it's probably a wildcard check.
 		fi, err := os.Stat(cca.source)
-		if err == nil {
-			if fi.IsDir() && !cca.recursive {
-				return errors.New("cannot transfer folder without --recursive")
-			}
+		if err == nil && fi.IsDir() && !cca.recursive {
+			return errors.New("cannot transfer folder without --recursive")
 		}
 
 		jobPartOrder.SourceRoot = cleanLocalPath(trimWildcards(tmpSrc))
