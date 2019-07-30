@@ -899,13 +899,22 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// TODO: Count files enumerated during scanning.
 		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
 		var traverser resourceTraverser
+		var destTraverser resourceTraverser
 
 		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() {})
 		if err != nil {
 			return err
 		}
 
+		// spawn a destination traverser but don't actually use it to traverse.
+		// We're just using this to check if our destination is a directory or not.
+		destTraverser, err = initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &cca.credentialInfo, &cca.followSymlinks, nil, false, func() {})
+		if err != nil {
+			return err
+		}
+
 		isDir := traverser.isDirectory()
+		isDestDir := destTraverser.isDirectory()
 
 		if isDir && !cca.recursive {
 			return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
@@ -913,9 +922,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
-			src := cca.findObject(true, object)
+			src := cca.findObject(true, isDestDir, object)
 			// Why hand in the source on the destination? Because we need to adjust the path for the source if there's no wildcard.
-			dst := cca.findObject(false, object)
+			dst := cca.findObject(false, isDestDir, object)
 
 			transfer := common.CopyTransfer{
 				Source:           src,
@@ -1019,7 +1028,15 @@ func initPipeline(ctx context.Context, location common.Location, credential comm
 	return
 }
 
-func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (relativePath string) {
+func trimWildcards(path string) string {
+	if strings.Index(path, "*") == -1 {
+		return path
+	}
+
+	return path[:strings.LastIndex(replacePathSeparators(path[:strings.Index(path, "*")]), "/")+1]
+}
+
+func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object storedObject) (relativePath string) {
 	var pathEncodeRules = func(path string) string {
 		loc := common.ELocation.Unknown()
 
@@ -1057,8 +1074,7 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, object storedObject) (rela
 		if source {
 			relativePath = ""
 		} else {
-			isDir := copyHandlerUtil{}.objectIsContainerOrDirectory(cca.destination, cca.fromTo.To())
-			if isDir {
+			if dstIsDir {
 				relativePath = "/" + object.name
 			} else {
 				relativePath = ""
