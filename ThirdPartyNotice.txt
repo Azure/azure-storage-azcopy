@@ -305,6 +305,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 russross/blackfriday, Copyright © 2011 Russ Ross. All rights reserved.
 
+Simplified BSD License
+
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions
 are met:
