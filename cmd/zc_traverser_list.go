@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net/url"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -13,7 +11,7 @@ import (
 // a meta traverser that goes through a list of paths (potentially directory entities) and scans them one by one
 // behaves like a single traverser (basically a "traverser of traverser")
 type listTraverser struct {
-	listReader              io.ReadCloser
+	listReader              chan string
 	childTraverserGenerator childTraverserGenerator
 }
 
@@ -23,11 +21,12 @@ func (l *listTraverser) isDirectory(isDest bool) bool {
 	return false
 }
 
+// To kill the traverser, close() the channel under it.
+// Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
 func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	// spawn a scanner to read the list of entities one line at a time
-	scanner := bufio.NewScanner(l.listReader)
-	for scanner.Scan() {
-		childPath := scanner.Text()
+	childPath, ok := <-l.listReader
+	for ; ok; childPath, ok = <-l.listReader {
 
 		// fetch an appropriate traverser, and go through the child path, which could be
 		//   1. a single entity
@@ -58,26 +57,27 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 		}
 	}
 
-	// in case the list of entities was not read properly, we can no longer continue enumeration
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("unable to scan the required list of entities due to error: %s", err)
-	}
-
 	// close the reader before returning
-	return l.listReader.Close()
+	return nil
 }
 
 func newListTraverser(parent string, parentSAS string, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context,
-	recursive bool, listReader io.ReadCloser) resourceTraverser {
+	recursive bool, listChan chan string) resourceTraverser {
 	var traverserGenerator childTraverserGenerator
 
 	traverserGenerator = func(relativeChildPath string) (resourceTraverser, error) {
-		// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation
-		childURL, _ := url.Parse(parent)
-		childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
+		source := ""
+		if parentType != common.ELocation.Local() {
+			// assume child path is not URL-encoded yet, this is consistent with the behavior of previous implementation
+			childURL, _ := url.Parse(parent)
+			childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
 
-		// construct traverser that goes through child
-		source := copyHandlerUtil{}.appendQueryParamToUrl(childURL, parentSAS).String()
+			// construct traverser that goes through child
+			source = copyHandlerUtil{}.appendQueryParamToUrl(childURL, parentSAS).String()
+		} else {
+			// is local, only generate the full path
+			source = common.GenerateFullPath(parent, relativeChildPath)
+		}
 
 		traverser, err := initResourceTraverser(source, parentType, ctx, credential, nil, nil, recursive, func() {})
 		if err != nil {
@@ -87,7 +87,7 @@ func newListTraverser(parent string, parentSAS string, parentType common.Locatio
 	}
 
 	return &listTraverser{
-		listReader:              listReader,
+		listReader:              listChan,
 		childTraverserGenerator: traverserGenerator,
 	}
 }

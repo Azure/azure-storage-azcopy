@@ -60,8 +60,8 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
-	includeFilters := buildIncludeFilters(cca.includePatterns)
-	excludeFilters := buildExcludeFilters(cca.excludePatterns)
+	includeFilters := buildIncludeFilters(cca.includePatterns, false) // TODO: Add include-path in here?
+	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)

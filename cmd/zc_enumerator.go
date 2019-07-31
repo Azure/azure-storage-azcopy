@@ -21,11 +21,10 @@
 package cmd
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -121,7 +120,20 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, err
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, f)
+		// Initialize a bufferless channel
+		fileChan := make(chan string)
+
+		// Scan the file in a seperate routine
+		go func() {
+			defer close(fileChan) // Close the channel at the end.
+
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				fileChan <- scanner.Text()
+			}
+		}()
+
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, fileChan)
 		return output, nil
 	}
 
@@ -141,13 +153,16 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			}
 
 			// A channel really would be preferable for this kind of behaviour but whatever.
-			strToRead := &bytes.Buffer{}
+			globChan := make(chan string)
 
-			for _, v := range matches {
-				strToRead.WriteString(strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath) + "\n")
-			}
+			go func() {
+				defer close(globChan)
+				for _, v := range matches {
+					globChan <- strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath)
+				}
+			}()
 
-			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, ioutil.NopCloser(strToRead))
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, globChan)
 		} else {
 			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}
