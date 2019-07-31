@@ -40,7 +40,11 @@ type localTraverser struct {
 	incrementEnumerationCounter func()
 }
 
-func (t *localTraverser) isDirectory() bool {
+func (t *localTraverser) isDirectory(isDest bool) bool {
+	if strings.HasSuffix(t.fullPath, "/") {
+		return true
+	}
+
 	props, err := os.Stat(t.fullPath)
 
 	if err != nil {

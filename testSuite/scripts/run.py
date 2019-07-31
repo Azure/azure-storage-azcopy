@@ -191,10 +191,7 @@ def main():
                          BlobFs_Upload_SAS_User_Scenarios,
                          Azcopy_Operation_User_Scenario,
                          FileShare_Download_User_Scenario,
-                         FileShare_Upload_User_Scenario,
-                         BlobFs_Upload_ShareKey_User_Scenarios,
-                         BlobFs_Download_SharedKey_User_Scenarios,
-                         Service_2_Service_Copy_User_Scenario]
+                         FileShare_Upload_User_Scenario]
     suites_list = []
 
     loader = unittest.TestLoader()

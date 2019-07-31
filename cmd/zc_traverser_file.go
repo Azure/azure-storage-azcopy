@@ -41,19 +41,8 @@ type fileTraverser struct {
 	incrementEnumerationCounter func()
 }
 
-func (t *fileTraverser) isDirectory() bool {
-	_, isFile := t.getPropertiesIfSingleFile()
-
-	if !isFile {
-		dirURL := azfile.NewDirectoryURL(*t.rawURL, t.p)
-		_, err := dirURL.GetProperties(t.ctx)
-
-		if err != nil {
-			return true
-		}
-	}
-
-	return false
+func (t *fileTraverser) isDirectory(isDest bool) bool {
+	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p) // This handles all of the fanciness for us.
 }
 
 func (t *fileTraverser) getPropertiesIfSingleFile() (*azfile.FileGetPropertiesResponse, bool) {

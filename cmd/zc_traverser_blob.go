@@ -42,9 +42,9 @@ type blobTraverser struct {
 	incrementEnumerationCounter func()
 }
 
-func (t *blobTraverser) isDirectory() bool {
+func (t *blobTraverser) isDirectory(isDest bool) bool {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
-	if isDirDirect {
+	if isDirDirect || isDest { // We do not need to do an actual check on the destination
 		return isDirDirect
 	}
 

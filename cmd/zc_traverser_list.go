@@ -19,7 +19,7 @@ type listTraverser struct {
 
 type childTraverserGenerator func(childPath string) (resourceTraverser, error)
 
-func (l *listTraverser) isDirectory() bool {
+func (l *listTraverser) isDirectory(isDest bool) bool {
 	return false
 }
 

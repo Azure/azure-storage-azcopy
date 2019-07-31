@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -901,20 +902,31 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		var traverser resourceTraverser
 		var destTraverser resourceTraverser
 
+		dst := cca.destination
+
+		if cca.destinationSAS != "" {
+			destURL, err := url.Parse(dst)
+
+			if err != nil {
+				return err
+			}
+
+			destURL = copyHandlerUtil{}.appendQueryParamToUrl(destURL, cca.destinationSAS)
+			dst = destURL.String()
+		}
+
 		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() {})
 		if err != nil {
 			return err
 		}
 
-		// spawn a destination traverser but don't actually use it to traverse.
-		// We're just using this to check if our destination is a directory or not.
-		destTraverser, err = initResourceTraverser(cca.destination, cca.fromTo.To(), &ctx, &cca.credentialInfo, &cca.followSymlinks, nil, false, func() {})
+		destTraverser, err = initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.credentialInfo, &cca.followSymlinks, nil, cca.recursive, func() {})
 		if err != nil {
 			return err
 		}
 
-		isDir := traverser.isDirectory()
-		isDestDir := destTraverser.isDirectory()
+		isDir := traverser.isDirectory(false)
+		isDestDir := destTraverser.isDirectory(true)
 
 		if isDir && !cca.recursive {
 			return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
@@ -1047,9 +1059,9 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object stor
 		}
 		pathParts := strings.Split(path, "/")
 
-		// Encode disallowed characters on windows. Retain this functionality on other OSes.
+		// Encode disallowed characters on windows.
 		// TODO: Inform tests of this
-		if loc == common.ELocation.Local() {
+		if loc == common.ELocation.Local() && runtime.GOOS == "windows" {
 			invalidChars := `<>\/:"|?*` + string(0x00)
 
 			for _, c := range strings.Split(invalidChars, "") {
@@ -1057,7 +1069,7 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object stor
 					pathParts[k] = strings.ReplaceAll(p, c, url.PathEscape(c))
 				}
 			}
-		} else {
+		} else if loc != common.ELocation.Local() {
 			for k, p := range pathParts {
 				pathParts[k] = url.PathEscape(p)
 			}
