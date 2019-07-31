@@ -86,5 +86,7 @@ func init() {
 	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	deleteCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	deleteCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include files whose relative paths match the pattern list. Example: myFolder/*.txt;*/mySubDir/*.pdf")
+	deleteCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "only exclude files whose relative paths match the pattern list. Example: myFolder/*.txt;*/mySubDir/*.pdf")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of a file which contains the list of files/directories to be deleted. The relative paths should be delimited by line breaks, and the paths should NOT be URL-encoded.")
 }

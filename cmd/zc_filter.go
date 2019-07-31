@@ -38,6 +38,10 @@ type excludeBlobTypeFilter struct {
 	blobTypes map[azblob.BlobType]bool
 }
 
+func (f *excludeBlobTypeFilter) doesSupportThisOS() (msg string, supported bool) {
+	return "", true
+}
+
 func (f *excludeBlobTypeFilter) doesPass(object storedObject) bool {
 	if _, ok := f.blobTypes[object.blobType]; !ok {
 		// For readability purposes, focus on returning false.
