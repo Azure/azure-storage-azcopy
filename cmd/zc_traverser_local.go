@@ -108,7 +108,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 							result, err = filepath.Abs(result)
 
 							if err != nil {
-								fmt.Println(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
+								glcm.Info(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
 								return nil
 							}
 

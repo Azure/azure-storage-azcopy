@@ -73,8 +73,10 @@ type rawCopyCmdArgs struct {
 	legacyExclude string
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	include string
-	exclude string
+	include     string
+	exclude     string
+	includePath string
+	excludePath string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -270,7 +272,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// TODO: When further in the refactor, just check this against a map
-	// ... so I don't have to write 50 thousand assertions.
 	if cooked.fromTo.From() != common.ELocation.Local() {
 		// initialize the include map which contains the list of files to be included
 		// parse the string passed in include flag
@@ -475,6 +476,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// parse the filter patterns
 	cooked.includePatterns = raw.parsePatterns(raw.include)
 	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+	cooked.includePathPatterns = raw.parsePatterns(raw.includePath)
+	cooked.excludePathPatterns = raw.parsePatterns(raw.excludePath)
 
 	return cooked, nil
 }
@@ -510,8 +513,10 @@ type cookedCopyCmdArgs struct {
 	legacyExclude map[string]int
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	includePatterns []string
-	excludePatterns []string
+	includePatterns     []string
+	includePathPatterns []string
+	excludePatterns     []string
+	excludePathPatterns []string
 
 	// filters from flags
 	listOfFilesToCopy   []string
@@ -897,8 +902,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.EFromTo.LocalBlob(),
 		common.EFromTo.LocalBlobFS(),
 		common.EFromTo.LocalFile():
-		// TODO: Count files enumerated during scanning.
-		// ^ Will probably get to this in a later PR, would be best to not do it now as other scenarios would falsely output 0 objects found.
 		var traverser resourceTraverser
 		var destTraverser resourceTraverser
 
@@ -1045,7 +1048,12 @@ func trimWildcards(path string) string {
 		return path
 	}
 
-	return path[:strings.LastIndex(replacePathSeparators(path[:strings.Index(path, "*")]), "/")+1]
+	firstWCIndex := strings.Index(path, "*")
+	result := replacePathSeparators(path[:firstWCIndex])
+	lastSepIndex := strings.LastIndex(result, "/")
+	result = result[:lastSepIndex+1]
+
+	return result
 }
 
 func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object storedObject) (relativePath string) {
@@ -1121,6 +1129,16 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	if len(cca.excludePatterns) != 0 {
 		for _, v := range cca.excludePatterns {
 			filters = append(filters, &excludeFilter{pattern: v})
+		}
+	}
+
+	if len(cca.includePathPatterns) != 0 {
+		filters = append(filters, &includeFilter{patterns: cca.includePathPatterns, targetsPath: true})
+	}
+
+	if len(cca.excludePathPatterns) != 0 {
+		for _, v := range cca.excludePathPatterns {
+			filters = append(filters, &excludeFilter{pattern: v, targetsPath: true})
 		}
 	}
 
@@ -1355,6 +1373,12 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
+		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt\n;*/subDirName/*.pdf"+
+		"Note: This considers the _entire_ relative path, file name included.")
+	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "only exclude these paths when copying. "+
+		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt\n;*/subDirName/*.pdf"+
+		"Note: This considers the _entire_ relative path, file name included.")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "exclude these files when copying. Support use of *.")

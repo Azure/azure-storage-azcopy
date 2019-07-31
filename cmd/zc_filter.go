@@ -22,7 +22,6 @@ package cmd
 
 import (
 	"path"
-	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -33,7 +32,7 @@ Blob type exclusion is required as a part of the copy enumerators refactor. This
 In order to make the actual filter speed faster, a map is opted for instead of a list.
 This map is used effectively as a hash set. If an item exists in the set, it does not pass the filter.
 
-I'm not going to get into the specifics of why this is faster, but know that it's O(1) time compared to O(n) time, where n is the number of blob types excluded.
+This behavior is O(1) time compared to O(n) time, where n is the number of blob types excluded.
 */
 type excludeBlobTypeFilter struct {
 	blobTypes map[azblob.BlobType]bool
@@ -50,12 +49,13 @@ func (f *excludeBlobTypeFilter) doesPass(object storedObject) bool {
 }
 
 type excludeFilter struct {
-	pattern string
+	pattern     string
+	targetsPath bool // TODO: include targetsPath in sync
 }
 
 func (f *excludeFilter) doesPass(storedObject storedObject) bool {
 	checkItem := storedObject.name
-	if strings.Contains(f.pattern, "/") {
+	if f.targetsPath {
 		checkItem = storedObject.relativePath
 	}
 
@@ -74,11 +74,11 @@ func (f *excludeFilter) doesPass(storedObject storedObject) bool {
 	return true
 }
 
-func buildExcludeFilters(patterns []string) []objectFilter {
+func buildExcludeFilters(patterns []string, targetPath bool) []objectFilter {
 	filters := make([]objectFilter, 0)
 	for _, pattern := range patterns {
 		if pattern != "" {
-			filters = append(filters, &excludeFilter{pattern: pattern})
+			filters = append(filters, &excludeFilter{pattern: pattern, targetsPath: targetPath})
 		}
 	}
 
@@ -93,7 +93,8 @@ func buildExcludeFilters(patterns []string) []objectFilter {
 // meaning that if an storedObject is accepted by any of the include filters, then it is accepted by all of them
 // consequently, all the include patterns must be stored together
 type includeFilter struct {
-	patterns []string
+	patterns    []string
+	targetsPath bool
 }
 
 func (f *includeFilter) doesPass(storedObject storedObject) bool {
@@ -103,7 +104,7 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 
 	for _, pattern := range f.patterns {
 		checkItem := storedObject.name
-		if strings.Contains(pattern, "/") {
+		if f.targetsPath {
 			checkItem = storedObject.relativePath
 		}
 
@@ -125,7 +126,7 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 	return false
 }
 
-func buildIncludeFilters(patterns []string) []objectFilter {
+func buildIncludeFilters(patterns []string, targetPath bool) []objectFilter {
 	validPatterns := make([]string, 0)
 	for _, pattern := range patterns {
 		if pattern != "" {
@@ -133,5 +134,5 @@ func buildIncludeFilters(patterns []string) []objectFilter {
 		}
 	}
 
-	return []objectFilter{&includeFilter{patterns: validPatterns}}
+	return []objectFilter{&includeFilter{patterns: validPatterns, targetsPath: targetPath}}
 }

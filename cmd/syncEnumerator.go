@@ -51,11 +51,15 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 	}
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
-	includeFilters := buildIncludeFilters(cca.include)
-	excludeFilters := buildExcludeFilters(cca.exclude)
+	includeFilters := buildIncludeFilters(cca.include, false)
+	includePathFilters := buildIncludeFilters(cca.includePath, true)
+	excludeFilters := buildExcludeFilters(cca.exclude, false)
+	excludePathFilters := buildExcludeFilters(cca.excludePath, true)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
+	filters = append(filters, includePathFilters...)
+	filters = append(filters, excludePathFilters...)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()

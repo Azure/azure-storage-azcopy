@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -140,13 +141,13 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			}
 
 			// A channel really would be preferable for this kind of behaviour but whatever.
-			strToRead := ""
+			strToRead := &bytes.Buffer{}
 
 			for _, v := range matches {
-				strToRead += strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath) + "\n"
+				strToRead.WriteString(strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath) + "\n")
 			}
 
-			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, ioutil.NopCloser(strings.NewReader(strToRead)))
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, ioutil.NopCloser(strToRead))
 		} else {
 			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}

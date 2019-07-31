@@ -50,7 +50,9 @@ type rawSyncCmdArgs struct {
 	blockSizeMB         float64
 	logVerbosity        string
 	include             string
+	includePath         string
 	exclude             string
+	excludePath         string
 	followSymlinks      bool
 	putMd5              bool
 	md5ValidationOption string
@@ -129,6 +131,8 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	// parse the filter patterns
 	cooked.include = raw.parsePatterns(raw.include)
 	cooked.exclude = raw.parsePatterns(raw.exclude)
+	cooked.includePath = raw.parsePatterns(raw.includePath)
+	cooked.excludePath = raw.parsePatterns(raw.excludePath)
 
 	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
@@ -180,7 +184,9 @@ type cookedSyncCmdArgs struct {
 	recursive      bool
 	followSymlinks bool
 	include        []string
+	includePath    []string
 	exclude        []string
+	excludePath    []string
 
 	// options
 	putMd5              bool
@@ -510,7 +516,9 @@ func init() {
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include files whose relative paths match the pattern list. Example: myFolder/*.txt;*/mySubDir/*.pdf")
 	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "exclude files whose relative paths match the pattern list. Example: myFolder/*.txt;*/mySubDir/*.pdf")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")
