@@ -413,9 +413,13 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 			js.TotalBytesEnumerated += uint64(jppt.SourceSize)
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
+			case common.ETransferStatus.NotStarted(),
+				common.ETransferStatus.Started():
+				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				js.TransfersCompleted++
 				js.TotalBytesTransferred += uint64(jppt.SourceSize)
+				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Failed(),
 				common.ETransferStatus.BlobTierFailure():
 				js.TransfersFailed++
@@ -446,6 +450,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+	js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
 
 	// This is added to let FE to continue fetching the Job Progress Summary
 	// in case of resume. In case of resume, the Job is already completely
@@ -546,12 +551,16 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 			jppt := jpp.Transfer(t)
 			// check for all completed transfer to calculate the progress percentage at the end
 			switch jppt.TransferStatus() {
+			case common.ETransferStatus.NotStarted(),
+				common.ETransferStatus.Started():
+				js.TotalBytesExpected += uint64(jppt.SourceSize)
 			case common.ETransferStatus.Success():
 				if fromTo == common.EFromTo.LocalBlob() ||
 					fromTo == common.EFromTo.BlobLocal() {
 					js.CopyTransfersCompleted++
 					js.TotalBytesTransferred += uint64(jppt.SourceSize)
-					js.TotalBytesEnumerated += uint64(jppt.SourceSize)
+					js.TotalBytesEnumerated += uint64(jppt.SourceSize) // TODO: is this really in the right place?  What if status is non-started?
+					js.TotalBytesExpected += uint64(jppt.SourceSize)
 				}
 				if fromTo == common.EFromTo.BlobTrash() {
 					js.DeleteTransfersCompleted++
@@ -563,6 +572,7 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 					fromTo == common.EFromTo.BlobLocal() {
 					js.CopyTransfersFailed++
 					js.TotalBytesEnumerated += uint64(jppt.SourceSize)
+					// do not increment TotalBytesExpected here, since it should not include failed transfers
 				}
 				if fromTo == common.EFromTo.BlobTrash() {
 					js.DeleteTransfersFailed++
@@ -582,6 +592,7 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
+	js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
 
 	// This is added to let FE to continue fetching the Job Progress Summary
 	// in case of resume. In case of resume, the Job is already completely

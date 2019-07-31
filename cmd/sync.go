@@ -405,7 +405,8 @@ Final Job Status: %v
 		// indicate whether constrained by disk or not
 		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
-		return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+			summary.PercentComplete,
 			summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
 			summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
 			summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
