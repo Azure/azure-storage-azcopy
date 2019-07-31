@@ -1,14 +1,14 @@
 trigger:
   branches:
     include:
-      - master
       - dev
+      - master
 
 pr:
   branches:
     include:
-      - master
       - dev
+      - master
 
 jobs:
   - job: Linux_and_Windows_Builds

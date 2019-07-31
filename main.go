@@ -23,6 +23,7 @@ package main
 import (
 	"log"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"time"
 
@@ -49,6 +50,8 @@ func main() {
 		return
 	}
 
+	configureGoMaxProcs()
+
 	configureGC()
 
 	// Perform os specific initialization
@@ -69,4 +72,14 @@ func configureGC() {
 		time.Sleep(20 * time.Second) // wait a little, so that our initial pool of buffers can get allocated without heaps of (unnecessary) GC activity
 		debug.SetGCPercent(20)       // activate more aggressive/frequent GC than the default
 	}()
+}
+
+// Ensure we always have more than 1 OS thread running goroutines, since there are issues with having just 1.
+// (E.g. version check doesn't happen at login time, if have only one go proc. Not sure why that happens if have only one
+// proc. Is presumably due to the high CPU usage we see on login if only 1 CPU, even tho can't see any busy-wait in that code)
+func configureGoMaxProcs() {
+	isOnlyOne := runtime.GOMAXPROCS(0) == 1
+	if isOnlyOne {
+		runtime.GOMAXPROCS(2)
+	}
 }

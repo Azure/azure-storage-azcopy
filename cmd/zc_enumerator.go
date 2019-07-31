@@ -212,6 +212,7 @@ type objectProcessor func(storedObject storedObject) error
 // given a storedObject, verify if it satisfies the defined conditions
 // if yes, return true
 type objectFilter interface {
+	doesSupportThisOS() (msg string, supported bool)
 	doesPass(storedObject storedObject) bool
 }
 
@@ -315,6 +316,10 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 	if filters != nil && len(filters) > 0 {
 		// loop through the filters, if any of them fail, then return false
 		for _, filter := range filters {
+			msg, supported := filter.doesSupportThisOS()
+			if !supported {
+				glcm.Error(msg)
+			}
 			if !filter.doesPass(storedObject) {
 				return false
 			}

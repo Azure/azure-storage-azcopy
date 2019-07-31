@@ -6,6 +6,7 @@ require (
 	github.com/Azure/azure-storage-file-go v0.5.0
 	github.com/Azure/go-autorest v10.15.2+incompatible
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
+	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/danieljoos/wincred v1.0.1
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/go-ini/ini v1.41.0 // indirect
@@ -25,4 +26,5 @@ require (
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 	gopkg.in/ini.v1 v1.42.0 // indirect
+	gopkg.in/yaml.v2 v2.2.2 // indirect
 )
