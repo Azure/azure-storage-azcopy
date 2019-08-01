@@ -52,6 +52,10 @@ type cmdIntegrationSuite struct{}
 var _ = chk.Suite(&cmdIntegrationSuite{})
 var ctx = context.Background()
 
+func (s *cmdIntegrationSuite) SetUpTest(c *chk.C) {
+	c.Log("Still running tests... ", c.TestName())
+}
+
 const (
 	containerPrefix      = "container"
 	blobPrefix           = "blob"

@@ -39,6 +39,10 @@ type genericTraverserSuite struct{}
 
 var _ = chk.Suite(&genericTraverserSuite{})
 
+func (s *genericTraverserSuite) SetUpTest(c *chk.C) {
+	c.Log("Still running tests... ", c.TestName())
+}
+
 // validate traversing a single Blob, a single Azure File, and a single local file
 // compare that the traversers get consistent results
 func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
