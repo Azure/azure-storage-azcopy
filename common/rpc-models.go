@@ -41,12 +41,12 @@ func (c *RpcCmd) Parse(s string) error {
 
 // This struct represents the job info (a single part) to be sent to the storage engine
 type CopyJobPartOrderRequest struct {
-	Version     Version     // version of the azcopy
-	JobID       JobID       // Guid - job identifier
-	PartNum     PartNumber  // part number of the job
-	IsFinalPart bool        // to determine the final part for a specific job
-	ForceWrite  bool        // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
-	Priority    JobPriority // priority of the task
+	Version     Version         // version of the azcopy
+	JobID       JobID           // Guid - job identifier
+	PartNum     PartNumber      // part number of the job
+	IsFinalPart bool            // to determine the final part for a specific job
+	ForceWrite  OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
+	Priority    JobPriority     // priority of the task
 	FromTo      FromTo
 	Include     map[string]int
 	Exclude     map[string]int

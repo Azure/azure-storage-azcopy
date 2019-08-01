@@ -125,6 +125,30 @@ func (dd DeleteDestination) String() string {
 	return enum.StringInt(dd, reflect.TypeOf(dd))
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EOverwriteOption = OverwriteOption(0)
+
+type OverwriteOption uint8
+
+func (OverwriteOption) True() OverwriteOption   { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption  { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption { return OverwriteOption(2) }
+
+func (o *OverwriteOption) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(o), s, true)
+	if err == nil {
+		*o = val.(OverwriteOption)
+	}
+	return err
+}
+
+func (o *OverwriteOption) String() string {
+	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type OutputFormat uint32
 
 var EOutputFormat = OutputFormat(0)

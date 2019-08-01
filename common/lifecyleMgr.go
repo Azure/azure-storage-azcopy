@@ -3,7 +3,6 @@ package common
 import (
 	"bufio"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"io"
 	"os"
 	"os/signal"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 )
 
 // only one instance of the formatter should exist
@@ -234,13 +235,6 @@ func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
 func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 	msgType := msgToOutput.msgType
 
-	// right now, we return nothing so that the default behavior is triggered for the part that intended to get response
-	if msgType == eOutputMessageType.Prompt() {
-		// TODO determine how prompts work with JSON output
-		msgToOutput.inputChannel <- ""
-		return
-	}
-
 	// simply output the json message
 	// we assume the msgContent is already formatted correctly
 	fmt.Println(GetJsonStringFromTemplate(newJsonOutputTemplate(msgType, msgToOutput.msgContent)))
@@ -248,6 +242,9 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 	// exit if needed
 	if msgType == eOutputMessageType.Exit() || msgType == eOutputMessageType.Error() {
 		os.Exit(int(msgToOutput.exitCode))
+	} else if msgType == eOutputMessageType.Prompt() {
+		// read the response to the prompt and send it back through the channel
+		msgToOutput.inputChannel <- lcm.readInCleanLineFromStdIn()
 	}
 }
 

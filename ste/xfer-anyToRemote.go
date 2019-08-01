@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"net/url"
 	"os"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -68,11 +69,11 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 		panic("must always schedule one chunk, even if file is empty") // this keeps our code structure simpler, by using a dummy chunk for empty files
 	}
 
-	// step 3: Check overwrite
-	// If the force Write flags is set to false
+	// step 3: check overwrite option
+	// if the force Write flags is set to false or prompt
 	// then check the file exists at the remote location
-	// If it does, mark transfer as failed.
-	if !jptm.IsForceWriteTrue() {
+	// if it does, react accordingly
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		exists, existenceErr := s.RemoteFileExists()
 		if existenceErr != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Could not check file existence. "+existenceErr.Error(), 0)
@@ -81,11 +82,22 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 			return
 		}
 		if exists {
-			// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
-			jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // TODO: question: is it OK to always use FileAlreadyExists here, instead of BlobAlreadyExists, even when saving to blob storage?  I.e. do we really need a different error for blobs?
-			jptm.ReportTransferDone()
-			return
+			shouldOverwrite := false
+
+			// if necessary, prompt to confirm user's intent
+			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
+				// don't show the full URL, as it's too long and hard to read
+				parsed, _ := url.Parse(info.Destination)
+				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(parsed.Path)
+			}
+
+			if !shouldOverwrite {
+				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 
