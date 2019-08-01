@@ -19,9 +19,6 @@ docker-clean: docker-compose
 
 setup: clean docker-build ## setup environment for development
 
-test: setup ## run go tests
-	ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) $(call with_docker,go test -race -short -cover ./cmd ./common ./ste ./azbfs, -e ACCOUNT_NAME -e ACCOUNT_KEY -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY)
-
 build: setup ## build binaries for the project
     # the environment variables need to be passed into the container explicitly
 	GOARCH=amd64 GOOS=linux $(call with_docker,go build -o "azcopy_linux_amd64",-e GOARCH -e GOOS)
@@ -29,7 +26,7 @@ build: setup ## build binaries for the project
 smoke: setup ## set up smoke test
 	$(call with_docker,go build -o test-validator ./testSuite/)
 
-all: setup test build smoke ## run all tests
+all: setup build smoke ## run all tests
 
 clean: docker-clean ## clean environment and binaries
 	rm -rf bin
