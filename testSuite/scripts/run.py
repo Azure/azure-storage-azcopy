@@ -180,7 +180,18 @@ def main():
     print("Smoke tests starting...")
     init()
 
-    test_class_to_run = [Block_Upload_User_Scenarios]
+    test_class_to_run = [BlobPipingTests,
+                         Blob_Sync_User_Scenario,
+                         Block_Upload_User_Scenarios,
+                         Blob_Download_User_Scenario,
+                         PageBlob_Upload_User_Scenarios,
+                         BlobFs_Upload_OAuth_User_Scenarios,
+                         BlobFs_Download_OAuth_User_Scenarios,
+                         BlobFs_Download_SAS_User_Scenarios,
+                         BlobFs_Upload_SAS_User_Scenarios,
+                         Azcopy_Operation_User_Scenario,
+                         FileShare_Download_User_Scenario,
+                         FileShare_Upload_User_Scenario]
     suites_list = []
 
     loader = unittest.TestLoader()
