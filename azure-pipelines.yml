@@ -45,11 +45,11 @@ jobs:
         condition: succeededOrFailed()
 
   - job: Unit_Test_Ubuntu
-      pool:
-        vmImage: 'ubuntu-16.04'
-      steps:
-        - task: GoTool@0
-          inputs:
-            version: '1.12'
-        - script: |
-            ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) go test -race -short -cover ./cmd ./common ./ste ./azbfs
+    pool:
+      vmImage: 'ubuntu-16.04'
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.12'
+      - script: |
+          ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) go test -race -short -cover ./cmd ./common ./ste ./azbfs
