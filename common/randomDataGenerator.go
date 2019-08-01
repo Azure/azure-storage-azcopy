@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	randomSliceLength = 32 * 1024
+	randomSliceLength = 256 * 1024
 )
 
 var (
@@ -99,7 +99,7 @@ func (r *randomDataGenerator) ReadAt(p []byte, off int64) (n int, err error) {
 		remainingThisRead := min(len(p)-n, remainingInFile)
 		remainingThisIteration := min(remainingThisRead, int64(len(r.randBytes)))
 		r.freshenRandomData(remainingThisIteration)
-		copy(p, r.randBytes[:remainingThisIteration])
+		copy(p[n:], r.randBytes[:remainingThisIteration])
 		n += remainingThisIteration
 	}
 
