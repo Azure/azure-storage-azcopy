@@ -21,25 +21,39 @@
 package ste
 
 import (
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"log"
-	"os"
 	"runtime"
 	"strconv"
 )
+
+// ConfiguredInt is an integer which may be optionally configured by user through an environment variable
+type ConfiguredInt struct {
+	Value             int
+	IsUserSpecified   bool
+	EnvVarName        string
+	DefaultSourceDesc string
+}
+
+func (i *ConfiguredInt) GetDescription() string {
+	if i.IsUserSpecified {
+		return fmt.Sprintf("From %s environment variable", i.EnvVarName)
+	} else {
+		return fmt.Sprintf("From %s. Set %s environment variable to override", i.EnvVarName)
+	}
+}
 
 // ConcurrencySettings stores the set of related numbers that govern concurrency levels in the STE
 type ConcurrencySettings struct {
 
 	// MainPoolSize is the size of the main goroutine pool that transfers the data
 	// (i.e. executes chunkfuncs)
-	MainPoolSize int
-
-	// MainPoolSizeIsUserSpecified shows if MainPoolSize was specifically requested by the user
-	MainPoolSizeIsUserSpecified bool
+	MainPoolSize ConfiguredInt
 
 	// TransferInitiationPoolSize is the size of the auxiliary goroutine pool that initiates transfers
 	// (i.e. creates chunkfuncs)
-	TransferInitiationPoolSize int
+	TransferInitiationPoolSize ConfiguredInt
 
 	// MaxIdleConnections is the max number of idle TCP connections to keep open
 	MaxIdleConnections int
@@ -50,28 +64,25 @@ type ConcurrencySettings struct {
 	// For uploads, the number of open files is effectively controlled by
 	// TransferInitiationPoolSize, since all the file IO (except retries) happens in
 	// transfer initiation.
-	MaxOpenFiles int
-	// TODO: consider whether we should also use MaxOpenFiles for uploads, somehow (see command above)
+	MaxOpenDownloadFiles int
+	// TODO: consider whether we should also use this (renamed to( MaxOpenFiles) for uploads, somehow (see command above). Is there any actual value in that? Maybe only highly handle-constrained Linux environments?
 }
 
 const defaultTransferInitiationPoolSize = 64
 const concurrentFilesFloor = 32
-
-// TODO: maybe parameterize this.  But bear in mind that in the first new months of usage,	we have never noticed a case where the default of 64 was _not_ fine.
 
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
 // machine where we are running
 func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 
-	initialMainPoolSize, wasFromEnv := getMainPoolSize()
+	initialMainPoolSize := getMainPoolSize()
 	maxMainPoolSize := initialMainPoolSize // one day we may compute a higher value for this, and dynamically grow the pool with this as a cap
 
 	s := ConcurrencySettings{
-		MainPoolSize:                initialMainPoolSize,
-		MainPoolSizeIsUserSpecified: wasFromEnv,
-		TransferInitiationPoolSize:  defaultTransferInitiationPoolSize,
-		MaxOpenFiles:                getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize),
+		MainPoolSize:               initialMainPoolSize,
+		TransferInitiationPoolSize: ConfiguredInt{defaultTransferInitiationPoolSize, false, "TBC", ""},
+		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
 	}
 
 	// Set the max idle connections that we allow. If there are any more idle connections
@@ -88,36 +99,40 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 	// on Windows when this value was set to 500 but there were 1000 to 2000 goroutines in the
 	// main pool size.  Using DialContext appears to mitigate that issue, so the value
 	// we compute here is really just to reduce unneeded make and break of connections)
-	s.MaxIdleConnections = maxMainPoolSize
+	s.MaxIdleConnections = maxMainPoolSize.Value
 
 	return s
 }
 
-func getMainPoolSize() (n int, isFromEnv bool) {
-	concurrencyValueOverride := os.Getenv("AZCOPY_CONCURRENCY_VALUE")
+func getMainPoolSize() ConfiguredInt {
+	envVar := common.EEnvironmentVariable.ConcurrencyValue()
+
+	concurrencyValueOverride := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
 	if concurrencyValueOverride != "" {
 		val, err := strconv.ParseInt(concurrencyValueOverride, 10, 64)
 		if err != nil {
 			log.Fatalf("error parsing the env AZCOPY_CONCURRENCY_VALUE %q failed with error %v",
 				concurrencyValueOverride, err)
 		}
-		return int(val), true
+		return ConfiguredInt{int(val), true, envVar.Name, ""}
 	}
 
 	numOfCPUs := runtime.NumCPU()
 
-	// fix the concurrency value for smaller machines
+	var value int
+
 	if numOfCPUs <= 4 {
-		return 32, false
+		// fix the concurrency value for smaller machines
+		value = 32
+	} else if 16*numOfCPUs > 300 {
+		// for machines that are extremely powerful, fix to 300 (previously this was to avoid running out of file descriptors, but we have another solution to that now)
+		value = 300
+	} else {
+		// for moderately powerful machines, compute a reasonable number
+		value = 16 * numOfCPUs
 	}
 
-	// for machines that are extremely powerful, fix to 300 (previously this was to avoid running out of file descriptors, but we have another solution to that now)
-	if 16*numOfCPUs > 300 {
-		return 300, false
-	}
-
-	// for moderately powerful machines, compute a reasonable number
-	return 16 * numOfCPUs, false
+	return ConfiguredInt{value, false, envVar.Name, "number of CPUs"}
 }
 
 // getMaxOpenFiles finds a number of concurrently-openable files

@@ -120,7 +120,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 
 	// Create suicide channel which is used to scale back on the number of workers
 	// TODO: this is not used. Remove it.
-	suicideCh := make(chan SuicideJob, concurrency.MainPoolSize)
+	suicideCh := make(chan SuicideJob, concurrency.MainPoolSize.Value)
 
 	planDir := path.Join(azcopyAppPathFolder, "plans")
 	if err := os.Mkdir(planDir, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
@@ -162,7 +162,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		pacer:            pacer,
 		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),
-		fileCountLimiter: common.NewCacheLimiter(int64(concurrency.MaxOpenFiles)),
+		fileCountLimiter: common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
 		appCtx:           appCtx,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
@@ -190,14 +190,14 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process chunks
-	for cc := 0; cc < concurrency.MainPoolSize; cc++ {
+	for cc := 0; cc < concurrency.MainPoolSize.Value; cc++ {
 		go ja.chunkProcessor(cc)
 	}
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
-	for cc := 0; cc < concurrency.TransferInitiationPoolSize; cc++ {
+	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
 		go ja.transferProcessor(cc)
 	}
 }
