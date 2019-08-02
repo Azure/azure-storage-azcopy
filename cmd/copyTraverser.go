@@ -31,6 +31,7 @@ import (
 )
 
 // TODO implement for local and ADLS Gen2
+// TODO cut these traverser spawners out
 func newTraverserForCopy(targetURL string, targetSAS string, targetType common.Location,
 	credential common.CredentialInfo, recursive bool) (resourceTraverser, error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)

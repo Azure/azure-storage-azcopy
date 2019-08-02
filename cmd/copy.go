@@ -73,10 +73,12 @@ type rawCopyCmdArgs struct {
 	legacyExclude string
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	include     string
-	exclude     string
-	includePath string
-	excludePath string
+	include               string
+	exclude               string
+	includePath           string
+	excludePath           string
+	includeFileAttributes string
+	excludeFileAttributes string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -214,7 +216,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Note: new implementation of list-of-files only works for remove command for now
+	// Note: new implementation of list-of-files only works for remove command and upload for now.
 	if cooked.fromTo == common.EFromTo.BlobTrash() || cooked.fromTo == common.EFromTo.FileTrash() || cooked.fromTo.From() == common.ELocation.Local() {
 		cooked.listOfFilesLocation = raw.listOfFilesToCopy
 	} else if cooked.fromTo == common.EFromTo.BlobFSTrash() {
@@ -479,6 +481,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.includePathPatterns = raw.parsePatterns(raw.includePath)
 	cooked.excludePathPatterns = raw.parsePatterns(raw.excludePath)
 
+	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.To() != common.ELocation.Local() {
+		return cooked, errors.New("cannot check file attributes on remote objects")
+	}
+	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
+	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
+
 	return cooked, nil
 }
 
@@ -513,10 +521,12 @@ type cookedCopyCmdArgs struct {
 	legacyExclude map[string]int
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	includePatterns     []string
-	includePathPatterns []string
-	excludePatterns     []string
-	excludePathPatterns []string
+	includePatterns       []string
+	includePathPatterns   []string
+	excludePatterns       []string
+	excludePathPatterns   []string
+	includeFileAttributes []string
+	excludeFileAttributes []string
 
 	// filters from flags
 	listOfFilesToCopy   []string
@@ -776,7 +786,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
 		}
 
-		jobPartOrder.SourceRoot = cleanLocalPath(trimWildcards(tmpSrc))
+		jobPartOrder.SourceRoot = cleanLocalPath(getPathBeforeFirstWildcard(tmpSrc))
 		cca.source = cleanLocalPath(tmpSrc)
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
@@ -937,9 +947,9 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
-			src := cca.findObject(true, isDestDir, object)
+			src := cca.makeEscapedRelativePath(true, isDestDir, object)
 			// Why hand in the source on the destination? Because we need to adjust the path for the source if there's no wildcard.
-			dst := cca.findObject(false, isDestDir, object)
+			dst := cca.makeEscapedRelativePath(false, isDestDir, object)
 
 			transfer := common.CopyTransfer{
 				Source:           src,
@@ -1025,7 +1035,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	return nil
 }
 
-// TODO: include this within initResourceTraverser?
 func initPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo) (p pipeline.Pipeline, err error) {
 	switch location {
 	case common.ELocation.Local():
@@ -1043,7 +1052,7 @@ func initPipeline(ctx context.Context, location common.Location, credential comm
 	return
 }
 
-func trimWildcards(path string) string {
+func getPathBeforeFirstWildcard(path string) string {
 	if strings.Index(path, "*") == -1 {
 		return path
 	}
@@ -1056,7 +1065,7 @@ func trimWildcards(path string) string {
 	return result
 }
 
-func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object storedObject) (relativePath string) {
+func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool, object storedObject) (relativePath string) {
 	var pathEncodeRules = func(path string) string {
 		loc := common.ELocation.Unknown()
 
@@ -1065,11 +1074,12 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object stor
 		} else {
 			loc = cca.fromTo.To()
 		}
-		pathParts := strings.Split(path, "/")
+		pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-		// Encode disallowed characters on windows.
+		// Encode disallowed characters on windows explicit to downloads.
 		// TODO: Inform tests of this
-		if loc == common.ELocation.Local() && runtime.GOOS == "windows" {
+		// TODO: on upload refactor, reverse this operation.
+		if loc == common.ELocation.Local() && !source && runtime.GOOS == "windows" {
 			invalidChars := `<>\/:"|?*` + string(0x00)
 
 			for _, c := range strings.Split(invalidChars, "") {
@@ -1104,11 +1114,11 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object stor
 		return pathEncodeRules(relativePath)
 	}
 
-	// If it's out here, the source is a folder (or wildcard) of some kind.
+	// If it's out here, the object is contained in a folder, or was found via a wildcard.
 
 	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
-	if !source && !strings.Contains(cca.source, "*") {
+	if !source && !pathPointsToContents(cca.source) {
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory
@@ -1116,6 +1126,15 @@ func (cca *cookedCopyCmdArgs) findObject(source bool, dstIsDir bool, object stor
 	}
 
 	return pathEncodeRules(relativePath)
+}
+
+// TODO: Find a better place for me and my friends (makeEscapedRelativePath, getPathBeforeFirstWildcard, initPipeline, etc.)
+// In local cases, many wildcards may be used, hence string.Contains
+// In non-local cases, only a trailing wildcard may be used: ex. https://myAccount.blob.core.windows.net/container/*
+// In both cases, we want to copy the contents of the matches to the exact path specified on the destination.
+// Without this, a directory is created at the destination, and everything is placed under it.
+func pathPointsToContents(path string) bool {
+	return strings.Contains(path, "*")
 }
 
 // Initialize the modular filters outside of copy to increase readability.
@@ -1150,6 +1169,14 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		}
 
 		filters = append(filters, &excludeBlobTypeFilter{blobTypes: excludeSet})
+	}
+
+	if len(cca.includeFileAttributes) != 0 {
+		filters = append(filters, buildAttrFilters(cca.includeFileAttributes, cca.source, true)...)
+	}
+
+	if len(cca.excludeFileAttributes) != 0 {
+		filters = append(filters, buildAttrFilters(cca.excludeFileAttributes, cca.source, false)...)
 	}
 
 	return filters
@@ -1371,17 +1398,17 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "only include these files when copying. "+
+	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
-		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt\n;*/subDirName/*.pdf"+
+		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf "+
 		"Note: This considers the _entire_ relative path, file name included.")
-	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "only exclude these paths when copying. "+
-		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt\n;*/subDirName/*.pdf"+
+	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "exclude these paths when copying. "+
+		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf"+
 		"Note: This considers the _entire_ relative path, file name included.")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
@@ -1435,7 +1462,6 @@ func init() {
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")

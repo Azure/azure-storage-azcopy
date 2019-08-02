@@ -145,14 +145,13 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		}
 
 		if strings.Index(source, "*") != -1 {
-			basePath := trimWildcards(source)
+			basePath := getPathBeforeFirstWildcard(source)
 			matches, err := filepath.Glob(source)
 
 			if err != nil {
 				return nil, fmt.Errorf("failed to glob: %s", err)
 			}
 
-			// A channel really would be preferable for this kind of behaviour but whatever.
 			globChan := make(chan string)
 
 			go func() {

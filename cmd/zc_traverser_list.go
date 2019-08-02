@@ -17,6 +17,7 @@ type listTraverser struct {
 
 type childTraverserGenerator func(childPath string) (resourceTraverser, error)
 
+// There is no impact to a list traverser returning false because a list traverser points directly to relative paths.
 func (l *listTraverser) isDirectory(isDest bool) bool {
 	return false
 }

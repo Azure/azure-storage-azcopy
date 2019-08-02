@@ -31,7 +31,6 @@ import (
 
 // TODO: Get rid of highly situational constructors.
 // Why? Because they create a MASSIVE amount of code duplication for a very specific situation.
-// We're repeating the mistakes of copy, just in a different place.
 // This is going to be more painful to clean up the longer we wait to do this, and the more we keep using these.
 // PLEASE, do not create any more of these. In the future, use initResourceTraverser.
 func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTraverser, error) {
