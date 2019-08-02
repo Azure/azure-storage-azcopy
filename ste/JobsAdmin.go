@@ -119,7 +119,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 
 	// Create suicide channel which is used to scale back on the number of workers
-	// TODO: IIRC, this is on longer used as of early 2019. Check that, and remove it?
+	// TODO: this is not used. Remove it.
 	suicideCh := make(chan SuicideJob, concurrency.MainPoolSize)
 
 	planDir := path.Join(azcopyAppPathFolder, "plans")
