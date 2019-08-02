@@ -40,8 +40,22 @@ func (i *ConfiguredInt) GetDescription() string {
 	if i.IsUserSpecified {
 		return fmt.Sprintf("From %s environment variable", i.EnvVarName)
 	} else {
-		return fmt.Sprintf("From %s. Set %s environment variable to override", i.EnvVarName)
+		return fmt.Sprintf("From %s. Set %s environment variable to override", i.DefaultSourceDesc, i.EnvVarName)
 	}
+}
+
+// tryNewConfiguredInt populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
+func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
+	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	if override != "" {
+		val, err := strconv.ParseInt(override, 10, 64)
+		if err != nil {
+			log.Fatalf("error parsing the env %s %q failed with error %v",
+				envVar.Name, override, err)
+		}
+		return &ConfiguredInt{int(val), true, envVar.Name, ""}
+	}
+	return nil
 }
 
 // ConcurrencySettings stores the set of related numbers that govern concurrency levels in the STE
@@ -49,11 +63,11 @@ type ConcurrencySettings struct {
 
 	// MainPoolSize is the size of the main goroutine pool that transfers the data
 	// (i.e. executes chunkfuncs)
-	MainPoolSize ConfiguredInt
+	MainPoolSize *ConfiguredInt
 
 	// TransferInitiationPoolSize is the size of the auxiliary goroutine pool that initiates transfers
 	// (i.e. creates chunkfuncs)
-	TransferInitiationPoolSize ConfiguredInt
+	TransferInitiationPoolSize *ConfiguredInt
 
 	// MaxIdleConnections is the max number of idle TCP connections to keep open
 	MaxIdleConnections int
@@ -81,7 +95,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 
 	s := ConcurrencySettings{
 		MainPoolSize:               initialMainPoolSize,
-		TransferInitiationPoolSize: ConfiguredInt{defaultTransferInitiationPoolSize, false, "TBC", ""},
+		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
 		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
 	}
 
@@ -104,17 +118,11 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 	return s
 }
 
-func getMainPoolSize() ConfiguredInt {
+func getMainPoolSize() *ConfiguredInt {
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
-	concurrencyValueOverride := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
-	if concurrencyValueOverride != "" {
-		val, err := strconv.ParseInt(concurrencyValueOverride, 10, 64)
-		if err != nil {
-			log.Fatalf("error parsing the env AZCOPY_CONCURRENCY_VALUE %q failed with error %v",
-				concurrencyValueOverride, err)
-		}
-		return ConfiguredInt{int(val), true, envVar.Name, ""}
+	if c := tryNewConfiguredInt(envVar); c != nil {
+		return c
 	}
 
 	numOfCPUs := runtime.NumCPU()
@@ -132,7 +140,17 @@ func getMainPoolSize() ConfiguredInt {
 		value = 16 * numOfCPUs
 	}
 
-	return ConfiguredInt{value, false, envVar.Name, "number of CPUs"}
+	return &ConfiguredInt{value, false, envVar.Name, "number of CPUs"}
+}
+
+func getTransferInitiationPoolSize() *ConfiguredInt {
+	envVar := common.EEnvironmentVariable.TransferInitiationPoolSize()
+
+	if c := tryNewConfiguredInt(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
 }
 
 // getMaxOpenFiles finds a number of concurrently-openable files
