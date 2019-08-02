@@ -67,11 +67,11 @@ jobs:
           # run smoke tests
           go build -o test-validator ./testSuite/
           mkdir test-temp
+          export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
           python ./testSuite/scripts/run.py
         env:
-          AZCOPY_EXECUTABLE_PATH: $(pwd)/azcopy_linux_amd64
-          TEST_SUITE_EXECUTABLE_LOCATION: $(pwd)/test-validator
-          TEST_DIRECTORY_PATH: $(pwd)/test-temp
           ACCOUNT_NAME: $(ACCOUNT_NAME)
           ACCOUNT_KEY: $(ACCOUNT_KEY)
           AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
