@@ -524,9 +524,9 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
-	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include files whose relative paths match the pattern list. Example: myFolder/*.txt;*/mySubDir/*.pdf")
-	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "only include these paths when syncing. "+
+	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "only include these paths when syncing. "+
 		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf"+
 		"Note: This considers the _entire_ relative path, file name included.")
 	syncCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "exclude these paths when syncing. "+
