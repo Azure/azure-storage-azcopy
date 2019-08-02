@@ -55,6 +55,7 @@ type ConcurrencySettings struct {
 }
 
 const defaultTransferInitiationPoolSize = 64
+const concurrentFilesFloor = 32
 
 // TODO: maybe parameterize this.  But bear in mind that in the first new months of usage,	we have never noticed a case where the default of 64 was _not_ fine.
 
@@ -142,10 +143,9 @@ func getMaxOpenPayloadFiles(maxFileAndSocketHandles int, concurrentConnections i
 	// If we get a negative or ridiculously low value, bring it up to some kind of sensible floor
 	// (and take our chances of running out of total handles - which is effectively a bet that
 	// we were too conservative earlier)
-	if concurrentFilesLimit < defaultTransferInitiationPoolSize {
-		concurrentFilesLimit = defaultTransferInitiationPoolSize
+	if concurrentFilesLimit < concurrentFilesFloor {
+		concurrentFilesLimit = concurrentFilesFloor
 	}
 	return concurrentFilesLimit
 
-	// TODO: consider adding environment var to optionally allow bringing concurrentFilesLimit down lower than what we calculate here
 }
