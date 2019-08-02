@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"path"
+	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
@@ -64,17 +65,20 @@ func (f *excludeFilter) doesSupportThisOS() (msg string, supported bool) {
 }
 
 func (f *excludeFilter) doesPass(storedObject storedObject) bool {
-	checkItem := storedObject.name
+	matched := false
+
 	if f.targetsPath {
-		checkItem = storedObject.relativePath
-	}
+		// Don't actually support patterns here.
+		matched = strings.HasPrefix(storedObject.relativePath, f.pattern)
+	} else {
+		var err error
+		matched, err = path.Match(f.pattern, storedObject.name)
 
-	matched, err := path.Match(f.pattern, checkItem)
-
-	// if the pattern failed to match with an error, then we assume the pattern is invalid
-	// and let it pass
-	if err != nil {
-		return true
+		// if the pattern failed to match with an error, then we assume the pattern is invalid
+		// and let it pass
+		if err != nil {
+			return true
+		}
 	}
 
 	if matched {
@@ -124,12 +128,20 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 			checkItem = storedObject.relativePath
 		}
 
-		matched, err := path.Match(pattern, checkItem)
+		matched := false
 
-		// if the pattern failed to match with an error, then we assume the pattern is invalid
-		// and ignore it
-		if err != nil {
-			continue
+		if f.targetsPath {
+			// Do not actually support patterns here
+			matched = strings.HasPrefix(checkItem, pattern)
+		} else {
+			var err error
+			matched, err = path.Match(pattern, checkItem)
+
+			// if the pattern failed to match with an error, then we assume the pattern is invalid
+			// and ignore it
+			if err != nil {
+				continue
+			}
 		}
 
 		// if an storedObject is accepted by any of the include filters

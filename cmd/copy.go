@@ -951,6 +951,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			// Why hand in the source on the destination? Because we need to adjust the path for the source if there's no wildcard.
 			dst := cca.makeEscapedRelativePath(false, isDestDir, object)
 
+			glcm.Info(fmt.Sprintf("Added %s to transfers", src))
+
 			transfer := common.CopyTransfer{
 				Source:           src,
 				Destination:      dst,
