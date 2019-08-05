@@ -69,6 +69,83 @@ func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	return fileInfo, true, nil
 }
 
+// Separate this from the traverser for two purposes:
+// 1) Cleaner code
+// 2) Easier to test individually than to test the entire traverser.
+func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
+	// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
+	// So, what is the plan of attack?
+	// Because we can't create endless channels, we create an array instead and use it as a queue.
+	// Furthermore, we use a map as a hashset to avoid re-walking any paths we already know.
+	type walkItem struct {
+		fullPath     string // We need the full, symlink-resolved path to walk against.
+		relativeBase string // We also need the relative base path we found the symlink at.
+	}
+
+	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
+	seenPaths := make(map[string]bool)
+
+	for len(walkQueue) > 0 {
+		queueItem := walkQueue[0]
+		walkQueue = walkQueue[1:]
+
+		err = filepath.Walk(queueItem.fullPath, func(filePath string, fileInfo os.FileInfo, fileError error) error {
+			if fileError != nil {
+				glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+				return nil
+			}
+
+			computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
+			computedRelativePath = cleanLocalPath(filepath.Join(queueItem.relativeBase, computedRelativePath))
+			computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
+
+			if fileInfo.Mode()&os.ModeSymlink != 0 {
+				result, err := filepath.EvalSymlinks(filePath)
+
+				if err != nil {
+					glcm.Info(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
+					return nil
+				}
+
+				result, err = filepath.Abs(result)
+				if err != nil {
+					glcm.Info(fmt.Sprintf("Failed to get absolute path of symlink %s: %s", filePath, err))
+					return nil
+				}
+
+				if _, ok := seenPaths[result]; !ok {
+					walkQueue = append(walkQueue, walkItem{
+						fullPath:     result,
+						relativeBase: computedRelativePath,
+					})
+				}
+				seenPaths[result] = true
+				return nil
+			} else {
+				if fileInfo.IsDir() {
+					return nil
+				}
+
+				result, err := filepath.Abs(filePath)
+
+				if err != nil {
+					glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+					return nil
+				}
+
+				if _, ok := seenPaths[result]; !ok {
+					seenPaths[result] = true
+					return walkFunc(filepath.Join(fullPath, computedRelativePath), fileInfo, fileError)
+				} else {
+					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s", filePath))
+					return nil
+				}
+			}
+		})
+	}
+	return
+}
+
 func (t *localTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
@@ -87,7 +164,40 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA), processor)
 	} else {
 		if t.recursive {
-			// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
+			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
+				if fileError != nil {
+					glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
+					return nil
+				}
+
+				if fileInfo.IsDir() {
+					return nil
+				}
+
+				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), "/")
+				if !t.followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
+					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", filepath.Join(t.fullPath, relPath)))
+					return nil
+				}
+
+				return processIfPassedFilters(filters,
+					newStoredObject(
+						fileInfo.Name(),
+						relPath,
+						fileInfo.ModTime(),
+						fileInfo.Size(),
+						nil,
+						blobTypeNA),
+					processor)
+			}
+
+			if t.followSymlinks {
+				return WalkWithSymlinks(t.fullPath, processFile)
+			} else {
+				return filepath.Walk(t.fullPath, processFile)
+			}
+
+			/*// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 			// So, what is the plan of attack?
 			// Because we can't create endless channels, we create an array instead and use it as a queue.
 			// Furthermore, we use a map as a hashset to avoid re-walking any paths we already know.
@@ -170,7 +280,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				})
 			}
 
-			return
+			return*/
 		} else {
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			files, err := ioutil.ReadDir(t.fullPath)
