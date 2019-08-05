@@ -22,7 +22,9 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -37,6 +39,43 @@ import (
 type genericTraverserSuite struct{}
 
 var _ = chk.Suite(&genericTraverserSuite{})
+
+// Test follow symlink functionality
+func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
+	if runtime.GOOS == "windows" {
+		c.Skip("Windows does not allow true symlinks")
+	}
+
+	// You get a sense of pride and satisfaction if you know what the first one references.
+	fileNames := []string{"my cat keeps sending me to bed.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
+
+	for _, v := range fileNames {
+		f, err := os.Create(filepath.Join(tmpDir, v))
+		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
+		c.Assert(err, chk.IsNil)
+		c.Assert(err2, chk.IsNil)
+		c.Assert(f.Close(), chk.IsNil)
+		c.Assert(f2.Close(), chk.IsNil)
+	}
+
+	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
+
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		return nil
+	}), chk.IsNil)
+	c.Assert(fileCount, chk.Equals, 6)
+}
 
 // validate traversing a single Blob, a single Azure File, and a single local file
 // compare that the traversers get consistent results
