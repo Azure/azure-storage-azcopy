@@ -21,12 +21,10 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -88,7 +86,7 @@ type resourceTraverser interface {
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listOfFilesLocation *string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel *chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -106,7 +104,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		p = &tmppipe
 	}
 
-	if listOfFilesLocation != nil && *listOfFilesLocation != "" {
+	if listofFilesChannel != nil {
 		splitsrc := strings.Split(source, "?")
 		sas := ""
 
@@ -114,26 +112,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			sas = splitsrc[1]
 		}
 
-		f, err := os.Open(*listOfFilesLocation)
-
-		if err != nil {
-			return nil, err
-		}
-
-		// Initialize a bufferless channel
-		fileChan := make(chan string)
-
-		// Scan the file in a seperate routine
-		go func() {
-			defer close(fileChan) // Close the channel at the end.
-
-			scanner := bufio.NewScanner(f)
-			for scanner.Scan() {
-				fileChan <- scanner.Text()
-			}
-		}()
-
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, fileChan)
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, *listofFilesChannel)
 		return output, nil
 	}
 

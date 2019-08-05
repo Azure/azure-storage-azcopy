@@ -54,6 +54,21 @@ func (t *localTraverser) isDirectory(isDest bool) bool {
 	return props.IsDir()
 }
 
+// For some reason, Goland was refusing to believe this existed when placed below traverse(). Compiled just fine though.
+func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
+	fileInfo, err := os.Stat(t.fullPath)
+
+	if err != nil {
+		return nil, false, err
+	}
+
+	if fileInfo.IsDir() {
+		return nil, false, nil
+	}
+
+	return fileInfo, true, nil
+}
+
 func (t *localTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
 	singleFileInfo, isSingleFile, err := t.getInfoIfSingleFile()
 
@@ -63,18 +78,20 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 	// if the path is a single file, then pass it through the filters and send to processor
 	if isSingleFile {
-		t.incrementEnumerationCounter()
-		err = processIfPassedFilters(filters, newStoredObject(singleFileInfo.Name(),
+		if t.incrementEnumerationCounter != nil {
+			t.incrementEnumerationCounter()
+		}
+
+		return processIfPassedFilters(filters, newStoredObject(singleFileInfo.Name(),
 			"", // relative path makes no sense when the full path already points to the file
 			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA), processor)
-		return
-
 	} else {
 		if t.recursive {
 			// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
 			// So, what is the plan of attack?
 			// Because we can't create endless channels, we create an array instead and use it as a queue.
 			// Furthermore, we use a map as a hashset to avoid re-walking any paths we already know.
+			// TODO: Break this out into a walkWithSymlinks function.
 			type walkItem struct {
 				fullPath     string // We need the full, symlink-resolved path to walk against
 				relativeBase string // We also need the relative base path we found the symlink at.
@@ -129,8 +146,26 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 							return nil
 						}
 
-						return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
-							fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
+						result, err := filepath.Abs(filePath)
+
+						if err != nil {
+							glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+							return nil
+						}
+
+						if _, ok := seenPaths[result]; !ok {
+							if t.incrementEnumerationCounter != nil {
+								t.incrementEnumerationCounter()
+							}
+
+							seenPaths[result] = true
+
+							return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
+								fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
+						} else {
+							glcm.Info(fmt.Sprintf("Ignored already seen file located at %s", result))
+							return nil
+						}
 					}
 				})
 			}
@@ -149,12 +184,11 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					continue
 				}
 
-				t.incrementEnumerationCounter()
-				err = processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
-
-				if err != nil {
-					return err
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter()
 				}
+
+				return processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
 			}
 		}
 	}
@@ -168,20 +202,6 @@ func replacePathSeparators(path string) string {
 	} else {
 		return path
 	}
-}
-
-func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
-	fileInfo, err := os.Stat(t.fullPath)
-
-	if err != nil {
-		return nil, false, err
-	}
-
-	if fileInfo.IsDir() {
-		return nil, false, nil
-	}
-
-	return fileInfo, true, nil
 }
 
 func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {

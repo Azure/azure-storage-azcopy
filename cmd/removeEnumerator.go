@@ -21,23 +21,24 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
-	"net/url"
-	"os"
-	"strings"
 )
 
 // provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
+// TODO: Make this merge into the other copy refactor code
 func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, err error) {
 	var sourceTraverser resourceTraverser
 
@@ -52,7 +53,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
 	}
 
-	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, &cca.listOfFilesLocation, cca.recursive, func() {})
+	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, func() {})
 
 	// report failure to create traverser
 	if err != nil {
@@ -60,9 +61,9 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
-	includeFilters := buildIncludeFilters(cca.includePatterns, false) // TODO: Add include-path in here?
+	includeFilters := buildIncludeFilters(cca.includePatterns) // TODO: Add include-path in here?
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
-	includePathFilters := buildIncludeFilters(cca.includePathPatterns, true)
+	includePathFilters := buildIncludeFilters(cca.includePathPatterns)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
 
 	// set up the filters in the right order
@@ -138,24 +139,13 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 	// parse the given source URL into parts, which separates the filesystem name and directory/file path
 	urlParts := azbfs.NewBfsURLParts(*sourceURL)
 
-	if len(cca.listOfFilesLocation) == 0 {
-		return removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
-	}
-
 	// list of files is given, record the parent path
 	parentPath := urlParts.DirectoryOrFilePath
 	successCount := 0
-	f, err := os.Open(cca.listOfFilesLocation)
-	if err != nil {
-		return "", fmt.Errorf("unable to open %s to retrieve the required list of entities to transfer", cca.listOfFilesLocation)
-	}
-	defer f.Close()
 
-	// spawn a scanner to read the list of entities one line at a time
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		childPath := scanner.Text()
-
+	// read from the list of files channel to find out what needs to be deleted.
+	childPath, ok := <-*cca.listOfFilesChannel
+	for ; ok; childPath, ok = <-*cca.listOfFilesChannel {
 		// remove the child path
 		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
 		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
@@ -165,11 +155,6 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 			glcm.Info(successMessage)
 			successCount += 1
 		}
-	}
-
-	// in case the list of entities was not read properly, we can no longer continue enumeration
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("unable to scan %s to retrieve the required list of entities to transfer", cca.listOfFilesLocation)
 	}
 
 	return fmt.Sprintf("Successfully removed %v entities.", successCount), nil

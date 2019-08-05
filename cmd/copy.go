@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -217,18 +218,50 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// Note: new implementation of list-of-files only works for remove command and upload for now.
-	if cooked.fromTo == common.EFromTo.BlobTrash() || cooked.fromTo == common.EFromTo.FileTrash() || cooked.fromTo.From() == common.ELocation.Local() {
-		cooked.listOfFilesLocation = raw.listOfFilesToCopy
-	} else if cooked.fromTo == common.EFromTo.BlobFSTrash() {
-		// Note: when the ADLS Gen2 interop happens eventually, we should keep the current blob implementation
-		// so that users can still use include/exclude flags,
-		// and we can shift to the new directory delete API (equivalent to the current bfs implementation)
-		// if no include/exclude is supplied.
-		if len(raw.include) > 0 || len(raw.exclude) > 0 {
+	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() {
+		// This handles both list-of-files and include-path as a list enumerator.
+		// This saves us time because we know *exactly* what we're looking for right off the bat.
+		// Note that exclude-path is handled as a filter unlike include-path.
+
+		// to garbage or to local
+		if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
 			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 		}
 
-		cooked.listOfFilesLocation = raw.listOfFilesToCopy
+		// unbuffered so this reads as we need it to rather than all at once in bulk
+		listChan := make(chan string)
+		var f *os.File
+
+		if raw.listOfFilesToCopy != "" {
+			f, err = os.Open(raw.listOfFilesToCopy)
+
+			if err != nil {
+				return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
+			}
+		}
+
+		go func() {
+			defer close(listChan)
+
+			if f != nil {
+				scanner := bufio.NewScanner(f)
+				for scanner.Scan() {
+					v := scanner.Text()
+					listChan <- v
+				}
+			}
+
+			// This occurs much earlier than the other include or exclude filters. I'd _like_ to move it closer in cook() once we get rid of the other bits of list-of-files.
+			includePathList := raw.parsePatterns(raw.includePath)
+
+			for _, v := range includePathList {
+				listChan <- v
+			}
+		}()
+
+		if raw.listOfFilesToCopy != "" || raw.includePath != "" {
+			cooked.listOfFilesChannel = &listChan
+		}
 	} else if len(raw.listOfFilesToCopy) > 0 {
 		// TODO remove this legacy implementation after copy enumerator refactoring
 
@@ -478,10 +511,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// parse the filter patterns
 	cooked.includePatterns = raw.parsePatterns(raw.include)
 	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
-	cooked.includePathPatterns = raw.parsePatterns(raw.includePath)
 	cooked.excludePathPatterns = raw.parsePatterns(raw.excludePath)
 
-	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.To() != common.ELocation.Local() {
+	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
 		return cooked, errors.New("cannot check file attributes on remote objects")
 	}
 	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
@@ -529,12 +561,12 @@ type cookedCopyCmdArgs struct {
 	excludeFileAttributes []string
 
 	// filters from flags
-	listOfFilesToCopy   []string
-	listOfFilesLocation string
-	recursive           bool
-	followSymlinks      bool
-	withSnapshots       bool
-	forceWrite          bool
+	listOfFilesToCopy  []string
+	listOfFilesChannel *chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
+	recursive          bool
+	followSymlinks     bool
+	withSnapshots      bool
+	forceWrite         bool
 
 	// options from flags
 	blockSize uint32
@@ -913,7 +945,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.LocalBlobFS(),
 		common.EFromTo.LocalFile():
 		var traverser resourceTraverser
-		var destTraverser resourceTraverser
 
 		dst := cca.destination
 
@@ -928,18 +959,13 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 			dst = destURL.String()
 		}
 
-		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, &cca.listOfFilesLocation, cca.recursive, func() {})
-		if err != nil {
-			return err
-		}
-
-		destTraverser, err = initResourceTraverser(dst, cca.fromTo.To(), &ctx, &cca.credentialInfo, &cca.followSymlinks, nil, cca.recursive, func() {})
+		traverser, err = initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
 		if err != nil {
 			return err
 		}
 
 		isDir := traverser.isDirectory(false)
-		isDestDir := destTraverser.isDirectory(true)
+		isDestDir := cca.isDestDirectory(dst, &ctx)
 
 		if isDir && !cca.recursive {
 			return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
@@ -948,10 +974,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		filters := cca.initModularFilters()
 		processor := func(object storedObject) error {
 			src := cca.makeEscapedRelativePath(true, isDestDir, object)
-			// Why hand in the source on the destination? Because we need to adjust the path for the source if there's no wildcard.
 			dst := cca.makeEscapedRelativePath(false, isDestDir, object)
-
-			glcm.Info(fmt.Sprintf("Added %s to transfers", src))
 
 			transfer := common.CopyTransfer{
 				Source:           src,
@@ -1139,6 +1162,17 @@ func pathPointsToContents(path string) bool {
 	return strings.Contains(path, "*")
 }
 
+// This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
+// This is just for the directory check.
+func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) bool {
+	destTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &cca.credentialInfo, &cca.followSymlinks, nil, cca.recursive, func() {})
+	if err != nil {
+		return false
+	}
+
+	return destTraverser.isDirectory(true)
+}
+
 // Initialize the modular filters outside of copy to increase readability.
 func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	filters := make([]objectFilter, 0) // same as []objectFilter{} under the hood
@@ -1153,9 +1187,8 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 		}
 	}
 
-	if len(cca.includePathPatterns) != 0 {
-		filters = append(filters, &includeFilter{patterns: cca.includePathPatterns, targetsPath: true})
-	}
+	// include-path is not a filter, therefore it does not get handled here.
+	// Check up in cook() around the list-of-files implementation as include-path gets included in the same way.
 
 	if len(cca.excludePathPatterns) != 0 {
 		for _, v := range cca.excludePathPatterns {

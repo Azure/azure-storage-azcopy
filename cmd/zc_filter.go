@@ -30,10 +30,7 @@ import (
 // Design explanation:
 /*
 Blob type exclusion is required as a part of the copy enumerators refactor. This would be used in Download and S2S scenarios.
-In order to make the actual filter speed faster, a map is opted for instead of a list.
 This map is used effectively as a hash set. If an item exists in the set, it does not pass the filter.
-
-This behavior is O(1) time compared to O(n) time, where n is the number of blob types excluded.
 */
 type excludeBlobTypeFilter struct {
 	blobTypes map[azblob.BlobType]bool
@@ -107,8 +104,7 @@ func buildExcludeFilters(patterns []string, targetPath bool) []objectFilter {
 // meaning that if an storedObject is accepted by any of the include filters, then it is accepted by all of them
 // consequently, all the include patterns must be stored together
 type includeFilter struct {
-	patterns    []string
-	targetsPath bool
+	patterns []string
 }
 
 func (f *includeFilter) doesSupportThisOS() (msg string, supported bool) {
@@ -124,24 +120,16 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 
 	for _, pattern := range f.patterns {
 		checkItem := storedObject.name
-		if f.targetsPath {
-			checkItem = storedObject.relativePath
-		}
 
 		matched := false
 
-		if f.targetsPath {
-			// Do not actually support patterns here
-			matched = strings.HasPrefix(checkItem, pattern)
-		} else {
-			var err error
-			matched, err = path.Match(pattern, checkItem)
+		var err error
+		matched, err = path.Match(pattern, checkItem)
 
-			// if the pattern failed to match with an error, then we assume the pattern is invalid
-			// and ignore it
-			if err != nil {
-				continue
-			}
+		// if the pattern failed to match with an error, then we assume the pattern is invalid
+		// and ignore it
+		if err != nil {
+			continue
 		}
 
 		// if an storedObject is accepted by any of the include filters
@@ -154,7 +142,7 @@ func (f *includeFilter) doesPass(storedObject storedObject) bool {
 	return false
 }
 
-func buildIncludeFilters(patterns []string, targetPath bool) []objectFilter {
+func buildIncludeFilters(patterns []string) []objectFilter {
 	validPatterns := make([]string, 0)
 	for _, pattern := range patterns {
 		if pattern != "" {
@@ -162,5 +150,5 @@ func buildIncludeFilters(patterns []string, targetPath bool) []objectFilter {
 		}
 	}
 
-	return []objectFilter{&includeFilter{patterns: validPatterns, targetsPath: targetPath}}
+	return []objectFilter{&includeFilter{patterns: validPatterns}}
 }

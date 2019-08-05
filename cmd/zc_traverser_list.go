@@ -25,7 +25,7 @@ func (l *listTraverser) isDirectory(isDest bool) bool {
 // To kill the traverser, close() the channel under it.
 // Behavior demonstrated: https://play.golang.org/p/OYdvLmNWgwO
 func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
-	// spawn a scanner to read the list of entities one line at a time
+	// read a channel until it closes to get a list of objects
 	childPath, ok := <-l.listReader
 	for ; ok; childPath, ok = <-l.listReader {
 
@@ -58,7 +58,6 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 		}
 	}
 
-	// close the reader before returning
 	return nil
 }
 

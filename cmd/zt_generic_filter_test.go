@@ -32,7 +32,7 @@ func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
 	// set up the filters
 	raw := rawSyncCmdArgs{}
 	includePatternList := raw.parsePatterns("*.pdf;*.jpeg;exactName")
-	includeFilter := buildIncludeFilters(includePatternList, false)[0]
+	includeFilter := buildIncludeFilters(includePatternList)[0]
 
 	// test the positive cases
 	filesToPass := []string{"bla.pdf", "fancy.jpeg", "socool.jpeg.pdf", "exactName"}
