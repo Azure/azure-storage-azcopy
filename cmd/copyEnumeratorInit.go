@@ -29,17 +29,16 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		dst = destURL.String()
 	}
 
-	traverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
+	// TODO: in download refactor, handle trailing wildcard properly here.
+	// As is, we don't cut it off at the moment,
+	// and we also don't properly handle the "source points to contents" scenario aside from on local, which waives it through wildcard support.
+	traverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, true, func() {})
 	if err != nil {
 		return nil, err
 	}
 
-	isDir := traverser.isDirectory(false)
+	// source directory check occurs within the traversers. This allows us to error out properly when pointing at a folder.
 	isDestDir := cca.isDestDirectory(dst, &ctx)
-
-	if isDir && !cca.recursive {
-		return nil, errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
-	}
 
 	filters := cca.initModularFilters()
 	processor := func(object storedObject) error {
@@ -69,12 +68,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 // This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
 // This is just for the directory check.
 func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) bool {
-	destTraverser, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &cca.credentialInfo, &cca.followSymlinks, nil, cca.recursive, func() {})
+	p, err := initPipeline(*ctx, cca.fromTo.To(), cca.credentialInfo)
+
 	if err != nil {
 		return false
 	}
 
-	return destTraverser.isDirectory(true)
+	return isPathDirectory(dst, cca.fromTo.To(), ctx, &p)
 }
 
 // Initialize the modular filters outside of copy to increase readability.

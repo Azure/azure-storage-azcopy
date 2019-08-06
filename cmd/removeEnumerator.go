@@ -53,7 +53,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
 	}
 
-	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, func() {})
+	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func() {})
 
 	// report failure to create traverser
 	if err != nil {
@@ -142,6 +142,10 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 	// list of files is given, record the parent path
 	parentPath := urlParts.DirectoryOrFilePath
 	successCount := 0
+
+	if cca.listOfFilesChannel == nil {
+		return removeSingleBfsResource(urlParts, p, ctx, cca.recursive)
+	}
 
 	// read from the list of files channel to find out what needs to be deleted.
 	childPath, ok := <-*cca.listOfFilesChannel

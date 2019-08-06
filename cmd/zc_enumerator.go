@@ -80,20 +80,23 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
-	isDirectory(isDest bool) bool // isDest is literally only useful on blob because we have seperate rules for blob on up/down.
+	isDirectory() bool
 }
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel *chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+// errorOnDirWOutRecursive is used by copy.
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel *chan string, recursive bool, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
+	// Clean up the source if it's a local path
 	if location == common.ELocation.Local() {
 		source = cleanLocalPath(source)
 	}
 
+	// Initialize the pipeline if creds and ctx is provided
 	if ctx != nil && credential != nil {
 		tmppipe, err := initPipeline(*ctx, location, *credential)
 
@@ -104,6 +107,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		p = &tmppipe
 	}
 
+	// Feed list of files channel into new list traverser, separate SAS.
 	if listofFilesChannel != nil {
 		splitsrc := strings.Split(source, "?")
 		sas := ""
@@ -123,6 +127,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			toFollow = *followSymlinks
 		}
 
+		// If wildcard is present, glob and feed the globbed list into a list enum.
 		if strings.Index(source, "*") != -1 {
 			basePath := getPathBeforeFirstWildcard(source)
 			matches, err := filepath.Glob(source)
@@ -142,7 +147,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 
 			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, globChan)
 		} else {
-			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
+			output = newLocalTraverser(source, recursive, toFollow, errorOnDirWOutRecursive, incrementEnumerationCounter)
 		}
 	case common.ELocation.Blob():
 		sourceURL, err := url.Parse(source)
@@ -154,7 +159,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
 
-		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, errorOnDirWOutRecursive, incrementEnumerationCounter)
 	case common.ELocation.File():
 		sourceURL, err := url.Parse(source)
 		if err != nil {
@@ -165,7 +170,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
 		}
 
-		output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		output = newFileTraverser(sourceURL, *p, *ctx, recursive, errorOnDirWOutRecursive, incrementEnumerationCounter)
 	case common.ELocation.BlobFS():
 		sourceURL, err := url.Parse(source)
 		if err != nil {
@@ -176,33 +181,12 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
 		}
 
-		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, errorOnDirWOutRecursive, incrementEnumerationCounter)
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}
 
 	return output, nil
-}
-
-// In local cases, many wildcards may be used, hence string.Contains
-// In non-local cases, only a trailing wildcard may be used: ex. https://myAccount.blob.core.windows.net/container/*
-// In both cases, we want to copy the contents of the matches to the exact path specified on the destination.
-// Without this, a directory is created at the destination, and everything is placed under it.
-func pathPointsToContents(path string) bool {
-	return strings.Contains(path, "*")
-}
-
-func getPathBeforeFirstWildcard(path string) string {
-	if strings.Index(path, "*") == -1 {
-		return path
-	}
-
-	firstWCIndex := strings.Index(path, "*")
-	result := replacePathSeparators(path[:firstWCIndex])
-	lastSepIndex := strings.LastIndex(result, "/")
-	result = result[:lastSepIndex+1]
-
-	return result
 }
 
 // given a storedObject, process it accordingly

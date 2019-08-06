@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -32,16 +33,17 @@ import (
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
-	rawURL    *url.URL
-	p         pipeline.Pipeline
-	ctx       context.Context
-	recursive bool
+	rawURL                  *url.URL
+	p                       pipeline.Pipeline
+	ctx                     context.Context
+	recursive               bool
+	errorOnDirWOutRecursive bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func (t *fileTraverser) isDirectory(isDest bool) bool {
+func (t *fileTraverser) isDirectory() bool {
 	return copyHandlerUtil{}.urlIsAzureFileDirectory(t.ctx, t.rawURL, t.p) // This handles all of the fanciness for us.
 }
 
@@ -80,6 +82,10 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 
 			return processIfPassedFilters(filters, storedObject, processor)
 		}
+	}
+
+	if t.errorOnDirWOutRecursive && !t.recursive {
+		return errors.New("cannot copy from container or directory without --recursive or trailing wildcard")
 	}
 
 	// get the directory URL so that we can list the files
@@ -143,7 +149,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (t *fileTraverser) {
+	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, errorOnDirWOutRecursive: errorOnDirWOutRecursive, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -33,46 +34,19 @@ import (
 
 // allow us to iterate through a path pointing to the blob endpoint
 type blobTraverser struct {
-	rawURL    *url.URL
-	p         pipeline.Pipeline
-	ctx       context.Context
-	recursive bool
+	rawURL                  *url.URL
+	p                       pipeline.Pipeline
+	ctx                     context.Context
+	recursive               bool
+	errorOnDirWOutRecursive bool // Error out if this is true and pointing to a directory without recursive
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func (t *blobTraverser) isDirectory(isDest bool) bool {
+func (t *blobTraverser) isDirectory() bool {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
-	if isDirDirect || isDest { // We do not need to do an actual check on the destination
-		return isDirDirect
-	}
-
-	// To find out if it's a directory or a individual blob, let's try to list from it.
-	blobURLParts := blobURLPartsExtension{azblob.NewBlobURLParts(*t.rawURL)}
-
-	rawContainerURL := blobURLParts.getContainerURL()
-	searchPrefix := blobURLParts.BlobName
-
-	// If this is a single blob, ensure it doesn't get included in the search.
-	if !strings.HasSuffix(searchPrefix, "/") {
-		searchPrefix += "/"
-	}
-
-	containerURL := azblob.NewContainerURL(rawContainerURL, t.p)
-	resp, err := containerURL.ListBlobsFlatSegment(t.ctx, azblob.Marker{}, azblob.ListBlobsSegmentOptions{})
-
-	if err != nil {
-		return false
-	}
-
-	// If items exist in the search, this IS a virtual directory.
-	// Virtual directories aren't otherwise possible in blob storage.
-	if len(resp.Segment.BlobItems) > 0 {
-		return true
-	}
-
-	return false
+	return isDirDirect
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool) {
@@ -108,6 +82,10 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 		}
 
 		return processIfPassedFilters(filters, storedObject, processor)
+	}
+
+	if t.errorOnDirWOutRecursive && !t.recursive {
+		return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
 	}
 
 	// get the container URL so that we can list the blobs
@@ -173,7 +151,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	return
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobTraverser) {
-	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (t *blobTraverser) {
+	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, errorOnDirWOutRecursive: errorOnDirWOutRecursive, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

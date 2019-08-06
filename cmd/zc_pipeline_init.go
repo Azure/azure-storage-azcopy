@@ -12,6 +12,7 @@ import (
 func initPipeline(ctx context.Context, location common.Location, credential common.CredentialInfo) (p pipeline.Pipeline, err error) {
 	switch location {
 	case common.ELocation.Local():
+		// Gracefully return
 		return nil, nil
 	case common.ELocation.Blob():
 		p, err = createBlobPipeline(ctx, credential)

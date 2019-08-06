@@ -61,7 +61,7 @@ func newLocalTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (*localTrav
 	// TODO: Implement this flag (followSymlinks).
 	// It's extra work and would require testing at the moment, hence why I didn't do it.
 	// Though in hindsight, copy is already getting this testing so, your choice.
-	traverser := newLocalTraverser(fullPath, cca.recursive, false, incrementEnumerationCounter)
+	traverser := newLocalTraverser(fullPath, cca.recursive, false, false, incrementEnumerationCounter)
 
 	return traverser, nil
 }
@@ -108,5 +108,5 @@ func newBlobTraverserForSync(cca *cookedSyncCmdArgs, isSource bool) (t *blobTrav
 		atomic.AddUint64(counterAddr, 1)
 	}
 
-	return newBlobTraverser(rawURL, p, ctx, cca.recursive, incrementEnumerationCounter), nil
+	return newBlobTraverser(rawURL, p, ctx, cca.recursive, false, incrementEnumerationCounter), nil
 }

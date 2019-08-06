@@ -22,8 +22,8 @@ package cmd
 
 import (
 	"path/filepath"
-	"syscall"
 	"strings"
+	"syscall"
 )
 
 type attrFilter struct {
@@ -40,7 +40,7 @@ func (f *attrFilter) doesSupportThisOS() (msg string, supported bool) {
 
 // TODO: review handling of filename for long path support
 func (f *attrFilter) doesPass(storedObject storedObject) bool {
-	fileName := filepath.Join(f.filePath, storedObject.name)
+	fileName := filepath.Join(f.filePath, storedObject.relativePath)
 	lpFileName, _ := syscall.UTF16PtrFromString(fileName)
 	attributes, err := syscall.GetFileAttributes(lpFileName)
 
@@ -53,7 +53,7 @@ func (f *attrFilter) doesPass(storedObject storedObject) bool {
 	// if a file shares one or more attributes with the ones provided by the filter,
 	// it's a match. Return the appropriate boolean value if there's a match.
 	// Otherwise return the opposite value.
-	if attributes & f.fileAttributes > 0 {
+	if attributes&f.fileAttributes > 0 {
 		return f.isIncludeFilter
 	}
 
@@ -76,17 +76,17 @@ func buildAttrFilters(attributes []string, fullPath string, isIncludeFilter bool
 	// I = Non-indexed files
 	// Reference for File Attribute Constants:
 	// https://docs.microsoft.com/en-us/windows/win32/fileio/file-attribute-constants
-	fileAttributeMap := map[string]uint32 {
-		"R" : 1,
-		"A" : 32,
-		"S" : 4,
-		"H" : 2,
-		"C" : 2048,
-		"N" : 128,
-		"E" : 16384,
-		"T" : 256,
-		"O" : 4096,
-		"I" : 8192,
+	fileAttributeMap := map[string]uint32{
+		"R": 1,
+		"A": 32,
+		"S": 4,
+		"H": 2,
+		"C": 2048,
+		"N": 128,
+		"E": 16384,
+		"T": 256,
+		"O": 4096,
+		"I": 8192,
 	}
 
 	for _, attribute := range attributes {

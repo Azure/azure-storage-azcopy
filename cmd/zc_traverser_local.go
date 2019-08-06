@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -35,12 +36,13 @@ type localTraverser struct {
 	fullPath       string
 	recursive      bool
 	followSymlinks bool
+	copyTraverser  bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func (t *localTraverser) isDirectory(isDest bool) bool {
+func (t *localTraverser) isDirectory() bool {
 	if strings.HasSuffix(t.fullPath, "/") {
 		return true
 	}
@@ -196,92 +198,11 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 			} else {
 				return filepath.Walk(t.fullPath, processFile)
 			}
-
-			/*// We want to re-queue symlinks up in their evaluated form because filepath.Walk doesn't evaluate them for us.
-			// So, what is the plan of attack?
-			// Because we can't create endless channels, we create an array instead and use it as a queue.
-			// Furthermore, we use a map as a hashset to avoid re-walking any paths we already know.
-			// TODO: Break this out into a walkWithSymlinks function.
-			type walkItem struct {
-				fullPath     string // We need the full, symlink-resolved path to walk against
-				relativeBase string // We also need the relative base path we found the symlink at.
-			}
-
-			var walkQueue = []walkItem{{fullPath: t.fullPath, relativeBase: ""}}
-			var seenPaths = make(map[string]bool)
-
-			for len(walkQueue) > 0 {
-				queueItem := walkQueue[0]
-				walkQueue = walkQueue[1:] // Handle queue as a sliding window over an array
-				err = filepath.Walk(queueItem.fullPath, func(filePath string, fileInfo os.FileInfo, fileError error) error {
-					if fileError != nil {
-						glcm.Info(fmt.Sprintf("Accessing %s failed with error: %s", filePath, fileError))
-						return nil
-					}
-
-					computedRelativePath := strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(queueItem.fullPath))
-					computedRelativePath = cleanLocalPath(filepath.Join(queueItem.relativeBase, computedRelativePath))
-					computedRelativePath = strings.TrimPrefix(computedRelativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
-
-					if fileInfo.Mode()&os.ModeSymlink != 0 {
-						if t.followSymlinks { // Follow the symlink, add it to the computed relative path.
-							result, err := filepath.EvalSymlinks(filePath)
-
-							if err != nil {
-								glcm.Info(fmt.Sprintf("Failed to open symlink %s: %s", filePath, err))
-								return nil
-							}
-
-							result, err = filepath.Abs(result)
-
-							if err != nil {
-								glcm.Info(fmt.Sprintf("Failed to resolve symlink %s: %s", filePath, err))
-								return nil
-							}
-
-							if _, ok := seenPaths[result]; !ok {
-								walkQueue = append(walkQueue, walkItem{
-									fullPath:     result,
-									relativeBase: computedRelativePath,
-								})
-							} else {
-								glcm.Info(fmt.Sprintf("Ignored recursive symlink at %s", filePath))
-							}
-							seenPaths[result] = true
-						}
-
-						return nil
-					} else {
-						if fileInfo.IsDir() {
-							return nil
-						}
-
-						result, err := filepath.Abs(filePath)
-
-						if err != nil {
-							glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
-							return nil
-						}
-
-						if _, ok := seenPaths[result]; !ok {
-							if t.incrementEnumerationCounter != nil {
-								t.incrementEnumerationCounter()
-							}
-
-							seenPaths[result] = true
-
-							return processIfPassedFilters(filters, newStoredObject(fileInfo.Name(), computedRelativePath,
-								fileInfo.ModTime(), fileInfo.Size(), nil, blobTypeNA), processor)
-						} else {
-							glcm.Info(fmt.Sprintf("Ignored already seen file located at %s", result))
-							return nil
-						}
-					}
-				})
-			}
-
-			return*/
 		} else {
+			if t.copyTraverser {
+				return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
+			}
+
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			files, err := ioutil.ReadDir(t.fullPath)
 			if err != nil {
@@ -298,7 +219,11 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					t.incrementEnumerationCounter()
 				}
 
-				return processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
+				err := processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
+
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -314,12 +239,13 @@ func replacePathSeparators(path string) string {
 	}
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
-		incrementEnumerationCounter: incrementEnumerationCounter}
+		incrementEnumerationCounter: incrementEnumerationCounter,
+		copyTraverser:               errorOnDirWOutRecursive}
 	return &traverser
 }
 
