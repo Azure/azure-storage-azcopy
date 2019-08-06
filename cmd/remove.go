@@ -85,12 +85,10 @@ func init() {
 	deleteCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when syncing between directories.")
 	deleteCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	deleteCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	deleteCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when removing. "+
-		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf"+
-		"Note: This considers the _entire_ relative path, file name included.")
+		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
+	deleteCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	deleteCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "exclude these paths when removing. "+
-		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf"+
-		"Note: This considers the _entire_ relative path, file name included.")
+		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
 	deleteCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of a file which contains the list of files/directories to be deleted. The relative paths should be delimited by line breaks, and the paths should NOT be URL-encoded.")
 }

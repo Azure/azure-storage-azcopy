@@ -1234,11 +1234,9 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
-		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf "+
-		"Note: This considers the _entire_ relative path, file name included.")
+		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
 	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "exclude these paths when copying. "+
-		"Supports use of * considering the relative path of items (from the root of the search.) ex. myFolder/*.txt;*/subDirName/*.pdf"+
-		"Note: This considers the _entire_ relative path, file name included.")
+		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
