@@ -24,7 +24,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -42,11 +41,6 @@ var _ = chk.Suite(&genericTraverserSuite{})
 
 // Test follow symlink functionality
 func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
-	if runtime.GOOS == "windows" {
-		c.Skip("Windows does not allow true symlinks")
-	}
-
-	// You get a sense of pride and satisfaction if you know what the first one references.
 	fileNames := []string{"my cat keeps sending me to bed.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)

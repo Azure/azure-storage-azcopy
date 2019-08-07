@@ -56,7 +56,6 @@ func (t *localTraverser) isDirectory() bool {
 	return props.IsDir()
 }
 
-// For some reason, Goland was refusing to believe this existed when placed below traverse(). Compiled just fine though.
 func (t *localTraverser) getInfoIfSingleFile() (os.FileInfo, bool, error) {
 	fileInfo, err := os.Stat(t.fullPath)
 
@@ -180,6 +179,10 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				if !t.followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
 					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", filepath.Join(t.fullPath, relPath)))
 					return nil
+				}
+
+				if t.incrementEnumerationCounter != nil {
+					t.incrementEnumerationCounter()
 				}
 
 				return processIfPassedFilters(filters,
