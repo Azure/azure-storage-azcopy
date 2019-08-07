@@ -62,7 +62,7 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 }
 
 func newListTraverser(parent string, parentSAS string, parentType common.Location, credential *common.CredentialInfo, ctx *context.Context,
-	recursive bool, listChan chan string) resourceTraverser {
+	recursive, followSymlinks bool, listChan chan string, incrementEnumerationCounter func()) resourceTraverser {
 	var traverserGenerator childTraverserGenerator
 
 	traverserGenerator = func(relativeChildPath string) (resourceTraverser, error) {
@@ -79,7 +79,7 @@ func newListTraverser(parent string, parentSAS string, parentType common.Locatio
 			source = common.GenerateFullPath(parent, relativeChildPath)
 		}
 
-		traverser, err := initResourceTraverser(source, parentType, ctx, credential, nil, nil, recursive, false, func() {})
+		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, false, incrementEnumerationCounter)
 		if err != nil {
 			return nil, err
 		}

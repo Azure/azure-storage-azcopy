@@ -107,6 +107,11 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		p = &tmppipe
 	}
 
+	toFollow := false
+	if followSymlinks != nil {
+		toFollow = *followSymlinks
+	}
+
 	// Feed list of files channel into new list traverser, separate SAS.
 	if listofFilesChannel != nil {
 		splitsrc := strings.Split(source, "?")
@@ -116,17 +121,12 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			sas = splitsrc[1]
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, listofFilesChannel)
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
 	switch location {
 	case common.ELocation.Local():
-		toFollow := false
-		if followSymlinks != nil {
-			toFollow = *followSymlinks
-		}
-
 		// If wildcard is present, glob and feed the globbed list into a list enum.
 		if strings.Index(source, "*") != -1 {
 			basePath := getPathBeforeFirstWildcard(source)
@@ -145,7 +145,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				}
 			}()
 
-			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, globChan)
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, globChan, incrementEnumerationCounter)
 		} else {
 			output = newLocalTraverser(source, recursive, toFollow, errorOnDirWOutRecursive, incrementEnumerationCounter)
 		}
