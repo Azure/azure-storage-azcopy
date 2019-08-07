@@ -53,6 +53,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
 	}
 
+	// Include-path is handled by ListOfFilesChannel.
 	sourceTraverser, err = initResourceTraverser(rawURL.String(), cca.fromTo.From(), &ctx, &cca.credentialInfo, nil, cca.listOfFilesChannel, cca.recursive, false, func() {})
 
 	// report failure to create traverser
@@ -61,7 +62,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	}
 
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
-	includeFilters := buildIncludeFilters(cca.includePatterns) // TODO: Add include-path in here?
+	includeFilters := buildIncludeFilters(cca.includePatterns)
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
 
