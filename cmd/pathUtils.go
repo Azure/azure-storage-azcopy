@@ -61,6 +61,7 @@ func isPathDirectory(path string, location common.Location, ctx *context.Context
 			_, err := directoryURL.GetProperties(*ctx)
 			if err != nil {
 				result = false
+				break
 			}
 
 			result = true
