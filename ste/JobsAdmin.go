@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"path"
@@ -91,6 +92,11 @@ var JobsAdmin interface {
 
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
+
+	AddSuccessfulBytesInActiveFiles(n uint64)
+
+	// returns number of bytes successfully transferred in transfers that are currently in progress
+	SuccessfulBytesInActiveFiles() uint64
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
@@ -318,8 +324,9 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
-	logger        common.ILoggerCloser
-	jobIDToJobMgr jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
+	atomicSuccessfulBytesInActiveFiles int64
+	logger                             common.ILoggerCloser
+	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	logDir              string // Where log files are stored
 	planDir             string // Initialize to directory where Job Part Plans are stored
@@ -417,6 +424,14 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
+}
+
+func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n uint64) {
+	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, int64(n))
+}
+
+func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
+	return uint64(atomic.LoadInt64(&ja.atomicSuccessfulBytesInActiveFiles))
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {

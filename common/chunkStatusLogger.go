@@ -51,6 +51,7 @@ type ChunkID struct {
 	// TODO: it's a bit odd having two pointers in a struct like this.  Review, maybe we should always work
 	//   with pointers to chunk ids, with nocopy?  If we do that, the two fields that are currently pointers
 	//   can become non-pointers
+	//   And maybe at that point, we would also put Length into chunkID, and use that in jptm.ReportChunkDone
 }
 
 func NewChunkID(name string, offsetInFile int64) ChunkID {
