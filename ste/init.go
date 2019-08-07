@@ -450,7 +450,12 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
-	js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	if js.TotalBytesExpected == 0 {
+		// if no bytes expected, and we should avoid dividing by 0 (which results in NaN)
+		js.PercentComplete = 100
+	} else {
+		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary
 	// in case of resume. In case of resume, the Job is already completely
@@ -592,7 +597,12 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 
 	// Add on byte count from files in flight, to get a more accurate running total
 	js.TotalBytesTransferred += JobsAdmin.SuccessfulBytesInActiveFiles()
-	js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	if js.TotalBytesExpected == 0 {
+		// if no bytes expected, we should avoid dividing by 0 (which results in NaN)
+		js.PercentComplete = 100
+	} else {
+		js.PercentComplete = 100 * float32(js.TotalBytesTransferred) / float32(js.TotalBytesExpected)
+	}
 
 	// This is added to let FE to continue fetching the Job Progress Summary
 	// in case of resume. In case of resume, the Job is already completely
