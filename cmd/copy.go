@@ -217,12 +217,12 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// Note: new implementation of list-of-files only works for remove command and upload for now.
+	// * -> Garbage and * -> Local work under this implementation
 	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() {
 		// This handles both list-of-files and include-path as a list enumerator.
 		// This saves us time because we know *exactly* what we're looking for right off the bat.
 		// Note that exclude-path is handled as a filter unlike include-path.
 
-		// to garbage or to local
 		if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
 			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
 		}
@@ -258,8 +258,14 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			}
 		}()
 
+		// A combined implementation reduces the amount of code duplication present.
+		// However, it _does_ increase the amount of code-intertwining present.
+		if raw.listOfFilesToCopy != "" && raw.includePath != "" {
+			return cooked, errors.New("cannot combine list of files and include path")
+		}
+
 		if raw.listOfFilesToCopy != "" || raw.includePath != "" {
-			cooked.listOfFilesChannel = &listChan
+			cooked.listOfFilesChannel = listChan
 		}
 	} else if len(raw.listOfFilesToCopy) > 0 {
 		// TODO remove this legacy implementation after copy enumerator refactoring
@@ -561,7 +567,7 @@ type cookedCopyCmdArgs struct {
 
 	// filters from flags
 	listOfFilesToCopy  []string
-	listOfFilesChannel *chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
+	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
 	recursive          bool
 	followSymlinks     bool
 	withSnapshots      bool

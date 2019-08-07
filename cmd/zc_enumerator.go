@@ -87,7 +87,7 @@ type resourceTraverser interface {
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel *chan string, recursive bool, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -116,7 +116,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			sas = splitsrc[1]
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, *listofFilesChannel)
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, listofFilesChannel)
 		return output, nil
 	}
 

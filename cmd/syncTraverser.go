@@ -23,10 +23,11 @@ package cmd
 import (
 	"context"
 	"errors"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
 	"strings"
 	"sync/atomic"
+
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // TODO: Get rid of highly situational constructors.

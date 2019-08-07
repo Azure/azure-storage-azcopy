@@ -63,12 +63,10 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	transferScheduler := newRemoveTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 	includeFilters := buildIncludeFilters(cca.includePatterns) // TODO: Add include-path in here?
 	excludeFilters := buildExcludeFilters(cca.excludePatterns, false)
-	includePathFilters := buildIncludeFilters(cca.includePathPatterns)
 	excludePathFilters := buildExcludeFilters(cca.excludePathPatterns, true)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
-	filters = append(filters, includePathFilters...)
 	filters = append(filters, excludePathFilters...)
 
 	finalize := func() error {
@@ -148,8 +146,8 @@ func removeBfsResources(cca *cookedCopyCmdArgs) (successMessage string, err erro
 	}
 
 	// read from the list of files channel to find out what needs to be deleted.
-	childPath, ok := <-*cca.listOfFilesChannel
-	for ; ok; childPath, ok = <-*cca.listOfFilesChannel {
+	childPath, ok := <-cca.listOfFilesChannel
+	for ; ok; childPath, ok = <-cca.listOfFilesChannel {
 		// remove the child path
 		urlParts.DirectoryOrFilePath = common.GenerateFullPath(parentPath, childPath)
 		successMessage, err := removeSingleBfsResource(urlParts, p, ctx, cca.recursive)

@@ -52,14 +52,10 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 	includeFilters := buildIncludeFilters(cca.include)
-	includePathFilters := buildIncludeFilters(cca.includePath)
 	excludeFilters := buildExcludeFilters(cca.exclude, false)
-	excludePathFilters := buildExcludeFilters(cca.excludePath, true)
 
 	// set up the filters in the right order
 	filters := append(includeFilters, excludeFilters...)
-	filters = append(filters, includePathFilters...)
-	filters = append(filters, excludePathFilters...)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
@@ -115,9 +111,7 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 
 	transferScheduler := newSyncTransferProcessor(cca, NumOfFilesPerDispatchJobPart)
 	includeFilters := buildIncludeFilters(cca.include)
-	includePathFilters := buildIncludeFilters(cca.includePath)
 	excludeFilters := buildExcludeFilters(cca.exclude, false)
-	excludePathFilters := buildExcludeFilters(cca.excludePath, true)
 
 	includeAttrFilters := buildAttrFilters(cca.includeFileAttributes, sourceTraverser.fullPath, true)
 	excludeAttrFilters := buildAttrFilters(cca.excludeFileAttributes, sourceTraverser.fullPath, false)
@@ -129,8 +123,6 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 	filters := append(includeFilters, includeAttrFilters...)
 	filters = append(filters, excludeFilters...)
 	filters = append(filters, excludeAttrFilters...)
-	filters = append(filters, includePathFilters...)
-	filters = append(filters, excludePathFilters...)
 
 	// set up the comparator so that the source/destination can be compared
 	indexer := newObjectIndexer()
