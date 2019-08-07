@@ -72,13 +72,14 @@ func newListTraverser(parent string, parentSAS string, parentType common.Locatio
 			childURL, _ := url.Parse(parent)
 			childURL.Path = common.GenerateFullPath(childURL.Path, relativeChildPath)
 
-			// construct traverser that goes through child
+			// append query to URL
 			source = copyHandlerUtil{}.appendQueryParamToUrl(childURL, parentSAS).String()
 		} else {
 			// is local, only generate the full path
 			source = common.GenerateFullPath(parent, relativeChildPath)
 		}
 
+		// Construct a traverser that goes through the child
 		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, false, incrementEnumerationCounter)
 		if err != nil {
 			return nil, err
