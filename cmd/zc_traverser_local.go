@@ -83,8 +83,14 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 		relativeBase string // We also need the relative base path we found the symlink at.
 	}
 
+	fullPath, err = filepath.Abs(fullPath)
+
+	if err != nil {
+		return err
+	}
+
 	walkQueue := []walkItem{{fullPath: fullPath, relativeBase: ""}}
-	seenPaths := make(map[string]bool)
+	seenPaths := map[string]bool{fullPath: true}
 
 	for len(walkQueue) > 0 {
 		queueItem := walkQueue[0]
@@ -110,23 +116,27 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 
 				result, err = filepath.Abs(result)
 				if err != nil {
-					glcm.Info(fmt.Sprintf("Failed to get absolute path of symlink %s: %s", filePath, err))
+					glcm.Info(fmt.Sprintf("Failed to get absolute path of symlink result %s: %s", filePath, err))
 					return nil
 				}
 
+				slPath, err := filepath.Abs(filePath)
+				if err != nil {
+					glcm.Info(fmt.Sprintf("Failed to get absolute path of %s: %s", filePath, err))
+				}
+
 				if _, ok := seenPaths[result]; !ok {
+					seenPaths[result] = true
+					seenPaths[slPath] = true // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because
 					walkQueue = append(walkQueue, walkItem{
 						fullPath:     result,
 						relativeBase: computedRelativePath,
 					})
+				} else {
+					glcm.Info(fmt.Sprintf("Ignored already linked directory pointed at %s (link at %s)", result, filepath.Join(fullPath, computedRelativePath)))
 				}
-				seenPaths[result] = true
 				return nil
 			} else {
-				if fileInfo.IsDir() {
-					return nil
-				}
-
 				result, err := filepath.Abs(filePath)
 
 				if err != nil {
@@ -134,11 +144,19 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 					return nil
 				}
 
+				if fileInfo.IsDir() {
+					// Add it to seen paths but ignore it otherwise.
+					// This prevents walking it again if we've already seen the directory.
+					seenPaths[result] = true
+					return nil
+				}
+
 				if _, ok := seenPaths[result]; !ok {
 					seenPaths[result] = true
 					return walkFunc(filepath.Join(fullPath, computedRelativePath), fileInfo, fileError)
 				} else {
-					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s", filePath))
+					// Output resulting path of symlink and symlink source
+					glcm.Info(fmt.Sprintf("Ignored already seen file located at %s (found at %s)", filePath, filepath.Join(fullPath, computedRelativePath)))
 					return nil
 				}
 			}
