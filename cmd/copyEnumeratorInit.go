@@ -74,13 +74,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 // This is condensed down into an individual function as we don't end up re-using the destination traverser at all.
 // This is just for the directory check.
 func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) bool {
-	p, err := initPipeline(*ctx, cca.fromTo.To(), cca.credentialInfo)
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &cca.credentialInfo, nil, nil, false, func() {})
 
 	if err != nil {
 		return false
 	}
 
-	return isPathDirectory(dst, cca.fromTo.To(), ctx, &p)
+	return rt.isDirectory(false)
 }
 
 // Initialize the modular filters outside of copy to increase readability.
