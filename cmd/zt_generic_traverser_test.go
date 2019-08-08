@@ -41,7 +41,7 @@ var _ = chk.Suite(&genericTraverserSuite{})
 
 // Test follow symlink functionality
 func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
-	fileNames := []string{"my cat keeps sending me to bed.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
+	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
