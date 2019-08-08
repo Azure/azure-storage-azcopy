@@ -21,7 +21,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -36,13 +35,12 @@ type localTraverser struct {
 	fullPath       string
 	recursive      bool
 	followSymlinks bool
-	copyTraverser  bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func (t *localTraverser) isDirectory() bool {
+func (t *localTraverser) isDirectory(bool) bool {
 	if strings.HasSuffix(t.fullPath, "/") {
 		return true
 	}
@@ -220,10 +218,6 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				return filepath.Walk(t.fullPath, processFile)
 			}
 		} else {
-			if t.copyTraverser {
-				return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
-			}
-
 			// if recursive is off, we only need to scan the files immediately under the fullPath
 			files, err := ioutil.ReadDir(t.fullPath)
 			if err != nil {
@@ -260,13 +254,12 @@ func replacePathSeparators(path string) string {
 	}
 }
 
-func newLocalTraverser(fullPath string, recursive bool, followSymlinks, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) *localTraverser {
+func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {
 	traverser := localTraverser{
 		fullPath:                    cleanLocalPath(fullPath),
 		recursive:                   recursive,
 		followSymlinks:              followSymlinks,
-		incrementEnumerationCounter: incrementEnumerationCounter,
-		copyTraverser:               errorOnDirWOutRecursive}
+		incrementEnumerationCounter: incrementEnumerationCounter}
 	return &traverser
 }
 

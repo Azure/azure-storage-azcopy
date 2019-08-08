@@ -18,7 +18,7 @@ type listTraverser struct {
 type childTraverserGenerator func(childPath string) (resourceTraverser, error)
 
 // There is no impact to a list traverser returning false because a list traverser points directly to relative paths.
-func (l *listTraverser) isDirectory() bool {
+func (l *listTraverser) isDirectory(bool) bool {
 	return false
 }
 
@@ -80,7 +80,7 @@ func newListTraverser(parent string, parentSAS string, parentType common.Locatio
 		}
 
 		// Construct a traverser that goes through the child
-		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, false, incrementEnumerationCounter)
+		traverser, err := initResourceTraverser(source, parentType, ctx, credential, &followSymlinks, nil, recursive, incrementEnumerationCounter)
 		if err != nil {
 			return nil, err
 		}

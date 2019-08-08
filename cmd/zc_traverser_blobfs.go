@@ -21,41 +21,39 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
-	"github.com/Azure/azure-storage-azcopy/common"
-
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blobFSTraverser struct {
-	rawURL                  *url.URL
-	p                       pipeline.Pipeline
-	ctx                     context.Context
-	recursive               bool
-	errorOnDirWOutRecursive bool // Error out if this is true and pointing to a directory without recursive
+	rawURL    *url.URL
+	p         pipeline.Pipeline
+	ctx       context.Context
+	recursive bool
 
 	// Generic function to indicate that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (t *blobFSTraverser) {
+func newBlobFSTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobFSTraverser) {
 	t = &blobFSTraverser{
 		rawURL:                      rawURL,
 		p:                           p,
 		ctx:                         ctx,
 		recursive:                   recursive,
-		errorOnDirWOutRecursive:     errorOnDirWOutRecursive,
 		incrementEnumerationCounter: incrementEnumerationCounter,
 	}
 	return
 }
 
-func (t *blobFSTraverser) isDirectory() bool {
+func (t *blobFSTraverser) isDirectory(bool) bool {
 	return copyHandlerUtil{}.urlIsBFSFileSystemOrDirectory(t.ctx, t.rawURL, t.p) // This gets all the fanciness done for us.
 }
 
@@ -103,10 +101,6 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 		}
 
 		return processIfPassedFilters(filters, storedObject, processor)
-	}
-
-	if t.errorOnDirWOutRecursive && !t.recursive {
-		return errors.New("cannot copy from container or directory without --recursive or trailing wildcard(/*)")
 	}
 
 	dirUrl := azbfs.NewDirectoryURL(*t.rawURL, t.p)

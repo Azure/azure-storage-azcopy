@@ -80,14 +80,18 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
-	isDirectory() bool
+	isDirectory(isSource bool) bool
+	// isDirectory has an isSource flag for a single exception to blob.
+	// Blob should ONLY check remote if it's a source.
+	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.
+	// Thus, we only check the directory syntax on blob destinations. On sources, we check both syntax and remote, if syntax isn't a directory.
 }
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -147,7 +151,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 
 			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, globChan, incrementEnumerationCounter)
 		} else {
-			output = newLocalTraverser(source, recursive, toFollow, errorOnDirWOutRecursive, incrementEnumerationCounter)
+			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}
 	case common.ELocation.Blob():
 		sourceURL, err := url.Parse(source)
@@ -159,7 +163,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
 
-		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, errorOnDirWOutRecursive, incrementEnumerationCounter)
+		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 	case common.ELocation.File():
 		sourceURL, err := url.Parse(source)
 		if err != nil {
@@ -170,7 +174,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
 		}
 
-		output = newFileTraverser(sourceURL, *p, *ctx, recursive, errorOnDirWOutRecursive, incrementEnumerationCounter)
+		output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 	case common.ELocation.BlobFS():
 		sourceURL, err := url.Parse(source)
 		if err != nil {
@@ -181,7 +185,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
 		}
 
-		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, errorOnDirWOutRecursive, incrementEnumerationCounter)
+		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
 	}

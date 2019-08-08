@@ -22,31 +22,39 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
 type blobTraverser struct {
-	rawURL                  *url.URL
-	p                       pipeline.Pipeline
-	ctx                     context.Context
-	recursive               bool
-	errorOnDirWOutRecursive bool // Error out if this is true and pointing to a directory without recursive
+	rawURL    *url.URL
+	p         pipeline.Pipeline
+	ctx       context.Context
+	recursive bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
 }
 
-func (t *blobTraverser) isDirectory() bool {
+func (t *blobTraverser) isDirectory(isSource bool) bool {
 	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
-	return isDirDirect
+
+	// Skip the single blob check if we're checking a destination.
+	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
+	if isDirDirect || !isSource {
+		return isDirDirect
+	}
+
+	_, isSingleBlob := t.getPropertiesIfSingleBlob()
+
+	return !isSingleBlob
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool) {
@@ -82,10 +90,6 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 		}
 
 		return processIfPassedFilters(filters, storedObject, processor)
-	}
-
-	if t.errorOnDirWOutRecursive && !t.recursive {
-		return errors.New("cannot copy from container or directory without --recursive or trailing wildcard (/*)")
 	}
 
 	// get the container URL so that we can list the blobs
@@ -151,7 +155,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	return
 }
 
-func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, errorOnDirWOutRecursive bool, incrementEnumerationCounter func()) (t *blobTraverser) {
-	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, errorOnDirWOutRecursive: errorOnDirWOutRecursive, incrementEnumerationCounter: incrementEnumerationCounter}
+func newBlobTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *blobTraverser) {
+	t = &blobTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

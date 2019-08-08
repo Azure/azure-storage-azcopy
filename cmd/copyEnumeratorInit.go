@@ -17,6 +17,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	var traverser resourceTraverser
 
 	dst := cca.destination
+	src := cca.source
 
 	if cca.destinationSAS != "" {
 		destURL, err := url.Parse(dst)
@@ -32,12 +33,17 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// TODO: in download refactor, handle trailing wildcard properly here.
 	// As is, we don't cut it off at the moment,
 	// and we also don't properly handle the "source points to contents" scenario aside from on local, which waives it through wildcard support.
-	traverser, err := initResourceTraverser(cca.source, cca.fromTo.From(), nil, nil, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, true, func() {})
+	traverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
 	if err != nil {
 		return nil, err
 	}
 
 	// source directory check occurs within the traversers. This allows us to error out properly when pointing at a folder.
+	isSourceDir := traverser.isDirectory(true)
+	if isSourceDir && !cca.recursive {
+		return nil, errors.New("cannot use directory as source without --recursive or trailing wildcard (/*)")
+	}
+
 	isDestDir := cca.isDestDirectory(dst, &ctx)
 
 	filters := cca.initModularFilters()
