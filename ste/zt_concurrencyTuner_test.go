@@ -22,6 +22,7 @@ package ste
 
 import (
 	chk "gopkg.in/check.v1"
+	"math"
 )
 
 type concurrencyTunerSuite struct{}
@@ -34,16 +35,20 @@ type tunerStep struct {
 	mbpsObserved int // the speed observed with the new concurrency value
 }
 
+func (s *concurrencyTunerSuite) noMax() int {
+	return math.MaxInt32
+}
+
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
 	steps := []tunerStep{
 		{16, concurrencyReasonInitial, 100},
 		{64, concurrencyReasonSeeking, 100},
 		{16, concurrencyReasonBackoff, 100},
 		{25, concurrencyReasonSeeking, 100},
-		{16, concurrencyReasonStable, 100},
-	}
+		{16, concurrencyReasonAtOptimum, 100},
+		{16, concurrencyReasonNotActive, 100}}
 
-	s.runTest(c, steps)
+	s.runTest(c, steps, s.noMax())
 
 }
 
@@ -55,11 +60,23 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth(c *chk.C) {
 		{512, concurrencyReasonSeeking, 20000},
 		{256, concurrencyReasonBackoff, 20000},
 		{307, concurrencyReasonSeeking, 20000},
-		{256, concurrencyReasonStable, 20000},
+		{256, concurrencyReasonAtOptimum, 20000},
+		{256, concurrencyReasonNotActive, 20000},
 	}
 
-	s.runTest(c, steps)
+	s.runTest(c, steps, s.noMax())
 
+}
+
+func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C) {
+	steps := []tunerStep{
+		{16, concurrencyReasonInitial, 1000},
+		{64, concurrencyReasonSeeking, 4000},
+		{100, concurrencyReasonHitMax, 8000}, // NOT "at optimum"
+		{100, concurrencyReasonNotActive, 8000},
+	}
+
+	s.runTest(c, steps, 100)
 }
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandardSteps(c *chk.C) {
@@ -73,14 +90,16 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandard
 		{614, concurrencyReasonSeeking, 16800},
 		{737, concurrencyReasonSeeking, 19500},
 		{884, concurrencyReasonSeeking, 20500},
-		{737, concurrencyReasonStable, 19500}}
+		{737, concurrencyReasonAtOptimum, 19500},
+		{737, concurrencyReasonNotActive, 19500},
+	}
 
-	s.runTest(c, steps)
+	s.runTest(c, steps, s.noMax())
 
 }
 
-func (s *concurrencyTunerSuite) runTest(c *chk.C, steps []tunerStep) {
-	t := NewAutoConcurrencyTuner()
+func (s *concurrencyTunerSuite) runTest(c *chk.C, steps []tunerStep, maxConcurrency int) {
+	t := NewAutoConcurrencyTuner(16, maxConcurrency)
 	observedMbps := -1 // there's no observation at first
 	for _, x := range steps {
 		// ask the tuner what do to

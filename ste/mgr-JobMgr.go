@@ -224,13 +224,19 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 
 	// convert the counts to simple strings for consumption by callers
 	const format = "%c: %2d"
-	result := make([]string, len(chunkStateCounts)+1)
+	result := make([]string, len(chunkStateCounts)+2)
 	total := int64(0)
 	for i, c := range chunkStateCounts {
 		result[i] = fmt.Sprintf(format, c.WaitReason.Name[0], c.Count)
 		total += c.Count
 	}
-	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
+	result[len(result)-2] = fmt.Sprintf(format, 'T', total)
+
+	// Add an exact count of the number of running goroutines in the main pool
+	// The states, above, that run inside that pool (basically the H and B states) will sum to
+	// a value <= this value. But without knowing this value, its harder to be sure if they are at the limit
+	// or not, especially if we are dynamically tuning the pool size.
+	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", JobsAdmin.CurrentMainPoolSize())
 
 	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection)
 

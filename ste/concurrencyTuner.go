@@ -29,7 +29,7 @@ type nullConcurrencyTuner struct {
 }
 
 func (n *nullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string) {
-	return n.fixedValue, concurrencyReasonFixed
+	return n.fixedValue, concurrencyReasonNotActive
 }
 
 type autoConcurrencyTuner struct {
@@ -39,20 +39,27 @@ type autoConcurrencyTuner struct {
 		s string
 	}
 	initialConcurrency int
+	maxConcurrency     int
 }
 
-func NewAutoConcurrencyTuner() ConcurrencyTuner {
+func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 	t := &autoConcurrencyTuner{
 		mbps: make(chan int),
 		concurrency: make(chan struct {
 			v int
 			s string
 		}),
-		initialConcurrency: 16}
+		initialConcurrency: initial,
+		maxConcurrency:     max}
 	go t.worker()
 	return t
 }
 
+// GetRecommendedConcurrency is the public interface of the tuner.
+// It imposes no timing constraints, on how frequently it is called, because we want
+// to run unit tests very quickly. It's up to the caller (in non-test situations) to
+// call at an appropriate frequency such that the currentMbps values are sufficiently accurate
+// (E.g. calling continuously doesn't give enough time to measure actual speeds)
 func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string) {
 	if currentMbps < 0 {
 		return t.initialConcurrency, concurrencyReasonInitial
@@ -65,38 +72,59 @@ func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newCo
 }
 
 const (
-	concurrencyReasonInitial = "initial"
-	concurrencyReasonSeeking = "seeking"
-	concurrencyReasonBackoff = "backingOff"
-	concurrencyReasonStable  = "stable"
-	concurrencyReasonFixed   = "fixedRate"
+	concurrencyReasonInitial   = "initial"
+	concurrencyReasonSeeking   = "seeking"
+	concurrencyReasonBackoff   = "backing off"
+	concurrencyReasonHitMax    = "hit max concurrency limit"
+	concurrencyReasonAtOptimum = "at optimum"
+	concurrencyReasonNotActive = "not actively tuning"
 )
 
 func (t *autoConcurrencyTuner) worker() {
-	const aggressiveMultiplier = 4
-	const standardMultiplier = 2
-	const cuttoffForAgqressiveMultiplier = 255
+	const aggressiveMultiplier = 2
+	const standardMultiplier = 1.5
+	const cuttoffForAgqressiveMultiplier = 511
 	const slowdownFactor = 5
 	const minMulitplier = 1.19 // really this is 1.2, but use a little less to make the floating point comparisons robust
-	const fudgeFactor = 0.75
+	const fudgeFactor = 0.10   // TODO: if we use this outside of benchmarking mode, in the interests of fairness to other traffic, use a higher value so we'll be less aggressive in terms of connection count.  But a bit of aggression is probably OK when benchmarking.
 
 	multiplier := float32(aggressiveMultiplier)
 	concurrency := float32(t.initialConcurrency)
+	hitMax := false
 
 	// get initial baseline throughput
 	lastSpeed := t.getCurrentSpeed()
 
 	for { // todo, add the conditions here
+		rateChangeReason := concurrencyReasonSeeking
+
+		// enforce a ceiling
+		hitMax = concurrency*multiplier > float32(t.maxConcurrency)
+		if hitMax {
+			multiplier = float32(t.maxConcurrency) / concurrency
+			rateChangeReason = concurrencyReasonHitMax
+		}
+
+		// compute increase
 		concurrency = concurrency * multiplier
-		desiredSpeedIncrease := lastSpeed * (multiplier - 1) * fudgeFactor // we'd like it to speed up linearly, but we'll accept a bit less, according to fudge factor
+
+		// compute desired result of increase
+		desiredSpeedIncrease := lastSpeed * (multiplier - 1) * fudgeFactor // we'd like it to speed up linearly, but in the interests of finding the fastest possible speed, we'll accept _significantly_ less, according to fudge factor. What we won't accept is "no speedup at all"
 		desiredNewSpeed := lastSpeed + desiredSpeedIncrease
 
-		t.setConcurrency(concurrency, concurrencyReasonSeeking)
+		// action the increase and measure its effect
+		t.setConcurrency(concurrency, rateChangeReason)
 		lastSpeed = t.getCurrentSpeed()
 
+		// decide what to do based on the measurement
 		if lastSpeed > desiredNewSpeed {
-			// Our concurrency change gave the hoped-for speed increase, so loop around and see if another increase will also work
-			// (but first reduce aggression if concurrency is already high)
+			// Our concurrency change gave the hoped-for speed increase, so loop around and see if another increase will also work,
+			// unless already at max
+			if hitMax {
+				break
+			}
+
+			// Reduce aggression if concurrency is already high
 			if multiplier > standardMultiplier && concurrency >= cuttoffForAgqressiveMultiplier {
 				multiplier = standardMultiplier
 			}
@@ -116,10 +144,18 @@ func (t *autoConcurrencyTuner) worker() {
 		}
 	}
 
-	// just provide the stable value for ever
+	if hitMax {
+		// provide no special "we found the best value" result, because actually we possibly didn't find it, we just hit the max
+	} else {
+		// provide the final value once with a reason that shows we've arrived at what we believe to be the optimal value
+		t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
+		_ = t.getCurrentSpeed() // read from the channel
+	}
+
+	// now just provide an "inactive" value for ever
 	for {
-		t.setConcurrency(concurrency, concurrencyReasonStable)
-		_ = t.getCurrentSpeed()
+		t.setConcurrency(concurrency, concurrencyReasonNotActive)
+		_ = t.getCurrentSpeed() // read from the channel
 	}
 }
 

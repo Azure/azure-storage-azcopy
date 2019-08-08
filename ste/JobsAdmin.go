@@ -101,6 +101,8 @@ var JobsAdmin interface {
 
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
+
+	CurrentMainPoolSize() int
 }
 
 func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder string, azcopyLogPathFolder string) {
@@ -125,10 +127,6 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// Create normal & low transfer/chunk channels
 	normalTransferCh, normalChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
 	lowTransferCh, lowChunkCh := make(chan IJobPartTransferMgr, channelSize), make(chan chunkFunc, channelSize)
-
-	// Create suicide channel which is used to scale back on the number of workers
-	// TODO: this is not used. Remove it.
-	suicideCh := make(chan SuicideJob, concurrency.InitialMainPoolSize)
 
 	maxRamBytesToUse := getMaxRamForChunks()
 
@@ -166,7 +164,11 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			lowTransferCh:    lowTransferCh,
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
-			suicideCh:        suicideCh,
+		},
+		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered
+			entryNotificationCh: make(chan struct{}),
+			exitNotificationCh:  make(chan struct{}),
+			scalebackRequestCh:  make(chan struct{}),
 		},
 		workaroundJobLoggingChannel: make(chan string, 1000), // workaround to support logging from JobsAdmin
 	}
@@ -181,10 +183,11 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
-	// Spin up the desired number of executionEngine workers to process chunks
-	for cc := 0; cc < concurrency.InitialMainPoolSize; cc++ {
-		go ja.chunkProcessor(cc)
-	}
+
+	// spin up a GR to co-ordinate dynamic sizing of the main pool
+	// It will automatically spin up the right number of chunk processors
+	go ja.poolSizer()
+
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
 	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
 	// anyway.)
@@ -254,13 +257,79 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	}
 }
 
+// worker that sizes the chunkProcessor pool, dynamically if necessary
+func (ja *jobsAdmin) poolSizer() {
+
+	nextWorkerId := 0
+	actualConcurrency := 0
+	lastBytesOnWire := int64(0)
+	lastBytesTime := time.Now()
+	hasHadTimeToStablize := false
+	throughputMonitoringInterval := time.Duration(4 * time.Second)
+
+	// construct concurrency tuner according to config
+	var concurrencyTuner ConcurrencyTuner = &nullConcurrencyTuner{fixedValue: ja.concurrency.InitialMainPoolSize}
+	if ja.concurrency.AutoTuneMainPool() {
+		concurrencyTuner = NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value)
+	}
+	targetConcurrency, reason := concurrencyTuner.GetRecommendedConcurrency(-1) // get initial size
+
+	// loop for ever, driving the actual concurrency towards the most up-to-date target
+	for {
+		// add or remove a worker if necessary
+		if actualConcurrency < targetConcurrency {
+			hasHadTimeToStablize = false
+			nextWorkerId++
+			go ja.chunkProcessor(nextWorkerId) // TODO: make sure this numbering is OK, even if we grow and shrink the pool (the id values don't matter right?)
+		} else if actualConcurrency > targetConcurrency {
+			hasHadTimeToStablize = false
+			ja.poolSizingChannels.scalebackRequestCh <- struct{}{}
+		}
+
+		// wait for something to happen (maybe ack from the worker of the change, else a timer interval)
+		select {
+		case <-ja.poolSizingChannels.entryNotificationCh:
+			// new worker has started
+			actualConcurrency++
+			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
+		case <-ja.poolSizingChannels.exitNotificationCh:
+			// worker has exited
+			actualConcurrency--
+			atomic.StoreInt32(&ja.atomicCurrentMainPoolSize, int32(actualConcurrency))
+		case <-time.After(throughputMonitoringInterval):
+			if actualConcurrency == targetConcurrency { // scalebacks can take time. Don't want to do any tuning if actual is not yet aligned to target
+				bytesOnWire := ja.BytesOverWire()
+				if hasHadTimeToStablize {
+					// throughput has had time to stabilize since last change, so we can meaningfully measure and act on throughput
+					elapsedSeconds := time.Since(lastBytesTime).Seconds()
+					bytes := bytesOnWire - lastBytesOnWire
+					megabitsPerSec := (8 * float64(bytes) / elapsedSeconds) / (1000 * 1000)
+					targetConcurrency, reason = concurrencyTuner.GetRecommendedConcurrency(int(megabitsPerSec))
+					if reason != concurrencyReasonNotActive {
+						ja.LogToJobLog(fmt.Sprintf("Auto-adjusting concurrency level to %d for reason: %s", targetConcurrency, reason))
+					}
+				} else {
+					// we weren't in steady state before, but given that throughputMonitoringInterval has now elapsed,
+					// we'll deem that we are in steady state now (so can start measuring throughput from now)
+					hasHadTimeToStablize = true
+				}
+				lastBytesOnWire = bytesOnWire
+				lastBytesTime = time.Now()
+			}
+		}
+	}
+}
+
 // general purpose worker that reads in schedules chunk jobs, and executes chunk jobs
 func (ja *jobsAdmin) chunkProcessor(workerID int) {
+	ja.poolSizingChannels.entryNotificationCh <- struct{}{}                   // say we have started
+	defer func() { ja.poolSizingChannels.exitNotificationCh <- struct{}{} }() // say we have exited
+
 	for {
-		// We check for suicides first to shrink goroutine pool
+		// We check for scalebacks first to shrink goroutine pool
 		// Then, we check chunks: normal & low priority
 		select {
-		case <-ja.xferChannels.suicideCh: // note: as at Dec 2018, this channel is not (yet) used
+		case <-ja.poolSizingChannels.scalebackRequestCh:
 			return
 		default:
 			select {
@@ -301,7 +370,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 	}
 
 	for {
-		// No suicide check here, because this routine runs only in a small number of goroutines, so no need to kill them off
+		// No scaleback check here, because this routine runs only in a small number of goroutines, so no need to kill them off
 		select {
 		case jptm := <-ja.xferChannels.normalTransferCh:
 			startTransfer(jptm)
@@ -322,6 +391,7 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
 	atomicSuccessfulBytesInActiveFiles int64
+	atomicCurrentMainPoolSize          int32
 	concurrency                        ConcurrencySettings
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
@@ -330,6 +400,7 @@ type jobsAdmin struct {
 	planDir                     string // Initialize to directory where Job Part Plans are stored
 	coordinatorChannels         CoordinatorChannels
 	xferChannels                XferChannels
+	poolSizingChannels          poolSizingChannels
 	appCtx                      context.Context
 	pacer                       pacerAdmin
 	slicePool                   common.ByteSlicePooler
@@ -350,10 +421,13 @@ type XferChannels struct {
 	lowTransferCh    <-chan IJobPartTransferMgr // Read-only
 	normalChunckCh   chan chunkFunc             // Read-write
 	lowChunkCh       chan chunkFunc             // Read-write
-	suicideCh        <-chan SuicideJob          // Read-only
 }
 
-type SuicideJob struct{}
+type poolSizingChannels struct {
+	entryNotificationCh chan struct{}
+	exitNotificationCh  chan struct{}
+	scalebackRequestCh  chan struct{}
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -537,6 +611,10 @@ func (ja *jobsAdmin) ShouldLog(level pipeline.LogLevel) bool  { return ja.logger
 func (ja *jobsAdmin) Log(level pipeline.LogLevel, msg string) { ja.logger.Log(level, msg) }
 func (ja *jobsAdmin) Panic(err error)                         { ja.logger.Panic(err) }
 func (ja *jobsAdmin) CloseLog()                               { ja.logger.CloseLog() }
+
+func (ja *jobsAdmin) CurrentMainPoolSize() int {
+	return int(atomic.LoadInt32(&ja.atomicCurrentMainPoolSize))
+}
 
 func (ja *jobsAdmin) slicePoolPruneLoop() {
 	// if something in the pool has been unused for this long, we probably don't need it
