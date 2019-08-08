@@ -54,8 +54,10 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		autoTuneGRs := true // TODO
+
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles)
+		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, autoTuneGRs)
 		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyAppPathFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err

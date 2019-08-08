@@ -114,9 +114,16 @@ func (jm *jobMgr) logConcurrencyParameters() {
 	// TODO: label max file buffer ram with how we obtained it (env var or default)
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB",
 		float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent network operations: %d (%s)",
-		jm.concurrency.MainPoolSize.Value,
-		jm.concurrency.MainPoolSize.GetDescription()))
+
+	dynamicMessage := ""
+	if jm.concurrency.AutoTuneMainPool() {
+		dynamicMessage = " will be dynamically tuned up to "
+	}
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent network operations: %s%d (%s)",
+		dynamicMessage,
+		jm.concurrency.MaxMainPoolSize.Value,
+		jm.concurrency.MaxMainPoolSize.GetDescription()))
+
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
 		jm.concurrency.TransferInitiationPoolSize.Value,
 		jm.concurrency.TransferInitiationPoolSize.GetDescription()))
