@@ -75,7 +75,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 
 // Test cancel symlink loop functionality
 func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
-	fileNames := []string{"thirty to fifty feral hogs.txt", "my feral hogs have unionized.txt", "theyre in the yard.txt"}
+	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
 
