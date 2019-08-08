@@ -214,13 +214,19 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 
 	// convert the counts to simple strings for consumption by callers
 	const format = "%c: %2d"
-	result := make([]string, len(chunkStateCounts)+1)
+	result := make([]string, len(chunkStateCounts)+2)
 	total := int64(0)
 	for i, c := range chunkStateCounts {
 		result[i] = fmt.Sprintf(format, c.WaitReason.Name[0], c.Count)
 		total += c.Count
 	}
-	result[len(result)-1] = fmt.Sprintf(format, 'T', total)
+	result[len(result)-2] = fmt.Sprintf(format, 'T', total)
+
+	// Add an exact count of the number of running goroutines in the main pool
+	// The states, above, that run inside that pool (basically the H and B states) will sum to
+	// a value <= this value. But without knowing this value, its harder to be sure if they are at the limit
+	// or not, especially if we are dynamically tuning the pool size.
+	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", JobsAdmin.CurrentMainPoolSize())
 
 	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection)
 
@@ -229,6 +235,9 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 	//    not job level, so can't log it directly AFAICT.
 	jm.logPerfInfo(result, con)
 
+	// TODO and this is even more of an ugly hack, but right now its the only way we can get logging of out JobsAdmin
+	jm.logJobsAdminMessages()
+
 	return result, con
 }
 
@@ -236,6 +245,18 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	constraintString := fmt.Sprintf("primary performance constraint is %s", constraint)
 	msg := fmt.Sprintf("PERF: %s. States: %s", constraintString, strings.Join(displayStrings, ", "))
 	jm.Log(pipeline.LogInfo, msg)
+}
+
+// TODO: find a better way for JobsAdmin to log (it doesn't have direct access to the job log, because it was originally designed to support multilpe jobs
+func (jm *jobMgr) logJobsAdminMessages() {
+	for {
+		select {
+		case msg := <-JobsAdmin.MessagesForJobLog():
+			jm.Log(pipeline.LogInfo, msg)
+		default:
+			return
+		}
+	}
 }
 
 // initializeJobPartPlanInfo func initializes the JobPartPlanInfo handler for given JobPartOrder

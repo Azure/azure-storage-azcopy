@@ -87,6 +87,7 @@ func (al *appLogger) CloseLog() {
 
 func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// TODO consider delete completely to get rid of app logger
+	// TODO: see also the workaround in jobsAdmin.LogToJobLog
 	// TODO: if we DON'T delete, use azCopyLogSanitizer
 	//if al.ShouldLog(loglevel) {
 	//	al.logger.Println(msg)

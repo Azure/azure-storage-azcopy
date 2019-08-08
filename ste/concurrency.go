@@ -127,13 +127,20 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, allowAutoTuneGRs bool) 
 	return s
 }
 
-func getMainPoolSize(numOfCPUs int, allowAutoTune bool) (initial int, max *ConfiguredInt) {
+func getMainPoolSize(numOfCPUs int, requestAutoTune bool) (initial int, max *ConfiguredInt) {
 
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
-	if c := tryNewConfiguredInt(envVar); c != nil {
-		if allowAutoTune {
-			// tell user that we can't actually auto tune, because configured value takes precedence
+	if common.GetLifecycleMgr().GetEnvironmentVariable(envVar) == "AUTO" {
+		// Allow user to force auto-tuning from the env var, even when not in benchmark mode
+		// Might be handy in some S2S cases, where we know that release 10.2.1 was using too few goroutines
+		// This feature will probably remain undocumented for at least one release cycle, while we consider
+		// whether to do more in this regard (e.g. make it the default behaviour)
+		requestAutoTune = true
+	} else if c := tryNewConfiguredInt(envVar); c != nil {
+		if requestAutoTune {
+			// Tell user that we can't actually auto tune, because configured value takes precedence
+			// This case happens when benchmarking with a fixed value from the env var
 			common.GetLifecycleMgr().Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
 		}
 		return c.Value, c // initial and max are same, fixed to the env var
@@ -141,7 +148,7 @@ func getMainPoolSize(numOfCPUs int, allowAutoTune bool) (initial int, max *Confi
 
 	var initialValue int
 
-	if allowAutoTune {
+	if requestAutoTune {
 		initialValue = 16 // deliberately start with a small initial value if we are auto-tuning
 	} else if numOfCPUs <= 4 {
 		// fix the concurrency value for smaller machines
@@ -156,7 +163,7 @@ func getMainPoolSize(numOfCPUs int, allowAutoTune bool) (initial int, max *Confi
 
 	reason := "number of CPUs"
 	maxValue := initialValue
-	if allowAutoTune {
+	if requestAutoTune {
 		reason = "auto-tuning limit"
 		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
 	}
