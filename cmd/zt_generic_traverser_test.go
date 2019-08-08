@@ -138,7 +138,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 
 // Test ability to only get the output of one symlink when two point to the same place
 func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
-	fileNames := []string{"my cat keeps sending me to bed.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
+	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
