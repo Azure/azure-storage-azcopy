@@ -39,9 +39,9 @@ type ConfiguredInt struct {
 
 func (i *ConfiguredInt) GetDescription() string {
 	if i.IsUserSpecified {
-		return fmt.Sprintf("From %s environment variable", i.EnvVarName)
+		return fmt.Sprintf("Based on %s environment variable", i.EnvVarName)
 	} else {
-		return fmt.Sprintf("From %s. Set %s environment variable to override", i.DefaultSourceDesc, i.EnvVarName)
+		return fmt.Sprintf("Based on %s. Set %s environment variable to override", i.DefaultSourceDesc, i.EnvVarName)
 	}
 }
 
@@ -62,9 +62,12 @@ func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
 // ConcurrencySettings stores the set of related numbers that govern concurrency levels in the STE
 type ConcurrencySettings struct {
 
-	// MainPoolSize is the size of the main goroutine pool that transfers the data
+	// InitialMainPoolSize is the initial size of the main goroutine pool that transfers the data
 	// (i.e. executes chunkfuncs)
-	MainPoolSize *ConfiguredInt
+	InitialMainPoolSize int
+
+	// MaxMainPoolSize is a number >= InitialMainPoolSize, representing max size we will grow the main pool to
+	MaxMainPoolSize *ConfiguredInt
 
 	// TransferInitiationPoolSize is the size of the auxiliary goroutine pool that initiates transfers
 	// (i.e. creates chunkfuncs)
@@ -83,19 +86,24 @@ type ConcurrencySettings struct {
 	// TODO: consider whether we should also use this (renamed to( MaxOpenFiles) for uploads, somehow (see command above). Is there any actual value in that? Maybe only highly handle-constrained Linux environments?
 }
 
+// AutoTuneMainPool says whether the main pool size should by dynamically tuned
+func (c ConcurrencySettings) AutoTuneMainPool() bool {
+	return c.MaxMainPoolSize.Value > c.InitialMainPoolSize
+}
+
 const defaultTransferInitiationPoolSize = 64
 const concurrentFilesFloor = 32
 
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
 // machine where we are running
-func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
+func NewConcurrencySettings(maxFileAndSocketHandles int, allowAutoTuneGRs bool) ConcurrencySettings {
 
-	initialMainPoolSize := getMainPoolSize(runtime.NumCPU())
-	maxMainPoolSize := initialMainPoolSize // one day we may compute a higher value for this, and dynamically grow the pool with this as a cap
+	initialMainPoolSize, maxMainPoolSize := getMainPoolSize(runtime.NumCPU(), allowAutoTuneGRs)
 
 	s := ConcurrencySettings{
-		MainPoolSize:               initialMainPoolSize,
+		InitialMainPoolSize:        initialMainPoolSize,
+		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
 		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
 	}
@@ -119,27 +127,41 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 	return s
 }
 
-func getMainPoolSize(numOfCPUs int) *ConfiguredInt {
+func getMainPoolSize(numOfCPUs int, allowAutoTune bool) (initial int, max *ConfiguredInt) {
+
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
-		return c
+		if allowAutoTune {
+			// tell user that we can't actually auto tune, because configured value takes precedence
+			common.GetLifecycleMgr().Info(fmt.Sprintf("Cannot auto-tune concurrency because it is fixed by environment variable %s", envVar.Name))
+		}
+		return c.Value, c // initial and max are same, fixed to the env var
 	}
 
-	var value int
+	var initialValue int
 
-	if numOfCPUs <= 4 {
+	if allowAutoTune {
+		initialValue = 16 // deliberately start with a small initial value if we are auto-tuning
+	} else if numOfCPUs <= 4 {
 		// fix the concurrency value for smaller machines
-		value = 32
+		initialValue = 32
 	} else if 16*numOfCPUs > 300 {
 		// for machines that are extremely powerful, fix to 300 (previously this was to avoid running out of file descriptors, but we have another solution to that now)
-		value = 300
+		initialValue = 300
 	} else {
 		// for moderately powerful machines, compute a reasonable number
-		value = 16 * numOfCPUs
+		initialValue = 16 * numOfCPUs
 	}
 
-	return &ConfiguredInt{value, false, envVar.Name, "number of CPUs"}
+	reason := "number of CPUs"
+	maxValue := initialValue
+	if allowAutoTune {
+		reason = "auto-tuning limit"
+		maxValue = 3000 // TODO: what should this be?  Testing indicates that this value is all we're ever likely to need, even in small-files cases
+	}
+
+	return initialValue, &ConfiguredInt{maxValue, false, envVar.Name, reason}
 }
 
 func getTransferInitiationPoolSize() *ConfiguredInt {

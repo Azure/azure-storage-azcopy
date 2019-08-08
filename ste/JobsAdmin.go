@@ -128,7 +128,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 
 	// Create suicide channel which is used to scale back on the number of workers
 	// TODO: this is not used. Remove it.
-	suicideCh := make(chan SuicideJob, concurrency.MainPoolSize.Value)
+	suicideCh := make(chan SuicideJob, concurrency.InitialMainPoolSize)
 
 	maxRamBytesToUse := getMaxRamForChunks()
 
@@ -182,7 +182,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
 	// Spin up the desired number of executionEngine workers to process chunks
-	for cc := 0; cc < concurrency.MainPoolSize.Value; cc++ {
+	for cc := 0; cc < concurrency.InitialMainPoolSize; cc++ {
 		go ja.chunkProcessor(cc)
 	}
 	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
