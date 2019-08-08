@@ -26,6 +26,12 @@ type excludeFilter struct {
 	pattern string
 }
 
+func (f *excludeFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
+}
+
 func (f *excludeFilter) doesPass(storedObject storedObject) bool {
 	matched, err := path.Match(f.pattern, storedObject.name)
 
@@ -62,6 +68,12 @@ func buildExcludeFilters(patterns []string) []objectFilter {
 // consequently, all the include patterns must be stored together
 type includeFilter struct {
 	patterns []string
+}
+
+func (f *includeFilter) doesSupportThisOS() (msg string, supported bool) {
+	msg = ""
+	supported = true
+	return
 }
 
 func (f *includeFilter) doesPass(storedObject storedObject) bool {

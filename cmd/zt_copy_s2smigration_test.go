@@ -48,6 +48,14 @@ const (
 
 var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandleOption
 
+func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	c.Assert(err, chk.IsNil)
+
+	// Cleanup the source S3 account
+	cleanS3Account(c, s3Client)
+}
+
 func getDefaultRawCopyInput(src, dst string) rawCopyCmdArgs {
 	return rawCopyCmdArgs{
 		src:                            src,
@@ -372,9 +380,6 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
 
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
-
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
@@ -416,9 +421,6 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
 
-	// Cleanup the source S3 account
-	cleanS3Account(c, s3Client)
-
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
@@ -428,7 +430,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
 	defer deleteBucket(c, s3Client, bucketName2)
 
-	time.Sleep(60 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
+	time.Sleep(30 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)

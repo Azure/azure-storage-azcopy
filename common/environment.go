@@ -32,6 +32,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
+	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.ShowPerfStates(),
@@ -77,6 +78,13 @@ func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
 		Description: "Overrides where the log files are stored, to avoid filling up a disk.",
+	}
+}
+
+func (EnvironmentVariable) BufferGB() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_BUFFER_GB",
+		Description: "Max number of GB that AzCopy should use for buffering data between network and disk. May include decimal point, e.g. 0.5. The default is based on machine size.",
 	}
 }
 

@@ -1,14 +1,14 @@
 trigger:
   branches:
     include:
-      - master
       - dev
+      - master
 
 pr:
   branches:
     include:
-      - master
       - dev
+      - master
 
 jobs:
   - job: Linux_and_Windows_Builds
@@ -43,3 +43,50 @@ jobs:
       - task: PublishBuildArtifacts@1
         displayName: 'Publish Artifacts'
         condition: succeededOrFailed()
+
+  - job: Test_On_Ubuntu
+    pool:
+      vmImage: 'ubuntu-16.04'
+    steps:
+      - task: GoTool@0
+        inputs:
+          version: '1.12'
+      - script: |
+          # run unit test and build executable
+          go test -race -short -cover ./cmd ./common ./ste ./azbfs
+          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      - task: UsePythonVersion@0
+        inputs:
+          versionSpec: '3.7'
+      - script: |
+          # run smoke tests
+          go build -o test-validator ./testSuite/
+          mkdir test-temp
+          export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+          python ./testSuite/scripts/run.py
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          AZCOPY_OAUTH_TOKEN_INFO: $(AZCOPY_OAUTH_TOKEN_INFO)
+          CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
+          CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
+          CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
+          FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
+          FILESYSTEM_URL: $(FILESYSTEM_URL)
+          OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
+          OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
+          PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
+          S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
+          S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
+          S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
+          S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+          SHARE_SAS_URL: $(SHARE_SAS_URL)

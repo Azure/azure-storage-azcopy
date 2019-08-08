@@ -21,8 +21,10 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
+	"fmt"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // the interceptor gathers/saves the job part orders for validation
@@ -83,7 +85,7 @@ type mockedLifecycleManager struct{}
 
 func (mockedLifecycleManager) Progress(common.OutputBuilder)                            {}
 func (mockedLifecycleManager) Init(common.OutputBuilder)                                {}
-func (mockedLifecycleManager) Info(string)                                              {}
+func (mockedLifecycleManager) Info(msg string)                                          { fmt.Println(msg) }
 func (mockedLifecycleManager) Prompt(string) string                                     { return "" }
 func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)               {}
 func (mockedLifecycleManager) Error(string)                                             {}

@@ -38,6 +38,7 @@ The built-in lookup table is small but on Unix it is augmented by the local syst
   - /etc/apache/mime.types
 
 On Windows, MIME types are extracted from the registry. This feature can be turned off with the help of a flag. Please refer to the flag section.
+
 ` + environmentVariableNotice
 
 const copyCmdExample = `Upload a single file using OAuth authentication. Please use 'azcopy login' command first if you aren't logged in yet:
@@ -115,6 +116,7 @@ Copy all buckets in a S3 region with access key to blob account with SAS:
 const envCmdShortDescription = "Shows the environment variables that can configure AzCopy's behavior"
 
 const envCmdLongDescription = `Shows the environment variables that can configure AzCopy's behavior.
+
 ` + environmentVariableNotice
 
 // ===================================== JOBS COMMAND ===================================== //
@@ -133,6 +135,7 @@ const showJobsCmdShortDescription = "Show detailed information for the given job
 
 const showJobsCmdLongDescription = `
 Show detailed information for the given job ID: if only the job ID is supplied without a flag, then the progress summary of the job is returned.
+(In the progress information shown by this command, the byte counts and percent complete do not include files currently in progress.)
 If the with-status flag is set, then the list of transfers in the job with the given value will be shown.`
 
 const resumeJobsCmdShortDescription = "Resume the existing job with the given job ID"
@@ -154,12 +157,13 @@ const loginCmdLongDescription = `Log in to Azure Active Directory to access Azur
 Note that, to be authorized to your Azure Storage account, you must assign your user 'Storage Blob Data Contributor' role on the Storage account.
 This command will cache encrypted login information for current user using the OS built-in mechanisms.
 Please refer to the examples for more information.
+
 ` + environmentVariableNotice
 
-const environmentVariableNotice = `
-(NOTICE FOR SETTING ENVIRONMENT VARIABLES: Bear in mind that setting an environment variable from the command line
-will be readable in your command line history. For variables that contain credentials, consider clearing these 
-entries from your history or using a small script of sorts to prompt for and set these variables.)`
+const environmentVariableNotice = "(NOTICE FOR SETTING ENVIRONMENT VARIABLES: Bear in mind that setting an environment variable from the command line " +
+	"will be readable in your command line history. " +
+	"For variables that contain credentials, consider clearing these entries from your history " +
+	"or using a small script of sorts to prompt for and set these variables.)"
 
 const loginCmdExample = `Log in interactively with default AAD tenant ID set to common:
 - azcopy login
@@ -226,6 +230,13 @@ Remove a subset of blobs in a virtual directory (ex: only jpg and pdf files, or 
 Remove an entire virtual directory but exclude certain blobs from the scope (ex: every blob that starts with foo or ends with bar):
   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
 
+Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
+  - file content:
+	dir1/dir2
+	blob1
+	blob2
+
 Remove a single file from ADLS Gen2 (include/exclude not supported):
   - azcopy rm "https://[account].dfs.core.windows.net/[container]/[path/to/file]?[SAS]"
 
@@ -279,4 +290,11 @@ Sync an entire directory but exclude certain files from the scope (ex: every fil
   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude="foo*;*bar"
 
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
+`
+
+const docCmdShortDescription = "Generates documentation for the tool in Markdown format"
+
+const docCmdLongDescription = `Generates documentation for the tool in Markdown format, and stores them in the designated location.
+
+By default, the files are stored in a folder named 'doc' inside the current directory.
 `

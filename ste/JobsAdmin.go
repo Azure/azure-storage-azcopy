@@ -27,8 +27,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"path"
@@ -91,6 +93,11 @@ var JobsAdmin interface {
 	// returns the current value of bytesOverWire.
 	BytesOverWire() int64
 
+	AddSuccessfulBytesInActiveFiles(n uint64)
+
+	// returns number of bytes successfully transferred in transfers that are currently in progress
+	SuccessfulBytesInActiveFiles() uint64
+
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
 }
@@ -127,19 +134,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		common.PanicIfErr(err)
 	}
 
-	// TODO: make ram usage configurable, with the following as just the default
-	// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
-	// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
-	// Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
-	// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
-	// Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
-	// count 100 MB towards this limit, but actually consume 128 MB)
-	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
-	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
-	if gbToUse > 16 {
-		gbToUse = 16 // cap it. Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
-	}
-	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+	maxRamBytesToUse := getMaxRamForChunks()
 
 	// default to a pacer that doesn't actually control the rate
 	// (it just records total throughput, since for historical reasons we do that in the pacer)
@@ -200,6 +195,41 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
 		go ja.transferProcessor(cc)
 	}
+}
+
+// Decide on a max amount of RAM we are willing to use. This functions as a cap, and prevents excessive usage.
+// There's no measure of physical RAM in the STD library, so we guestimate conservatively, based on  CPU count (logical, not phyiscal CPUs)
+// Note that, as at Feb 2019, the multiSizeSlicePooler uses additional RAM, over this level, since it includes the cache of
+// currently-unnused, re-useable slices, that is not tracked by cacheLimiter.
+// Also, block sizes that are not powers of two result in extra usage over and above this limit. (E.g. 100 MB blocks each
+// count 100 MB towards this limit, but actually consume 128 MB)
+func getMaxRamForChunks() int64 {
+
+	// return the user-specified override value, if any
+	envVar := common.EEnvironmentVariable.BufferGB()
+	overrideString := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	if overrideString != "" {
+		overrideValue, err := strconv.ParseFloat(overrideString, 64)
+		if err != nil {
+			common.GetLifecycleMgr().Error(fmt.Sprintf("Cannot parse environment variable %s, due to error %s", envVar.Name, err))
+		} else {
+			return int64(overrideValue * 1024 * 1024 * 1024)
+		}
+	}
+
+	// else use a sensible default
+	// TODO maybe one day measure actual RAM available
+	const gbToUsePerCpu = 0.5 // should be enough to support the amount of traffic 1 CPU can drive, and also less than the typical installed RAM-per-CPU
+	maxTotalGB := float32(16) // Even 6 is enough at 10 Gbps with standard 8MB chunk size, but we need allow extra here to help if larger blob block sizes are selected by user, since then we need more memory to get enough chunks to have enough network-level concurrency
+	if strconv.IntSize == 32 {
+		maxTotalGB = 1 // 32-bit apps can only address 2 GB, and best to leave plenty for needs outside our cache (e.g. running the app itself)
+	}
+	gbToUse := float32(runtime.NumCPU()) * gbToUsePerCpu
+	if gbToUse > maxTotalGB {
+		gbToUse = maxTotalGB // cap it.
+	}
+	maxRamBytesToUse := int64(gbToUse * 1024 * 1024 * 1024)
+	return maxRamBytesToUse
 }
 
 // QueueJobParts puts the given JobPartManager into the partChannel
@@ -294,9 +324,10 @@ func (ja *jobsAdmin) transferProcessor(workerID int) {
 // There will be only 1 instance of the jobsAdmin type.
 // The coordinator uses this to manage all the running jobs and their job parts.
 type jobsAdmin struct {
-	concurrency   ConcurrencySettings
-	logger        common.ILoggerCloser
-	jobIDToJobMgr jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
+	atomicSuccessfulBytesInActiveFiles int64
+	concurrency                        ConcurrencySettings
+	logger                             common.ILoggerCloser
+	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
 	logDir              string // Where log files are stored
 	planDir             string // Initialize to directory where Job Part Plans are stored
@@ -394,6 +425,14 @@ func (ja *jobsAdmin) ScheduleChunk(priority common.JobPriority, chunkFunc chunkF
 
 func (ja *jobsAdmin) BytesOverWire() int64 {
 	return ja.pacer.GetTotalTraffic()
+}
+
+func (ja *jobsAdmin) AddSuccessfulBytesInActiveFiles(n uint64) {
+	atomic.AddInt64(&ja.atomicSuccessfulBytesInActiveFiles, int64(n))
+}
+
+func (ja *jobsAdmin) SuccessfulBytesInActiveFiles() uint64 {
+	return uint64(atomic.LoadInt64(&ja.atomicSuccessfulBytesInActiveFiles))
 }
 
 func (ja *jobsAdmin) ResurrectJob(jobId common.JobID, sourceSAS string, destinationSAS string) bool {

@@ -206,6 +206,10 @@ func secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID 
 func (uotm *UserOAuthTokenManager) SecretLogin(tenantID, activeDirectoryEndpoint, secret, applicationID string, persist bool) (*OAuthTokenInfo, error) {
 	oAuthTokenInfo, err := secretLoginNoUOTM(tenantID, activeDirectoryEndpoint, secret, applicationID)
 
+	if err != nil {
+		return nil, err
+	}
+
 	if persist {
 		err = uotm.credCache.SaveToken(*oAuthTokenInfo)
 		if err != nil {
