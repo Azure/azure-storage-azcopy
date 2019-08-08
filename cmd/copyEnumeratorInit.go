@@ -38,12 +38,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	// source directory check occurs within the traversers. This allows us to error out properly when pointing at a folder.
+	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
 	isSourceDir := traverser.isDirectory(true)
 	if isSourceDir && !cca.recursive {
 		return nil, errors.New("cannot use directory as source without --recursive or trailing wildcard (/*)")
 	}
 
+	// Check if the destination is a directory so we can correctly decide where our files land
 	isDestDir := cca.isDestDirectory(dst, &ctx)
 
 	filters := cca.initModularFilters()
