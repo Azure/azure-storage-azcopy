@@ -30,6 +30,7 @@ type EnvironmentVariable struct {
 // This array needs to be updated when a new public environment variable is added
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
+	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
 	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.AWSAccessKeyID(),
@@ -62,7 +63,14 @@ func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
-		Description: "Overrides how many Go Routines work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+		Description: "Overrides how many HTTP connections work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+	}
+}
+
+func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_FILES",
+		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
 	}
 }
 

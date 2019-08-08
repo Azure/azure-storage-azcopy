@@ -206,7 +206,7 @@ func (cr *singleChunkReader) blockingPrefetch(fileReader io.ReaderAt, isRetry bo
 	// read WITHOUT holding the "close" lock.  While we don't have the lock, we mutate ONLY local variables, no instance state.
 	// (Don't release the other lock, muMaster, since that's unnecessary would make it harder to reason about behaviour - e.g. is something other than Close happening?)
 	cr.muClose.Unlock()
-	n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile)
+	n, readErr := fileReader.ReadAt(targetBuffer, cr.chunkId.OffsetInFile())
 	cr.muClose.Lock()
 
 	// now that we have the lock again, see if any error means we can't continue

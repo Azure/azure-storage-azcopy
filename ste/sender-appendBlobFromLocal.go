@@ -51,7 +51,7 @@ func (u *appendBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 		body := newPacedRequestBody(u.jptm.Context(), reader, u.pacer)
 		_, err := u.destAppendBlobURL.AppendBlock(u.jptm.Context(), body,
 			azblob.AppendBlobAccessConditions{
-				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},
+				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
 			}, nil)
 		if err != nil {
 			u.jptm.FailActiveUpload("Appending block", err)
