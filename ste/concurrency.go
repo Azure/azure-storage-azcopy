@@ -22,10 +22,11 @@ package ste
 
 import (
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"log"
 	"runtime"
 	"strconv"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // ConfiguredInt is an integer which may be optionally configured by user through an environment variable
@@ -90,7 +91,7 @@ const concurrentFilesFloor = 32
 // machine where we are running
 func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 
-	initialMainPoolSize := getMainPoolSize()
+	initialMainPoolSize := getMainPoolSize(runtime.NumCPU())
 	maxMainPoolSize := initialMainPoolSize // one day we may compute a higher value for this, and dynamically grow the pool with this as a cap
 
 	s := ConcurrencySettings{
@@ -118,14 +119,12 @@ func NewConcurrencySettings(maxFileAndSocketHandles int) ConcurrencySettings {
 	return s
 }
 
-func getMainPoolSize() *ConfiguredInt {
+func getMainPoolSize(numOfCPUs int) *ConfiguredInt {
 	envVar := common.EEnvironmentVariable.ConcurrencyValue()
 
 	if c := tryNewConfiguredInt(envVar); c != nil {
 		return c
 	}
-
-	numOfCPUs := runtime.NumCPU()
 
 	var value int
 
