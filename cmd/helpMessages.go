@@ -135,6 +135,7 @@ const showJobsCmdShortDescription = "Show detailed information for the given job
 
 const showJobsCmdLongDescription = `
 Show detailed information for the given job ID: if only the job ID is supplied without a flag, then the progress summary of the job is returned.
+(In the progress information shown by this command, the byte counts and percent complete do not include files currently in progress.)
 If the with-status flag is set, then the list of transfers in the job with the given value will be shown.`
 
 const resumeJobsCmdShortDescription = "Resume the existing job with the given job ID"

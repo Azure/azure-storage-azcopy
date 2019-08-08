@@ -63,7 +63,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 			// for this destination type, there is no need to upload ranges than consist entirely of zeros
 			jptm.Log(pipeline.LogDebug,
 				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-					id.OffsetInFile, id.OffsetInFile+reader.Length()))
+					id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
 			return
 		}
 
@@ -79,7 +79,7 @@ func (u *pageBlobUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int3
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
 		enrichedContext := withRetryNotification(jptm.Context(), u.filePacer)
-		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile, body, azblob.PageBlobAccessConditions{}, nil)
+		_, err := u.destPageBlobURL.UploadPages(enrichedContext, id.OffsetInFile(), body, azblob.PageBlobAccessConditions{}, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading page", err)
 			return

@@ -140,18 +140,19 @@ func PrintJobProgressSummary(summary common.ListJobSummaryResponse) {
 
 	glcm.Exit(func(format common.OutputFormat) string {
 		if format == common.EOutputFormat.Json() {
-			jsonOutput, err := json.Marshal(summary)
+			jsonOutput, err := json.Marshal(summary) // see note below re % complete being approximate. We can't include "approx" in the JSON.
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		}
 
 		return fmt.Sprintf(
-			"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nFinal Job Status: %v\n",
+			"\nJob %s summary\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nPercent Complete (approx): %.1f\nFinal Job Status: %v\n",
 			summary.JobID.String(),
 			summary.TotalTransfers,
 			summary.TransfersCompleted,
 			summary.TransfersFailed,
 			summary.TransfersSkipped,
+			summary.PercentComplete, // noted as approx in the format string because won't include in-flight files if this Show command is run from a different process
 			summary.JobStatus,
 		)
 	}, common.EExitCode.Success())
