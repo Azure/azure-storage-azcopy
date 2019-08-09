@@ -73,6 +73,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()
 			}
+
 			return processIfPassedFilters(filters, storedObject, processor)
 		}
 	}

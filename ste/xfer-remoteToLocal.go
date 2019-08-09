@@ -103,8 +103,13 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		// the user wants to discard the downloaded data
 		dstFile = devNullWriter{}
 	} else {
-		// normal scenario, create the destination file as expected
+		// Normal scenario, create the destination file as expected
+		// Use pseudo chunk id to alow our usual state tracking mechanism to keep count of how many
+		// file creations are running at any given instant, for perf diagnostics
+		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
 		dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
+		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err, true)
 			return
@@ -202,6 +207,11 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 // complete epilogue. Handles both success and failure
 func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, activeDstFile io.WriteCloser, forceReleaseFileCount bool, cw common.ChunkedFileWriter) {
 	info := jptm.Info()
+
+	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
+	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 
 	haveNonEmptyFile := activeDstFile != nil
 	if haveNonEmptyFile {

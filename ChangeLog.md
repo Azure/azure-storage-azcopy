@@ -1,22 +1,35 @@
 
 # Change Log
 
-## Version XX.XX.XX 
+## Version 10.2.1
 
 ### Bug fix
 
+1. Fixed outputting error message for SPN login failures.
+
+## Version 10.2.0
+
+### Bug fix
+
+1. Security: fixed signature redaction in logs to include all error types: the log entries for network failures and HTTP errors could include SAS tokens. In previous releases, the SAS tokens were not always redacted correctly and could be written to the AzCopy log file and also to the Windows Event Log or the Linux Syslog. Now, SAS tokens are correctly redacted when logging those errors. Note that errors returned by the Storage service itself - such as authentication errors and bad container names – were already redacted correctly.
 1. Added error to using Azure Files without a SAS token (invalid auth configuration).
 1. AzCopy v10 now outputs a sensible error & warning when attempting to authenticate a storage account business-to-business.
 1. `--log-level=none` now drops no logs, and has a listing in `--help`.
 1. Fixed bug where piping was not picking up the service version override, making it not work well against Azure Stack.
 1. Fixed a timeout when uploading particularly large files to ADLSG2.
+1. Fixed single wildcard match uploads.
 
 ### New features
 
-1. Enabled copying from page/block/append blob to another blob of a different type
+1. Enabled copying from page/block/append blob to another blob of a different type.
 1. AzCopy now grabs proxy details (sans authentication) from the Windows Registry using `mattn/go-ieproxy`.
 1. Service Principal Authentication is now available under `azcopy login`-- check `azcopy env` for details on client secrets/cert passwords. 
-1. SAS tokens are supported on HNS (Hierarchical Namespace/Azure Data Lake Generation 2) Storage Accounts
+1. SAS tokens are supported on HNS (Hierarchical Namespace/Azure Data Lake Generation 2) Storage Accounts.
+1. Added support for custom headers on ADLS Gen 2.
+1. Added support for fractional block size for copy and sync.
+1. Use different log output for skipped files (so they don't look like failures).
+1. Added bandwidth cap (--cap-mbps) to limit AzCopy's network usage, check `azcopy cp -h` for details.
+1. Added ADLS Gen2 support for rm command.
 
 ## Version 10.1.2
 

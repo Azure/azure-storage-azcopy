@@ -277,6 +277,11 @@ func isDummyChunkInEmptyFile(startIndex int64, fileSize int64) bool {
 // Complete epilogue. Handles both success and failure.
 func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, sip ISourceInfoProvider) {
 	info := jptm.Info()
+	// allow our usual state tracking mechanism to keep count of how many epilogues are running at any given instant, for perf diagnostics
+	pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
+	jptm.LogChunkStatus(pseudoId, common.EWaitReason.Epilogue())
+	defer jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
+
 	if jptm.TransferStatus() > 0 {
 		if _, isS2SCopier := s.(s2sCopier); sip.IsLocal() || (isS2SCopier && info.S2SSourceChangeValidation) {
 			// Check the source to see if it was changed during transfer. If it was, mark the transfer as failed.
@@ -297,11 +302,11 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 			destLength, err := s2sc.GetDestinationLength()
 
 			if err != nil {
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", err)
+        jptm.FailActiveSend("S2S Length check: Get destination length", err)
 			}
 
 			if destLength != jptm.Info().SourceSize {
-				jptm.FailActiveSend("epilogueWithCleanupSendToRemote", errors.New("destination length does not match source length"))
+				jptm.FailActiveSend("S2S Length check", errors.New("destination length does not match source length"))
 			}
 		}
 	}

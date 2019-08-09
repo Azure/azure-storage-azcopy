@@ -241,7 +241,7 @@ func (w *chunkedFileWriter) workerRoutine(ctx context.Context) {
 		}
 
 		// index the new chunk
-		unsavedChunksByFileOffset[newChunk.id.OffsetInFile] = newChunk
+		unsavedChunksByFileOffset[newChunk.id.OffsetInFile()] = newChunk
 		w.chunkLogger.LogChunkStatus(newChunk.id, EWaitReason.PriorChunk()) // may have to wait on prior chunks to arrive
 
 		// Process all chunks that we can

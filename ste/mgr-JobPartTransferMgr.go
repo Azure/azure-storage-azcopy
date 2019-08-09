@@ -108,6 +108,19 @@ type chunkFunc func(int)
 
 // jobPartTransferMgr represents the runtime information for a Job Part's transfer
 type jobPartTransferMgr struct {
+
+	// NumberOfChunksDone represents the number of chunks of a transfer
+	// which are either completed or failed.
+	// NumberOfChunksDone determines the final cancellation or completion of a transfer
+	atomicChunksDone uint32
+
+	// used defensively to protect against accidental double counting
+	atomicCompletionIndicator uint32
+
+	// how many bytes have been successfully transferred
+	// (hard to infer from atomicChunksDone because that counts both successes and failures)
+	atomicSuccessfulBytes uint64
+
 	jobPartMgr          IJobPartMgr // Refers to the "owning" Job Part
 	jobPartPlanTransfer *JobPartPlanTransfer
 	transferIndex       uint32
@@ -121,14 +134,6 @@ type jobPartTransferMgr struct {
 	numChunks uint32
 
 	actionAfterLastChunk func()
-
-	// NumberOfChunksDone represents the number of chunks of a transfer
-	// which are either completed or failed.
-	// NumberOfChunksDone determines the final cancellation or completion of a transfer
-	atomicChunksDone uint32
-
-	// used defensively to protect against accidental double counting
-	atomicCompletionIndicator uint32
 
 	/*
 		@Parteek removed 3/23 morning, as jeff ad equivalent
@@ -317,11 +322,19 @@ func (jptm *jobPartTransferMgr) ReportChunkDone(id common.ChunkID) (lastChunk bo
 	// before another was finish. Which would be bad
 	id.SetCompletionNotificationSent()
 
+	// track progress
+	if jptm.TransferStatus() > 0 {
+		n := uint64(jptm.Info().BlockSize) // TODO: this is just an assumption/approximation (since last one in each file will be different). Maybe add Length into chunkID one day, and use that...
+		atomic.AddUint64(&jptm.atomicSuccessfulBytes, n)
+		JobsAdmin.AddSuccessfulBytesInActiveFiles(n)
+	}
+
 	// Do our actual processing
 	chunksDone = atomic.AddUint32(&jptm.atomicChunksDone, 1)
 	lastChunk = chunksDone == jptm.numChunks
 	if lastChunk {
 		jptm.runActionAfterLastChunk()
+		JobsAdmin.AddSuccessfulBytesInActiveFiles(-atomic.LoadUint64(&jptm.atomicSuccessfulBytes)) // subtract our bytes from the active files bytes, because we are done now
 	}
 	return lastChunk, chunksDone
 }

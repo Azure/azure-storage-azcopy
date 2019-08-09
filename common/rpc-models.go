@@ -144,15 +144,24 @@ type ListJobSummaryResponse struct {
 	TransfersCompleted uint32
 	TransfersFailed    uint32
 	TransfersSkipped   uint32
-	BytesOverWire      uint64
-	// sum of the size of transfer completed successfully so far.
+
+	// includes bytes sent in retries (i.e. has double counting, if there are retries) and in failed transfers
+	BytesOverWire uint64
+
+	// does not include failed transfers or bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
 	TotalBytesTransferred uint64
+
 	// sum of the total transfer enumerated so far.
 	TotalBytesEnumerated uint64
-	FailedTransfers      []TransferDetail
-	SkippedTransfers     []TransferDetail
-	PerfConstraint       PerfConstraint
-	PerfStrings          []string `json:"-"`
+	// sum of total bytes expected in the job (i.e. based on our current expectation of which files will be successful)
+	TotalBytesExpected uint64
+
+	PercentComplete float32
+
+	FailedTransfers  []TransferDetail
+	SkippedTransfers []TransferDetail
+	PerfConstraint   PerfConstraint
+	PerfStrings      []string `json:"-"`
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
@@ -163,22 +172,30 @@ type ListSyncJobSummaryResponse struct {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections int64
 	// CompleteJobOrdered determines whether the Job has been completely ordered or not
-	CompleteJobOrdered       bool
-	JobStatus                JobStatus
-	CopyTotalTransfers       uint32
-	CopyTransfersCompleted   uint32
-	CopyTransfersFailed      uint32
-	BytesOverWire            uint64
+	CompleteJobOrdered     bool
+	JobStatus              JobStatus
+	CopyTotalTransfers     uint32
+	CopyTransfersCompleted uint32
+	CopyTransfersFailed    uint32
+
+	// includes bytes sent in retries (i.e. has double counting, if there are retries)
+	BytesOverWire uint64
+
 	DeleteTotalTransfers     uint32
 	DeleteTransfersCompleted uint32
 	DeleteTransfersFailed    uint32
 	FailedTransfers          []TransferDetail
 	PerfConstraint           PerfConstraint
 	PerfStrings              []string `json:"-"`
-	// sum of the size of transfer completed successfully so far.
+
+	// does not include failed transfers or bytes sent in retries (i.e. no double counting). Includes successful transfers and transfers in progress
 	TotalBytesTransferred uint64
 	// sum of the total transfer enumerated so far.
 	TotalBytesEnumerated uint64
+	// sum of total bytes expected in the job (i.e. based on our current expectation of which files will be successful)
+	TotalBytesExpected uint64
+
+	PercentComplete float32
 }
 
 type ListJobTransfersRequest struct {

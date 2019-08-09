@@ -23,55 +23,47 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
 	"net/url"
 	"strings"
 )
 
-func newBlobTraverserForRemove(cca *cookedCopyCmdArgs) (t *blobTraverser, err error) {
+// TODO implement for local and ADLS Gen2
+func newTraverserForCopy(targetURL string, targetSAS string, targetType common.Location,
+	credential common.CredentialInfo, recursive bool) (resourceTraverser, error) {
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
 
-	rawURL, err := url.Parse(cca.source)
-	if err == nil && cca.sourceSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
+	rawURL, err := url.Parse(targetURL)
+	if err == nil && targetSAS != "" {
+		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, targetSAS)
 	}
 
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	if strings.Contains(rawURL.Path, "*") {
-		return nil, errors.New("illegal URL, no pattern matching allowed for remove command")
+		return nil, errors.New("illegal URL, no pattern matching allowed")
 	}
 
-	p, err := createBlobPipeline(ctx, cca.credentialInfo)
-	if err != nil {
-		return
+	switch targetType {
+	case common.ELocation.Blob():
+		p, err := createBlobPipeline(ctx, credential)
+		if err != nil {
+			return nil, err
+		}
+
+		return newBlobTraverser(rawURL, p, ctx, recursive, nil), nil
+	case common.ELocation.File():
+		p, err := createFilePipeline(ctx, credential)
+		if err != nil {
+			return nil, err
+		}
+
+		return newFileTraverser(rawURL, p, ctx, recursive, nil), nil
+	default:
+		return nil, fmt.Errorf("traverser not implemented for type %s", targetType)
 	}
-
-	return newBlobTraverser(rawURL, p, ctx, cca.recursive, nil), nil
-}
-
-func newFileTraverserForRemove(cca *cookedCopyCmdArgs) (t *fileTraverser, err error) {
-	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-
-	rawURL, err := url.Parse(cca.source)
-	if err == nil && cca.sourceSAS != "" {
-		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.sourceSAS)
-	}
-
-	if err != nil {
-		return
-	}
-
-	if strings.Contains(rawURL.Path, "*") {
-		return nil, errors.New("illegal URL, no pattern matching allowed for remove command")
-	}
-
-	p, err := createFilePipeline(ctx, cca.credentialInfo)
-	if err != nil {
-		return
-	}
-
-	return newFileTraverser(rawURL, p, ctx, cca.recursive, nil), nil
 }

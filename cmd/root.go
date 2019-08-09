@@ -29,8 +29,8 @@ import (
 	"github.com/spf13/cobra"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
+	"time"
 )
 
 var azcopyAppPathFolder string
@@ -55,9 +55,8 @@ var rootCmd = &cobra.Command{
 		}
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-		concurrentConnections := common.ComputeConcurrencyValue(runtime.NumCPU())
-		concurrentFilesLimit := computeConcurrentFilesLimit(azcopyMaxFileAndSocketHandles, concurrentConnections)
-		err = ste.MainSTE(concurrentConnections, concurrentFilesLimit, int64(cmdLineCapMegaBitsPerSecond), azcopyAppPathFolder, azcopyLogPathFolder)
+		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles)
+		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyAppPathFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err
 		}
@@ -65,8 +64,9 @@ var rootCmd = &cobra.Command{
 		// spawn a routine to fetch and compare the local application's version against the latest version available
 		// if there's a newer version that can be used, then write the suggestion to stderr
 		// however if this takes too long the message won't get printed
-		// Note: this function is only triggered for non-help commands
-		go detectNewVersion()
+		// Note: this function is neccessary for non-help, non-login commands, since they don't reach the corresponding
+		// beginDetectNewVersion call in Execute (below)
+		beginDetectNewVersion()
 
 		return nil
 	},
@@ -86,14 +86,21 @@ func Execute(azsAppPathFolder, logPathFolder string, maxFileAndSocketHandles int
 		glcm.Error(err.Error())
 	} else {
 		// our commands all control their own life explicitly with the lifecycle manager
-		// only help commands reach this point
-		// execute synchronously before exiting
-		detectNewVersion()
+		// only commands that don't explicitly exit actually reach this point (e.g. help commands and login commands)
+		select {
+		case <-beginDetectNewVersion():
+			// noop
+		case <-time.After(time.Second * 8):
+			// don't wait too long
+		}
 		glcm.Exit(nil, common.EExitCode.Success())
 	}
 }
 
 func init() {
+	// replace the word "global" to avoid confusion (e.g. it doesn't affect all instances of AzCopy)
+	rootCmd.SetUsageTemplate(strings.Replace((&cobra.Command{}).UsageTemplate(), "Global Flags", "Flags Applying to All Commands", -1))
+
 	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
 
@@ -115,84 +122,74 @@ func init() {
 	rootCmd.PersistentFlags().MarkHidden("send-random-data-ext")
 }
 
-func detectNewVersion() {
-	const versionMetadataUrl = "https://aka.ms/azcopyv10-version-metadata"
+// always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where
+// aka.ms is not resolvable to a reachable IP address). In such cases, this routine will run for ever, and the caller should
+// just give up on it.
+// We spin up the GR here, not in the caller, so that the need to use a separate GC can never be forgotten
+// (if do it synchronously, and can't resolve URL, this blocks caller for ever)
+func beginDetectNewVersion() chan struct{} {
+	completionChannel := make(chan struct{})
+	go func() {
+		const versionMetadataUrl = "https://aka.ms/azcopyv10-version-metadata"
 
-	// step 0: check the Stderr before checking version
-	_, err := os.Stderr.Stat()
-	if err != nil {
-		return
-	}
+		// step 0: check the Stderr before checking version
+		_, err := os.Stderr.Stat()
+		if err != nil {
+			return
+		}
 
-	// step 1: initialize pipeline
-	p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
-	if err != nil {
-		return
-	}
+		// step 1: initialize pipeline
+		p, err := createBlobPipeline(context.TODO(), common.CredentialInfo{CredentialType: common.ECredentialType.Anonymous()})
+		if err != nil {
+			return
+		}
 
-	// step 2: parse source url
-	u, err := url.Parse(versionMetadataUrl)
-	if err != nil {
-		return
-	}
+		// step 2: parse source url
+		u, err := url.Parse(versionMetadataUrl)
+		if err != nil {
+			return
+		}
 
-	// step 3: start download
-	blobURL := azblob.NewBlobURL(*u, p)
-	blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
-	if err != nil {
-		return
-	}
+		// step 3: start download
+		blobURL := azblob.NewBlobURL(*u, p)
+		blobStream, err := blobURL.Download(context.TODO(), 0, azblob.CountToEnd, azblob.BlobAccessConditions{}, false)
+		if err != nil {
+			return
+		}
 
-	blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
-	defer blobBody.Close()
+		blobBody := blobStream.Body(azblob.RetryReaderOptions{MaxRetryRequests: ste.MaxRetryPerDownloadBody})
+		defer blobBody.Close()
 
-	// step 4: read newest version str
-	buf := new(bytes.Buffer)
-	n, err := buf.ReadFrom(blobBody)
-	if n == 0 || err != nil {
-		return
-	}
-	// only take the first line, in case the version metadata file is upgraded in the future
-	remoteVersion := strings.Split(buf.String(), "\n")[0]
+		// step 4: read newest version str
+		buf := new(bytes.Buffer)
+		n, err := buf.ReadFrom(blobBody)
+		if n == 0 || err != nil {
+			return
+		}
+		// only take the first line, in case the version metadata file is upgraded in the future
+		remoteVersion := strings.Split(buf.String(), "\n")[0]
 
-	// step 5: compare remote version to local version to see if there's a newer AzCopy
-	v1, err := NewVersion(common.AzcopyVersion)
-	if err != nil {
-		return
-	}
-	v2, err := NewVersion(remoteVersion)
-	if err != nil {
-		return
-	}
+		// step 5: compare remote version to local version to see if there's a newer AzCopy
+		v1, err := NewVersion(common.AzcopyVersion)
+		if err != nil {
+			return
+		}
+		v2, err := NewVersion(remoteVersion)
+		if err != nil {
+			return
+		}
 
-	if v1.OlderThan(*v2) {
-		executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
-		executableName := executablePathSegments[len(executablePathSegments)-1]
+		if v1.OlderThan(*v2) {
+			executablePathSegments := strings.Split(strings.Replace(os.Args[0], "\\", "/", -1), "/")
+			executableName := executablePathSegments[len(executablePathSegments)-1]
 
-		// output in info mode instead of stderr, as it was crashing CI jobs of some people
-		glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
-	}
-}
+			// output in info mode instead of stderr, as it was crashing CI jobs of some people
+			glcm.Info(executableName + ": A newer version " + remoteVersion + " is available to download\n")
+		}
 
-// ComputeConcurrentFilesLimit finds a number of concurrently-openable files
-// such that we'll have enough handles left, after using some as network handles
-// TODO: add environment var to optionally allow bringing concurrentFiles down lower
-//    (and, when we do, actually USE it for uploads, since currently we're only using it on downloads)
-//    (update logging
-func computeConcurrentFilesLimit(maxFileAndSocketHandles int, concurrentConnections int) int {
+		// let caller know we have finished, if they want to know
+		close(completionChannel)
+	}()
 
-	allowanceForOnGoingEnumeration := 1 // might still be scanning while we are transferring. Make this bigger if we ever do parallel scanning
-
-	// Compute a very conservative estimate for total number of connections that we may have
-	// To get a conservative estimate we pessimistically assume that the pool of idle conns is full,
-	// but all the ones we are actually using are (by some fluke of timing) not in the pool.
-	// TODO: consider actually SETTING AzCopyMaxIdleConnsPerHost to say, max(0.3 * FileAndSocketHandles, 1000), instead of using the hard-coded value we currently have
-	possibleMaxTotalConcurrentHttpConnections := concurrentConnections + ste.AzCopyMaxIdleConnsPerHost + allowanceForOnGoingEnumeration
-
-	concurrentFilesLimit := maxFileAndSocketHandles - possibleMaxTotalConcurrentHttpConnections
-
-	if concurrentFilesLimit < ste.NumTransferInitiationRoutines {
-		concurrentFilesLimit = ste.NumTransferInitiationRoutines // Set sensible floor, so we don't get negative or zero values if maxFileAndSocketHandles is low
-	}
-	return concurrentFilesLimit
+	return completionChannel
 }

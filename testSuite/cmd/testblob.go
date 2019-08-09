@@ -148,7 +148,7 @@ func verifyBlockBlobDirUpload(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0))
 	containerUrl := azblob.NewContainerURL(*sasUrl, p)
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
@@ -287,7 +287,7 @@ func verifySinglePageBlobUpload(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0))
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 	pageBlobUrl := azblob.NewPageBlobURL(*sourceURL, p)
@@ -454,7 +454,7 @@ func verifySingleBlockBlob(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0))
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 
@@ -616,7 +616,7 @@ func verifySingleAppendBlob(testBlobCmd TestBlobCommand) {
 			RetryDelay:    ste.UploadRetryDelay,
 			MaxRetryDelay: ste.UploadMaxRetryDelay},
 		nil,
-		ste.NewAzcopyHTTPClient())
+		ste.NewAzcopyHTTPClient(0))
 
 	testCtx := context.WithValue(context.Background(), ste.ServiceAPIVersionOverride, defaultServiceApiVersion)
 	appendBlobURL := azblob.NewAppendBlobURL(*sourceURL, p)

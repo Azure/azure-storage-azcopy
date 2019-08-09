@@ -136,14 +136,14 @@ func (u *azureFilesUploader) GenerateUploadFunc(id common.ChunkID, blockIndex in
 			// for this destination type, there is no need to upload ranges than consist entirely of zeros
 			jptm.Log(pipeline.LogDebug,
 				fmt.Sprintf("Not uploading range from %d to %d,  all bytes are zero",
-					id.OffsetInFile, id.OffsetInFile+reader.Length()))
+					id.OffsetInFile(), id.OffsetInFile()+reader.Length()))
 			return
 		}
 
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile, body, nil)
+		_, err := u.fileURL.UploadRange(jptm.Context(), id.OffsetInFile(), body, nil)
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return

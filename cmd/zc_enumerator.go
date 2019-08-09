@@ -42,6 +42,9 @@ type storedObject struct {
 
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
+	// note that sometimes the rootDir given by the user turns out to be a single file
+	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
+	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
 	relativePath string
 }
 
@@ -77,6 +80,7 @@ type objectProcessor func(storedObject storedObject) error
 // given a storedObject, verify if it satisfies the defined conditions
 // if yes, return true
 type objectFilter interface {
+	doesSupportThisOS() (msg string, supported bool)
 	doesPass(storedObject storedObject) bool
 }
 
@@ -180,6 +184,10 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 	if filters != nil && len(filters) > 0 {
 		// loop through the filters, if any of them fail, then return false
 		for _, filter := range filters {
+			msg, supported := filter.doesSupportThisOS()
+			if !supported {
+				glcm.Error(msg)
+			}
 			if !filter.doesPass(storedObject) {
 				return false
 			}

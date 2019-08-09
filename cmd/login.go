@@ -23,9 +23,9 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/spf13/cobra"
+	"strings"
 )
 
 func init() {
@@ -46,13 +46,15 @@ func init() {
 			loginCmdArgs.clientSecret = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.ClientSecret())
 
 			if loginCmdArgs.certPass != "" || loginCmdArgs.clientSecret != "" {
-				glcm.Info(`Bear in mind that setting a environment variable from the command line will be readable in your command line history.
-				Consider clearing these entries from your history or using a small script of sorts to prompt for and set these variables.`)
+				glcm.Info(environmentVariableNotice)
 			}
 
 			err := loginCmdArgs.process()
 			if err != nil {
-				return fmt.Errorf("failed to perform login command, %v", err)
+				// the errors from adal contains \r\n in the body, get rid of them to make the error easier to look at
+				prettyErr := strings.Replace(err.Error(), `\r\n`, "\n", -1)
+				prettyErr += "\n\nNOTE: If your credential was created in the last 5 minutes, please wait a few minutes and try again."
+				glcm.Error("Failed to perform login command: \n" + prettyErr)
 			}
 			return nil
 		},
