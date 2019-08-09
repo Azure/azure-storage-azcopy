@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
 	"time"
 
@@ -36,6 +37,11 @@ type ISourceInfoProvider interface {
 	GetLastModifiedTime() (time.Time, error)
 
 	IsLocal() bool
+}
+
+type ILocalSourceInfoProvider interface {
+	ISourceInfoProvider
+	OpenSourceFile() (common.CloseableReaderAt, error)
 }
 
 // IRemoteSourceInfoProvider is the abstraction of the methods needed to prepare remote copy source.

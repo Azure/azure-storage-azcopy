@@ -24,11 +24,9 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"hash"
-	"os"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"hash"
 )
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
@@ -93,9 +91,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	var sourceFileFactory func() (common.CloseableReaderAt, error)
 	srcFile := (common.CloseableReaderAt)(nil)
 	if srcInfoProvider.IsLocal() {
-		sourceFileFactory = func() (common.CloseableReaderAt, error) {
-			return openSourceFile(info)
-		}
+		sourceFileFactory = srcInfoProvider.(ILocalSourceInfoProvider).OpenSourceFile // all local providers must implement this interface
 		srcFile, err = sourceFileFactory()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
@@ -144,16 +140,6 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
-}
-
-func openSourceFile(info TransferInfo) (common.CloseableReaderAt, error) {
-	if common.IsPlaceholderForRandomDataGenerator(info.Source) {
-		// Generate a "file" of random data. Useful for testing when you want really big files, but don't want
-		// to make them yourself
-		return common.NewRandomDataGenerator(info.SourceSize), nil
-	} else {
-		return os.Open(info.Source)
-	}
 }
 
 // Schedule all the send chunks.
@@ -296,13 +282,13 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	}
 
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
-	
+
 	if info.S2SDestLengthValidation {
 		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
 			destLength, err := s2sc.GetDestinationLength()
 
 			if err != nil {
-        jptm.FailActiveSend("S2S Length check: Get destination length", err)
+				jptm.FailActiveSend("S2S Length check: Get destination length", err)
 			}
 
 			if destLength != jptm.Info().SourceSize {

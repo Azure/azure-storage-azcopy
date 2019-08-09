@@ -107,7 +107,7 @@ type rawCopyCmdArgs struct {
 	blockBlobTier   string
 	pageBlobTier    string
 	background      bool
-	output          string
+	output          string // TODO: Is this unused now? replaced with param at root level?
 	acl             string
 	logVerbosity    string
 	cancelFromStdin bool
@@ -536,9 +536,18 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	return cooked, nil
 }
 
+// When other commands use the copy command arguments to cook cook, set the blobType to None and validation option
+// else parsing the arguments will fail.
+func (raw *rawCopyCmdArgs) setMandatoryDefaults() {
+	raw.blobType = common.EBlobType.None().String()
+	raw.blockBlobTier = common.EBlockBlobTier.None().String()
+	raw.pageBlobTier = common.EPageBlobTier.None().String()
+	raw.md5ValidationOption = common.DefaultHashValidationOption.String()
+	raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
+}
+
 func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
-	isUpload := fromTo.From() == common.ELocation.Local() && fromTo.To().IsRemote()
-	if putMd5 && !isUpload {
+	if putMd5 && !fromTo.IsUpload() {
 		return fmt.Errorf("put-md5 is set but the job is not an upload")
 	}
 	return nil
@@ -546,8 +555,7 @@ func validatePutMd5(putMd5 bool, fromTo common.FromTo) error {
 
 func validateMd5Option(option common.HashValidationOption, fromTo common.FromTo) error {
 	hasMd5Validation := option != common.DefaultHashValidationOption
-	isDownload := fromTo.To() == common.ELocation.Local()
-	if hasMd5Validation && !isDownload {
+	if hasMd5Validation && !fromTo.IsDownload() {
 		return fmt.Errorf("check-md5 is set but the job is not a download")
 	}
 	return nil
@@ -835,6 +843,28 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 
 		jobPartOrder.SourceRoot = cleanLocalPath(getPathBeforeFirstWildcard(tmpSrc))
 		cca.source = cleanLocalPath(tmpSrc)
+
+	case common.ELocation.Benchmark():
+
+		// TODO: is this the right place for this virtual dir code?
+		//  Should it instead be destination focussed (manipulate the dest path) and/or be done in benchmark.go (problem with that
+		//  is that we don'nt have the job id there...
+
+		// Add in a unique virtual dir name, so that we know for sure we will never overwrite anything
+		// Use the jobID for clarity and debuggability
+		virtualDir := "benchmark-" + cca.jobID.String()
+
+		// TODO: this seems to be necessary because the processor in init enumerator pre-pends
+		//   a /.  After all refactoring is finished, is that what we still expect?  And should it prepending
+		//  / or AZCOPY_PATH_SEPARATOR_STRING?
+		//  If we don't prepend it here, the stripping out of SourceRoot doesn't work in addTransfer
+		//  Reviewers: this seems messy and error-prone. Any thoughts?
+		jobPartOrder.SourceRoot = common.AZCOPY_PATH_SEPARATOR_STRING + virtualDir
+
+		cca.source, err = benchmarkSourceHelper{}.SetVirtualDir(cca.source, virtualDir)
+		if err != nil {
+			return err
+		}
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -885,10 +915,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// set the clean source root
 		bfsUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bfsUrl.Path)
 		jobPartOrder.SourceRoot = bfsUrl.String()
-
-	case common.ELocation.Local():
-		cca.source = cleanLocalPath(cca.source)
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 
 	case common.ELocation.S3():
 		fromURL, err := url.Parse(cca.source)
@@ -958,7 +984,12 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(),
 		common.EFromTo.LocalBlobFS(),
-		common.EFromTo.LocalFile():
+		common.EFromTo.LocalFile(),
+
+		common.EFromTo.BenchmarkBlob(),
+		common.EFromTo.BenchmarkBlobFS(),
+		common.EFromTo.BenchmarkFile():
+
 		var e *copyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {

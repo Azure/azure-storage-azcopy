@@ -153,6 +153,13 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		} else {
 			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}
+	case common.ELocation.Benchmark():
+		ben, err := newBenchmarkTraverser(source, incrementEnumerationCounter)
+		if err != nil {
+			return nil, err
+		}
+		output = ben
+
 	case common.ELocation.Blob():
 		sourceURL, err := url.Parse(source)
 		if err != nil {

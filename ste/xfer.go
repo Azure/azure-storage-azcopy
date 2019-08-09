@@ -126,6 +126,8 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		switch sourceType {
 		case common.ELocation.Local():
 			return newLocalSourceInfoProvider
+		case common.ELocation.Benchmark():
+			return newBenchmarkSourceInfoProvider
 		case common.ELocation.Blob():
 			return newBlobSourceInfoProvider
 		case common.ELocation.File():

@@ -238,7 +238,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		// For blob/file to blob copy, calculate credential type for destination (currently only support StageBlockFromURL)
 		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
 		fallthrough
-	case common.EFromTo.LocalBlob(), common.EFromTo.PipeBlob():
+	case common.EFromTo.LocalBlob(), common.EFromTo.PipeBlob(), common.EFromTo.BenchmarkBlob():
 		if credentialType, err = getBlobCredentialType(ctx, raw.destination, false, raw.destinationSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
@@ -255,7 +255,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		if credentialType, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
-	case common.EFromTo.LocalBlobFS():
+	case common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
 		if credentialType, err = getBlobFSCredentialType(ctx, raw.destination, raw.destinationSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
@@ -263,7 +263,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		if credentialType, err = getBlobFSCredentialType(ctx, raw.source, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
-	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile():
+	case common.EFromTo.LocalFile(), common.EFromTo.FileLocal(), common.EFromTo.FileTrash(), common.EFromTo.FilePipe(), common.EFromTo.PipeFile(), common.EFromTo.BenchmarkFile():
 		if credentialType, err = getAzureFileCredentialType(); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
