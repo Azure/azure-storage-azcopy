@@ -29,8 +29,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-file-go/azfile"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type azureFilesUploader struct {
@@ -162,6 +163,10 @@ func (u *azureFilesUploader) Epilogue() {
 			return err
 		})
 	}
+}
+
+func (u *azureFilesUploader) Cleanup() {
+	jptm := u.jptm
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 {
@@ -177,7 +182,6 @@ func (u *azureFilesUploader) Epilogue() {
 			jptm.Log(pipeline.LogError, fmt.Sprintf("error deleting the (incomplete) file %s. Failed with error %s", u.fileURL.String(), err.Error()))
 		}
 	}
-
 }
 
 // getParentDirectoryURL gets parent directory URL of an Azure FileURL.

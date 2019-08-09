@@ -47,10 +47,15 @@ type ISenderBase interface {
 	Prologue(state common.PrologueState)
 
 	// Epilogue will be called automatically once we know all the chunk funcs have been processed.
+	// This should handle any service-specific cleanup.
+	// jptm cleanup is handled in Cleanup() now.
+	Epilogue()
+
+	// Cleanup will be called after epilogue.
 	// Implementation should interact with its jptm to do
 	// post-success processing if transfer has been successful so far,
 	// or post-failure processing otherwise.
-	Epilogue()
+	Cleanup()
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
@@ -63,6 +68,9 @@ type s2sCopier interface {
 
 	// GenerateCopyFunc returns a func() that will copy the specified portion of the source URL file to the remote location.
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
+
+	// GetDestinationLength returns a integer containing the length of the file at the remote location.
+	GetDestinationLength() (int64, error)
 }
 
 type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer pacer) (s2sCopier, error)
