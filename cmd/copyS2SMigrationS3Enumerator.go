@@ -344,7 +344,8 @@ func (e *copyS2SMigrationS3Enumerator) addObjectToNTransfer(srcURL, destURL url.
 		ContentLanguage:    oie.ContentLanguage(),
 		CacheControl:       oie.CacheControl(),
 		ContentMD5:         oie.ContentMD5(),
-		Metadata:           oie.NewCommonMetadata()}
+		Metadata:           oie.NewCommonMetadata(),
+	}
 
 	return e.addTransfer(copyTransfer, cca)
 }

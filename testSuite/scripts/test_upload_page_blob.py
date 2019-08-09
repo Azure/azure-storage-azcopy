@@ -18,12 +18,12 @@ class PageBlob_Upload_User_Scenarios(unittest.TestCase):
             dest_validate = util.get_resource_from_oauth_container_validate(file_name)
 
         result = util.Command("copy").add_arguments(file_path).add_arguments(dest).add_flags("log-level", "info"). \
-            add_flags("block-size-mb", "4").add_flags("blob-type","PageBlob").execute_azcopy_copy_command()
+            add_flags("block-size-mb", "4").add_flags("blob-type", "PageBlob").execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # execute validator.
         result = util.Command("testBlob").add_arguments(file_path).add_arguments(dest_validate).\
-                add_flags("blob-type","PageBlob").execute_azcopy_verify()
+                add_flags("blob-type", "PageBlob").execute_azcopy_verify()
         self.assertTrue(result)
 
     # test_page_blob_upload_1mb_with_sas verifies the azcopy upload of 1mb file

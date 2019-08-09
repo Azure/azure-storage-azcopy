@@ -22,9 +22,13 @@ package ste
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
@@ -76,15 +80,7 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 	case common.EFromTo.BlobLocal(): // download from Azure Blob to local file system
 		return parameterizeDownload(remoteToLocal, newBlobDownloader)
 	case common.EFromTo.LocalBlob(): // upload from local file system to Azure blob
-		switch blobType {
-		case common.EBlobType.None(),
-			common.EBlobType.BlockBlob():
-			return parameterizeSend(anyToRemote, newBlockBlobUploader, newLocalSourceInfoProvider)
-		case common.EBlobType.PageBlob():
-			return parameterizeSend(anyToRemote, newPageBlobUploader, newLocalSourceInfoProvider)
-		case common.EBlobType.AppendBlob():
-			return parameterizeSend(anyToRemote, newAppendBlobUploader, newLocalSourceInfoProvider)
-		}
+		return parameterizeSend(anyToRemote, newBlobUploader, newLocalSourceInfoProvider)
 	case common.EFromTo.BlobTrash():
 		return DeleteBlobPrologue
 	case common.EFromTo.FileLocal(): // download from Azure File to local file system
@@ -105,4 +101,18 @@ func computeJobXfer(fromTo common.FromTo, blobType common.BlobType) newJobXfer {
 		return parameterizeSend(anyToRemote, newURLToBlobCopier, newS3SourceInfoProvider)
 	}
 	panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
+}
+
+var inferExtensions = map[string]azblob.BlobType{
+	".vhd":  azblob.BlobPageBlob,
+	".vhdx": azblob.BlobPageBlob,
+}
+
+// infers a blob type from the extension specified.
+func inferBlobType(filename string, defaultBlobType azblob.BlobType) azblob.BlobType {
+	if b, ok := inferExtensions[strings.ToLower(filepath.Ext(filename))]; ok {
+		return b
+	}
+
+	return defaultBlobType
 }
