@@ -74,6 +74,7 @@ type IJobMgr interface {
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
+	PipelineNetworkStats() *pipelineNetworkStats
 
 	common.ILoggerCloser
 }
@@ -84,10 +85,11 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:        NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
-		logger:            common.NewJobLogger(jobID, level, appLogger, logFileFolder),
-		chunkStatusLogger: common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
-		concurrency:       concurrency,
+		httpClient:           NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
+		logger:               common.NewJobLogger(jobID, level, appLogger, logFileFolder),
+		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
+		concurrency:          concurrency,
+		pipelineNetworkStats: newPipelineNetworkStats(),
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
@@ -145,12 +147,13 @@ type jobMgr struct {
 	atomicAllTransfersScheduled int32
 	atomicTransferDirection     common.TransferDirection
 
-	concurrency       ConcurrencySettings
-	logger            common.ILoggerResetable
-	chunkStatusLogger common.ChunkStatusLoggerCloser
-	jobID             common.JobID // The Job's unique ID
-	ctx               context.Context
-	cancel            context.CancelFunc
+	concurrency          ConcurrencySettings
+	logger               common.ILoggerResetable
+	chunkStatusLogger    common.ChunkStatusLoggerCloser
+	jobID                common.JobID // The Job's unique ID
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	pipelineNetworkStats *pipelineNetworkStats
 
 	// Share the same HTTP Client across all job parts, so that the we maximize re-use of
 	// its internal connection pool
@@ -308,6 +311,10 @@ func (jm *jobMgr) setDirection(fromTo common.FromTo) {
 
 func (jm *jobMgr) HttpClient() *http.Client {
 	return jm.httpClient
+}
+
+func (jm *jobMgr) PipelineNetworkStats() *pipelineNetworkStats {
+	return jm.pipelineNetworkStats
 }
 
 // SetIncludeExclude sets the include / exclude list of transfers

@@ -1095,7 +1095,19 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				return string(jsonOutput)
 			} else {
 				output := fmt.Sprintf(
-					"\n\nJob %s summary\nElapsed Time (Minutes): %v\nTotal Number Of Transfers: %v\nNumber of Transfers Completed: %v\nNumber of Transfers Failed: %v\nNumber of Transfers Skipped: %v\nTotalBytesTransferred: %v\nFinal Job Status: %v\n",
+					`
+
+Job %s summary
+Elapsed Time (Minutes): %v
+Total Number Of Transfers: %v
+Number of Transfers Completed: %v
+Number of Transfers Failed: %v
+Number of Transfers Skipped: %v
+TotalBytesTransferred: %v
+IOPS; ms per req: %v; %v 
+Ntwk Err; Srv Busy: %.2f%%; %.2f%%
+Final Job Status: %v
+`,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
 					summary.TotalTransfers,
@@ -1103,6 +1115,7 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 					summary.TransfersFailed,
 					summary.TransfersSkipped,
 					summary.TotalBytesTransferred,
+					summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage,
 					summary.JobStatus)
 
 				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)

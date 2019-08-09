@@ -300,7 +300,9 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
 		nil,
-		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost)), nil
+		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost),
+		nil, // we don't gather network stats on the credential pipeline
+	), nil
 }
 
 const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost

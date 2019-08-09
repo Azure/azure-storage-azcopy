@@ -380,6 +380,8 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
+IOPS; ms per req: %v; %v 
+Ntwk Err; Srv Busy: %.2f%%; %.2f%%
 Final Job Status: %v
 `,
 				summary.JobID.String(),
@@ -392,6 +394,7 @@ Final Job Status: %v
 				cca.atomicDeletionCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
+				summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage,
 				summary.JobStatus)
 
 			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)

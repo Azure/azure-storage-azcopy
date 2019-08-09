@@ -158,6 +158,14 @@ type ListJobSummaryResponse struct {
 
 	PercentComplete float32
 
+	// Stats measured from the network pipeline
+	// Values are all-time values, for the duration of the job.
+	// Will be zero if read outside the process running the job (e.g. with 'jobs show' command)
+	AverageIOPS            int
+	AverageE2EMilliseconds int
+	ServerBusyPercentage   float32
+	NetworkErrorPercentage float32
+
 	FailedTransfers  []TransferDetail
 	SkippedTransfers []TransferDetail
 	PerfConstraint   PerfConstraint
@@ -196,6 +204,14 @@ type ListSyncJobSummaryResponse struct {
 	TotalBytesExpected uint64
 
 	PercentComplete float32
+
+	// Stats measured from the network pipeline
+	// Values are all-time values, for the duration of the job.
+	// Will be zero if read outside the process running the job (e.g. with 'jobs show' command)
+	AverageIOPS            int
+	AverageE2EMilliseconds int
+	ServerBusyPercentage   float32
+	NetworkErrorPercentage float32
 }
 
 type ListJobTransfersRequest struct {
