@@ -473,10 +473,20 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+
 	// Get the number of active go routines performing the transfer or executing the chunk Func
-	// TODO: added for debugging purpose. remove later
+	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
 	js.ActiveConnections = jm.ActiveConnections()
+
 	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+
+	pipeStats := jm.PipelineNetworkStats()
+	if pipeStats != nil {
+		js.AverageIOPS = pipeStats.OperationsPerSecond()
+		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
+		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+	}
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
