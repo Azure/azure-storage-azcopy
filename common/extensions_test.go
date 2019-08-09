@@ -4,7 +4,11 @@ import (
 	chk "gopkg.in/check.v1"
 )
 
-func (s *mainTestSuite) TestGenerateFullPath(c *chk.C) {
+type extensionsTestSuite struct{}
+
+var _ = chk.Suite(&extensionsTestSuite{})
+
+func (s *extensionsTestSuite) TestGenerateFullPath(c *chk.C) {
 	// the goal is to make sure the root path and child path are always combined correctly
 	testCases := map[string][]string{
 		"/usr/foo1/bla.txt": {"/usr/foo1", "bla.txt"},    // normal case
