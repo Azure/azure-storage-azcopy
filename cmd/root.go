@@ -56,10 +56,11 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		autoTuneGRs := true // TODO
+		// currently, we only automatically do auto-tuning when benchmarking
+		preferToAutoTuneGRs := cmd == benchCmd
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
-		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, autoTuneGRs)
+		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
 		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err
@@ -108,23 +109,6 @@ func init() {
 
 	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
-
-	// Special flag for generating test data
-	// TODO: find a cleaner way to get the value into common, rather than just using it directly as a variable here
-	rootCmd.PersistentFlags().StringVar(&common.SendRandomDataExt, "send-random-data-ext", "",
-		"Files with this extension will not have their actual content sent. Instead, random data will be generated "+
-			"and sent. The number of random bytes sent will equal the file size. To be used in testing. To use, use command-line "+
-			"tools to create a sparse file of any desired size (but zero bytes actually used on-disk). Choose a distinctive"+
-			"extension for the file (e.g. 'azCopySparseFill'). Then set this parameter to that extension (without the dot).")
-	// On Windows, to create a sparse file, do something like this from an admin prompt:
-	//     fsutil file createnew testfile.AzSparseFill 0
-	//     fsutil sparse setflag .\testfile.AzSparseFill
-	//     fsutil file seteof .\testfile.AzSparseFill 536870912000
-	// Use dd on Linux.
-
-	// Not making this publicly documented yet
-	// TODO: add API calls to check that the on-disk size really is zero for the affected files, then make this publicly exposed
-	rootCmd.PersistentFlags().MarkHidden("send-random-data-ext")
 }
 
 // always spins up a new goroutine, because sometimes the aka.ms URL can't be reached (e.g. a constrained environment where

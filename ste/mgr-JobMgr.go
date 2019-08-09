@@ -286,20 +286,13 @@ func (jm *jobMgr) AddJobPart(partNum PartNumber, planFile JobPartPlanFileName, s
 // but we assume that all the job parts are running in the same direction.
 // TODO: Optimize this when it's necessary for delete.
 func (jm *jobMgr) setDirection(fromTo common.FromTo) {
-	fromIsLocal := fromTo.From() == common.ELocation.Local()
-	toIsLocal := fromTo.To() == common.ELocation.Local()
-
-	isUpload := fromIsLocal && !toIsLocal
-	isDownload := !fromIsLocal && toIsLocal
-	isS2SCopy := fromTo.From().IsRemote() && fromTo.To().IsRemote()
-
-	if isUpload {
+	if fromTo.IsUpload() {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Upload())
 	}
-	if isDownload {
+	if fromTo.IsDownload() {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.Download())
 	}
-	if isS2SCopy {
+	if fromTo.IsS2S() {
 		jm.atomicTransferDirection.AtomicStore(common.ETransferDirection.S2SCopy())
 	}
 }

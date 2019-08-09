@@ -97,9 +97,9 @@ const concurrentFilesFloor = 32
 // NewConcurrencySettings gets concurrency settings by referring to the
 // environment variable AZCOPY_CONCURRENCY_VALUE (if set) and to properties of the
 // machine where we are running
-func NewConcurrencySettings(maxFileAndSocketHandles int, allowAutoTuneGRs bool) ConcurrencySettings {
+func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool) ConcurrencySettings {
 
-	initialMainPoolSize, maxMainPoolSize := getMainPoolSize(runtime.NumCPU(), allowAutoTuneGRs)
+	initialMainPoolSize, maxMainPoolSize := getMainPoolSize(runtime.NumCPU(), requestAutoTuneGRs)
 
 	s := ConcurrencySettings{
 		InitialMainPoolSize:        initialMainPoolSize,
