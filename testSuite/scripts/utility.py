@@ -232,8 +232,8 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     
     # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
     test_oauth_container_validate_sas_url = container_oauth_validate
-    if not clean_test_container(test_oauth_container_validate_sas_url):
-        print("failed to clean OAuth SAS validation container.")
+    if not clean_test_container(test_oauth_container_url):
+        print("failed to clean OAuth container.")
 
     test_premium_account_contaier_url = premium_container_sas
     if not clean_test_container(test_premium_account_contaier_url):
@@ -511,7 +511,7 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        #print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True
@@ -548,7 +548,7 @@ def execute_azcopy_command_get_output(command):
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return exec.output
     else:
         return output

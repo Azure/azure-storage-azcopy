@@ -143,14 +143,13 @@ func (util copyHandlerUtil) urlIsBFSFileSystemOrDirectory(ctx context.Context, u
 	return dirURL.IsDirectory(context.Background())
 }
 
-func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL) bool {
+func (util copyHandlerUtil) urlIsAzureFileDirectory(ctx context.Context, url *url.URL, p pipeline.Pipeline) bool {
 	// Azure file share case
 	if util.urlIsContainerOrVirtualDirectory(url) {
 		return true
 	}
 
 	// Need make request to ensure if it's directory
-	p := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	directoryURL := azfile.NewDirectoryURL(*url, p)
 	_, err := directoryURL.GetProperties(ctx)
 	if err != nil {

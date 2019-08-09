@@ -47,15 +47,15 @@ type rawSyncCmdArgs struct {
 	dst       string
 	recursive bool
 	// options from flags
-	blockSizeMB             float64
-	logVerbosity            string
-	include                 string
-	exclude                 string
-	includeFileAttributes   string
-	excludeFileAttributes   string
+	blockSizeMB           float64
+	logVerbosity          string
+	include               string
+	exclude               string
+	includeFileAttributes string
+	excludeFileAttributes string
 
-	followSymlinks          bool
-	putMd5                  bool
+	followSymlinks      bool
+	putMd5              bool
 	md5ValidationOption string
 	// this flag indicates the user agreement with respect to deleting the extra files at the destination
 	// which do not exists at source. With this flag turned on/off, users will not be asked for permission.
@@ -519,8 +519,8 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
-	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "only exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
 	syncCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) only include files whose attributes match the attribute list. Example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) exclude files whose attributes match the attribute list. Example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
