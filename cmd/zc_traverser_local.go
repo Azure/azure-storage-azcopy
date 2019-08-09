@@ -226,6 +226,37 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 			// go through the files and return if any of them fail to process
 			for _, singleFile := range files {
+				// This won't change. It's purely to hand info off to STE about where the symlink lives.
+				relativePath := singleFile.Name()
+				if singleFile.Mode()&os.ModeSymlink != 0 {
+					if !t.followSymlinks {
+						continue
+					} else {
+						// Because this only goes one layer deep, we can just append the filename to fullPath and resolve with it.
+						symlinkPath := filepath.Join(t.fullPath, singleFile.Name())
+						// Evaluate the symlink
+						result, err := filepath.EvalSymlinks(symlinkPath)
+
+						if err != nil {
+							return err
+						}
+
+						// Resolve the absolute file path of the symlink
+						result, err = filepath.Abs(result)
+
+						if err != nil {
+							return err
+						}
+
+						// Replace the current FileInfo with
+						singleFile, err = os.Stat(result)
+
+						if err != nil {
+							return err
+						}
+					}
+				}
+
 				if singleFile.IsDir() {
 					continue
 				}
@@ -234,7 +265,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					t.incrementEnumerationCounter()
 				}
 
-				err := processIfPassedFilters(filters, newStoredObject(singleFile.Name(), singleFile.Name(), singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
+				err := processIfPassedFilters(filters, newStoredObject(singleFile.Name(), relativePath, singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
 
 				if err != nil {
 					return err
