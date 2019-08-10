@@ -275,10 +275,14 @@ func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
 		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
-			"cancelling the job at this point means it cannot be resumed.", []common.ResponseOption{
-			common.EResponseOption.Yes(),
-			common.EResponseOption.No(),
-		})
+			"cancelling the job at this point means it cannot be resumed.",
+			common.PromptDetails{
+				PromptType: common.EPromptType.Cancel(),
+				ResponseOptions: []common.ResponseOption{
+					common.EResponseOption.Yes(),
+					common.EResponseOption.No(),
+				},
+			})
 
 		if answer != common.EResponseOption.Yes() {
 			// user aborted cancel

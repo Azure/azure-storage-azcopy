@@ -56,11 +56,15 @@ func (o *overwritePrompter) shouldOverwrite(objectPath string) (shouldOverwrite 
 func (o *overwritePrompter) promptForConfirmation(objectPath string) (shouldDelete bool) {
 	answer := common.GetLifecycleMgr().Prompt(fmt.Sprintf("%s already exists at the destination. "+
 		"Do you wish to overwrite?", objectPath),
-		[]common.ResponseOption{
-			common.EResponseOption.Yes(),
-			common.EResponseOption.No(),
-			common.EResponseOption.YesForAll(),
-			common.EResponseOption.NoForAll()})
+		common.PromptDetails{
+			PromptType:   common.EPromptType.Overwrite(),
+			PromptTarget: objectPath,
+			ResponseOptions: []common.ResponseOption{
+				common.EResponseOption.Yes(),
+				common.EResponseOption.No(),
+				common.EResponseOption.YesForAll(),
+				common.EResponseOption.NoForAll()},
+		})
 
 	switch answer {
 	case common.EResponseOption.Yes():

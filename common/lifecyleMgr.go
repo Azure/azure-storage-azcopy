@@ -37,16 +37,16 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Init(OutputBuilder)                                             // let the user know the job has started and initial information like log location
-	Progress(OutputBuilder)                                         // print on the same line over and over again, not allowed to float up
-	Exit(OutputBuilder, ExitCode)                                   // indicates successful execution exit after printing, allow user to specify exit code
-	Info(string)                                                    // simple print, allowed to float up
-	Error(string)                                                   // indicates fatal error, exit after printing, exit code is always Failed (1)
-	Prompt(message string, options []ResponseOption) ResponseOption // ask the user a question(after erasing the progress), then return the response
-	SurrenderControl()                                              // give up control, this should never return
-	InitiateProgressReporting(WorkController)                       // start writing progress with another routine
-	GetEnvironmentVariable(EnvironmentVariable) string              // get the environment variable or its default value
-	SetOutputFormat(OutputFormat)                                   // change the output format of the entire application
+	Init(OutputBuilder)                                          // let the user know the job has started and initial information like log location
+	Progress(OutputBuilder)                                      // print on the same line over and over again, not allowed to float up
+	Exit(OutputBuilder, ExitCode)                                // indicates successful execution exit after printing, allow user to specify exit code
+	Info(string)                                                 // simple print, allowed to float up
+	Error(string)                                                // indicates fatal error, exit after printing, exit code is always Failed (1)
+	Prompt(message string, details PromptDetails) ResponseOption // ask the user a question(after erasing the progress), then return the response
+	SurrenderControl()                                           // give up control, this should never return
+	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
+	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
+	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -143,20 +143,20 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	}
 }
 
-func (lcm *lifecycleMgr) Prompt(message string, options []ResponseOption) ResponseOption {
+func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseOption {
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
-		msgContent:      message,
-		msgType:         eOutputMessageType.Prompt(),
-		inputChannel:    expectedInputChannel,
-		responseOptions: options,
+		msgContent:    message,
+		msgType:       eOutputMessageType.Prompt(),
+		inputChannel:  expectedInputChannel,
+		promptDetails: details,
 	}
 
 	// block until input comes from the user
 	rawResponse := <-expectedInputChannel
 
 	// match the given response against one of the options we gave
-	for _, option := range options {
+	for _, option := range details.ResponseOptions {
 		// in case the user misunderstood and typed full response type instead, we still tolerate it
 		// e.g. instead of "y", user typed "Yes"
 		if strings.EqualFold(option.ResponseString, rawResponse) ||
@@ -252,7 +252,7 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 	// simply output the json message
 	// we assume the msgContent is already formatted correctly
 	fmt.Println(GetJsonStringFromTemplate(newJsonOutputTemplate(msgType, msgToOutput.msgContent,
-		msgToOutput.responseOptions)))
+		msgToOutput.promptDetails)))
 
 	// exit if needed
 	if msgType == eOutputMessageType.Exit() || msgType == eOutputMessageType.Error() {
@@ -325,7 +325,7 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 
 		// example output: Please confirm with: [Y] Yes  [N] No  [A] Yes for all  [L] No for all
 		fmt.Print(" Please confirm with:")
-		for _, option := range msgToOutput.responseOptions {
+		for _, option := range msgToOutput.promptDetails.ResponseOptions {
 			fmt.Printf(" [%s] %s ", strings.ToUpper(option.ResponseString), option.UserFriendlyResponseType)
 		}
 

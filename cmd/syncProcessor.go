@@ -116,12 +116,17 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) (shouldDelete bool, keepPrompting bool) {
 	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
 		"Do you wish to delete it from the destination(%s)?",
-		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay), []common.ResponseOption{
-		common.EResponseOption.Yes(),
-		common.EResponseOption.No(),
-		common.EResponseOption.YesForAll(),
-		common.EResponseOption.NoForAll(),
-	})
+		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay),
+		common.PromptDetails{
+			PromptType:   common.EPromptType.DeleteDestination(),
+			PromptTarget: object.relativePath,
+			ResponseOptions: []common.ResponseOption{
+				common.EResponseOption.Yes(),
+				common.EResponseOption.No(),
+				common.EResponseOption.YesForAll(),
+				common.EResponseOption.NoForAll()},
+		},
+	)
 
 	switch answer {
 	case common.EResponseOption.Yes():

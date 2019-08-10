@@ -27,16 +27,30 @@ func (o outputMessageType) String() string {
 
 // defines the output and how it should be handled
 type outputMessage struct {
-	msgContent      string
-	msgType         outputMessageType
-	exitCode        ExitCode         // only for when the application is meant to exit after printing (i.e. Error or Final)
-	inputChannel    chan<- string    // support getting a response from the user
-	responseOptions []ResponseOption // used from prompt messages where we expect a response
+	msgContent    string
+	msgType       outputMessageType
+	exitCode      ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
+	inputChannel  chan<- string // support getting a response from the user
+	promptDetails PromptDetails
 }
 
 // used for output types that are not simple strings, such as progress and init
 // a given format(text,json) is passed in, and the appropriate string is returned
 type OutputBuilder func(OutputFormat) string
+
+type PromptDetails struct {
+	PromptType      PromptType
+	ResponseOptions []ResponseOption // used from prompt messages where we expect a response
+	PromptTarget    string           // used when prompt message is targeting a specific resource, ease partner team integration
+}
+
+var EPromptType = PromptType("")
+
+type PromptType string
+
+func (PromptType) Cancel() PromptType            { return PromptType("Cancel") }
+func (PromptType) Overwrite() PromptType         { return PromptType("Overwrite") }
+func (PromptType) DeleteDestination() PromptType { return PromptType("DeleteDestination") }
 
 // -------------------------------------- JSON templates -------------------------------------- //
 // used to help formatting of JSON outputs
@@ -50,15 +64,15 @@ func GetJsonStringFromTemplate(template interface{}) string {
 
 // defines the general output template when the format is set to json
 type jsonOutputTemplate struct {
-	TimeStamp       time.Time
-	MessageType     string
-	MessageContent  string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
-	ResponseOptions []ResponseOption
+	TimeStamp      time.Time
+	MessageType    string
+	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
+	PromptDetails  PromptDetails
 }
 
-func newJsonOutputTemplate(messageType outputMessageType, messageContent string, responseOptions []ResponseOption) *jsonOutputTemplate {
+func newJsonOutputTemplate(messageType outputMessageType, messageContent string, promptDetails PromptDetails) *jsonOutputTemplate {
 	return &jsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
-		MessageContent: messageContent, ResponseOptions: responseOptions}
+		MessageContent: messageContent, PromptDetails: promptDetails}
 }
 
 type InitMsgJsonTemplate struct {
