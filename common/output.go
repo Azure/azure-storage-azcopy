@@ -2,10 +2,11 @@ package common
 
 import (
 	"encoding/json"
-	"github.com/JeffreyRichter/enum/enum"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/JeffreyRichter/enum/enum"
 )
 
 var eOutputMessageType = outputMessageType(0)
@@ -26,10 +27,11 @@ func (o outputMessageType) String() string {
 
 // defines the output and how it should be handled
 type outputMessage struct {
-	msgContent   string
-	msgType      outputMessageType
-	exitCode     ExitCode      // only for when the application is meant to exit after printing (i.e. Error or Final)
-	inputChannel chan<- string // support getting a response from the user
+	msgContent      string
+	msgType         outputMessageType
+	exitCode        ExitCode         // only for when the application is meant to exit after printing (i.e. Error or Final)
+	inputChannel    chan<- string    // support getting a response from the user
+	responseOptions []ResponseOption // used from prompt messages where we expect a response
 }
 
 // used for output types that are not simple strings, such as progress and init
@@ -48,13 +50,15 @@ func GetJsonStringFromTemplate(template interface{}) string {
 
 // defines the general output template when the format is set to json
 type jsonOutputTemplate struct {
-	TimeStamp      time.Time
-	MessageType    string
-	MessageContent string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
+	TimeStamp       time.Time
+	MessageType     string
+	MessageContent  string // a simple string for INFO and ERROR, a serialized JSON for INIT, PROGRESS, EXIT
+	ResponseOptions []ResponseOption
 }
 
-func newJsonOutputTemplate(messageType outputMessageType, messageContent string) *jsonOutputTemplate {
-	return &jsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(), MessageContent: messageContent}
+func newJsonOutputTemplate(messageType outputMessageType, messageContent string, responseOptions []ResponseOption) *jsonOutputTemplate {
+	return &jsonOutputTemplate{TimeStamp: time.Now(), MessageType: messageType.String(),
+		MessageContent: messageContent, ResponseOptions: responseOptions}
 }
 
 type InitMsgJsonTemplate struct {

@@ -24,8 +24,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
 
 	"net/url"
 	"strings"
@@ -262,21 +263,25 @@ func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 	// hand over control to the lifecycle manager if blocking
 	if blocking {
-		glcm.InitiateProgressReporting(cca, true)
+		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca, true)
+		glcm.InitiateProgressReporting(cca)
 	}
 }
 
 func (cca *cookedSyncCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	// prompt for confirmation, except when enumeration is complete
 	if !cca.isEnumerationComplete {
-		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+		answer := lcm.Prompt("The enumeration (source/destination comparison) is not complete, "+
+			"cancelling the job at this point means it cannot be resumed.", []common.ResponseOption{
+			common.EResponseOption.Yes(),
+			common.EResponseOption.No(),
+		})
 
-		// read a line from stdin, if the answer is not yes, then abort cancel by returning
-		if !strings.EqualFold(answer, "y") {
+		if answer != common.EResponseOption.Yes() {
+			// user aborted cancel
 			return
 		}
 	}

@@ -1055,24 +1055,25 @@ func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 	// hand over control to the lifecycle manager if blocking
 	if blocking {
-		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.InitiateProgressReporting(cca)
 	}
 }
 
 func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	// prompt for confirmation, except when:
-	// 1. output is not in text format
-	// 2. azcopy was spawned by another process (cancelFromStdin indicates this)
-	// 3. enumeration is complete
-	if !(azcopyOutputFormat != common.EOutputFormat.Text() || cca.isEnumerationComplete) {
-		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+	// prompt for confirmation, except when enumeration is complete
+	if !cca.isEnumerationComplete {
+		answer := lcm.Prompt("The source enumeration is not complete, "+
+			"cancelling the job at this point means it cannot be resumed.", []common.ResponseOption{
+			common.EResponseOption.Yes(),
+			common.EResponseOption.No(),
+		})
 
-		// read a line from stdin, if the answer is not yes, then abort cancel by returning
-		if !strings.EqualFold(answer, "y") {
+		if answer != common.EResponseOption.Yes() {
+			// user aborted cancel
 			return
 		}
 	}

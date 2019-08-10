@@ -27,7 +27,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -116,21 +115,25 @@ func (d *interactiveDeleteProcessor) removeImmediately(object storedObject) (err
 
 func (d *interactiveDeleteProcessor) promptForConfirmation(object storedObject) (shouldDelete bool, keepPrompting bool) {
 	answer := glcm.Prompt(fmt.Sprintf("The %s '%s' does not exist at the source. "+
-		"Do you wish to delete it from the destination(%s)? "+
-		"[Y] Yes  [A] Yes to all  [N] No  [L] No to all  (default is N):",
-		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay))
+		"Do you wish to delete it from the destination(%s)?",
+		d.objectTypeToDisplay, object.relativePath, d.objectLocationToDisplay), []common.ResponseOption{
+		common.EResponseOption.Yes(),
+		common.EResponseOption.No(),
+		common.EResponseOption.YesForAll(),
+		common.EResponseOption.NoForAll(),
+	})
 
-	switch strings.ToLower(answer) {
-	case "y":
+	switch answer {
+	case common.EResponseOption.Yes():
 		// print nothing, since the deleter is expected to log the message when the delete happens
 		return true, true
-	case "a":
+	case common.EResponseOption.YesForAll():
 		glcm.Info(fmt.Sprintf("Confirmed. All the extra %ss will be deleted.", d.objectTypeToDisplay))
 		return true, false
-	case "n":
+	case common.EResponseOption.No():
 		glcm.Info(fmt.Sprintf("Keeping extra %s: %s", d.objectTypeToDisplay, object.relativePath))
 		return false, true
-	case "l":
+	case common.EResponseOption.NoForAll():
 		glcm.Info("No deletions will happen from now onwards.")
 		return false, false
 	default:

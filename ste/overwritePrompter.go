@@ -22,7 +22,6 @@ package ste
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -56,29 +55,31 @@ func (o *overwritePrompter) shouldOverwrite(objectPath string) (shouldOverwrite 
 
 func (o *overwritePrompter) promptForConfirmation(objectPath string) (shouldDelete bool) {
 	answer := common.GetLifecycleMgr().Prompt(fmt.Sprintf("%s already exists at the destination. "+
-		"Do you wish to overwrite? [Y] Yes  [A] Yes to all  [N] No  [L] No to all  (default is N):", objectPath))
+		"Do you wish to overwrite?", objectPath),
+		[]common.ResponseOption{
+			common.EResponseOption.Yes(),
+			common.EResponseOption.No(),
+			common.EResponseOption.YesForAll(),
+			common.EResponseOption.NoForAll()})
 
-	switch strings.ToLower(answer) {
-	case "y":
+	switch answer {
+	case common.EResponseOption.Yes():
 		common.GetLifecycleMgr().Info(fmt.Sprintf("Confirmed. %s will be overwritten.", objectPath))
 		return true
-	case "a":
+	case common.EResponseOption.YesForAll():
 		common.GetLifecycleMgr().Info("Confirmed. All future conflicts will be overwritten.")
 		o.shouldPromptUser = false
 		o.savedResponse = true
 		return true
-	case "n":
+	case common.EResponseOption.No():
 		common.GetLifecycleMgr().Info(fmt.Sprintf("%s will be skipped", objectPath))
 		return false
-	case "l":
+	case common.EResponseOption.NoForAll():
 		common.GetLifecycleMgr().Info("No overwriting will happen from now onwards.")
 		o.shouldPromptUser = false
 		o.savedResponse = false
 		return false
 	default:
-		// if other random inputs came in, like 'cancel' in case StgExp is launching AzCopy
-		// we'd skip the current file
-		// TODO if more input types are added in the future, we need to improve this mechanism
 		common.GetLifecycleMgr().Info(fmt.Sprintf("Unrecognizable answer, skipping %s.", objectPath))
 		return false
 	}

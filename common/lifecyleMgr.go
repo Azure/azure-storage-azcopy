@@ -37,16 +37,16 @@ var lcm = func() (lcmgr *lifecycleMgr) {
 // create a public interface so that consumers outside of this package can refer to the lifecycle manager
 // but they would not be able to instantiate one
 type LifecycleMgr interface {
-	Init(OutputBuilder)                                // let the user know the job has started and initial information like log location
-	Progress(OutputBuilder)                            // print on the same line over and over again, not allowed to float up
-	Exit(OutputBuilder, ExitCode)                      // indicates successful execution exit after printing, allow user to specify exit code
-	Info(string)                                       // simple print, allowed to float up
-	Error(string)                                      // indicates fatal error, exit after printing, exit code is always Failed (1)
-	Prompt(string) string                              // ask the user a question(after erasing the progress), then return the response
-	SurrenderControl()                                 // give up control, this should never return
-	InitiateProgressReporting(WorkController, bool)    // start writing progress with another routine
-	GetEnvironmentVariable(EnvironmentVariable) string // get the environment variable or its default value
-	SetOutputFormat(OutputFormat)                      // change the output format of the entire application
+	Init(OutputBuilder)                                             // let the user know the job has started and initial information like log location
+	Progress(OutputBuilder)                                         // print on the same line over and over again, not allowed to float up
+	Exit(OutputBuilder, ExitCode)                                   // indicates successful execution exit after printing, allow user to specify exit code
+	Info(string)                                                    // simple print, allowed to float up
+	Error(string)                                                   // indicates fatal error, exit after printing, exit code is always Failed (1)
+	Prompt(message string, options []ResponseOption) ResponseOption // ask the user a question(after erasing the progress), then return the response
+	SurrenderControl()                                              // give up control, this should never return
+	InitiateProgressReporting(WorkController)                       // start writing progress with another routine
+	GetEnvironmentVariable(EnvironmentVariable) string              // get the environment variable or its default value
+	SetOutputFormat(OutputFormat)                                   // change the output format of the entire application
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -143,16 +143,30 @@ func (lcm *lifecycleMgr) Info(msg string) {
 	}
 }
 
-func (lcm *lifecycleMgr) Prompt(msg string) string {
+func (lcm *lifecycleMgr) Prompt(message string, options []ResponseOption) ResponseOption {
 	expectedInputChannel := make(chan string, 1)
 	lcm.msgQueue <- outputMessage{
-		msgContent:   msg,
-		msgType:      eOutputMessageType.Prompt(),
-		inputChannel: expectedInputChannel,
+		msgContent:      message,
+		msgType:         eOutputMessageType.Prompt(),
+		inputChannel:    expectedInputChannel,
+		responseOptions: options,
 	}
 
 	// block until input comes from the user
-	return <-expectedInputChannel
+	rawResponse := <-expectedInputChannel
+
+	// match the given response against one of the options we gave
+	for _, option := range options {
+		// in case the user misunderstood and typed full response type instead, we still tolerate it
+		// e.g. instead of "y", user typed "Yes"
+		if strings.EqualFold(option.ResponseString, rawResponse) ||
+			strings.EqualFold(option.UserFriendlyResponseType, rawResponse) {
+			return option
+		}
+	}
+
+	// nothing matched our options, assume default behavior (up to whoever that called Prompt)
+	return EResponseOption.Default()
 }
 
 // TODO minor: consider merging with Exit
@@ -237,7 +251,8 @@ func (lcm *lifecycleMgr) processJSONOutput(msgToOutput outputMessage) {
 
 	// simply output the json message
 	// we assume the msgContent is already formatted correctly
-	fmt.Println(GetJsonStringFromTemplate(newJsonOutputTemplate(msgType, msgToOutput.msgContent)))
+	fmt.Println(GetJsonStringFromTemplate(newJsonOutputTemplate(msgType, msgToOutput.msgContent,
+		msgToOutput.responseOptions)))
 
 	// exit if needed
 	if msgType == eOutputMessageType.Exit() || msgType == eOutputMessageType.Error() {
@@ -308,6 +323,12 @@ func (lcm *lifecycleMgr) processTextOutput(msgToOutput outputMessage) {
 			fmt.Print(msgToOutput.msgContent)
 		}
 
+		// example output: Please confirm with: [Y] Yes  [N] No  [A] Yes for all  [L] No for all
+		fmt.Print(" Please confirm with:")
+		for _, option := range msgToOutput.responseOptions {
+			fmt.Printf(" [%s] %s ", strings.ToUpper(option.ResponseString), option.UserFriendlyResponseType)
+		}
+
 		// read the response to the prompt and send it back through the channel
 		msgToOutput.inputChannel <- lcm.readInCleanLineFromStdIn()
 	}
@@ -320,7 +341,7 @@ type WorkController interface {
 }
 
 // isInteractive indicates whether the application was spawned by an actual user on the command
-func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController, isInteractive bool) {
+func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	if !atomic.CompareAndSwapInt32(&lcm.waitEverCalled, 0, 1) {
 		return
 	}
@@ -330,27 +351,6 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController, isInteract
 	go func() {
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
-
-		// if the application was launched by another process, allow input from stdin to trigger a cancellation
-		if !isInteractive {
-			// dispatch a routine to read the stdin
-			// if input is the word 'cancel' then stop the current job by sending a kill signal to cancel channel
-			go func() {
-				for {
-					input := lcm.readInCleanLineFromStdIn()
-
-					// if the word 'cancel' was passed in, then cancel the current job by sending a signal to the cancel channel
-					if strings.EqualFold(input, "cancel") {
-						// send a kill signal to the cancel channel.
-						lcm.cancelChannel <- os.Kill
-
-						// exit the loop as soon as cancel is received
-						// there is no need to wait on the stdin anymore
-						break
-					}
-				}
-			}()
-		}
 
 		for {
 			select {

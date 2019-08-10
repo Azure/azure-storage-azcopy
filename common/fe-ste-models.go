@@ -127,6 +127,42 @@ func (dd DeleteDestination) String() string {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// represents one possible response
+var EResponseOption = ResponseOption{ResponseType: "", UserFriendlyResponseType: "", ResponseString: ""}
+
+type ResponseOption struct {
+	ResponseType             string // helps us clarify the user's intent and support partner team's localization
+	UserFriendlyResponseType string // text to print in interactive mode
+	ResponseString           string // customizable string to map to ResponseOption, future-proof
+}
+
+// NOTE: these enums are shared with StgExp, so the text is spelled out explicitly (for easy json marshalling)
+func (ResponseOption) Yes() ResponseOption {
+	return ResponseOption{ResponseType: "Yes", UserFriendlyResponseType: "Yes", ResponseString: "y"}
+}
+func (ResponseOption) No() ResponseOption {
+	return ResponseOption{ResponseType: "No", UserFriendlyResponseType: "No", ResponseString: "n"}
+}
+func (ResponseOption) YesForAll() ResponseOption {
+	return ResponseOption{ResponseType: "YesForAll", UserFriendlyResponseType: "Yes for all", ResponseString: "a"}
+}
+func (ResponseOption) NoForAll() ResponseOption {
+	return ResponseOption{ResponseType: "NoForAll", UserFriendlyResponseType: "No for all", ResponseString: "l"}
+}
+func (ResponseOption) Default() ResponseOption {
+	return ResponseOption{ResponseType: "", UserFriendlyResponseType: "", ResponseString: ""}
+}
+
+func (o *ResponseOption) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(o), s, true)
+	if err == nil {
+		*o = val.(ResponseOption)
+	}
+	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 var EOverwriteOption = OverwriteOption(0)
 
 type OverwriteOption uint8
@@ -143,7 +179,7 @@ func (o *OverwriteOption) Parse(s string) error {
 	return err
 }
 
-func (o *OverwriteOption) String() string {
+func (o OverwriteOption) String() string {
 	return enum.StringInt(o, reflect.TypeOf(o))
 }
 
