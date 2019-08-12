@@ -77,13 +77,14 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
-	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
 
 	for _, v := range fileNames {
 		f, err := os.Create(filepath.Join(tmpDir, v))
 		c.Assert(err, chk.IsNil)
 		c.Assert(f.Close(), chk.IsNil)
 	}
+
+	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
 
 	// Only 3 files should ever be found.
 	// This is because the symlink links back to the root dir
@@ -108,7 +109,6 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
 	c.Assert(os.Mkdir(symlinkTmpDir, os.ModeDir), chk.IsNil)
-	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir")), chk.IsNil)
 
 	for _, v := range fileNames {
 		f, err := os.Create(filepath.Join(tmpDir, v))
@@ -118,6 +118,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 		c.Assert(f.Close(), chk.IsNil)
 		c.Assert(f2.Close(), chk.IsNil)
 	}
+
+	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir")), chk.IsNil)
 
 	// Only 6 files should ever be found.
 	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
@@ -180,8 +182,6 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	child := filepath.Join(root2, "childdir")
 
 	c.Assert(os.Mkdir(child, os.ModeDir), chk.IsNil)
-	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
-	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
 
 	for _, v := range fileNames {
 		f, err := os.Create(filepath.Join(root2, v))
@@ -191,6 +191,9 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 		c.Assert(f.Close(), chk.IsNil)
 		c.Assert(f2.Close(), chk.IsNil)
 	}
+
+	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
+	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
 
 	fileCount := 0
 	c.Assert(WalkWithSymlinks(root1, func(path string, fi os.FileInfo, err error) error {
