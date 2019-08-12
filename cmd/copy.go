@@ -251,7 +251,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 				}
 			}
 
-			// This occurs much earlier than the other include or exclude filters. I'd _like_ to move it closer in cook() once we get rid of the other bits of list-of-files.
+			// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
 			includePathList := raw.parsePatterns(raw.includePath)
 
 			for _, v := range includePathList {
