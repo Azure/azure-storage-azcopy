@@ -394,7 +394,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
@@ -433,7 +433,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
-		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
@@ -474,10 +474,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
 		}
-		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
@@ -1265,7 +1265,7 @@ func init() {
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection of VHD and VHDX files as page blobs when no source blob type is available. (For instance, a VHD from local/files/S3 is detected as a page blob, but a VHD from blob would be detected as its source type)")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
