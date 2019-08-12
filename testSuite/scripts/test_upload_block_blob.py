@@ -504,7 +504,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
             x = json.loads(result, object_hook=lambda d: namedtuple('X', d.keys())(*d.values()))
         except:
             self.fail('error parsing the output in Json Format')
-        self.assertEquals(x.TransfersCompleted, 3)
+        self.assertEquals(x.TransfersCompleted, 6)
         self.assertEquals(x.TransfersFailed, 0)
 
         # download from container with sub-dir in include flags
@@ -512,7 +512,7 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-type", "json"). \
-            add_flags("include-pattern", "sub_dir_include_flag_set_download/*"). \
+            add_flags("include-path", "sub_dir_include_flag_set_download/"). \
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -559,14 +559,14 @@ class Block_Upload_User_Scenarios(unittest.TestCase):
         except:
             self.fail('error parsing the output in JSON Format')
         # Number of expected successful transfer should be 18 since two files in directory are set to exclude
-        self.assertEquals(x.TransfersCompleted, 17)
+        self.assertEquals(x.TransfersCompleted, 14)
         self.assertEquals(x.TransfersFailed, 0)
 
         # download from container with sub-dir in exclude flags
         destination_sas = util.get_resource_sas(dir_name)
         result = util.Command("copy").add_arguments(destination_sas).add_arguments(util.test_directory_path). \
             add_flags("recursive", "true").add_flags("log-level", "info").add_flags("output-type", "json"). \
-            add_flags("exclude-pattern", "sub_dir_exclude_flag_set_download/*"). \
+            add_flags("exclude-path", "sub_dir_exclude_flag_set_download/"). \
             execute_azcopy_copy_command_get_output()
 
         # parse the result to get the last job progress summary

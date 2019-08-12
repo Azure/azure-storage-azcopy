@@ -855,9 +855,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bUrl := blobParts.URL()
 		cca.source = bUrl.String()
 
-		// set the clean source root
+		// set the clean source root for S2S
+		if cca.fromTo.To() != common.ELocation.Local() {
+			bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		}
 		jobPartOrder.SourceRoot = bUrl.String()
-
 	case common.ELocation.File():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -873,7 +875,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fUrl := fileParts.URL()
 		cca.source = fUrl.String()
 
-		// set the clean source root
+		// set the clean source root for S2S
+		if cca.fromTo.To() != common.ELocation.Local() {
+			fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		}
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
