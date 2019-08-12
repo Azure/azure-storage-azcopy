@@ -69,7 +69,7 @@ class FileShare_Download_User_Scenario(unittest.TestCase):
             os.makedirs(dest)
 
         result = util.Command("copy").add_arguments(src).add_arguments(dest). \
-            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("copy-contents", "true"). \
+            add_flags("log-level", "info").add_flags("recursive", "true").add_flags("strip-top-dir", "true"). \
             execute_azcopy_copy_command()
         self.assertTrue(result)
 

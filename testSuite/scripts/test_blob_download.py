@@ -271,7 +271,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas = util.get_resource_sas(dir_name)
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path).\
-            add_flags("copy-contents", "true").add_flags("log-level", "Info").add_flags("output-type","json").\
+            add_flags("strip-top-dir", "true").add_flags("log-level", "Info").add_flags("output-type","json").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
         result = util.parseAzcopyOutput(result)
@@ -290,7 +290,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name + "/sub_dir_download_wildcard_recursive_false_1")
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path).\
-            add_flags("copy-contents", "true").add_flags("log-level", "Info").add_flags("output-type","json").\
+            add_flags("strip-top-dir", "true").add_flags("log-level", "Info").add_flags("output-type","json").\
             add_flags("include-pattern", "*.txt").execute_azcopy_copy_command_get_output()
         #download the directory
         # parse the result to get the last job progress summary
@@ -339,7 +339,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas_with_wildcard = util.get_resource_sas(dir_name)
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("copy-contents", "true").\
+            add_flags("log-level", "Info").add_flags("strip-top-dir", "true").\
             add_flags("output-type","json").add_flags("recursive","true").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
@@ -360,7 +360,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         dir_sas_with_wildcard = util.get_resource_sas(dir_name)
         #download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
-            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("copy-contents", "true").\
+            add_flags("log-level", "Info").add_flags("output-type","json").add_flags("strip-top-dir", "true").\
             add_flags("recursive", "true").add_flags("include-path", "logs/;abc/").\
             execute_azcopy_copy_command_get_output()
         # parse the result to get the last job progress summary
