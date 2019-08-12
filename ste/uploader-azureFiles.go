@@ -184,6 +184,16 @@ func (u *azureFilesUploader) Cleanup() {
 	}
 }
 
+func (u *azureFilesUploader) GetDestinationLength() (int64, error) {
+	prop, err := u.fileURL.GetProperties(u.jptm.Context())
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
+}
+
 // getParentDirectoryURL gets parent directory URL of an Azure FileURL.
 func getParentDirectoryURL(fileURL azfile.FileURL, p pipeline.Pipeline) azfile.DirectoryURL {
 	u := fileURL.URL()

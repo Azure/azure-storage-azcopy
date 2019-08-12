@@ -90,6 +90,9 @@ type uploader interface {
 
 	// Md5Channel returns the channel on which anyToRemote should send the MD5 hash to the uploader
 	Md5Channel() chan<- []byte
+
+	// GetDestinationLength returns a integer containing the length of the file at the remote location
+	GetDestinationLength() (int64, error)
 }
 
 func newMd5Channel() chan []byte {

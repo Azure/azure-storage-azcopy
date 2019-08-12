@@ -48,7 +48,7 @@ func (e *copyS2SMigrationEnumeratorBase) initEnumeratorCommon(ctx context.Contex
 		return err
 	}
 
-	e.S2SDestLengthValidation = cca.s2sCheckLength
+	e.S2SDestLengthValidation = cca.CheckLength
 	e.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
 	e.S2SInvalidMetadataHandleOption = cca.s2sInvalidMetadataHandleOption
 

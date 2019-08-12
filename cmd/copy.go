@@ -101,7 +101,7 @@ type rawCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      string
-	s2sCheckLength           bool
+	CheckLength              bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
 	blockBlobTier   string
@@ -372,10 +372,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Do not check for an error on this. Leaving this as true doesn't hurt, as the event never triggers unless it's an s2s copy anyway.
-	// This is thanks to a type assertion attempt.
-	// Atop this, leaving this on board for up/downloads in the future would be useful.
-	cooked.s2sCheckLength = raw.s2sCheckLength
+	cooked.CheckLength = raw.CheckLength
 
 	cooked.background = raw.background
 	cooked.acl = raw.acl
@@ -599,7 +596,7 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
-	s2sCheckLength           bool
+	CheckLength              bool
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
@@ -1284,7 +1281,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sCheckLength, "s2s-check-length", true, "Check the length of a file transferred S2S after the transfer. If there is a mismatch, fail the transfer.")
+	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file transferred S2S after the transfer. If there is a mismatch, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
