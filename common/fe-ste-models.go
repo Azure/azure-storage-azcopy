@@ -381,6 +381,12 @@ func (ft *FromTo) From() Location {
 	return Location((((1 << 16) - 1) & *ft) >> 8)
 }
 
+func (ft *FromTo) IsDownload() bool {
+	isFromRemote := ft.From().IsRemote()
+	isToRemote := ft.To().IsRemote()
+	return isFromRemote && !isToRemote
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Enumerates the values for blob type.
 type BlobType uint8
