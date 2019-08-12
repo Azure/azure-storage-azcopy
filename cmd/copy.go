@@ -610,7 +610,6 @@ type cookedCopyCmdArgs struct {
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
-	cancelFromStdin          bool
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
