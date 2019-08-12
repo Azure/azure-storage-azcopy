@@ -101,12 +101,10 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 			for _, fileInfo := range lResp.FileItems {
 				f := currentDirURL.NewFileURL(fileInfo.Name)
 
-				//// TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
-				//// TODO this traverser is only being used by rm at the moment, so we don't need the properties, uncomment in the future when this is no longer true
-				//fileProperties, err := f.GetProperties(t.ctx)
-				//if err != nil {
-				//	return err
-				//}
+				fileProperties, err := f.GetProperties(t.ctx)
+				if err != nil {
+					return err
+				}
 
 				// compute the relative path of the file with respect to the target directory
 				fileURLParts := azfile.NewFileURLParts(f.URL())
@@ -114,11 +112,11 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
 				storedObject := storedObject{
-					name:         getObjectNameOnly(fileInfo.Name),
-					relativePath: relativePath,
-					//lastModifiedTime: fileProperties.LastModified(),
-					//md5:              fileProperties.ContentMD5(),
-					//size:             fileProperties.ContentLength(),
+					name:             getObjectNameOnly(fileInfo.Name),
+					relativePath:     relativePath,
+					lastModifiedTime: fileProperties.LastModified(),
+					md5:              fileProperties.ContentMD5(),
+					size:             fileProperties.ContentLength(),
 				}
 
 				if t.incrementEnumerationCounter != nil {
