@@ -39,12 +39,32 @@ type pipelineNetworkStats struct {
 	atomic503CountIOPS         int64
 	atomic503CountUnknown      int64 // counts 503's when we don't know the reason
 	atomicE2ETotalMilliseconds int64 // should this be nanoseconds?  Not really needed, given typical minimum operation lengths that we observe
+	atomicStartSeconds         int64
 	nocopy                     common.NoCopy
-	start                      time.Time // TODO: this seems out of place here, but so does the alternative of returning operation count instead of IOPS
+	tunerInterface             ConcurrencyTunerStatsCoordinator
 }
 
-func newPipelineNetworkStats() *pipelineNetworkStats {
-	return &pipelineNetworkStats{start: time.Now()}
+func newPipelineNetworkStats(tunerInterface ConcurrencyTunerStatsCoordinator) *pipelineNetworkStats {
+	s := &pipelineNetworkStats{tunerInterface: tunerInterface}
+	tunerWillCallUs := tunerInterface.RequestCallbackWhenStable(s.start) // we want to start gather stats after the tuner has reached a stable value. No point in gathering them earlier
+	if !tunerWillCallUs {
+		// assume tuner is inactive, and start ourselves now
+		s.start()
+	}
+	return s
+}
+
+// start starts the gathering of stats
+func (s *pipelineNetworkStats) start() {
+	atomic.StoreInt64(&s.atomicStartSeconds, time.Now().Unix())
+}
+
+func (s *pipelineNetworkStats) getStartSeconds() int64 {
+	return atomic.LoadInt64(&s.atomicStartSeconds)
+}
+
+func (s *pipelineNetworkStats) IsStarted() bool {
+	return s.getStartSeconds() > 0
 }
 
 func (s *pipelineNetworkStats) recordRetry(responseBody string) {
@@ -59,7 +79,10 @@ func (s *pipelineNetworkStats) recordRetry(responseBody string) {
 
 func (s *pipelineNetworkStats) OperationsPerSecond() int {
 	s.nocopy.Check()
-	elapsed := time.Since(s.start).Seconds()
+	if !s.IsStarted() {
+		return 0
+	}
+	elapsed := time.Since(time.Unix(s.getStartSeconds(), 0)).Seconds()
 	if elapsed > 0 {
 		return int(float64(atomic.LoadInt64(&s.atomicOperationCount)) / elapsed)
 	} else {
@@ -130,7 +153,7 @@ func (p *xferStatsPolicy) Do(ctx context.Context, request pipeline.Request) (pip
 
 	resp, err := p.next.Do(ctx, request)
 
-	if p.stats != nil {
+	if p.stats != nil && p.stats.IsStarted() {
 		atomic.AddInt64(&p.stats.atomicOperationCount, 1)
 		atomic.AddInt64(&p.stats.atomicE2ETotalMilliseconds, int64(time.Since(start).Seconds()*1000))
 

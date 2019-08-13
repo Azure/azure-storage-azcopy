@@ -20,8 +20,15 @@
 
 package ste
 
+// ConcurrencyTuner is the primary interface to the concurrency tuner
 type ConcurrencyTuner interface {
 	GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string)
+}
+
+// ConcurrencyTunerStatsCoordinator supports linkage between stats gathering and concurrency tuning
+type ConcurrencyTunerStatsCoordinator interface {
+	// RequestCallbackWhenStable lets our stats-gather ask the concurrency tuner to call it back when the tuner has reached a stable level
+	RequestCallbackWhenStable(callback func()) (callbackAccepted bool)
 }
 
 type nullConcurrencyTuner struct {
@@ -32,14 +39,19 @@ func (n *nullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newCo
 	return n.fixedValue, concurrencyReasonNotActive
 }
 
+func (n *nullConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {
+	return false
+}
+
 type autoConcurrencyTuner struct {
 	mbps        chan int
 	concurrency chan struct {
 		v int
 		s string
 	}
-	initialConcurrency int
-	maxConcurrency     int
+	initialConcurrency  int
+	maxConcurrency      int
+	callbacksWhenStable chan func()
 }
 
 func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
@@ -49,8 +61,10 @@ func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 			v int
 			s string
 		}),
-		initialConcurrency: initial,
-		maxConcurrency:     max}
+		initialConcurrency:  initial,
+		maxConcurrency:      max,
+		callbacksWhenStable: make(chan func(), 1000),
+	}
 	go t.worker()
 	return t
 }
@@ -81,16 +95,15 @@ const (
 )
 
 func (t *autoConcurrencyTuner) worker() {
-	const aggressiveMultiplier = 2
-	const standardMultiplier = 1.5
-	const cuttoffForAgqressiveMultiplier = 511
+	const initialMultiplier = 2
 	const slowdownFactor = 5
 	const minMulitplier = 1.19 // really this is 1.2, but use a little less to make the floating point comparisons robust
-	const fudgeFactor = 0.10   // TODO: if we use this outside of benchmarking mode, in the interests of fairness to other traffic, use a higher value so we'll be less aggressive in terms of connection count.  But a bit of aggression is probably OK when benchmarking.
+	const fudgeFactor = 0.25
 
-	multiplier := float32(aggressiveMultiplier)
+	multiplier := float32(initialMultiplier)
 	concurrency := float32(t.initialConcurrency)
 	hitMax := false
+	sawHighMultiGbps := false
 
 	// get initial baseline throughput
 	lastSpeed := t.getCurrentSpeed()
@@ -107,29 +120,30 @@ func (t *autoConcurrencyTuner) worker() {
 
 		// compute increase
 		concurrency = concurrency * multiplier
-
-		// compute desired result of increase
-		desiredSpeedIncrease := lastSpeed * (multiplier - 1) * fudgeFactor // we'd like it to speed up linearly, but in the interests of finding the fastest possible speed, we'll accept _significantly_ less, according to fudge factor. What we won't accept is "no speedup at all"
+		desiredSpeedIncrease := lastSpeed * (multiplier - 1) * fudgeFactor // we'd like it to speed up linearly, but we'll accept a _lot_ less, according to fudge factor in the interests of finding best possible speed
 		desiredNewSpeed := lastSpeed + desiredSpeedIncrease
 
 		// action the increase and measure its effect
 		t.setConcurrency(concurrency, rateChangeReason)
 		lastSpeed = t.getCurrentSpeed()
+		if lastSpeed > 5000 {
+			sawHighMultiGbps = true
+		}
+
+		// workaround for variable throughput when targeting 20 Gbps account limit (concurrency > 32 and < 256 didn't seem to give stable throughput)
+		// TODO: review this, and look for root cause/better solution. Justification for the current approach is that
+		//    if link supports multiGb speeds, then 256 conns is probably fine (i.e. not so many that it will cause problems)
+		probeHigherRegardless := sawHighMultiGbps && multiplier == initialMultiplier && concurrency >= 32 && concurrency < 256
 
 		// decide what to do based on the measurement
-		if lastSpeed > desiredNewSpeed {
+		if lastSpeed > desiredNewSpeed || probeHigherRegardless {
 			// Our concurrency change gave the hoped-for speed increase, so loop around and see if another increase will also work,
 			// unless already at max
 			if hitMax {
 				break
 			}
-
-			// Reduce aggression if concurrency is already high
-			if multiplier > standardMultiplier && concurrency >= cuttoffForAgqressiveMultiplier {
-				multiplier = standardMultiplier
-			}
 		} else {
-			// it didn't work, so we conclude it was too aggressive and back off to where we were before
+			// the new speed didn't work, so we conclude it was too aggressive and back off to where we were before
 			concurrency = concurrency / multiplier
 
 			// reduce multiplier to probe more slowly on the next iteration
@@ -145,15 +159,18 @@ func (t *autoConcurrencyTuner) worker() {
 	}
 
 	if hitMax {
-		// provide no special "we found the best value" result, because actually we possibly didn't find it, we just hit the max
+		// provide no special "we found the best value" result, because actually we possibly didn't find it, we just hit the max,
+		// and we've already notified that fact, when we tied using the max
 	} else {
 		// provide the final value once with a reason that shows we've arrived at what we believe to be the optimal value
 		t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
 		_ = t.getCurrentSpeed() // read from the channel
+		t.signalStability()
 	}
 
 	// now just provide an "inactive" value for ever
 	for {
+		t.signalStability() // in case anyone new has "subscribed"
 		t.setConcurrency(concurrency, concurrencyReasonNotActive)
 		_ = t.getCurrentSpeed() // read from the channel
 	}
@@ -170,4 +187,24 @@ func (t *autoConcurrencyTuner) getCurrentSpeed() (mbps float32) {
 	// assume that any necessary time delays, to measure or to wait for stablization,
 	// are done by the caller of GetRecommendedConcurrency
 	return float32(<-t.mbps)
+}
+
+func (t *autoConcurrencyTuner) signalStability() {
+	for {
+		select {
+		case callback := <-t.callbacksWhenStable:
+			callback() // consume and call each callback once
+		default:
+			return
+		}
+	}
+}
+
+func (t *autoConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {
+	select {
+	case t.callbacksWhenStable <- callback:
+		return true
+	default:
+		return false // channel full
+	}
 }

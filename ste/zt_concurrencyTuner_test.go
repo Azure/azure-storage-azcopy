@@ -42,9 +42,9 @@ func (s *concurrencyTunerSuite) noMax() int {
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
 	steps := []tunerStep{
 		{16, concurrencyReasonInitial, 100},
-		{64, concurrencyReasonSeeking, 100},
+		{32, concurrencyReasonSeeking, 100},
 		{16, concurrencyReasonBackoff, 100},
-		{25, concurrencyReasonSeeking, 100},
+		{19, concurrencyReasonSeeking, 100},
 		{16, concurrencyReasonAtOptimum, 100},
 		{16, concurrencyReasonNotActive, 100}}
 
@@ -55,7 +55,9 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth(c *chk.C) {
 	steps := []tunerStep{
 		{16, concurrencyReasonInitial, 1000},
-		{64, concurrencyReasonSeeking, 4000},
+		{32, concurrencyReasonSeeking, 3000},
+		{64, concurrencyReasonSeeking, 6000},
+		{128, concurrencyReasonSeeking, 12000},
 		{256, concurrencyReasonSeeking, 20000},
 		{512, concurrencyReasonSeeking, 20000},
 		{256, concurrencyReasonBackoff, 20000},
@@ -71,6 +73,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth(c *chk.C) {
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C) {
 	steps := []tunerStep{
 		{16, concurrencyReasonInitial, 1000},
+		{32, concurrencyReasonSeeking, 2000},
 		{64, concurrencyReasonSeeking, 4000},
 		{100, concurrencyReasonHitMax, 8000}, // NOT "at optimum"
 		{100, concurrencyReasonNotActive, 8000},
@@ -81,15 +84,17 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C)
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandardSteps(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 500},
+		{16, concurrencyReasonInitial, 100},
+		{32, concurrencyReasonSeeking, 1000},
 		{64, concurrencyReasonSeeking, 2000},
-		{256, concurrencyReasonSeeking, 8000},
-		{512, concurrencyReasonSeeking, 14500},
+		{128, concurrencyReasonSeeking, 5000},
+		{256, concurrencyReasonSeeking, 10000},
+		{512, concurrencyReasonSeeking, 17500},
 		{1024, concurrencyReasonSeeking, 20000},
-		{512, concurrencyReasonBackoff, 14500},
-		{614, concurrencyReasonSeeking, 16800},
+		{512, concurrencyReasonBackoff, 17500},
+		{614, concurrencyReasonSeeking, 18500},
 		{737, concurrencyReasonSeeking, 19500},
-		{884, concurrencyReasonSeeking, 20500},
+		{884, concurrencyReasonSeeking, 19550},
 		{737, concurrencyReasonAtOptimum, 19500},
 		{737, concurrencyReasonNotActive, 19500},
 	}

@@ -89,7 +89,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		logger:               common.NewJobLogger(jobID, level, appLogger, logFileFolder),
 		chunkStatusLogger:    common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
 		concurrency:          concurrency,
-		pipelineNetworkStats: newPipelineNetworkStats(),
+		pipelineNetworkStats: newPipelineNetworkStats(JobsAdmin.(*jobsAdmin).concurrencyTunerCoordinator), // let the stats coordinate with the concurrency tuner
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
