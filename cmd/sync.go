@@ -85,10 +85,9 @@ func (raw *rawSyncCmdArgs) separateSasFromURL(rawURL string) (cleanURL string, s
 	blobParts := azblob.NewBlobURLParts(*fromUrl)
 	sas = blobParts.SAS.Encode()
 
-	// get clean URL without SAS and trailing / in the path
+	// get clean URL without SAS
 	blobParts.SAS = azblob.SASQueryParameters{}
 	bUrl := blobParts.URL()
-	bUrl.Path = strings.TrimSuffix(bUrl.Path, common.AZCOPY_PATH_SEPARATOR_STRING)
 	cleanURL = bUrl.String()
 
 	return
