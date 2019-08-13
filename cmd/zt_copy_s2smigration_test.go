@@ -135,7 +135,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
@@ -185,7 +185,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
@@ -238,7 +238,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
@@ -268,7 +268,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c 
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -308,7 +308,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -346,7 +346,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 
@@ -383,12 +383,12 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName1)
+	defer deleteBucket(c, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix("us-west-2-region")
 	bucketRegion2 := "us-west-2"
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: bucketRegion2})
-	defer deleteBucket(c, s3Client, bucketName2)
+	defer deleteBucket(c, s3Client, bucketName2, true)
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)
@@ -424,11 +424,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
 	createNewBucketWithName(c, s3Client, bucketName1, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName1)
+	defer deleteBucket(c, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix(specificRegion)
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
-	defer deleteBucket(c, s3Client, bucketName2)
+	defer deleteBucket(c, s3Client, bucketName2, true)
 
 	time.Sleep(30 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
@@ -463,7 +463,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
 	// Generate source bucket
 	bucketName := generateBucketName()
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	dstContainerName := generateContainerName()
 

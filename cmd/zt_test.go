@@ -430,7 +430,7 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 	return
 }
 
-func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
+func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitMinute bool) {
 	objectsCh := make(chan string)
 
 	go func() {
@@ -455,6 +455,10 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
 
 	// Remove the bucket.
 	_ = client.RemoveBucket(bucketName)
+
+	if waitMinute {
+		time.Sleep(time.Minute)
+	}
 	//c.Assert(err, chk.IsNil)
 }
 
@@ -468,8 +472,10 @@ func cleanS3Account(c *chk.C, client *minio.Client) {
 		if strings.Contains(bucket.Name, "elastic") {
 			continue
 		}
-		deleteBucket(c, client, bucket.Name)
+		deleteBucket(c, client, bucket.Name, false)
 	}
+
+	time.Sleep(time.Minute)
 }
 
 func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
