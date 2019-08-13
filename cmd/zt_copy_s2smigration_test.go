@@ -198,7 +198,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 	// construct the raw input to simulate user input
 	rawSrcS3BucketURL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName) // Use default region
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
-	rawSrcS3BucketStrWithWirdcard := strings.Replace(rawSrcS3BucketURL.String(), invalidPrefix, "invalid*", 1)
+	rawSrcS3BucketStrWithWirdcard := strings.Replace(rawSrcS3BucketURL.String(), invalidPrefix, "invalid----*", 1)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketStrWithWirdcard, rawDstBlobServiceURLWithSAS.String())
 
 	// bucket should be resolved, and objects should be scheduled for transfer
@@ -239,10 +239,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
 
-	defer func() {
-		deleteBucket(c, s3Client, bucketName, false)
-		time.Sleep(time.Minute) // This absolutely has to be deleted otherwise it will cause other tests to bug out.
-	}()
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
