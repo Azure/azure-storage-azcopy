@@ -58,6 +58,9 @@ type ISenderBase interface {
 	// post-success processing if transfer has been successful so far,
 	// or post-failure processing otherwise.
 	Cleanup()
+
+	// GetDestinationLength returns a integer containing the length of the file at the remote location
+	GetDestinationLength() (int64, error)
 }
 
 type senderFactory func(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error)
@@ -70,9 +73,6 @@ type s2sCopier interface {
 
 	// GenerateCopyFunc returns a func() that will copy the specified portion of the source URL file to the remote location.
 	GenerateCopyFunc(chunkID common.ChunkID, blockIndex int32, adjustedChunkSize int64, chunkIsWholeFile bool) chunkFunc
-
-	// GetDestinationLength returns a integer containing the length of the file at the remote location.
-	GetDestinationLength() (int64, error)
 }
 
 type s2sCopierFactory func(jptm IJobPartTransferMgr, srcInfoProvider IRemoteSourceInfoProvider, destination string, p pipeline.Pipeline, pacer pacer) (s2sCopier, error)
@@ -90,9 +90,6 @@ type uploader interface {
 
 	// Md5Channel returns the channel on which anyToRemote should send the MD5 hash to the uploader
 	Md5Channel() chan<- []byte
-
-	// GetDestinationLength returns a integer containing the length of the file at the remote location
-	GetDestinationLength() (int64, error)
 }
 
 func newMd5Channel() chan []byte {
