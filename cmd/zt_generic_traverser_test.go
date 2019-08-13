@@ -107,7 +107,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
-	c.Assert(os.Mkdir(symlinkTmpDir, os.ModeDir), chk.IsNil)
+	c.Assert(os.MkdirAll(symlinkTmpDir, os.ModeDir), chk.IsNil)
 	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir")), chk.IsNil)
 
 	for _, v := range fileNames {
@@ -179,7 +179,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	root2 := scenarioHelper{}.generateLocalDirectory(c)
 	child := filepath.Join(root2, "childdir")
 
-	c.Assert(os.Mkdir(child, os.ModeDir), chk.IsNil)
+	c.Assert(os.MkdirAll(child, os.ModeDir), chk.IsNil)
 	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
 	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
 
