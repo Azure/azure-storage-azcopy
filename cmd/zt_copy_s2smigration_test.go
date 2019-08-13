@@ -238,7 +238,11 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// Generate source bucket
 	bucketName := generateBucketNameWithCustomizedPrefix(invalidPrefix)
 	createNewBucketWithName(c, s3Client, bucketName, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName, true)
+
+	defer func() {
+		deleteBucket(c, s3Client, bucketName, false)
+		time.Sleep(time.Minute) // This absolutely has to be deleted otherwise it will cause other tests to bug out.
+	}()
 
 	objectList := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName, "", false)
 	c.Assert(len(objectList), chk.Not(chk.Equals), 0)
