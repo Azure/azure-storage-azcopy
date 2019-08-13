@@ -43,7 +43,9 @@ var _ = chk.Suite(&genericTraverserSuite{})
 func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(tmpDir)
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(symlinkTmpDir)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
@@ -70,6 +72,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(tmpDir)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
@@ -95,6 +98,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(tmpDir)
 	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
 	c.Assert(os.Mkdir(symlinkTmpDir, os.ModeDir), chk.IsNil)
 
@@ -123,7 +127,9 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(tmpDir)
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(symlinkTmpDir)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
@@ -152,7 +158,9 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	fileNames := []string{"file1.txt", "file2.txt", "file3.txt"}
 
 	root1 := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(root1)
 	root2 := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(root2)
 	child := filepath.Join(root2, "childdir")
 
 	c.Assert(os.Mkdir(child, os.ModeDir), chk.IsNil)
@@ -201,6 +209,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// set up the directory as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(dstDirName)
 		dstFileName := storedObjectName
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
@@ -297,6 +306,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
 
 	// test two scenarios, either recursive or not
@@ -386,6 +396,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 	// set up the destination with a folder that have the exact same files
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, fileList)
 
 	// test two scenarios, either recursive or not

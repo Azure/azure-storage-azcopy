@@ -21,6 +21,8 @@
 package cmd
 
 import (
+	"os"
+
 	chk "gopkg.in/check.v1"
 )
 
@@ -28,6 +30,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAttrFlag(c *chk.C) {
 	bsu := getBSU()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// add special files with attributes that we wish to exclude
@@ -60,6 +63,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAttrFlag(c *chk.C) {
 	bsu := getBSU()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	// add special files with attributes that we wish to include
@@ -97,6 +101,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithIncludeAndIncludeAttrFlags(c *ch
 	bsu := getBSU()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	fileList := []string{"file1.txt", "file2.png", "file3.txt"}
@@ -133,6 +138,7 @@ func (s *cmdIntegrationSuite) TestSyncUploadWithExcludeAndExcludeAttrFlags(c *ch
 	bsu := getBSU()
 
 	srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirName)
 	commonFileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirName, "")
 
 	fileList := []string{"file1.bin", "file2.png", "file3.bin"}
