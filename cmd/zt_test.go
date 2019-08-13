@@ -127,7 +127,7 @@ func generateBucketName() string {
 }
 
 func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
-	return generateName(customizedPrefix, 63)
+	return generateName(customizedPrefix, 60)
 }
 
 func generateObjectName() string {
@@ -430,7 +430,7 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 	return
 }
 
-func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitMinute bool) {
+func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
 	objectsCh := make(chan string)
 
 	go func() {
@@ -456,8 +456,8 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitMinute 
 	// Remove the bucket.
 	_ = client.RemoveBucket(bucketName)
 
-	if waitMinute {
-		time.Sleep(time.Minute)
+	if waitQuarterMinute {
+		time.Sleep(time.Second * 15)
 	}
 	//c.Assert(err, chk.IsNil)
 }
