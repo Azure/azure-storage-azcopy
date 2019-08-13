@@ -180,17 +180,19 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// Spin up slice pool pruner
 	go ja.slicePoolPruneLoop()
 
+	// spin up a GR to co-ordinate dynamic sizing of the main pool
+	// It will automatically spin up the right number of chunk processors
+	t := ja.createConcurrencyTuner()
+	ja.concurrencyTunerCoordinator = t.(ConcurrencyTunerStatsCoordinator)
+	go ja.poolSizer(t)
+
 	// One routine constantly monitors the partsChannel.  It takes the JobPartManager from
 	// the Channel and schedules the transfers of that JobPart.
 	go ja.scheduleJobParts()
 
-	// spin up a GR to co-ordinate dynamic sizing of the main pool
-	// It will automatically spin up the right number of chunk processors
-	go ja.poolSizer()
-
-	// Spin up a separate set of workers to process initiation of transfers (so that transfer initiation can't starve
-	// out progress on already-scheduled chunks. (Not sure whether that can really happen, but this protects against it
-	// anyway.)
+	// In addition to the main pool, we spin up a separate set of workers to process initiation of transfers
+	// (so that transfer initiation can't starve out progress on already-scheduled chunks.
+	// (Not sure whether that can really happen, but this protects against it anyway.)
 	// Perhaps MORE importantly, doing this separately gives us more CONTROL over how we interact with the file system.
 	for cc := 0; cc < concurrency.TransferInitiationPoolSize.Value; cc++ {
 		go ja.transferProcessor(cc)
@@ -257,22 +259,28 @@ func (ja *jobsAdmin) scheduleJobParts() {
 	}
 }
 
+func (ja *jobsAdmin) createConcurrencyTuner() ConcurrencyTuner {
+	if ja.concurrency.AutoTuneMainPool() {
+		return NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value)
+	} else {
+		return &nullConcurrencyTuner{fixedValue: ja.concurrency.InitialMainPoolSize}
+	}
+}
+
 // worker that sizes the chunkProcessor pool, dynamically if necessary
-func (ja *jobsAdmin) poolSizer() {
+func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 
 	nextWorkerId := 0
 	actualConcurrency := 0
 	lastBytesOnWire := int64(0)
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
-	throughputMonitoringInterval := time.Duration(4 * time.Second)
+	initialMonitoringInterval := time.Duration(4 * time.Second)
+	expandedMonitoringInterval := time.Duration(6 * time.Second)
+	throughputMonitoringInterval := initialMonitoringInterval
 
-	// construct concurrency tuner according to config
-	var concurrencyTuner ConcurrencyTuner = &nullConcurrencyTuner{fixedValue: ja.concurrency.InitialMainPoolSize}
-	if ja.concurrency.AutoTuneMainPool() {
-		concurrencyTuner = NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value)
-	}
-	targetConcurrency, reason := concurrencyTuner.GetRecommendedConcurrency(-1) // get initial size
+	// get initial pool size
+	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1)
 
 	// loop for ever, driving the actual concurrency towards the most up-to-date target
 	for {
@@ -304,7 +312,10 @@ func (ja *jobsAdmin) poolSizer() {
 					elapsedSeconds := time.Since(lastBytesTime).Seconds()
 					bytes := bytesOnWire - lastBytesOnWire
 					megabitsPerSec := (8 * float64(bytes) / elapsedSeconds) / (1000 * 1000)
-					targetConcurrency, reason = concurrencyTuner.GetRecommendedConcurrency(int(megabitsPerSec))
+					if megabitsPerSec > 11000 {
+						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period if over 10 Gbps, since in some tests it takes a little longer to get a good average
+					}
+					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec))
 					if reason != concurrencyReasonNotActive {
 						ja.LogToJobLog(fmt.Sprintf("Auto-adjusting concurrency level to %d for reason: %s", targetConcurrency, reason))
 					}
@@ -407,6 +418,7 @@ type jobsAdmin struct {
 	cacheLimiter                common.CacheLimiter
 	fileCountLimiter            common.CacheLimiter
 	workaroundJobLoggingChannel chan string
+	concurrencyTunerCoordinator ConcurrencyTunerStatsCoordinator
 }
 
 type CoordinatorChannels struct {
