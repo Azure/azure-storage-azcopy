@@ -46,15 +46,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
 
-	for _, v := range fileNames {
-		f, err := os.Create(filepath.Join(tmpDir, v))
-		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
-		c.Assert(err, chk.IsNil)
-		c.Assert(err2, chk.IsNil)
-		c.Assert(f.Close(), chk.IsNil)
-		c.Assert(f2.Close(), chk.IsNil)
-	}
-
+	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
 	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
 
 	fileCount := 0
@@ -78,12 +71,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 
-	for _, v := range fileNames {
-		f, err := os.Create(filepath.Join(tmpDir, v))
-		c.Assert(err, chk.IsNil)
-		c.Assert(f.Close(), chk.IsNil)
-	}
-
+	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
 
 	// Only 3 files should ever be found.
@@ -110,15 +98,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
 	c.Assert(os.Mkdir(symlinkTmpDir, os.ModeDir), chk.IsNil)
 
-	for _, v := range fileNames {
-		f, err := os.Create(filepath.Join(tmpDir, v))
-		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
-		c.Assert(err, chk.IsNil)
-		c.Assert(err2, chk.IsNil)
-		c.Assert(f.Close(), chk.IsNil)
-		c.Assert(f2.Close(), chk.IsNil)
-	}
-
+	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
 	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir")), chk.IsNil)
 
 	// Only 6 files should ever be found.
@@ -145,15 +126,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
 	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
 
-	for _, v := range fileNames {
-		f, err := os.Create(filepath.Join(tmpDir, v))
-		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
-		c.Assert(err, chk.IsNil)
-		c.Assert(err2, chk.IsNil)
-		c.Assert(f.Close(), chk.IsNil)
-		c.Assert(f2.Close(), chk.IsNil)
-	}
-
+	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
 	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
 	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "extradir")), chk.IsNil)
 	c.Assert(os.Symlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink")), chk.IsNil)
@@ -183,15 +157,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 
 	c.Assert(os.Mkdir(child, os.ModeDir), chk.IsNil)
 
-	for _, v := range fileNames {
-		f, err := os.Create(filepath.Join(root2, v))
-		f2, err2 := os.Create(filepath.Join(child, v))
-		c.Assert(err, chk.IsNil)
-		c.Assert(err2, chk.IsNil)
-		c.Assert(f.Close(), chk.IsNil)
-		c.Assert(f2.Close(), chk.IsNil)
-	}
-
+	scenarioHelper{}.generateLocalFilesFromList(c, root2, fileNames)
+	scenarioHelper{}.generateLocalFilesFromList(c, child, fileNames)
 	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
 	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
 
