@@ -438,7 +438,10 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
 
 		// List all objects from a bucket-name with a matching prefix.
 		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
-			c.Assert(object.Err, chk.IsNil)
+			if object.Err != nil {
+				continue
+			}
+
 			objectsCh <- object.Key
 		}
 	}()
@@ -457,7 +460,9 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
 
 func cleanS3Account(c *chk.C, client *minio.Client) {
 	buckets, err := client.ListBuckets()
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		return
+	}
 
 	for _, bucket := range buckets {
 		if strings.Contains(bucket.Name, "elastic") {
