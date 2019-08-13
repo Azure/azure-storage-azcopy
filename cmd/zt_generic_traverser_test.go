@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -99,8 +100,8 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(tmpDir)
-	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
-	c.Assert(os.MkdirAll(symlinkTmpDir, 0600), chk.IsNil)
+	symlinkTmpDir, err := ioutil.TempDir(tmpDir, "subdir")
+	c.Assert(err, chk.IsNil)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
@@ -161,9 +162,9 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	defer os.RemoveAll(root1)
 	root2 := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(root2)
-	child := filepath.Join(root2, "childdir")
 
-	c.Assert(os.MkdirAll(child, 0600), chk.IsNil)
+	child, err := ioutil.TempDir(root2, "childdir")
+	c.Assert(err, chk.IsNil)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, root2, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, child, fileNames)
