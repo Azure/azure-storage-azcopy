@@ -100,7 +100,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
 	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(tmpDir)
 	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
-	c.Assert(os.Mkdir(symlinkTmpDir, os.ModeDir), chk.IsNil)
+	c.Assert(os.MkdirAll(symlinkTmpDir, os.ModeDir), chk.IsNil)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, tmpDir, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, symlinkTmpDir, fileNames)
@@ -163,7 +163,7 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	defer os.RemoveAll(root2)
 	child := filepath.Join(root2, "childdir")
 
-	c.Assert(os.Mkdir(child, os.ModeDir), chk.IsNil)
+	c.Assert(os.MkdirAll(child, os.ModeDir), chk.IsNil)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, root2, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, child, fileNames)
