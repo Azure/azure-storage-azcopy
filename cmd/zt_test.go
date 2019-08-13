@@ -127,7 +127,7 @@ func generateBucketName() string {
 }
 
 func generateBucketNameWithCustomizedPrefix(customizedPrefix string) string {
-	return generateName(customizedPrefix, 60)
+	return generateName(customizedPrefix, 63)
 }
 
 func generateObjectName() string {
