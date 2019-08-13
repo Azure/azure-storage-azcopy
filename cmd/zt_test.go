@@ -439,7 +439,7 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 		// List all objects from a bucket-name with a matching prefix.
 		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
 			if object.Err != nil {
-				continue
+				return
 			}
 
 			objectsCh <- object.Key
