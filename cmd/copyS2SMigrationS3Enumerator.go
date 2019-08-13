@@ -195,27 +195,6 @@ func (e *copyS2SMigrationS3Enumerator) addTransferFromService(ctx context.Contex
 	}
 	r := NewS3BucketNameToAzureResourcesResolver(bucketNames)
 
-	// Validate name resolving, if there is any problem, do fast fail.
-	// At same time, if there is any resolving happened, print to user.
-	resolveErr := false
-	for _, bucketInfo := range bucketInfos {
-		if resolvedName, err := r.ResolveName(bucketInfo.Name); err != nil {
-			// For resolving failure, print to user.
-			glcm.Error(err.Error())
-			resolveErr = true
-		} else {
-			if resolvedName != bucketInfo.Name {
-				glcm.Info(fmt.Sprintf("s3 bucket name %q is invalid for Azure container/share/filesystem, and has been renamed to %q", bucketInfo.Name, resolvedName))
-			}
-		}
-	}
-
-	if resolveErr {
-		return errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. " +
-			"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
-			"with customized destination name after the service to service copy finished")
-	}
-
 	// bucket filter selects buckets need to be involved into transfer.
 	bucketFilter := func(bucketInfo minio.BucketInfo) bool {
 		// Check if bucket name has given prefix.
@@ -229,7 +208,14 @@ func (e *copyS2SMigrationS3Enumerator) addTransferFromService(ctx context.Contex
 	// defines action need be fulfilled to enumerate bucket further
 	bucketAction := func(bucketInfo minio.BucketInfo) error {
 		// Note: Name resolving is only for destination, source's bucket name should be kept for include/exclude/wildcard.
-		resolvedBucketName, _ := r.ResolveName(bucketInfo.Name) // No error here, as already validated.
+		resolvedBucketName, err := r.ResolveName(bucketInfo.Name) // No error here, as already validated.
+
+		// Move the name resolution error to here so that only actually scheduled buckets get checked
+		if err != nil {
+			return errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. " +
+				"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
+				"with customized destination name after the service to service copy finished")
+		}
 		// Whatever the destination type is, it should be equivalent to account level,
 		// so directly append bucket name to it.
 		tmpDestURL := urlExtension{URL: destBaseURL}.generateObjectPath(resolvedBucketName)
