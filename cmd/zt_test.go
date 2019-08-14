@@ -432,14 +432,12 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 
 func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
 	objectsCh := make(chan string)
-	doneCh := make(chan struct{})
 
 	go func() {
 		defer close(objectsCh)
-		defer func() { doneCh <- struct{}{} }()
 
 		// List all objects from a bucket-name with a matching prefix.
-		for object := range client.ListObjectsV2(bucketName, "", true, doneCh) {
+		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
 			if object.Err != nil {
 				return
 			}
