@@ -25,8 +25,9 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type urlToPageBlobCopier struct {
@@ -90,11 +91,21 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 			c.jptm.FailActiveUpload("Pacing block (global level)", err)
 		}
 		_, err := c.destPageBlobURL.UploadPagesFromURL(
-			enrichedContext, c.srcURL, id.OffsetInFile, id.OffsetInFile, adjustedChunkSize, nil,
+			enrichedContext, c.srcURL, id.OffsetInFile(), id.OffsetInFile(), adjustedChunkSize, nil,
 			azblob.PageBlobAccessConditions{}, azblob.ModifiedAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Uploading page from URL", err)
 			return
 		}
 	})
+}
+
+// GetDestinationLength gets the destination length.
+func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
+	properties, err := c.destPageBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{})
+	if err != nil {
+		return -1, err
+	}
+
+	return properties.ContentLength(), nil
 }

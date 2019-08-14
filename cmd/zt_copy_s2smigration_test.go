@@ -199,8 +199,6 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 	rawSrcS3BucketStrWithWirdcard := strings.Replace(rawSrcS3BucketURL.String(), invalidPrefix, "invalid*", 1)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketStrWithWirdcard, rawDstBlobServiceURLWithSAS.String())
 
-	fmt.Println(raw.src)
-
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.IsNil)
@@ -430,7 +428,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: specificRegion})
 	defer deleteBucket(c, s3Client, bucketName2)
 
-	time.Sleep(60 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
+	time.Sleep(30 * time.Second) // TODO: review and remove this, which was put here as a workaround to issues with buckets being reported as not existing
 
 	objectList1 := scenarioHelper{}.generateCommonRemoteScenarioForS3(c, s3Client, bucketName1, "", true)
 	c.Assert(len(objectList1), chk.Not(chk.Equals), 0)

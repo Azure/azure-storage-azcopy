@@ -257,7 +257,8 @@ func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer(srcURL, destURL url.
 		ContentLanguage:    properties.ContentLanguage(),
 		CacheControl:       properties.CacheControl(),
 		ContentMD5:         properties.ContentMD5(),
-		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata())},
+		Metadata:           common.FromAzFileMetadataToCommonMetadata(properties.NewMetadata()),
+		},
 		cca)
 }
 
@@ -266,7 +267,8 @@ func (e *copyS2SMigrationFileEnumerator) addFileToNTransfer2(srcURL, destURL url
 	return e.addTransfer(common.CopyTransfer{
 		Source:      gCopyUtil.stripSASFromFileShareUrl(srcURL).String(),
 		Destination: gCopyUtil.stripSASFromBlobUrl(destURL).String(), // Optimize this if more target resource types need be supported.
-		SourceSize:  properties.ContentLength},
+		SourceSize:  properties.ContentLength,
+		},
 		cca)
 }
 

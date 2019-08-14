@@ -30,7 +30,9 @@ type EnvironmentVariable struct {
 // This array needs to be updated when a new public environment variable is added
 var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
+	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
+	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
 	EEnvironmentVariable.ShowPerfStates(),
@@ -61,7 +63,14 @@ func (EnvironmentVariable) CertificatePassword() EnvironmentVariable {
 func (EnvironmentVariable) ConcurrencyValue() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_CONCURRENCY_VALUE",
-		Description: "Overrides how many Go Routines work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+		Description: "Overrides how many HTTP connections work on transfers. By default, this number is determined based on the number of logical cores on the machine.",
+	}
+}
+
+func (EnvironmentVariable) TransferInitiationPoolSize() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_CONCURRENT_FILES",
+		Description: "Overrides the (approximate) number of files that are in progress at any one time, by controlling how many files we concurrently initiate transfers for.",
 	}
 }
 
@@ -69,6 +78,13 @@ func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
 		Description: "Overrides where the log files are stored, to avoid filling up a disk.",
+	}
+}
+
+func (EnvironmentVariable) BufferGB() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_BUFFER_GB",
+		Description: "Max number of GB that AzCopy should use for buffering data between network and disk. May include decimal point, e.g. 0.5. The default is based on machine size.",
 	}
 }
 

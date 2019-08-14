@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"runtime"
 	"strings"
@@ -47,8 +48,8 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 		return func(ctx context.Context, request pipeline.Request) (response pipeline.Response, err error) {
 			try++ // The first try is #1 (not #0)
 
-			// Log the outgoing request as informational
-			if po.ShouldLog(pipeline.LogInfo) {
+			// Log the outgoing request if at debug log level
+			if po.ShouldLog(pipeline.LogDebug) {
 				b := &bytes.Buffer{}
 				fmt.Fprintf(b, "==> OUTGOING REQUEST (Try=%d)\n", try)
 				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), nil, nil)
@@ -56,10 +57,28 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			}
 
 			// Set the time for this particular retry operation and then Do the operation.
-			tryStart := time.Now()
-			response, err = next.Do(ctx, request) // Make the request
+			// The time we gather here is a measure of service responsiveness, and as such it shouldn't
+			// include the time taken to transfer the body. For downloads, that's easy,
+			// since Do returns before the body is processed.  For uploads, its trickier, because
+			// the body transferring is inside Do. So we use an http trace, so we can time
+			// from the time we finished sending the request (including any body).
+			var endRequestWrite time.Time
+			haveEndWrite := false
+			tracedContext := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+				WroteRequest: func(w httptrace.WroteRequestInfo) {
+					endRequestWrite = time.Now()
+					haveEndWrite = true
+				},
+			})
+			tryBeginAwaitResponse := time.Now()
+
+			response, err = next.Do(tracedContext, request) // Make the request
+
 			tryEnd := time.Now()
-			tryDuration := tryEnd.Sub(tryStart)
+			if haveEndWrite {
+				tryBeginAwaitResponse = endRequestWrite // adjust to the time we really started waiting for the response
+			}
+			tryDuration := tryEnd.Sub(tryBeginAwaitResponse)
 			opDuration := tryEnd.Sub(operationStart)
 
 			logLevel, forceLog, httpError := pipeline.LogInfo, false, false // Default logging information
@@ -77,7 +96,14 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				} else if sc == http.StatusNotFound || sc == http.StatusConflict || sc == http.StatusPreconditionFailed || sc == http.StatusRequestedRangeNotSatisfiable {
 					httpError = true
 				}
-			} else { // This error did not get an HTTP response from the service; upgrade the severity to Error
+			} else if isContextCancelledError(err) {
+				// No point force-logging these, and probably, for clarity of the log, no point in even logging unless at debug level
+				// Otherwise, when lots of go-routines are running, and one fails with a real error, the rest obscure the log with their
+				// context canceled logging. If there's no real error, just user-requested cancellation,
+				// that's is visible by cancelled status shown in end-of-log summary.
+				logLevel, forceLog = pipeline.LogDebug, false
+			} else {
+				// This error did not get an HTTP response from the service; upgrade the severity to Error
 				logLevel, forceLog = pipeline.LogError, true
 			}
 
@@ -99,7 +125,12 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 					}
 				}
 
-				pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err)
+				if forceLog || err != nil || po.ShouldLog(pipeline.LogDebug) {
+					pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err) // only write full headers if debugging or error
+				} else {
+					writeRequestAsOneLine(b, prepareRequestForLogging(request))
+				}
+
 				//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
 				//for a set of harmless errors. HTTP requests ultimately will be retried.
 				if logLevel <= pipeline.LogError && !httpError {
@@ -117,6 +148,31 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 			return response, err
 		}
 	})
+}
+
+func isContextCancelledError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if err == context.Canceled {
+		return true
+	}
+
+	cause := pipeline.Cause(err)
+	if cause == context.Canceled {
+		return true
+	}
+
+	if uErr, ok := cause.(*url.Error); ok {
+		return isContextCancelledError(uErr.Err)
+	}
+
+	return false
+}
+
+func writeRequestAsOneLine(b *bytes.Buffer, request *http.Request) {
+	fmt.Fprint(b, "   "+request.Method+" "+request.URL.String()+"\n")
 }
 
 func prepareRequestForLogging(request pipeline.Request) *http.Request {

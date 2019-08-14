@@ -135,6 +135,7 @@ const showJobsCmdShortDescription = "Show detailed information for the given job
 
 const showJobsCmdLongDescription = `
 Show detailed information for the given job ID: if only the job ID is supplied without a flag, then the progress summary of the job is returned.
+(In the progress information shown by this command, the byte counts and percent complete do not include files currently in progress.)
 If the with-status flag is set, then the list of transfers in the job with the given value will be shown.`
 
 const resumeJobsCmdShortDescription = "Resume the existing job with the given job ID"
@@ -229,6 +230,13 @@ Remove a subset of blobs in a virtual directory (ex: only jpg and pdf files, or 
 Remove an entire virtual directory but exclude certain blobs from the scope (ex: every blob that starts with foo or ends with bar):
   - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/directory]?[SAS]" --recursive=true --exclude="foo*;*bar"
 
+Remove specific blobs and virtual directories by putting their relative paths (NOT URL-encoded) in a file:
+  - azcopy rm "https://[account].blob.core.windows.net/[container]/[path/to/parent/dir]" --recursive=true --list-of-files=/usr/bar/list.txt
+  - file content:
+	dir1/dir2
+	blob1
+	blob2
+
 Remove a single file from ADLS Gen2 (include/exclude not supported):
   - azcopy rm "https://[account].dfs.core.windows.net/[container]/[path/to/file]?[SAS]"
 
@@ -282,4 +290,11 @@ Sync an entire directory but exclude certain files from the scope (ex: every fil
   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude="foo*;*bar"
 
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
+`
+
+const docCmdShortDescription = "Generates documentation for the tool in Markdown format"
+
+const docCmdLongDescription = `Generates documentation for the tool in Markdown format, and stores them in the designated location.
+
+By default, the files are stored in a folder named 'doc' inside the current directory.
 `

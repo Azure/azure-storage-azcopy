@@ -80,13 +80,14 @@ type IJobMgr interface {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-func newJobMgr(appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
+func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID common.JobID, appCtx context.Context, level common.LogLevel, commandString string, logFileFolder string) IJobMgr {
 	// atomicAllTransfersScheduled is set to 1 since this api is also called when new job part is ordered.
 	enableChunkLogOutput := level.ToPipelineLogLevel() == pipeline.LogDebug
 	jm := jobMgr{jobID: jobID, jobPartMgrs: newJobPartToJobPartMgr(), include: map[string]int{}, exclude: map[string]int{},
-		httpClient:        NewAzcopyHTTPClient(),
+		httpClient:        NewAzcopyHTTPClient(concurrency.MaxIdleConnections),
 		logger:            common.NewJobLogger(jobID, level, appLogger, logFileFolder),
 		chunkStatusLogger: common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
+		concurrency:       concurrency,
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	return &jm
@@ -110,10 +111,17 @@ func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
 
 func (jm *jobMgr) logConcurrencyParameters() {
 	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Number of CPUs: %d", runtime.NumCPU()))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB", float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d", JobsAdmin.(*jobsAdmin).fileCountLimiter.Limit()))
-	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d", NumTransferInitiationRoutines))
-	// TODO: find a way to add concurrency value here (i.e. number of chunk func worker go routines)
+	// TODO: label max file buffer ram with how we obtained it (env var or default)
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max file buffer RAM %.3f GB",
+		float32(JobsAdmin.(*jobsAdmin).cacheLimiter.Limit())/(1024*1024*1024)))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent network operations: %d (%s)",
+		jm.concurrency.MainPoolSize.Value,
+		jm.concurrency.MainPoolSize.GetDescription()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max concurrent transfer initiation routines: %d (%s)",
+		jm.concurrency.TransferInitiationPoolSize.Value,
+		jm.concurrency.TransferInitiationPoolSize.GetDescription()))
+	jm.logger.Log(pipeline.LogInfo, fmt.Sprintf("Max open files when downloading: %d (auto-computed)",
+		jm.concurrency.MaxOpenDownloadFiles))
 }
 
 // jobMgr represents the runtime information for a Job
@@ -130,6 +138,7 @@ type jobMgr struct {
 	atomicAllTransfersScheduled int32
 	atomicTransferDirection     common.TransferDirection
 
+	concurrency       ConcurrencySettings
 	logger            common.ILoggerResetable
 	chunkStatusLogger common.ChunkStatusLoggerCloser
 	jobID             common.JobID // The Job's unique ID

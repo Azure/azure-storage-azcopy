@@ -26,8 +26,9 @@ import (
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type urlToBlockBlobCopier struct {
@@ -139,10 +140,21 @@ func (c *urlToBlockBlobCopier) generatePutBlockFromURL(id common.ChunkID, blockI
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
 		_, err := c.destBlockBlobURL.StageBlockFromURL(ctxWithLatestServiceVersion, encodedBlockID, c.srcURL,
-			id.OffsetInFile, adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{})
+			id.OffsetInFile(), adjustedChunkSize, azblob.LeaseAccessConditions{}, azblob.ModifiedAccessConditions{})
 		if err != nil {
 			c.jptm.FailActiveSend("Staging block from URL", err)
 			return
 		}
 	})
+}
+
+// GetDestinationLength gets the destination length.
+func (c *urlToBlockBlobCopier) GetDestinationLength() (int64, error) {
+	ctxWithLatestServiceVersion := context.WithValue(c.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+	properties, err := c.destBlockBlobURL.GetProperties(ctxWithLatestServiceVersion, azblob.BlobAccessConditions{})
+	if err != nil {
+		return -1, err
+	}
+
+	return properties.ContentLength(), nil
 }

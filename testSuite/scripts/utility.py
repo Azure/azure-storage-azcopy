@@ -237,6 +237,8 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     # Therefore, we'd delete the container successfully with the container level SAS
     # and just not be able to re-make it with the container SAS
     test_oauth_container_validate_sas_url = container_oauth_validate
+    if not clean_test_container(test_oauth_container_url):
+        print("failed to clean OAuth container.")
 
     test_premium_account_contaier_url = premium_container_sas
     if not clean_test_container(test_premium_account_contaier_url):
@@ -551,7 +553,7 @@ def execute_azcopy_command_get_output(command):
             cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        #print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return exec.output
     else:
         return output

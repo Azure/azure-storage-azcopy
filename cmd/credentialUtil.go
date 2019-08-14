@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"sync"
@@ -299,8 +300,10 @@ func createBlobPipeline(ctx context.Context, credInfo common.CredentialInfo) (pi
 			MaxRetryDelay: ste.UploadMaxRetryDelay,
 		},
 		nil,
-		ste.NewAzcopyHTTPClient()), nil
+		ste.NewAzcopyHTTPClient(frontEndMaxIdleConnectionsPerHost)), nil
 }
+
+const frontEndMaxIdleConnectionsPerHost = http.DefaultMaxIdleConnsPerHost
 
 func createBlobFSPipeline(ctx context.Context, credInfo common.CredentialInfo) (pipeline.Pipeline, error) {
 	credential := common.CreateBlobFSCredential(ctx, credInfo, common.CredentialOpOptions{

@@ -8,9 +8,12 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/azbfs"
@@ -72,34 +75,22 @@ func NewVersionPolicyFactory() pipeline.Factory {
 	})
 }
 
-// Max number of idle connections per host, to be held in the connection pool inside HTTP client.
-// This use to be 1000, but each consumes a handle, and on Linux total file/network handle counts can be
-// tightly constrained, possibly to as low as 1024 in total. So we want a lower figure than 1000.
-// 500 ought to be enough because this figure is about pooling temporarily un-used connections.
-// Our max number of USED connections, at any one moment in time, is set by AZCOPY_CONCURRENCY_VALUE
-// which, as at Mar 2019, defaults to 300.  Because connections are constantly released and use by that pool
-// of 300 goroutines, its reasonable to assume that the total number of momentarily-
-// UNused connections will be much smaller than the number USED, i.e. much less than 300.  So this figure
-// we set here should be MORE than enough.
-const AzCopyMaxIdleConnsPerHost = 500
-
 // NewAzcopyHTTPClient creates a new HTTP client.
 // We must minimize use of this, and instead maximize re-use of the returned client object.
 // Why? Because that makes our connection pooling more efficient, and prevents us exhausting the
 // number of available network sockets on resource-constrained Linux systems. (E.g. when
 // 'ulimit -Hn' is low).
-func NewAzcopyHTTPClient() *http.Client {
+func NewAzcopyHTTPClient(maxIdleConns int) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			Proxy: ieproxy.GetProxyFunc(),
-			// We use Dial instead of DialContext as DialContext has been reported to cause slower performance.
-			Dial /*Context*/ : (&net.Dialer{
+			DialContext: newDialRateLimiter(&net.Dialer{
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 				DualStack: true,
-			}).Dial, /*Context*/
+			}).DialContext,
 			MaxIdleConns:           0, // No limit
-			MaxIdleConnsPerHost:    AzCopyMaxIdleConnsPerHost,
+			MaxIdleConnsPerHost:    maxIdleConns,
 			IdleConnTimeout:        180 * time.Second,
 			TLSHandshakeTimeout:    10 * time.Second,
 			ExpectContinueTimeout:  1 * time.Second,
@@ -110,6 +101,33 @@ func NewAzcopyHTTPClient() *http.Client {
 			//ExpectContinueTimeout:  time.Duration{},
 		},
 	}
+}
+
+// Prevents too many dials happening at once, because we've observed that that increases the thread
+// count in the app, to several times more than is actually necessary - presumably due to a blocking OS
+// call somewhere. It's tidier to avoid creating those excess OS threads.
+// Even our change from Dial (deprecated) to DialContext did not replicate the effect of dialRateLimiter.
+type dialRateLimiter struct {
+	dialer *net.Dialer
+	sem    *semaphore.Weighted
+}
+
+func newDialRateLimiter(dialer *net.Dialer) *dialRateLimiter {
+	const concurrentDialsPerCpu = 10 // exact value doesn't matter too much, but too low will be too slow, and too high will reduce the beneficial effect on thread count
+	return &dialRateLimiter{
+		dialer,
+		semaphore.NewWeighted(int64(concurrentDialsPerCpu * runtime.NumCPU())),
+	}
+}
+
+func (d *dialRateLimiter) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	err := d.sem.Acquire(context.Background(), 1)
+	if err != nil {
+		return nil, err
+	}
+	defer d.sem.Release(1)
+
+	return d.dialer.DialContext(ctx, network, address)
 }
 
 // newAzcopyHTTPClientFactory creates a HTTPClientPolicyFactory object that sends HTTP requests to a Go's default http.Client.

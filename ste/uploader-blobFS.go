@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -165,7 +166,7 @@ func (u *blobFSUploader) GenerateUploadFunc(id common.ChunkID, blockIndex int32,
 		// upload the byte range represented by this chunk
 		jptm.LogChunkStatus(id, common.EWaitReason.Body())
 		body := newPacedRequestBody(jptm.Context(), reader, u.pacer)
-		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile, body) // note: AppendData is really UpdatePath with "append" action
+		_, err := u.fileURL.AppendData(jptm.Context(), id.OffsetInFile(), body) // note: AppendData is really UpdatePath with "append" action
 		if err != nil {
 			jptm.FailActiveUpload("Uploading range", err)
 			return
@@ -198,6 +199,10 @@ func (u *blobFSUploader) Epilogue() {
 			jptm.FailActiveUpload("Getting hash", errNoHash) // don't return, since need cleanup below
 		}
 	}
+}
+
+func (u *blobFSUploader) Cleanup() {
+	jptm := u.jptm
 
 	// Cleanup if status is now failed
 	if jptm.TransferStatus() <= 0 {

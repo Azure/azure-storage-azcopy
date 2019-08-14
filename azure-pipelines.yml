@@ -1,14 +1,14 @@
 trigger:
   branches:
     include:
-      - master
       - dev
+      - master
 
 pr:
   branches:
     include:
-      - master
       - dev
+      - master
 
 jobs:
   - job: Linux_and_Windows_Builds
@@ -44,12 +44,69 @@ jobs:
         displayName: 'Publish Artifacts'
         condition: succeededOrFailed()
 
-  - job: Unit_Test_Ubuntu
+  - job: Test_On_Ubuntu
+    variables:
+      isMutexSet: 'false'
+    # allow maximum build time, in case we have build congestion
+    timeoutInMinutes: 360
     pool:
       vmImage: 'ubuntu-16.04'
     steps:
+      - task: UsePythonVersion@0
+        name: 'Set_up_Python'
+        inputs:
+          versionSpec: '3.7'
       - task: GoTool@0
+        name: 'Set_up_Golang'
         inputs:
           version: '1.12'
       - script: |
-          ACCOUNT_NAME=$(ACCOUNT_NAME) ACCOUNT_KEY=$(ACCOUNT_KEY) AWS_ACCESS_KEY_ID=$(AWS_ACCESS_KEY_ID) AWS_SECRET_ACCESS_KEY=$(AWS_SECRET_ACCESS_KEY) go test -race -short -cover ./cmd ./common ./ste ./azbfs
+          pip install azure-storage-blob==12.0.0b2
+          # acquire the mutex before running live tests to avoid conflicts
+          python ./tool_distributed_mutex.py lock "$(MUTEX_URL)"
+          # set the variable to indicate that the mutex was actually acquired
+          echo '##vso[task.setvariable variable=isMutexSet]true'
+        name: 'Acquire_the_distributed_mutex'
+      - script: |
+          # run unit test and build executable
+          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
+          set -e
+          go test -race -short -cover ./cmd ./common ./ste ./azbfs
+          GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
+        name: 'Run_unit_tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+      - script: |
+          go build -o test-validator ./testSuite/
+          mkdir test-temp
+          export AZCOPY_EXECUTABLE_PATH=$(pwd)/azcopy_linux_amd64
+          export TEST_SUITE_EXECUTABLE_LOCATION=$(pwd)/test-validator
+          export TEST_DIRECTORY_PATH=$(pwd)/test-temp
+          python ./testSuite/scripts/run.py
+        name: 'Run_smoke_tests'
+        env:
+          ACCOUNT_NAME: $(ACCOUNT_NAME)
+          ACCOUNT_KEY: $(ACCOUNT_KEY)
+          AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+          AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+          AZCOPY_OAUTH_TOKEN_INFO: $(AZCOPY_OAUTH_TOKEN_INFO)
+          CONTAINER_OAUTH_URL: $(CONTAINER_OAUTH_URL)
+          CONTAINER_OAUTH_VALIDATE_SAS_URL: $(CONTAINER_OAUTH_VALIDATE_SAS_URL)
+          CONTAINER_SAS_URL: $(CONTAINER_SAS_URL)
+          FILESYSTEM_SAS_URL: $(FILESYSTEM_SAS_URL)
+          FILESYSTEM_URL: $(FILESYSTEM_URL)
+          OAUTH_AAD_ENDPOINT: $(OAUTH_AAD_ENDPOINT)
+          OAUTH_TENANT_ID: $(OAUTH_TENANT_ID)
+          PREMIUM_CONTAINER_SAS_URL: $(PREMIUM_CONTAINER_SAS_URL)
+          S2S_DST_BLOB_ACCOUNT_SAS_URL: $(S2S_DST_BLOB_ACCOUNT_SAS_URL)
+          S2S_SRC_BLOB_ACCOUNT_SAS_URL: $(S2S_SRC_BLOB_ACCOUNT_SAS_URL)
+          S2S_SRC_FILE_ACCOUNT_SAS_URL: $(S2S_SRC_FILE_ACCOUNT_SAS_URL)
+          S2S_SRC_S3_SERVICE_URL: $(S2S_SRC_S3_SERVICE_URL)
+          SHARE_SAS_URL: $(SHARE_SAS_URL)
+      - script: python ./tool_distributed_mutex.py unlock "$(MUTEX_URL)"
+        name: 'Release_the_distributed_mutex'
+        # this runs even if the job was canceled (only if the mutex was acquired by this job)
+        condition: and(always(), eq(variables['isMutexSet'], 'true'))

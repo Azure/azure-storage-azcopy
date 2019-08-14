@@ -27,8 +27,9 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // allow us to iterate through a path pointing to the blob endpoint
@@ -40,6 +41,20 @@ type blobTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
+}
+
+func (t *blobTraverser) isDirectory(isSource bool) bool {
+	isDirDirect := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(t.rawURL)
+
+	// Skip the single blob check if we're checking a destination.
+	// This is an individual exception for blob because blob supports virtual directories and blobs sharing the same name.
+	if isDirDirect || !isSource {
+		return isDirDirect
+	}
+
+	_, isSingleBlob := t.getPropertiesIfSingleBlob()
+
+	return !isSingleBlob
 }
 
 func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool) {
@@ -73,6 +88,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
 		}
+
 		return processIfPassedFilters(filters, storedObject, processor)
 	}
 

@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -39,8 +40,173 @@ type genericTraverserSuite struct{}
 
 var _ = chk.Suite(&genericTraverserSuite{})
 
-func (s *genericTraverserSuite) SetUpTest(c *chk.C) {
-	c.Log("Still running tests... ", c.TestName())
+// Test follow symlink functionality
+func (s *genericTraverserSuite) TestWalkWithSymlinks(c *chk.C) {
+	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
+
+	for _, v := range fileNames {
+		f, err := os.Create(filepath.Join(tmpDir, v))
+		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
+		c.Assert(err, chk.IsNil)
+		c.Assert(err2, chk.IsNil)
+		c.Assert(f.Close(), chk.IsNil)
+		c.Assert(f2.Close(), chk.IsNil)
+	}
+
+	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
+
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		return nil
+	}), chk.IsNil)
+
+	// 3 files live in base, 3 files live in symlink
+	c.Assert(fileCount, chk.Equals, 6)
+}
+
+// Test cancel symlink loop functionality
+func (s *genericTraverserSuite) TestWalkWithSymlinksBreakLoop(c *chk.C) {
+	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	c.Assert(os.Symlink(tmpDir, filepath.Join(tmpDir, "spinloop")), chk.IsNil)
+
+	for _, v := range fileNames {
+		f, err := os.Create(filepath.Join(tmpDir, v))
+		c.Assert(err, chk.IsNil)
+		c.Assert(f.Close(), chk.IsNil)
+	}
+
+	// Only 3 files should ever be found.
+	// This is because the symlink links back to the root dir
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		return nil
+	}), chk.IsNil)
+
+	c.Assert(fileCount, chk.Equals, 3)
+}
+
+// Test ability to dedupe within the same directory
+func (s *genericTraverserSuite) TestWalkWithSymlinksDedupe(c *chk.C) {
+	fileNames := []string{"stonks.txt", "jaws but its a baby shark.mp3", "my crow soft.txt"}
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := filepath.Join(tmpDir, "subdir")
+	c.Assert(os.Mkdir(symlinkTmpDir, os.ModeDir), chk.IsNil)
+	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "symlinkdir")), chk.IsNil)
+
+	for _, v := range fileNames {
+		f, err := os.Create(filepath.Join(tmpDir, v))
+		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
+		c.Assert(err, chk.IsNil)
+		c.Assert(err2, chk.IsNil)
+		c.Assert(f.Close(), chk.IsNil)
+		c.Assert(f2.Close(), chk.IsNil)
+	}
+
+	// Only 6 files should ever be found.
+	// 3 in the root dir, 3 in subdir, then symlinkdir should be ignored because it's been seen.
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		return nil
+	}), chk.IsNil)
+
+	c.Assert(fileCount, chk.Equals, 6)
+}
+
+// Test ability to only get the output of one symlink when two point to the same place
+func (s *genericTraverserSuite) TestWalkWithSymlinksMultitarget(c *chk.C) {
+	fileNames := []string{"March 20th is international happiness day.txt", "wonderwall but it goes on and on and on.mp3", "bonzi buddy.exe"}
+	tmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	symlinkTmpDir := scenarioHelper{}.generateLocalDirectory(c)
+	c.Assert(tmpDir, chk.Not(chk.Equals), symlinkTmpDir)
+
+	for _, v := range fileNames {
+		f, err := os.Create(filepath.Join(tmpDir, v))
+		f2, err2 := os.Create(filepath.Join(symlinkTmpDir, v))
+		c.Assert(err, chk.IsNil)
+		c.Assert(err2, chk.IsNil)
+		c.Assert(f.Close(), chk.IsNil)
+		c.Assert(f2.Close(), chk.IsNil)
+	}
+
+	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "so long and thanks for all the fish")), chk.IsNil)
+	c.Assert(os.Symlink(symlinkTmpDir, filepath.Join(tmpDir, "extradir")), chk.IsNil)
+	c.Assert(os.Symlink(filepath.Join(tmpDir, "extradir"), filepath.Join(tmpDir, "linktolink")), chk.IsNil)
+
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(tmpDir, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		return nil
+	}), chk.IsNil)
+
+	// 3 files live in base, 3 files live in first symlink, second & third symlink is ignored.
+	c.Assert(fileCount, chk.Equals, 6)
+}
+
+func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
+	fileNames := []string{"file1.txt", "file2.txt", "file3.txt"}
+
+	root1 := scenarioHelper{}.generateLocalDirectory(c)
+	root2 := scenarioHelper{}.generateLocalDirectory(c)
+	child := filepath.Join(root2, "childdir")
+
+	c.Assert(os.Mkdir(child, os.ModeDir), chk.IsNil)
+	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
+	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
+
+	for _, v := range fileNames {
+		f, err := os.Create(filepath.Join(root2, v))
+		f2, err2 := os.Create(filepath.Join(child, v))
+		c.Assert(err, chk.IsNil)
+		c.Assert(err2, chk.IsNil)
+		c.Assert(f.Close(), chk.IsNil)
+		c.Assert(f2.Close(), chk.IsNil)
+	}
+
+	fileCount := 0
+	c.Assert(WalkWithSymlinks(root1, func(path string, fi os.FileInfo, err error) error {
+		c.Assert(err, chk.IsNil)
+
+		if fi.IsDir() {
+			return nil
+		}
+
+		fileCount++
+		return nil
+	}), chk.IsNil)
+
+	// 6 files total live under toroot. tochild should be ignored (or if tochild was traversed first, child will be ignored on toroot).
+	c.Assert(fileCount, chk.Equals, 6)
 }
 
 // validate traversing a single Blob, a single Azure File, and a single local file
@@ -75,7 +241,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, func() {})
+		localTraverser := newLocalTraverser(filepath.Join(dstDirName, dstFileName), false, false, func() {})
 
 		// invoke the local traversal with a dummy processor
 		localDummyProcessor := dummyProcessor{}
@@ -197,7 +363,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, func() {})
+		localTraverser := newLocalTraverser(dstDirName, isRecursiveOn, false, func() {})
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation
@@ -305,7 +471,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	// test two scenarios, either recursive or not
 	for _, isRecursiveOn := range []bool{true, false} {
 		// construct a local traverser
-		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, func() {})
+		localTraverser := newLocalTraverser(filepath.Join(dstDirName, virDirName), isRecursiveOn, false, func() {})
 
 		// invoke the local traversal with an indexer
 		// so that the results are indexed for easy validation

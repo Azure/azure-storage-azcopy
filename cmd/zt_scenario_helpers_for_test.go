@@ -57,6 +57,23 @@ var specialNames = []string{
 	"як вас звати",
 }
 
+// note: this is to emulate the list-of-files flag
+func (scenarioHelper) generateListOfFiles(c *chk.C, fileList []string) (path string) {
+	parentDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
+	c.Assert(err, chk.IsNil)
+
+	// create the file
+	path = common.GenerateFullPath(parentDirName, generateName("listy", 0))
+	err = os.MkdirAll(filepath.Dir(path), os.ModePerm)
+	c.Assert(err, chk.IsNil)
+
+	// pipe content into it
+	content := strings.Join(fileList, "\n")
+	err = ioutil.WriteFile(path, []byte(content), common.DEFAULT_FILE_PERM)
+	c.Assert(err, chk.IsNil)
+	return
+}
+
 func (scenarioHelper) generateLocalDirectory(c *chk.C) (dstDirName string) {
 	dstDirName, err := ioutil.TempDir("", "AzCopyLocalTest")
 	c.Assert(err, chk.IsNil)
@@ -86,7 +103,7 @@ func (s scenarioHelper) generateLocalFilesFromList(c *chk.C, dirPath string, fil
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath string, prefix string) (fileList []string) {
@@ -108,7 +125,7 @@ func (s scenarioHelper) generateCommonRemoteScenarioForLocal(c *chk.C, dirPath s
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -136,7 +153,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForBlob(c *chk.C, containerURL
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -180,7 +197,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForAzureFile(c *chk.C, shareUR
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -224,7 +241,7 @@ func (scenarioHelper) generateBlobsFromList(c *chk.C, containerURL azblob.Contai
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -255,7 +272,7 @@ func (scenarioHelper) generatePageBlobsFromList(c *chk.C, containerURL azblob.Co
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.ContainerURL, blobList []string, data string) {
@@ -282,7 +299,7 @@ func (scenarioHelper) generateAppendBlobsFromList(c *chk.C, containerURL azblob.
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateBlockBlobWithAccessTier(c *chk.C, containerURL azblob.ContainerURL, blobName string, accessTier azblob.AccessTierType) {
@@ -315,7 +332,7 @@ func (scenarioHelper) generateFlatFiles(c *chk.C, shareURL azfile.ShareURL, file
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 // make 50 objects with random names
@@ -351,7 +368,7 @@ func (scenarioHelper) generateCommonRemoteScenarioForS3(c *chk.C, client *minio.
 	}
 
 	// sleep a bit so that the blobs' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 	return
 }
 
@@ -370,7 +387,7 @@ func (scenarioHelper) generateAzureFilesFromList(c *chk.C, shareURL azfile.Share
 	}
 
 	// sleep a bit so that the files' lmts are guaranteed to be in the past
-	time.Sleep(time.Millisecond * 1500)
+	time.Sleep(time.Millisecond * 1050)
 }
 
 func (scenarioHelper) generateBFSPathsFromList(c *chk.C, filesystemURL azbfs.FileSystemURL, fileList []string) {
@@ -545,7 +562,10 @@ func runSyncAndVerify(c *chk.C, raw rawSyncCmdArgs, verifier func(err error)) {
 func runCopyAndVerify(c *chk.C, raw rawCopyCmdArgs, verifier func(err error)) {
 	// the simulated user input should parse properly
 	cooked, err := raw.cook()
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		verifier(err)
+		return
+	}
 
 	// the enumeration ends when process() returns
 	err = cooked.process()

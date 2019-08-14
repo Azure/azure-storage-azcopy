@@ -21,10 +21,18 @@
 package cmd
 
 import (
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -42,6 +50,9 @@ type storedObject struct {
 
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
+	// note that sometimes the rootDir given by the user turns out to be a single file
+	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
+	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
 	relativePath string
 	// container source, only included by account traversers.
 	containerName string
@@ -72,6 +83,117 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
 	traverse(processor objectProcessor, filters []objectFilter) error
+	isDirectory(isSource bool) bool
+	// isDirectory has an isSource flag for a single exception to blob.
+	// Blob should ONLY check remote if it's a source.
+	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.
+	// Thus, we only check the directory syntax on blob destinations. On sources, we check both syntax and remote, if syntax isn't a directory.
+}
+
+// source, location, recursive, and incrementEnumerationCounter are always required.
+// ctx, pipeline are only required for remote resources.
+// followSymlinks is only required for local resources (defaults to false)
+// errorOnDirWOutRecursive is used by copy.
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+	var output resourceTraverser
+	var p *pipeline.Pipeline
+
+	// Clean up the source if it's a local path
+	if location == common.ELocation.Local() {
+		source = cleanLocalPath(source)
+	}
+
+	// Initialize the pipeline if creds and ctx is provided
+	if ctx != nil && credential != nil {
+		tmppipe, err := initPipeline(*ctx, location, *credential)
+
+		if err != nil {
+			return nil, err
+		}
+
+		p = &tmppipe
+	}
+
+	toFollow := false
+	if followSymlinks != nil {
+		toFollow = *followSymlinks
+	}
+
+	// Feed list of files channel into new list traverser, separate SAS.
+	if listofFilesChannel != nil {
+		splitsrc := strings.Split(source, "?")
+		sas := ""
+
+		if len(splitsrc) > 1 {
+			sas = splitsrc[1]
+		}
+
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
+		return output, nil
+	}
+
+	switch location {
+	case common.ELocation.Local():
+		// If wildcard is present, glob and feed the globbed list into a list enum.
+		if strings.Index(source, "*") != -1 {
+			basePath := getPathBeforeFirstWildcard(source)
+			matches, err := filepath.Glob(source)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to glob: %s", err)
+			}
+
+			globChan := make(chan string)
+
+			go func() {
+				defer close(globChan)
+				for _, v := range matches {
+					globChan <- strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath)
+				}
+			}()
+
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, globChan, incrementEnumerationCounter)
+		} else {
+			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
+		}
+	case common.ELocation.Blob():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil || p == nil {
+			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
+		}
+
+		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+	case common.ELocation.File():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil || p == nil {
+			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
+		}
+
+		output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+	case common.ELocation.BlobFS():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil || p == nil {
+			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
+		}
+
+		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+	default:
+		return nil, errors.New("could not choose a traverser from currently available traversers")
+	}
+
+	return output, nil
 }
 
 // given a storedObject, process it accordingly
@@ -80,6 +202,7 @@ type objectProcessor func(storedObject storedObject) error
 // given a storedObject, verify if it satisfies the defined conditions
 // if yes, return true
 type objectFilter interface {
+	doesSupportThisOS() (msg string, supported bool)
 	doesPass(storedObject storedObject) bool
 }
 
@@ -183,6 +306,10 @@ func passedFilters(filters []objectFilter, storedObject storedObject) bool {
 	if filters != nil && len(filters) > 0 {
 		// loop through the filters, if any of them fail, then return false
 		for _, filter := range filters {
+			msg, supported := filter.doesSupportThisOS()
+			if !supported {
+				glcm.Error(msg)
+			}
 			if !filter.doesPass(storedObject) {
 				return false
 			}

@@ -39,18 +39,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// a max is set because we cannot buffer infinite amount of destination file info in memory
-const MaxNumberOfFilesAllowedInSync = 10000000
-
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string
 	recursive bool
 	// options from flags
-	blockSizeMB         float64
-	logVerbosity        string
-	include             string
-	exclude             string
+	blockSizeMB           float64
+	logVerbosity          string
+	include               string
+	exclude               string
+	includeFileAttributes string
+	excludeFileAttributes string
+
 	followSymlinks      bool
 	putMd5              bool
 	md5ValidationOption string
@@ -130,6 +130,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	cooked.include = raw.parsePatterns(raw.include)
 	cooked.exclude = raw.parsePatterns(raw.exclude)
 
+	// parse the attribute filter patterns
+	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
+	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
+
 	err = cooked.logVerbosity.Parse(raw.logVerbosity)
 	if err != nil {
 		return cooked, err
@@ -177,10 +181,12 @@ type cookedSyncCmdArgs struct {
 	credentialInfo common.CredentialInfo
 
 	// filters
-	recursive      bool
-	followSymlinks bool
-	include        []string
-	exclude        []string
+	recursive             bool
+	followSymlinks        bool
+	include               []string
+	exclude               []string
+	includeFileAttributes []string
+	excludeFileAttributes []string
 
 	// options
 	putMd5              bool
@@ -405,7 +411,8 @@ Final Job Status: %v
 		// indicate whether constrained by disk or not
 		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
-		return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
+			summary.PercentComplete,
 			summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted,
 			summary.CopyTransfersFailed+summary.DeleteTransfersFailed,
 			summary.CopyTotalTransfers+summary.DeleteTotalTransfers-(summary.CopyTransfersCompleted+summary.DeleteTransfersCompleted+summary.CopyTransfersFailed+summary.DeleteTransfersFailed),
@@ -509,8 +516,10 @@ func init() {
 	rootCmd.AddCommand(syncCmd)
 	syncCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", true, "true by default, look into sub-directories recursively when syncing between directories.")
 	syncCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
-	syncCmd.PersistentFlags().StringVar(&raw.include, "include", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
-	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude", "", "exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "only exclude files whose name matches the pattern list. Example: *.jpg;*.pdf;exactName")
+	syncCmd.PersistentFlags().StringVar(&raw.includeFileAttributes, "include-attributes", "", "(Windows only) only include files whose attributes match the attribute list. Example: A;S;R")
+	syncCmd.PersistentFlags().StringVar(&raw.excludeFileAttributes, "exclude-attributes", "", "(Windows only) exclude files whose attributes match the attribute list. Example: A;S;R")
 	syncCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
 	syncCmd.PersistentFlags().StringVar(&raw.deleteDestination, "delete-destination", "false", "defines whether to delete extra files from the destination that are not present at the source. Could be set to true, false, or prompt. "+
 		"If set to prompt, user will be asked a question before scheduling files/blobs for deletion.")

@@ -30,8 +30,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blockBlobSenderBase struct {
@@ -153,6 +154,10 @@ func (s *blockBlobSenderBase) Epilogue() {
 			// don't return, because need cleanup below
 		}
 	}
+}
+
+func (s *blockBlobSenderBase) Cleanup() {
+	jptm := s.jptm
 
 	// Cleanup
 	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?

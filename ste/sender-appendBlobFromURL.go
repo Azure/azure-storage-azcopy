@@ -62,9 +62,9 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 		if err := c.pacer.RequestTrafficAllocation(c.jptm.Context(), adjustedChunkSize); err != nil {
 			c.jptm.FailActiveUpload("Pacing block", err)
 		}
-		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile, adjustedChunkSize,
+		_, err := c.destAppendBlobURL.AppendBlockFromURL(ctxWithLatestServiceVersion, c.srcURL, id.OffsetInFile(), adjustedChunkSize,
 			azblob.AppendBlobAccessConditions{
-				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile},
+				AppendPositionAccessConditions: azblob.AppendPositionAccessConditions{IfAppendPositionEqual: id.OffsetInFile()},
 			}, azblob.ModifiedAccessConditions{}, nil)
 		if err != nil {
 			c.jptm.FailActiveS2SCopy("Appending block from URL", err)
@@ -73,4 +73,14 @@ func (c *urlToAppendBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex i
 	}
 
 	return c.generateAppendBlockToRemoteFunc(id, appendBlockFromURL)
+}
+
+// GetDestinationLength gets the destination length.
+func (c *urlToAppendBlobCopier) GetDestinationLength() (int64, error) {
+	properties, err := c.destAppendBlobURL.GetProperties(c.jptm.Context(), azblob.BlobAccessConditions{})
+	if err != nil {
+		return -1, err
+	}
+
+	return properties.ContentLength(), nil
 }

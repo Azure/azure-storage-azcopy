@@ -21,27 +21,29 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-pipeline-go/pipeline"
-	"math"
-
 	"io"
+	"io/ioutil"
+	"math"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"io/ioutil"
+	"github.com/Azure/azure-pipeline-go/pipeline"
+
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+	"github.com/spf13/cobra"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
-	"github.com/spf13/cobra"
 )
 
 const pipingUploadParallelism = 5
@@ -71,8 +73,12 @@ type rawCopyCmdArgs struct {
 	legacyExclude string
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	include string
-	exclude string
+	include               string
+	exclude               string
+	includePath           string
+	excludePath           string
+	includeFileAttributes string
+	excludeFileAttributes string
 
 	// filters from flags
 	listOfFilesToCopy string
@@ -95,6 +101,7 @@ type rawCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      string
+	s2sCheckLength           bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
 	blockBlobTier   string
@@ -209,19 +216,75 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
-	// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-	// file names to include explicitly and include file may mention the pattern.
-	// This could conflict enumerating the files to queue up for transfer.
-	if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
-		return cooked, fmt.Errorf("user provided argument with both listOfFilesToCopy and include flag. Only one should be provided")
-	}
 
-	// If the user provided the list of files explicitly to be copied, then parse the argument
-	// The user passes the location of json file which will have the list of files to be copied.
-	// The "json file" is chosen as input because there is limit on the number of characters that
-	// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
-	// any limit on the number of files that can be copied.
-	if len(raw.listOfFilesToCopy) > 0 {
+	// Note: new implementation of list-of-files only works for remove command and upload for now.
+	// * -> Garbage and * -> Local work under this implementation
+	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() {
+		// This handles both list-of-files and include-path as a list enumerator.
+		// This saves us time because we know *exactly* what we're looking for right off the bat.
+		// Note that exclude-path is handled as a filter unlike include-path.
+
+		if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
+			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
+		}
+
+		// unbuffered so this reads as we need it to rather than all at once in bulk
+		listChan := make(chan string)
+		var f *os.File
+
+		if raw.listOfFilesToCopy != "" {
+			f, err = os.Open(raw.listOfFilesToCopy)
+
+			if err != nil {
+				return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
+			}
+		}
+
+		go func() {
+			defer close(listChan)
+
+			if f != nil {
+				scanner := bufio.NewScanner(f)
+				for scanner.Scan() {
+					v := scanner.Text()
+					listChan <- v
+				}
+			}
+
+			// This occurs much earlier than the other include or exclude filters. I'd _like_ to move it closer in cook() once we get rid of the other bits of list-of-files.
+			includePathList := raw.parsePatterns(raw.includePath)
+
+			for _, v := range includePathList {
+				listChan <- v
+			}
+		}()
+
+		// A combined implementation reduces the amount of code duplication present.
+		// However, it _does_ increase the amount of code-intertwining present.
+		if raw.listOfFilesToCopy != "" && raw.includePath != "" {
+			return cooked, errors.New("cannot combine list of files and include path")
+		}
+
+		if raw.listOfFilesToCopy != "" || raw.includePath != "" {
+			cooked.listOfFilesChannel = listChan
+		}
+	} else if len(raw.listOfFilesToCopy) > 0 {
+		// TODO remove this legacy implementation after copy enumerator refactoring
+
+		// User can provide either listOfFilesToCopy or include since listOFFiles mentions
+		// file names to include explicitly and include file may mention the pattern.
+		// This could conflict enumerating the files to queue up for transfer.
+		if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
+			return cooked, fmt.Errorf("both list-of-files and include flag were provided." +
+				"Only one of them is allowed at a time")
+		}
+
+		// If the user provided the list of files explicitly to be copied, then parse the argument
+		// The user passes the location of json file which will have the list of files to be copied.
+		// The "json file" is chosen as input because there is limit on the number of characters that
+		// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
+		// any limit on the number of files that can be copied.
+
 		jsonFile, err := os.Open(raw.listOfFilesToCopy)
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
@@ -249,42 +312,49 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 	}
 
-	// initialize the include map which contains the list of files to be included
-	// parse the string passed in include flag
-	// more than one file are expected to be separated by ';'
-	cooked.legacyInclude = make(map[string]int)
-	if len(raw.legacyInclude) > 0 {
-		files := strings.Split(raw.legacyInclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
+	// TODO: When further in the refactor, just check this against a map
+	if cooked.fromTo.From() != common.ELocation.Local() {
+		// initialize the include map which contains the list of files to be included
+		// parse the string passed in include flag
+		// more than one file are expected to be separated by ';'
+		cooked.legacyInclude = make(map[string]int)
+		if len(raw.legacyInclude) > 0 {
+			files := strings.Split(raw.legacyInclude, ";")
+			for index := range files {
+				// If split of the include string leads to an empty string
+				// not include that string
+				if len(files[index]) == 0 {
+					continue
+				}
+				// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
+				// this replacement is done to handle the windows file paths where path separator "\\"
+				includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				cooked.legacyInclude[includePath] = index
 			}
-			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.legacyInclude[includePath] = index
 		}
-	}
 
-	// initialize the exclude map which contains the list of files to be excluded
-	// parse the string passed in exclude flag
-	// more than one file are expected to be separated by ';'
-	cooked.legacyExclude = make(map[string]int)
-	if len(raw.legacyExclude) > 0 {
-		files := strings.Split(raw.legacyExclude, ";")
-		for index := range files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(files[index]) == 0 {
-				continue
+		// initialize the exclude map which contains the list of files to be excluded
+		// parse the string passed in exclude flag
+		// more than one file are expected to be separated by ';'
+		cooked.legacyExclude = make(map[string]int)
+		if len(raw.legacyExclude) > 0 {
+			files := strings.Split(raw.legacyExclude, ";")
+			for index := range files {
+				// If split of the include string leads to an empty string
+				// not include that string
+				if len(files[index]) == 0 {
+					continue
+				}
+				// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
+				// this replacement is done to handle the windows file paths where path separator "\\"
+				excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
+				cooked.legacyExclude[excludePath] = index
 			}
-			// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.legacyExclude[excludePath] = index
 		}
+	} else {
+		// I do not like this implementation whatsoever, but just for now, we need to circumvent the legacy include and excludes.
+		raw.include = raw.legacyInclude
+		raw.exclude = raw.legacyExclude
 	}
 
 	cooked.metadata = raw.metadata
@@ -301,6 +371,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+
+	// Do not check for an error on this. Leaving this as true doesn't hurt, as the event never triggers unless it's an s2s copy anyway.
+	// This is thanks to a type assertion attempt.
+	// Atop this, leaving this on board for up/downloads in the future would be useful.
+	cooked.s2sCheckLength = raw.s2sCheckLength
 
 	cooked.background = raw.background
 	cooked.acl = raw.acl
@@ -319,7 +394,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
@@ -357,6 +432,9 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
+		}
+		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal():
@@ -396,10 +474,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
 		}
-		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
@@ -447,6 +525,13 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// parse the filter patterns
 	cooked.includePatterns = raw.parsePatterns(raw.include)
 	cooked.excludePatterns = raw.parsePatterns(raw.exclude)
+	cooked.excludePathPatterns = raw.parsePatterns(raw.excludePath)
+
+	if (raw.includeFileAttributes != "" || raw.excludeFileAttributes != "") && fromTo.From() != common.ELocation.Local() {
+		return cooked, errors.New("cannot check file attributes on remote objects")
+	}
+	cooked.includeFileAttributes = raw.parsePatterns(raw.includeFileAttributes)
+	cooked.excludeFileAttributes = raw.parsePatterns(raw.excludeFileAttributes)
 
 	return cooked, nil
 }
@@ -482,15 +567,20 @@ type cookedCopyCmdArgs struct {
 	legacyExclude map[string]int
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
-	includePatterns []string
-	excludePatterns []string
+	includePatterns       []string
+	includePathPatterns   []string
+	excludePatterns       []string
+	excludePathPatterns   []string
+	includeFileAttributes []string
+	excludeFileAttributes []string
 
 	// filters from flags
-	listOfFilesToCopy []string
-	recursive         bool
-	followSymlinks    bool
-	withSnapshots     bool
-	forceWrite        bool
+	listOfFilesToCopy  []string
+	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
+	recursive          bool
+	followSymlinks     bool
+	withSnapshots      bool
+	forceWrite         bool
 
 	// options from flags
 	blockSize uint32
@@ -509,6 +599,7 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
+	s2sCheckLength           bool
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
@@ -736,6 +827,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// Strip the SAS from the source and destination whenever there is SAS exists in URL.
 	// Note: SAS could exists in source of S2S copy, even if the credential type is OAuth for destination.
 	switch from {
+	case common.ELocation.Local():
+		tmpSrc, err := filepath.Abs(cca.source)
+		if err != nil {
+			return fmt.Errorf("couldn't get absolute path of the source location %s. Failed with errror %s", cca.source, err.Error())
+		}
+
+		jobPartOrder.SourceRoot = cleanLocalPath(getPathBeforeFirstWildcard(tmpSrc))
+		cca.source = cleanLocalPath(tmpSrc)
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -857,13 +956,16 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	// depending on the source and destination type, we process the cp command differently
 	// Create enumerator and do enumerating
 	switch cca.fromTo {
-	case common.EFromTo.LocalBlob():
-		fallthrough
-	case common.EFromTo.LocalBlobFS():
-		fallthrough
-	case common.EFromTo.LocalFile():
-		e := copyUploadEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
+	case common.EFromTo.LocalBlob(),
+		common.EFromTo.LocalBlobFS(),
+		common.EFromTo.LocalFile():
+		var e *copyEnumerator
+		e, err = cca.initEnumerator(jobPartOrder, ctx)
+		if err != nil {
+			return err
+		}
+
+		err = e.enumerate()
 	case common.EFromTo.BlobLocal():
 		e := copyDownloadBlobEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
@@ -873,22 +975,17 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	case common.EFromTo.BlobFSLocal():
 		e := copyDownloadBlobFSEnumerator(jobPartOrder)
 		err = e.enumerate(cca)
-	case common.EFromTo.BlobTrash():
-		e, createErr := newRemoveBlobEnumerator(cca)
+	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
+		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
 			return createErr
 		}
 
 		err = e.enumerate()
-	case common.EFromTo.FileTrash():
-		e, createErr := newRemoveFileEnumerator(cca)
-		if createErr != nil {
-			return createErr
-		}
 
-		err = e.enumerate()
 	case common.EFromTo.BlobFSTrash():
-		msg, err := removeBfsResource(cca)
+		// TODO merge with BlobTrash case
+		msg, err := removeBfsResources(cca)
 		if err == nil {
 			glcm.Exit(func(format common.OutputFormat) string {
 				return msg
@@ -1052,7 +1149,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			// indicate whether constrained by disk or not
 			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
 
-			return fmt.Sprintf("%v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
+				summary.PercentComplete,
 				summary.TransfersCompleted,
 				summary.TransfersFailed,
 				summary.TotalTransfers-(summary.TransfersCompleted+summary.TransfersFailed+summary.TransfersSkipped),
@@ -1150,11 +1248,15 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include", "", "only include these files when copying. "+
+	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
+	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
+		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
+	cpCmd.PersistentFlags().StringVar(&raw.excludePath, "exclude-path", "", "exclude these paths when copying. "+
+		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
@@ -1163,7 +1265,7 @@ func init() {
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. This is used in case of upload / account to account copy")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection.")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
@@ -1182,6 +1284,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
+	cpCmd.PersistentFlags().BoolVar(&raw.s2sCheckLength, "s2s-check-length", true, "Check the length of a file transferred S2S after the transfer. If there is a mismatch, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
@@ -1208,7 +1311,6 @@ func init() {
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("include")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")

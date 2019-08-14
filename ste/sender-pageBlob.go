@@ -29,8 +29,9 @@ import (
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type pageBlobSenderBase struct {
@@ -204,7 +205,9 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 
 func (s *pageBlobSenderBase) Epilogue() {
 	_ = s.filePacer.Close() // release resources
+}
 
+func (s *pageBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 
 	// Cleanup
