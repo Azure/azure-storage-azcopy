@@ -16,7 +16,7 @@ require (
 	github.com/kr/pretty v0.1.0
 	github.com/kr/text v0.1.0
 	github.com/mattn/go-ieproxy v0.0.0-20190702010315-6dee0af9227d
-	github.com/minio/minio-go v6.0.12+incompatible
+	github.com/minio/minio-go v6.0.14+incompatible
 	github.com/mitchellh/go-homedir v1.0.0 // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/spf13/cobra v0.0.3
