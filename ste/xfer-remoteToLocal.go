@@ -288,7 +288,7 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
-			jptm.Log(pipeline.LogInfo, "DOWNLOAD SUCCESSFUL")
+			jptm.Log(pipeline.LogInfo, fmt.Sprintf("DOWNLOAD SUCCESSFUL: %s", info.Destination))
 		}
 		if jptm.ShouldLog(pipeline.LogDebug) {
 			jptm.Log(pipeline.LogDebug, "Finalizing Transfer")

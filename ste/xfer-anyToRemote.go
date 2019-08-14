@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"hash"
 	"os"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -296,13 +297,13 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	}
 
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
-	
+
 	if info.S2SDestLengthValidation {
 		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
 			destLength, err := s2sc.GetDestinationLength()
 
 			if err != nil {
-        jptm.FailActiveSend("S2S Length check: Get destination length", err)
+				jptm.FailActiveSend("S2S Length check: Get destination length", err)
 			}
 
 			if destLength != jptm.Info().SourceSize {
@@ -335,9 +336,10 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPY SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
-				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+				// Output relative path of file, includes file name.
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOAD SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}
