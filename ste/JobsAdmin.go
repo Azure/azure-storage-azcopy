@@ -282,10 +282,17 @@ func (ja *jobsAdmin) recordTuningCompleted() {
 		msg += " Recording of performance stats will begin now."
 	}
 	common.GetLifecycleMgr().Info(msg)
+	ja.LogToJobLog(msg)
 }
 
 // worker that sizes the chunkProcessor pool, dynamically if necessary
 func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
+
+	logConcurrency := func(targetConcurrency int, reason string) {
+		msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
+		common.GetLifecycleMgr().Info(msg)
+		ja.LogToJobLog(msg)
+	}
 
 	nextWorkerId := 0
 	actualConcurrency := 0
@@ -298,6 +305,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 
 	// get initial pool size
 	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1)
+	logConcurrency(targetConcurrency, reason)
 
 	// loop for ever, driving the actual concurrency towards the most up-to-date target
 	for {
@@ -334,7 +342,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 					}
 					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec))
 					if reason != concurrencyReasonFinished {
-						ja.LogToJobLog(fmt.Sprintf("Auto-adjusting concurrency level to %d for reason: %s", targetConcurrency, reason))
+						logConcurrency(targetConcurrency, reason)
 					}
 				} else {
 					// we weren't in steady state before, but given that throughputMonitoringInterval has now elapsed,

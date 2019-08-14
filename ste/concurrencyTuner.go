@@ -102,8 +102,8 @@ func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newCo
 
 const (
 	concurrencyReasonNone      = ""
-	concurrencyReasonInitial   = "initial"
-	concurrencyReasonSeeking   = "seeking"
+	concurrencyReasonInitial   = "initial starting point"
+	concurrencyReasonSeeking   = "seeking optimum"
 	concurrencyReasonBackoff   = "backing off"
 	concurrencyReasonHitMax    = "hit max concurrency limit"
 	concurrencyReasonAtOptimum = "at optimum"
