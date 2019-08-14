@@ -387,7 +387,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 	defer deleteBucket(c, s3Client, bucketName1, true)
 
 	bucketName2 := generateBucketNameWithCustomizedPrefix("us-west-2-region")
-	bucketRegion2 := "us-west-2"
+	bucketRegion2 := "us-west-1" // Use different region than other regional test to avoid conflicting
 	createNewBucketWithName(c, s3Client, bucketName2, createS3ResOptions{Location: bucketRegion2})
 	defer deleteBucket(c, s3Client, bucketName2, true)
 
