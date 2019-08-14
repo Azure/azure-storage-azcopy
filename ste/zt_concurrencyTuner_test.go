@@ -46,7 +46,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
 		{16, concurrencyReasonBackoff, 100},
 		{19, concurrencyReasonSeeking, 100},
 		{16, concurrencyReasonAtOptimum, 100},
-		{16, concurrencyReasonNotActive, 100}}
+		{16, concurrencyReasonFinished, 100}}
 
 	s.runTest(c, steps, s.noMax())
 
@@ -63,7 +63,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth(c *chk.C) {
 		{256, concurrencyReasonBackoff, 20000},
 		{307, concurrencyReasonSeeking, 20000},
 		{256, concurrencyReasonAtOptimum, 20000},
-		{256, concurrencyReasonNotActive, 20000},
+		{256, concurrencyReasonFinished, 20000},
 	}
 
 	s.runTest(c, steps, s.noMax())
@@ -76,7 +76,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C)
 		{32, concurrencyReasonSeeking, 2000},
 		{64, concurrencyReasonSeeking, 4000},
 		{100, concurrencyReasonHitMax, 8000}, // NOT "at optimum"
-		{100, concurrencyReasonNotActive, 8000},
+		{100, concurrencyReasonFinished, 8000},
 	}
 
 	s.runTest(c, steps, 100)
@@ -96,7 +96,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandard
 		{737, concurrencyReasonSeeking, 19500},
 		{884, concurrencyReasonSeeking, 19550},
 		{737, concurrencyReasonAtOptimum, 19500},
-		{737, concurrencyReasonNotActive, 19500},
+		{737, concurrencyReasonFinished, 19500},
 	}
 
 	s.runTest(c, steps, s.noMax())

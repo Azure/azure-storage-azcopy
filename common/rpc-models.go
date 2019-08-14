@@ -180,6 +180,8 @@ type ListJobSummaryResponse struct {
 	SkippedTransfers []TransferDetail
 	PerfConstraint   PerfConstraint
 	PerfStrings      []string `json:"-"`
+
+	PerformanceAdvice []PerformanceAdvice
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

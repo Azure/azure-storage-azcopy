@@ -392,7 +392,7 @@ Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
 IOPS; ms per req: %v; %v 
 Ntwk Err; Srv Busy: %.2f%%; %.2f%%
-Final Job Status: %v
+Final Job Status: %v%s
 `,
 				summary.JobID.String(),
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
@@ -405,7 +405,8 @@ Final Job Status: %v
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
 				summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage,
-				summary.JobStatus)
+				summary.JobStatus,
+				formatPerfAdvice(summary.PerformanceAdvice))
 
 			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 			if exists {

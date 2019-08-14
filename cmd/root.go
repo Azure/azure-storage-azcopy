@@ -57,11 +57,12 @@ var rootCmd = &cobra.Command{
 		}
 
 		// currently, we only automatically do auto-tuning when benchmarking
-		preferToAutoTuneGRs := cmd == benchCmd
+		preferToAutoTuneGRs := cmd == benchCmd // TODO: do we have a better way to do this than making benchCmd global?
+		providePerformanceAdvice := cmd == benchCmd
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles, preferToAutoTuneGRs)
-		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder)
+		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder, providePerformanceAdvice)
 		if err != nil {
 			return err
 		}
