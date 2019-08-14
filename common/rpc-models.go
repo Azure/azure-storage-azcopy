@@ -170,6 +170,8 @@ type ListJobSummaryResponse struct {
 	SkippedTransfers []TransferDetail
 	PerfConstraint   PerfConstraint
 	PerfStrings      []string `json:"-"`
+
+	PerformanceAdvice []PerformanceAdvice
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
@@ -212,6 +214,8 @@ type ListSyncJobSummaryResponse struct {
 	AverageE2EMilliseconds int
 	ServerBusyPercentage   float32
 	NetworkErrorPercentage float32
+
+	PerformanceAdvice []PerformanceAdvice
 }
 
 type ListJobTransfersRequest struct {

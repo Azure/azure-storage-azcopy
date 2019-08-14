@@ -49,9 +49,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder, azcopyLogPathFolder string) error {
+func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder, azcopyLogPathFolder string, providePrefAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyAppPathFolder, azcopyLogPathFolder)
+	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyAppPathFolder, azcopyLogPathFolder, providePrefAdvice)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
@@ -502,6 +502,8 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	if js.JobStatus == common.EJobStatus.Completed() {
 		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
 			js.TransfersCompleted > 0)
+
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice()
 	}
 
 	return js
@@ -658,6 +660,8 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(false,
 			js.CopyTransfersFailed+js.DeleteTransfersFailed > 0,
 			js.CopyTransfersCompleted+js.DeleteTransfersCompleted > 0)
+
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice()
 	}
 
 	return js

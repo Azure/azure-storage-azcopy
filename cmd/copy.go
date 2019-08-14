@@ -1137,7 +1137,7 @@ Number of Transfers Skipped: %v
 TotalBytesTransferred: %v
 IOPS; ms per req: %v; %v 
 Ntwk Err; Srv Busy: %.2f%%; %.2f%%
-Final Job Status: %v
+Final Job Status: %v%s
 `,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
@@ -1147,7 +1147,8 @@ Final Job Status: %v
 					summary.TransfersSkipped,
 					summary.TotalBytesTransferred,
 					summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage,
-					summary.JobStatus)
+					summary.JobStatus,
+					formatPerfAdvice(summary.PerformanceAdvice))
 
 				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
@@ -1201,6 +1202,27 @@ Final Job Status: %v
 				summary.TransfersSkipped, summary.TotalTransfers, scanningString, perfString, throughputString, diskString)
 		}
 	})
+}
+
+func formatPerfAdvice(advice []common.PerformanceAdvice) string {
+	if len(advice) == 0 {
+		return ""
+	}
+	b := strings.Builder{}
+	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
+	b.WriteString("Performance benchmark results: \n")
+	for _, a := range advice {
+		b.WriteString("\n")
+		pri := "Main"
+		if !a.PriorityAdvice {
+			pri = "Additional"
+		}
+		b.WriteString(pri + " Result:\n")
+		b.WriteString("  Code:   " + a.Code + "\n")
+		b.WriteString("  Desc:   " + a.Title + "\n")
+		b.WriteString("  Reason: " + a.Reason + "\n")
+	}
+	return b.String()
 }
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,

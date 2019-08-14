@@ -20,15 +20,21 @@
 
 package ste
 
-// ConcurrencyTuner is the primary interface to the concurrency tuner
-type ConcurrencyTuner interface {
-	GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string)
-}
+import (
+	"sync"
+	"time"
+)
 
-// ConcurrencyTunerStatsCoordinator supports linkage between stats gathering and concurrency tuning
-type ConcurrencyTunerStatsCoordinator interface {
-	// RequestCallbackWhenStable lets our stats-gather ask the concurrency tuner to call it back when the tuner has reached a stable level
+type ConcurrencyTuner interface {
+	// GetRecommendedConcurrency is called repeatedly, at intervals decided by the caller,
+	// to compute recommended concurrency levels
+	GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string)
+
+	// RequestCallbackWhenStable lets interested parties ask the concurrency tuner to call them back when the tuner has reached a stable level
 	RequestCallbackWhenStable(callback func()) (callbackAccepted bool)
+
+	// GetFinalState returns the final state of the tuner
+	GetFinalState() (finalReason string, finalRecommendedConcurrency int, tm time.Time)
 }
 
 type nullConcurrencyTuner struct {
@@ -36,11 +42,15 @@ type nullConcurrencyTuner struct {
 }
 
 func (n *nullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string) {
-	return n.fixedValue, concurrencyReasonNotActive
+	return n.fixedValue, concurrencyReasonFinished
 }
 
 func (n *nullConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {
 	return false
+}
+
+func (n *nullConcurrencyTuner) GetFinalState() (finalReason string, finalRecommendedConcurrency int, tm time.Time) {
+	return "", 0, time.Time{}
 }
 
 type autoConcurrencyTuner struct {
@@ -52,6 +62,10 @@ type autoConcurrencyTuner struct {
 	initialConcurrency  int
 	maxConcurrency      int
 	callbacksWhenStable chan func()
+	finalReason         string
+	finalConcurrency    int
+	finalTime           time.Time
+	lockFinal           sync.Mutex
 }
 
 func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
@@ -64,6 +78,7 @@ func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 		initialConcurrency:  initial,
 		maxConcurrency:      max,
 		callbacksWhenStable: make(chan func(), 1000),
+		lockFinal:           sync.Mutex{},
 	}
 	go t.worker()
 	return t
@@ -86,12 +101,13 @@ func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newCo
 }
 
 const (
+	concurrencyReasonNone      = ""
 	concurrencyReasonInitial   = "initial"
 	concurrencyReasonSeeking   = "seeking"
 	concurrencyReasonBackoff   = "backing off"
 	concurrencyReasonHitMax    = "hit max concurrency limit"
 	concurrencyReasonAtOptimum = "at optimum"
-	concurrencyReasonNotActive = "not actively tuning"
+	concurrencyReasonFinished  = "tuning already finished"
 )
 
 func (t *autoConcurrencyTuner) worker() {
@@ -102,8 +118,9 @@ func (t *autoConcurrencyTuner) worker() {
 
 	multiplier := float32(initialMultiplier)
 	concurrency := float32(t.initialConcurrency)
-	hitMax := false
+	atMax := false
 	sawHighMultiGbps := false
+	lastReason := concurrencyReasonNone
 
 	// get initial baseline throughput
 	lastSpeed := t.getCurrentSpeed()
@@ -112,8 +129,8 @@ func (t *autoConcurrencyTuner) worker() {
 		rateChangeReason := concurrencyReasonSeeking
 
 		// enforce a ceiling
-		hitMax = concurrency*multiplier > float32(t.maxConcurrency)
-		if hitMax {
+		atMax = concurrency*multiplier > float32(t.maxConcurrency)
+		if atMax {
 			multiplier = float32(t.maxConcurrency) / concurrency
 			rateChangeReason = concurrencyReasonHitMax
 		}
@@ -124,7 +141,7 @@ func (t *autoConcurrencyTuner) worker() {
 		desiredNewSpeed := lastSpeed + desiredSpeedIncrease
 
 		// action the increase and measure its effect
-		t.setConcurrency(concurrency, rateChangeReason)
+		lastReason = t.setConcurrency(concurrency, rateChangeReason)
 		lastSpeed = t.getCurrentSpeed()
 		if lastSpeed > 5000 {
 			sawHighMultiGbps = true
@@ -139,7 +156,7 @@ func (t *autoConcurrencyTuner) worker() {
 		if lastSpeed > desiredNewSpeed || probeHigherRegardless {
 			// Our concurrency change gave the hoped-for speed increase, so loop around and see if another increase will also work,
 			// unless already at max
-			if hitMax {
+			if atMax {
 				break
 			}
 		} else {
@@ -152,35 +169,38 @@ func (t *autoConcurrencyTuner) worker() {
 			if multiplier < minMulitplier {
 				break // no point in tuning any more
 			} else {
-				t.setConcurrency(concurrency, concurrencyReasonBackoff)
+				lastReason = t.setConcurrency(concurrency, concurrencyReasonBackoff)
 				lastSpeed = t.getCurrentSpeed() // must re-measure immediately after backing off
 			}
 		}
 	}
 
-	if hitMax {
+	if atMax {
 		// provide no special "we found the best value" result, because actually we possibly didn't find it, we just hit the max,
-		// and we've already notified that fact, when we tied using the max
+		// and we've already notified caller of that reason, when we tied using the max
 	} else {
 		// provide the final value once with a reason that shows we've arrived at what we believe to be the optimal value
-		t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
+		lastReason = t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
 		_ = t.getCurrentSpeed() // read from the channel
-		t.signalStability()
 	}
+
+	t.storeFinalState(lastReason, concurrency)
+	t.signalStability()
 
 	// now just provide an "inactive" value for ever
 	for {
-		t.signalStability() // in case anyone new has "subscribed"
-		t.setConcurrency(concurrency, concurrencyReasonNotActive)
+		_ = t.setConcurrency(concurrency, concurrencyReasonFinished)
 		_ = t.getCurrentSpeed() // read from the channel
+		t.signalStability()     // in case anyone new has "subscribed"
 	}
 }
 
-func (t *autoConcurrencyTuner) setConcurrency(mbps float32, reason string) {
+func (t *autoConcurrencyTuner) setConcurrency(mbps float32, reason string) string {
 	t.concurrency <- struct {
 		v int
 		s string
 	}{v: int(mbps), s: reason}
+	return reason
 }
 
 func (t *autoConcurrencyTuner) getCurrentSpeed() (mbps float32) {
@@ -198,6 +218,22 @@ func (t *autoConcurrencyTuner) signalStability() {
 			return
 		}
 	}
+}
+
+func (t *autoConcurrencyTuner) storeFinalState(reason string, concurrency float32) {
+	t.lockFinal.Lock()
+	defer t.lockFinal.Unlock()
+
+	t.finalReason = reason
+	t.finalConcurrency = int(concurrency)
+	t.finalTime = time.Now()
+}
+
+func (t *autoConcurrencyTuner) GetFinalState() (reason string, concurrency int, tm time.Time) {
+	t.lockFinal.Lock()
+	defer t.lockFinal.Unlock()
+
+	return t.finalReason, t.finalConcurrency, t.finalTime
 }
 
 func (t *autoConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {

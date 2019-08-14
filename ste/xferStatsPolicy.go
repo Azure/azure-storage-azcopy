@@ -41,10 +41,10 @@ type pipelineNetworkStats struct {
 	atomicE2ETotalMilliseconds int64 // should this be nanoseconds?  Not really needed, given typical minimum operation lengths that we observe
 	atomicStartSeconds         int64
 	nocopy                     common.NoCopy
-	tunerInterface             ConcurrencyTunerStatsCoordinator
+	tunerInterface             ConcurrencyTuner
 }
 
-func newPipelineNetworkStats(tunerInterface ConcurrencyTunerStatsCoordinator) *pipelineNetworkStats {
+func newPipelineNetworkStats(tunerInterface ConcurrencyTuner) *pipelineNetworkStats {
 	s := &pipelineNetworkStats{tunerInterface: tunerInterface}
 	tunerWillCallUs := tunerInterface.RequestCallbackWhenStable(s.start) // we want to start gather stats after the tuner has reached a stable value. No point in gathering them earlier
 	if !tunerWillCallUs {
@@ -132,6 +132,16 @@ func (s *pipelineNetworkStats) ThroughputServerBusyPercentage() float32 {
 	}
 }
 
+func (s *pipelineNetworkStats) OtherServerBusyPercentage() float32 {
+	s.nocopy.Check()
+	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
+	if ops > 0 {
+		return 100 * float32(atomic.LoadInt64(&s.atomic503CountUnknown)) / ops
+	} else {
+		return 0
+	}
+}
+
 func (s *pipelineNetworkStats) AverageE2EMilliseconds() int {
 	s.nocopy.Check()
 	ops := atomic.LoadInt64(&s.atomicOperationCount)
@@ -163,6 +173,7 @@ func (p *xferStatsPolicy) Do(ctx context.Context, request pipeline.Request) (pip
 		}
 
 		if resp != nil {
+			// TODO should we also count status 500?  It is mentioned here as timeout:https://docs.microsoft.com/en-us/azure/storage/common/storage-scalability-targets
 			if rr := resp.Response(); rr != nil && rr.StatusCode == http.StatusServiceUnavailable {
 				// we got a response, and it was "retry please, I'm busy"
 				// To find out why the server was busy we need to look at the response

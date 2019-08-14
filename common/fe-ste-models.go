@@ -1011,3 +1011,20 @@ func (pc *PerfConstraint) Parse(s string) error {
 	}
 	return err
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type PerformanceAdvice struct {
+
+	// Code representing the type of the advice
+	Code string `json:"Code"` // reminder that PerformanceAdvice may be serialized in JSON output
+
+	// Human-friendly title (directly corresponds to Code, but more readable)
+	Title string
+
+	// Reason why this advice has been given
+	Reason string
+
+	// Is this the primary advice (used to distinguish most important advice in cases where multiple advice objects are returned)
+	PriorityAdvice bool
+}
