@@ -441,7 +441,7 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 		// List all objects from a bucket-name with a matching prefix.
 		for object := range client.ListObjectsV2(bucketName, "", true, doneCh) {
 			if object.Err != nil {
-				continue
+				return
 			}
 
 			objectsCh <- object.Key
@@ -449,19 +449,25 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarter
 	}()
 
 	// List bucket, and delete all the objects in the bucket
-	_ = client.RemoveObjects(bucketName, objectsCh)
+	errChn := client.RemoveObjects(bucketName, objectsCh)
+	var err error
 
-	// for err := range errChn {
-	// 	  c.Assert(err, chk.IsNil)
-	// }
+	for rmObjErr := range errChn {
+		if rmObjErr.Err != nil {
+			return
+		}
+	}
 
 	// Remove the bucket.
-	_ = client.RemoveBucket(bucketName)
+	err = client.RemoveBucket(bucketName)
+
+	if err != nil {
+		return
+	}
 
 	if waitQuarterMinute {
 		time.Sleep(time.Second * 15)
 	}
-	//c.Assert(err, chk.IsNil)
 }
 
 func cleanS3Account(c *chk.C, client *minio.Client) {
