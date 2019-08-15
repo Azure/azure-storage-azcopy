@@ -270,11 +270,15 @@ func (jm *jobMgr) TryGetPerformanceAdvice() []common.PerformanceAdvice {
 		return make([]common.PerformanceAdvice, 0)
 	}
 
+	megabitsPerSec := float64(0)
 	finalReason, finalConcurrency, timeOfFinalReason := ja.concurrencyTuner.GetFinalState()
 
-	bytesTransferredAfterTuning := ja.BytesOverWire() - atomic.LoadInt64(&ja.atomicBytesTransferredWhileTuning)
-	secondsAfterTuning := time.Since(timeOfFinalReason).Seconds()
-	megabitsPerSec := (8 * float64(bytesTransferredAfterTuning) / secondsAfterTuning) / (1000 * 1000)
+	if finalConcurrency != 0 {
+		// tuning did finish
+		bytesTransferredAfterTuning := ja.BytesOverWire() - atomic.LoadInt64(&ja.atomicBytesTransferredWhileTuning)
+		secondsAfterTuning := time.Since(timeOfFinalReason).Seconds()
+		megabitsPerSec = (8 * float64(bytesTransferredAfterTuning) / secondsAfterTuning) / (1000 * 1000)
+	}
 
 	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency)
 	return a.GetAdvice()

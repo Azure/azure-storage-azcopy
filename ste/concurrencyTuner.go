@@ -50,7 +50,7 @@ func (n *nullConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callb
 }
 
 func (n *nullConcurrencyTuner) GetFinalState() (finalReason string, finalRecommendedConcurrency int, tm time.Time) {
-	return "", 0, time.Time{}
+	return concurrencyReasonTunerDisabled, 0, time.Time{}
 }
 
 type autoConcurrencyTuner struct {
@@ -101,13 +101,14 @@ func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newCo
 }
 
 const (
-	concurrencyReasonNone      = ""
-	concurrencyReasonInitial   = "initial starting point"
-	concurrencyReasonSeeking   = "seeking optimum"
-	concurrencyReasonBackoff   = "backing off"
-	concurrencyReasonHitMax    = "hit max concurrency limit"
-	concurrencyReasonAtOptimum = "at optimum"
-	concurrencyReasonFinished  = "tuning already finished"
+	concurrencyReasonNone          = ""
+	concurrencyReasonTunerDisabled = "tuner disabled" // used as the final (non-finished) state for null tuner
+	concurrencyReasonInitial       = "initial starting point"
+	concurrencyReasonSeeking       = "seeking optimum"
+	concurrencyReasonBackoff       = "backing off"
+	concurrencyReasonHitMax        = "hit max concurrency limit"
+	concurrencyReasonAtOptimum     = "at optimum"
+	concurrencyReasonFinished      = "tuning already finished (or never started)"
 )
 
 func (t *autoConcurrencyTuner) worker() {
@@ -143,14 +144,15 @@ func (t *autoConcurrencyTuner) worker() {
 		// action the increase and measure its effect
 		lastReason = t.setConcurrency(concurrency, rateChangeReason)
 		lastSpeed = t.getCurrentSpeed()
-		if lastSpeed > 5000 {
+		if lastSpeed > 10000 {
 			sawHighMultiGbps = true
 		}
 
 		// workaround for variable throughput when targeting 20 Gbps account limit (concurrency > 32 and < 256 didn't seem to give stable throughput)
 		// TODO: review this, and look for root cause/better solution. Justification for the current approach is that
 		//    if link supports multiGb speeds, then 256 conns is probably fine (i.e. not so many that it will cause problems)
-		probeHigherRegardless := sawHighMultiGbps && multiplier == initialMultiplier && concurrency >= 32 && concurrency < 256
+		dontBackoffRegardless := sawHighMultiGbps && concurrency >= 32 && concurrency <= 256
+		probeHigherRegardless := sawHighMultiGbps && concurrency >= 32 && concurrency < 256 && multiplier == initialMultiplier
 
 		// decide what to do based on the measurement
 		if lastSpeed > desiredNewSpeed || probeHigherRegardless {
@@ -159,6 +161,9 @@ func (t *autoConcurrencyTuner) worker() {
 			if atMax {
 				break
 			}
+		} else if dontBackoffRegardless {
+			// nothing more we can do
+			break
 		} else {
 			// the new speed didn't work, so we conclude it was too aggressive and back off to where we were before
 			concurrency = concurrency / multiplier
