@@ -256,7 +256,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 					p.mbps, p.finalConcurrency)
 			}
 
-		case concurrencyReasonNone:
+		case concurrencyReasonTunerDisabled:
 			addAdvice(EAdviceType.ConcurrencyNotTuned(),
 				"Auto-tuning of concurrency was prevented by an environment variable setting a specific concurrency value. Therefore "+
 					"AzCopy cannot tune itself to find the maximum possible throughput.")

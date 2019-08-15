@@ -103,6 +103,22 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandard
 
 }
 
+func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround(c *chk.C) {
+	steps := []tunerStep{
+		{16, concurrencyReasonInitial, 1000},
+		{32, concurrencyReasonSeeking, 5000},
+		{64, concurrencyReasonSeeking, 10000},
+		// range of special handling for workaround is >= 32, < 256 & have seen over 10 Gbps
+		{128, concurrencyReasonSeeking, 10100},   // this would cause backoff if not for workaround
+		{256, concurrencyReasonSeeking, 10200},   // this would also cause backoff if not for workaround
+		{256, concurrencyReasonAtOptimum, 10200}, // due to workaround, it bails out instead of backing off
+		{256, concurrencyReasonFinished, 10200},  // in practice, if we hang around at this level of concurrency, we do get much higher throughputs (where supported)
+	}
+
+	s.runTest(c, steps, s.noMax())
+
+}
+
 func (s *concurrencyTunerSuite) runTest(c *chk.C, steps []tunerStep, maxConcurrency int) {
 	t := NewAutoConcurrencyTuner(16, maxConcurrency)
 	observedMbps := -1 // there's no observation at first
