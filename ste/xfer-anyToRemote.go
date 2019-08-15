@@ -27,10 +27,14 @@ import (
 	"hash"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
+
+// This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
+var s2sAccessTierFailureLogGLCM sync.Once
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
