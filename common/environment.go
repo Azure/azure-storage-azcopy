@@ -32,6 +32,7 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 	EEnvironmentVariable.ConcurrencyValue(),
 	EEnvironmentVariable.TransferInitiationPoolSize(),
 	EEnvironmentVariable.LogLocation(),
+	EEnvironmentVariable.JobPlanLocation(),
 	EEnvironmentVariable.BufferGB(),
 	EEnvironmentVariable.AWSAccessKeyID(),
 	EEnvironmentVariable.AWSSecretAccessKey(),
@@ -78,6 +79,13 @@ func (EnvironmentVariable) LogLocation() EnvironmentVariable {
 	return EnvironmentVariable{
 		Name:        "AZCOPY_LOG_LOCATION",
 		Description: "Overrides where the log files are stored, to avoid filling up a disk.",
+	}
+}
+
+func (EnvironmentVariable) JobPlanLocation() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_JOB_PLAN_LOCATION",
+		Description: "Overrides where the job plan files (used for progress tracking and resuming) are stored, to avoid filling up a disk.",
 	}
 }
 
