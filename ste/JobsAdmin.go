@@ -289,9 +289,16 @@ func (ja *jobsAdmin) recordTuningCompleted() {
 func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 
 	logConcurrency := func(targetConcurrency int, reason string) {
-		msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
-		common.GetLifecycleMgr().Info(msg)
-		ja.LogToJobLog(msg)
+		switch reason {
+		case concurrencyReasonNone,
+			concurrencyReasonFinished,
+			concurrencyReasonTunerDisabled:
+			return
+		default:
+			msg := fmt.Sprintf("Trying %d concurrent connections (%s)", targetConcurrency, reason)
+			common.GetLifecycleMgr().Info(msg)
+			ja.LogToJobLog(msg)
+		}
 	}
 
 	nextWorkerId := 0
@@ -305,7 +312,10 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 
 	// get initial pool size
 	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1)
-	logConcurrency(targetConcurrency, reason)
+	go func() {
+		time.Sleep(initialMonitoringInterval / 2) // otherwise this message ends up as the very first output from AzCopy. Which looks strange
+		logConcurrency(targetConcurrency, reason)
+	}()
 
 	// loop for ever, driving the actual concurrency towards the most up-to-date target
 	for {
@@ -341,9 +351,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period if over 10 Gbps, since in some tests it takes a little longer to get a good average
 					}
 					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec))
-					if reason != concurrencyReasonFinished {
-						logConcurrency(targetConcurrency, reason)
-					}
+					logConcurrency(targetConcurrency, reason)
 				} else {
 					// we weren't in steady state before, but given that throughputMonitoringInterval has now elapsed,
 					// we'll deem that we are in steady state now (so can start measuring throughput from now)

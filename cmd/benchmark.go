@@ -96,6 +96,9 @@ func parseSizeString(s string, name string) (int64, error) {
 // of a benchmark job is doing a copy. Benchmark just doesn't offer so many
 // choices in its raw args
 func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
+
+	glcm.Info(common.BenchmarkPreviewNotice)
+
 	dummyCooked := cookedCopyCmdArgs{}
 
 	if raw.fileCount <= 0 {
@@ -206,6 +209,9 @@ func init() {
 		Long:       benchCmdLongDescription,
 		Example:    benchCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
+
+			// TODO: if/when we support benchmarking for S2S, note that the current code to set userAgent string in
+			//   jobPartMgr will need to be changed if we want it to still set the benchmarking suffix for S2S
 			if len(args) == 1 {
 				raw.dst = args[0]
 			} else {
