@@ -50,6 +50,9 @@ var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandle
 
 func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+
+	// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
+	// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
 	if err != nil {
 		return
 	}
@@ -127,7 +130,9 @@ func printTransfers(ts []string) {
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolved(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	invalidPrefix := "invalid---bucketname.for---azure"
 	resolvedPrefix := "invalid-3-bucketname-for-3-azure"
@@ -177,7 +182,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketNameNeedBeResolved(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	invalidPrefix := "invalid----bucketname.for-azure"
 	resolvedPrefix := "invalid-4-bucketname-for-azure"
@@ -230,7 +237,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithWildcardInSrcAndBucketN
 // and resolving logic will resolve -- to -2- which means the length to be 64. This exceeds valid container name, so error will be returned.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolvedNegative(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	invalidPrefix := "invalid.bucketname--for.azure"
 	// resolvedPrefix := "invalid-bucketname-2-for-azure"
@@ -264,7 +273,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 // Copy from virtual directory to container, with normal encoding ' ' as ' '.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
@@ -304,7 +315,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcNotEncoded(c 
 // The scheduled transfer would be URL encoded no matter what's the raw source/destination provided by user.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
@@ -342,7 +355,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithSpaceInSrcEncodedAsPlus
 // By design, when source directory contains objects with suffix ‘/’, objects with suffix ‘/’ should be ignored.
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffix(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()
@@ -379,7 +394,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithObjectUsingSlashAsSuffi
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseDefaultEndpoint(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
@@ -420,7 +437,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegionsAndListUseSpecificRegion(c *chk.C) {
 	specificRegion := "us-west-2"
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName1 := generateBucketNameWithCustomizedPrefix("default-region")
@@ -459,7 +478,9 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3AccountWithBucketInDifferentRegio
 
 func (s *cmdIntegrationSuite) TestS2SCopyFromS3ObjectToBlobContainer(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		c.Skip("S3 client credentials not supplied")
+	}
 
 	// Generate source bucket
 	bucketName := generateBucketName()

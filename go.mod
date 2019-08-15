@@ -8,7 +8,6 @@ require (
 	github.com/JeffreyRichter/enum v0.0.0-20180725232043-2567042f9cda
 	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/danieljoos/wincred v1.0.1
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible // indirect
 	github.com/go-ini/ini v1.41.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
