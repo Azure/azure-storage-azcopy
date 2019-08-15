@@ -958,7 +958,15 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
-		cca.destination = cleanLocalPath(cca.destination)
+		var result string
+		result, err = filepath.Abs(cca.destination)
+
+		if err != nil {
+			return err
+		}
+
+		cca.destination = cleanLocalPath(result)
+		jobPartOrder.DestinationRoot = cca.destination
 	}
 
 	// set the root destination after it's been cleaned
