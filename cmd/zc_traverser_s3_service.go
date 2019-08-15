@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"net/url"
+	"path/filepath"
 
 	"github.com/minio/minio-go"
 
@@ -14,8 +14,8 @@ import (
 // This will modify the storedObject format a slight bit to add a "container" parameter.
 
 type s3ServiceTraverser struct {
-	rawURL *url.URL // No pipeline needed for S3
-	ctx    context.Context
+	ctx           context.Context
+	bucketPattern string
 
 	s3URL    s3URLPartsExtension
 	s3Client *minio.Client
@@ -27,6 +27,17 @@ type s3ServiceTraverser struct {
 func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
 	if bucketInfo, err := t.s3Client.ListBuckets(); err == nil {
 		for _, v := range bucketInfo {
+			// Match a pattern for the bucket name and the bucket name only
+			if t.bucketPattern != "" {
+				if ok, err := filepath.Match(t.bucketPattern, v.Name); err != nil {
+					// Break if the pattern is invalid
+					return err
+				} else if !ok {
+					// Ignore the bucket if it does not match the pattern
+					continue
+				}
+			}
+
 			tmpS3URL := t.s3URL
 			tmpS3URL.BucketName = v.Name
 			urlResult := tmpS3URL.URL()
@@ -57,18 +68,21 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 }
 
 func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, incrementEnumerationCounter func()) (t *s3ServiceTraverser, err error) {
-	t = &s3ServiceTraverser{rawURL: rawURL, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter}
+	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter}
 
 	var s3URLParts common.S3URLParts
-	s3URLParts, err = common.NewS3URLParts(*t.rawURL)
+	s3URLParts, err = common.NewS3URLParts(*rawURL)
 
 	if err != nil {
 		return
 	} else if !s3URLParts.IsServiceSyntactically() {
-		return nil, errors.New("rawURL supplied to S3ServiceTraverser should be service URL")
-	} else {
-		t.s3URL = s3URLPartsExtension{s3URLParts}
+		// Yoink the bucket name off and treat it as the pattern.
+		t.bucketPattern = s3URLParts.BucketName
+
+		s3URLParts.BucketName = ""
 	}
+
+	t.s3URL = s3URLPartsExtension{s3URLParts}
 
 	t.s3Client, err = common.CreateS3Client(
 		t.ctx,

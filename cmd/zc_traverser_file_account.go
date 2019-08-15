@@ -3,16 +3,18 @@ package cmd
 import (
 	"context"
 	"net/url"
+	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 type fileAccountTraverser struct {
-	rawURL     *url.URL
-	accountURL azfile.ServiceURL
-	p          pipeline.Pipeline
-	ctx        context.Context
+	rawURL       *url.URL
+	accountURL   azfile.ServiceURL
+	p            pipeline.Pipeline
+	ctx          context.Context
+	sharePattern string
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
@@ -28,6 +30,17 @@ func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []obj
 		}
 
 		for _, v := range resp.ShareItems {
+			// Match a pattern for the share name and the share name only
+			if t.sharePattern != "" {
+				if ok, err := filepath.Match(t.sharePattern, v.Name); err != nil {
+					// Break if the pattern is invalid
+					return err
+				} else if !ok {
+					// Ignore the share if it doesn't match the pattern.
+					continue
+				}
+			}
+
 			shareURL := t.accountURL.NewShareURL(v.Name).URL()
 			shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
 
@@ -52,7 +65,13 @@ func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []obj
 }
 
 func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, incrementEnumerationCounter func()) (t *fileAccountTraverser) {
-	t = &fileAccountTraverser{rawURL: rawURL, p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(*rawURL, p)}
+	fURLparts := azfile.NewFileURLParts(*rawURL)
+	sPattern := fURLparts.ShareName
 
+	if fURLparts.ShareName != "" {
+		fURLparts.ShareName = ""
+	}
+
+	t = &fileAccountTraverser{rawURL: rawURL, p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern}
 	return
 }

@@ -178,7 +178,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 
 		return processIfPassedFilters(filters, newStoredObject(singleFileInfo.Name(),
 			"", // relative path makes no sense when the full path already points to the file
-			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA), processor)
+			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA,
+			"", // container name makes no sense when we're locally traversing
+		), processor)
 	} else {
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -208,7 +210,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						nil,
-						blobTypeNA),
+						blobTypeNA,
+						"", // container name makes no sense when we're locally traversing
+					),
 					processor)
 			}
 
@@ -265,7 +269,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					t.incrementEnumerationCounter()
 				}
 
-				err := processIfPassedFilters(filters, newStoredObject(singleFile.Name(), relativePath, singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
+				err := processIfPassedFilters(filters, newStoredObject(singleFile.Name(), relativePath, singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA,
+					"", // container name makes no sense when we're locally traversing
+				), processor)
 
 				if err != nil {
 					return err
