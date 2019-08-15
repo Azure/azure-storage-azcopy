@@ -21,11 +21,13 @@
 package ste
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"net/http"
+	"runtime"
+	"time"
 )
-
-// TODO: should this be in ste, common, or a new place of its own?  Reviewers, what do you think?
 
 type AdviceType struct {
 	code        string
@@ -84,6 +86,11 @@ func (AdviceType) NetworkErrors() AdviceType {
 		"Network errors, such as losses of connections, may have limited throughput"}
 }
 
+func (AdviceType) VMSize() AdviceType {
+	return AdviceType{"VMSize",
+		"The size of this Azure VM may have limited throughput"}
+}
+
 type PerformanceAdvisor struct {
 	networkErrorPercentage         float32
 	serverBusyPercentageIOPS       float32
@@ -94,6 +101,8 @@ type PerformanceAdvisor struct {
 	capMbps                        int64 // 0 if no cap
 	finalConcurrencyTunerReason    string
 	finalConcurrency               int
+	azureVmCores                   int // 0 if not azure VM
+	azureVmSizeName                string
 }
 
 func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int) *PerformanceAdvisor {
@@ -102,6 +111,11 @@ func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64
 		mbps:                        mbps,
 		finalConcurrencyTunerReason: finalReason,
 		finalConcurrency:            finalConcurrency,
+	}
+
+	p.azureVmSizeName = p.getAzureVmSize()
+	if p.azureVmSizeName != "" {
+		p.azureVmCores = runtime.NumCPU()
 	}
 
 	if stats != nil {
@@ -122,6 +136,14 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 	const (
 		serverBusyThresholdPercent   = 5.0
 		networkErrorThresholdPercent = 5.0
+
+		// we don't have any API to get exact throughput given a VM size. But a quick look at the documentation
+		// suggests that all current gen VMs get around 500 to 1000 Mbps per core.
+		// To allow some wriggle room (VM not quite hitting cap, but still affected by that cap) we choose a value a bit less than the min.
+		// Then, if a VM is getting LESS than this amount per core, we infer that it's not at its throughput cap.
+		// If it's getting more than this amount AND there are no other constraints, then we assume the constraint IS
+		// the throughput cap. (It's probably not the network, because if we use this we already know its an Azure VM).
+		expectedMinAzureMbpsPerCore = 400
 	)
 
 	result := make([]common.PerformanceAdvice, 0)
@@ -208,11 +230,32 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 	} else {
 		switch p.finalConcurrencyTunerReason {
 		case concurrencyReasonAtOptimum:
-			addAdvice(EAdviceType.NetworkIsBottleneck(),
-				"No other factors were identified that are limiting performance, so the bottleneck is assumed to be available "+
-					"network bandwidth. The available network bandwidth is the portion of the installed bandwidth that "+
-					"is not already used by other traffic. Throughput of %d Mega bits/sec was obtained with %d concurrent connections.",
-				p.mbps, p.finalConcurrency)
+
+			isAzureVM := p.azureVmCores > 0
+			definitelyBelowAzureVMLimit := p.mbps < int64(p.azureVmCores*expectedMinAzureMbpsPerCore)
+			if isAzureVM && !definitelyBelowAzureVMLimit {
+				// Azure VM size
+				// We're not "definitely" below the VM limit, so we _might_ be at it.
+				// Can't get any more accurate than "might" without specific throughput limit for the VM we're running in,
+				// and we don't have an API for that
+				addAdvice(EAdviceType.VMSize(),
+					"Throughput may be limited by the size of the Azure VM that's running AzCopy. Check the documented expected "+
+						"network bandwidth for this VM size (%s).  If the observed throughput of %d Mbits/sec is close to the documented maximum for the "+
+						"VM, then upsize to a larger VM. But if the observed throughput is NOT close to the maximum, and your VM is not "+
+						"in the same region as your target account, consider network bandwidth as a possible bottleneck.  (AzCopy displays this "+
+						"message on Azure VMs when throughput per core is greater than %d Mbps and no other limiting factors were identified.)",
+					p.azureVmSizeName, p.mbps, expectedMinAzureMbpsPerCore)
+				// TODO: can we detect if we're in the same region?  And can we do any better than that, because in many
+				//   (virtually all?) cases even being in different regions is fine.
+			} else {
+				// not limited by VM size
+				addAdvice(EAdviceType.NetworkIsBottleneck(),
+					"No other factors were identified that are limiting performance, so the bottleneck is assumed to be available "+
+						"network bandwidth. The available network bandwidth is the portion of the installed bandwidth that "+
+						"is not already used by other traffic. Throughput of %d Mega bits/sec was obtained with %d concurrent connections.",
+					p.mbps, p.finalConcurrency)
+			}
+
 		case concurrencyReasonNone:
 			addAdvice(EAdviceType.ConcurrencyNotTuned(),
 				"Auto-tuning of concurrency was prevented by an environment variable setting a specific concurrency value. Therefore "+
@@ -236,4 +279,34 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 	//   blob and normal).  Or will 503s tell us enough in those cases?
 
 	return result
+}
+
+// the Azure Instance Metadata Service lives at a non-routable IP address.
+// If we get a reply from it, and the reply looks reasonable, we know we are in Azure.
+// No need for proxy settings here, because its a non-routable IP address visible only to Azure VMs.
+// And no need to get a signed response from metadata/attested since this is not security-sensitive.
+func (p *PerformanceAdvisor) getAzureVmSize() string {
+	client := &http.Client{
+		Timeout: time.Second * 3, // no point in waiting too long, since when it works, it will be almost instant
+	}
+
+	req, err := http.NewRequest("GET", "http://169.254.169.254/metadata/instance/compute/vmSize?api-version=2019-03-11&format=text", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Add("Metadata", "true")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	buf := bytes.Buffer{}
+	n, err := buf.ReadFrom(resp.Body)
+	if n == 0 || err != nil {
+		return ""
+	}
+
+	return buf.String()
 }
