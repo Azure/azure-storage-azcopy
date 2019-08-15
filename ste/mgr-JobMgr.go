@@ -275,7 +275,8 @@ func (jm *jobMgr) TryGetPerformanceAdvice() []common.PerformanceAdvice {
 		megabitsPerSec = (8 * float64(bytesTransferredAfterTuning) / secondsAfterTuning) / (1000 * 1000)
 	}
 
-	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency)
+	dir := jm.atomicTransferDirection.AtomicLoad()
+	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir)
 	return a.GetAdvice()
 }
 

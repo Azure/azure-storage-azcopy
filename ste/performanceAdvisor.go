@@ -103,14 +103,16 @@ type PerformanceAdvisor struct {
 	finalConcurrency               int
 	azureVmCores                   int // 0 if not azure VM
 	azureVmSizeName                string
+	direction                      common.TransferDirection
 }
 
-func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int) *PerformanceAdvisor {
+func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection) *PerformanceAdvisor {
 	p := &PerformanceAdvisor{
 		capMbps:                     commandLineMbpsCap,
 		mbps:                        mbps,
 		finalConcurrencyTunerReason: finalReason,
 		finalConcurrency:            finalConcurrency,
+		direction:                   dir,
 	}
 
 	p.azureVmSizeName = p.getAzureVmSize()
@@ -233,7 +235,9 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 
 			isAzureVM := p.azureVmCores > 0
 			definitelyBelowAzureVMLimit := p.mbps < int64(p.azureVmCores*expectedMinAzureMbpsPerCore)
-			if isAzureVM && !definitelyBelowAzureVMLimit {
+			if isAzureVM &&
+				p.direction != common.ETransferDirection.S2SCopy() && // VM limits are not relevant in S2S copy
+				!definitelyBelowAzureVMLimit {
 				// Azure VM size
 				// We're not "definitely" below the VM limit, so we _might_ be at it.
 				// Can't get any more accurate than "might" without specific throughput limit for the VM we're running in,
