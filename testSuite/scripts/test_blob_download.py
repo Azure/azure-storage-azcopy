@@ -358,7 +358,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # create the resource sas
         dir_sas_with_wildcard = util.get_resource_sas(dir_name)
-        #download the directory
+        # download the directory
         result = util.Command("copy").add_arguments(dir_sas_with_wildcard).add_arguments(dir_path). \
             add_flags("log-level", "Info").add_flags("output-type","json").add_flags("strip-top-dir", "true").\
             add_flags("recursive", "true").add_flags("include-path", "logs/;abc/").\
@@ -377,6 +377,22 @@ class Blob_Download_User_Scenario(unittest.TestCase):
         # Number of Expected Transfer should be 20
         self.assertEquals(x.TransfersCompleted, 20)
         self.assertEquals(x.TransfersFailed, 0)
+
+        # prepare testing paths
+        log_path = os.path.join(dir_path, "logs/")
+        abc_path = os.path.join(dir_path, "abc/")
+        log_url = util.get_resource_sas(dir_name + "/logs")
+        abc_url = util.get_resource_sas(dir_name + "/abc")
+
+        # Test log path
+        result = util.Command("testBlob").add_arguments(log_path).add_arguments(log_url).\
+            add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
+
+        # test abc path
+        result = util.Command("testBlob").add_arguments(abc_path).add_arguments(abc_url)\
+            .add_flags("is-object-dir", "true").execute_azcopy_verify()
+        self.assertTrue(result)
 
         # This test validates the functionality if list-of-files flag.
     def test_blob_download_list_of_files_flag(self):
@@ -425,7 +441,7 @@ class Blob_Download_User_Scenario(unittest.TestCase):
 
         # create the resource sas
         dir_sas = util.get_resource_sas(dir_name)
-        #download the logs directory inside the dir
+        # download the logs directory inside the dir
         list_of_files = ["logs"]
         filePath = util.create_new_list_of_files("testfile", list_of_files)
         result = util.Command("copy").add_arguments(dir_sas).add_arguments(dir_path). \

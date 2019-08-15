@@ -200,7 +200,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 	rawContainerURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
 	raw := getDefaultCopyRawInput(rawContainerURLWithSAS.String(), dstDirName)
 	raw.recursive = true
-	raw.copyContents = true
+	raw.stripTopDir = true
 	raw.legacyInclude = "*.pdf"
 
 	runCopyAndVerify(c, raw, func(err error) {

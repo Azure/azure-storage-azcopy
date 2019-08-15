@@ -52,7 +52,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
 	isSourceDir := traverser.isDirectory(true)
-	if isSourceDir && !cca.recursive && !cca.copyContents {
+	if isSourceDir && !cca.recursive && !cca.stripTopDir {
 		return nil, errors.New("cannot use directory as source without --recursive or trailing wildcard (/*)")
 	}
 
@@ -203,7 +203,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 
 	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
-	if !source && !cca.copyContents {
+	if !source && !cca.stripTopDir {
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory

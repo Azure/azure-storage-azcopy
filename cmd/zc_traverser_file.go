@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -111,13 +112,14 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				storedObject := storedObject{
-					name:             getObjectNameOnly(fileInfo.Name),
-					relativePath:     relativePath,
-					lastModifiedTime: fileProperties.LastModified(),
-					md5:              fileProperties.ContentMD5(),
-					size:             fileProperties.ContentLength(),
-				}
+				storedObject := newStoredObject(
+					getObjectNameOnly(fileInfo.Name),
+					relativePath,
+					fileProperties.LastModified(),
+					fileProperties.ContentLength(),
+					fileProperties.ContentMD5(),
+					azblob.BlobNone,
+				)
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

@@ -83,7 +83,7 @@ type rawCopyCmdArgs struct {
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
-	copyContents      bool
+	stripTopDir       bool
 	followSymlinks    bool
 	withSnapshots     bool
 	// forceWrite flag is used to define the User behavior
@@ -183,15 +183,17 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
-	cooked.copyContents = raw.copyContents
+	cooked.stripTopDir = raw.stripTopDir
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
 
-	// Local supports wildcards just fine.
+	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
+	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
+	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.source for wildcards.
 	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source, "*") {
-		cooked.copyContents = true
+		cooked.stripTopDir = true
 	}
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
@@ -224,8 +226,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Note: new implementation of list-of-files only works for remove command and upload for now.
-	// * -> Garbage, Local -> *, and * -> Local work under this implementation
+	// * -> Garbage, Local -> *, and * -> Local work under this implementation of list of files
 	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Local() {
 		// This handles both list-of-files and include-path as a list enumerator.
 		// This saves us time because we know *exactly* what we're looking for right off the bat.
@@ -585,7 +586,7 @@ type cookedCopyCmdArgs struct {
 	listOfFilesToCopy  []string
 	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
 	recursive          bool
-	copyContents       bool
+	stripTopDir        bool
 	followSymlinks     bool
 	withSnapshots      bool
 	forceWrite         bool
@@ -1250,7 +1251,7 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
-	cpCmd.PersistentFlags().BoolVar(&raw.copyContents, "strip-top-dir", false, "copy everything under the source, not the source itself")
+	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\" (ex. sourcedir/subdir1/file1 copies to subdir1/file1 on destination)")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
