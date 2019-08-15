@@ -1028,3 +1028,11 @@ type PerformanceAdvice struct {
 	// Is this the primary advice (used to distinguish most important advice in cases where multiple advice objects are returned)
 	PriorityAdvice bool
 }
+
+const BenchmarkPreviewNotice = "The benchmark feature is currently in Preview status."
+
+const BenchmarkFinalDisclaimer = `This benchmark tries to find optimal performance, computed without touching any local disk. When reading 
+and writing real data, performance may be different. If disk limits throughput, AzCopy will display a message on screen.`
+
+const BenchmarkLinuxExtraDisclaimer = `On Linux, when AzCopy is uploading just one or two large files, disk performance may be greatly improved by
+increasing read_ahead_kb to 8192 for the data disk.`

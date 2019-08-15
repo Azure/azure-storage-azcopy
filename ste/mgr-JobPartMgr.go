@@ -424,6 +424,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+		userAgent = common.BenchmarkUserAgent
 	}
 
 	credOption := common.CredentialOpOptions{

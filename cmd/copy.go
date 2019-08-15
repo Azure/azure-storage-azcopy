@@ -32,6 +32,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -1211,6 +1212,7 @@ func formatPerfAdvice(advice []common.PerformanceAdvice) string {
 	b := strings.Builder{}
 	b.WriteString("\n\n") // two newlines to separate the perf results from everything else
 	b.WriteString("Performance benchmark results: \n")
+	b.WriteString("Note: " + common.BenchmarkPreviewNotice + "\n")
 	for _, a := range advice {
 		b.WriteString("\n")
 		pri := "Main"
@@ -1221,6 +1223,11 @@ func formatPerfAdvice(advice []common.PerformanceAdvice) string {
 		b.WriteString("  Code:   " + a.Code + "\n")
 		b.WriteString("  Desc:   " + a.Title + "\n")
 		b.WriteString("  Reason: " + a.Reason + "\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(common.BenchmarkFinalDisclaimer)
+	if runtime.GOOS == "linux" {
+		b.WriteString(common.BenchmarkLinuxExtraDisclaimer)
 	}
 	return b.String()
 }

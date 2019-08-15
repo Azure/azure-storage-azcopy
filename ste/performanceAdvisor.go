@@ -52,12 +52,12 @@ func (AdviceType) ServerBusy() AdviceType {
 }
 
 func (AdviceType) ConcurrencyNotEnoughTime() AdviceType {
-	return AdviceType{"ConcurrencyNotEnoughTime",
+	return AdviceType{"ConcurrencyNotEnoughTimeToTune",
 		"Network bandwidth not measured because the test finished too soon"}
 }
 
 func (AdviceType) ConcurrencyNotTuned() AdviceType {
-	return AdviceType{"ConcurrencyNotTuned",
+	return AdviceType{"ConcurrencyTuningDisabled",
 		"Network bandwidth not measured because concurrency tuning was disabled"}
 }
 
@@ -145,7 +145,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 		// Then, if a VM is getting LESS than this amount per core, we infer that it's not at its throughput cap.
 		// If it's getting more than this amount AND there are no other constraints, then we assume the constraint IS
 		// the throughput cap. (It's probably not the network, because if we use this we already know its an Azure VM).
-		expectedMinAzureMbpsPerCore = 400
+		expectedMinAzureMbpsPerCore = 375
 	)
 
 	result := make([]common.PerformanceAdvice, 0)
