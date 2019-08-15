@@ -140,8 +140,13 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			resolvedBucketName, err := s3BucketNameResolver.ResolveName(e.s3URLParts.BucketName)
 			if err != nil {
 				glcm.Error(err.Error())
-				return errors.New("fail to add transfer, the source bucket has invalid name for Azure. " +
-					"Please include the destination container/share/filesystem name in the destination URL.")
+				return errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. " +
+					"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
+					"with customized destination name after the service to service copy finished")
+			}
+
+			if resolvedBucketName != e.s3URLParts.BucketName {
+				glcm.Info(fmt.Sprintf("s3 bucket name %q is invalid for Azure container/share/filesystem, and has been renamed to %q", e.s3URLParts.BucketName, resolvedBucketName))
 			}
 
 			*e.destURL = urlExtension{*e.destURL}.generateObjectPath(resolvedBucketName)

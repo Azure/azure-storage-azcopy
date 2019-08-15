@@ -431,6 +431,12 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 }
 
 func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
+	// If we error out in this function, simply just skip over deleting the bucket.
+	// Some of our buckets have become "ghost" buckets in the past.
+	// Ghost buckets show up in list calls but can't actually be interacted with.
+	// Some ghost buckets are temporary, others are permanent.
+	// As such, we need a way to deal with them when they show up.
+	// By doing this, they'll just be cleaned up the next test run instead of failing all tests.
 	objectsCh := make(chan string)
 
 	go func() {
