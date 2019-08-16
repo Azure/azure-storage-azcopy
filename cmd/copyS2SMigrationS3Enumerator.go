@@ -140,7 +140,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			resolvedBucketName, err := s3BucketNameResolver.ResolveName(e.s3URLParts.BucketName)
 			if err != nil {
 				glcm.Error(err.Error())
-				return errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. " +
+				return errors.New("failed to add transfers from service, some of the buckets have invalid names for Azure. " +
 					"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
 					"with customized destination name after the service to service copy finished")
 			}

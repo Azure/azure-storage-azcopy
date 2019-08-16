@@ -655,3 +655,34 @@ func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) az
 
 	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
 }
+
+// check.v1 style "StringIncludes" checker
+
+type stringIncludesChecker struct {
+	*chk.CheckerInfo
+}
+
+var StringIncludes = &stringIncludesChecker{
+	&chk.CheckerInfo{Name: "StringIncludes", Params: []string{"obtained", "expected to find"}},
+}
+
+func (checker *stringIncludesChecker) Check(params []interface{}, names []string) (result bool, error string) {
+	if len(params) < 2 {
+		return false, "StringIncludes requires two parameters"
+	} // Ignore extra parameters
+
+	// Assert that params[0] and params[1] are strings
+	aStr, aOK := params[0].(string)
+	bStr, bOK := params[1].(string)
+	if !aOK || !bOK {
+		return false, "All parameters must be strings"
+	}
+
+	if strings.Contains(aStr, bStr) {
+		return true, ""
+	}
+
+	return false, fmt.Sprintf("Failed to find substring in source string:\n\n"+
+		"SOURCE: %s\n"+
+		"EXPECTED: %s\n", aStr, bStr)
+}
