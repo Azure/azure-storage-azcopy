@@ -476,8 +476,6 @@ func (jptm *jobPartTransferMgr) FailActiveSendWithStatus(where string, err error
 // Use this to mark active transfers (i.e. those where chunk funcs have been scheduled) as failed.
 // Unlike just setting the status to failed, this also handles cancellation correctly
 func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descriptionOfWhereErrorOccurred string, err error, failureStatus common.TransferStatus) {
-	// TODO: Remove this debug statement. It's only here for CI to spit out at me what _actually_ happened because our present output isn't enough.
-	fmt.Println("Transfer failed:", typ, descriptionOfWhereErrorOccurred, err, failureStatus)
 	// TODO here we only act if the transfer is not yet canceled
 	// 	however, it's possible that this function is called simultaneously by different chunks
 	//  in that case, the logs would be repeated

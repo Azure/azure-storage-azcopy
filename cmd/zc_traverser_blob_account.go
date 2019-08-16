@@ -10,7 +10,6 @@ import (
 )
 
 type blobAccountTraverser struct {
-	rawURL           *url.URL
 	accountURL       azblob.ServiceURL
 	p                pipeline.Pipeline
 	ctx              context.Context
@@ -73,7 +72,7 @@ func newBlobAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		bURLParts.ContainerName = ""
 	}
 
-	t = &blobAccountTraverser{rawURL: rawURL, p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azblob.NewServiceURL(bURLParts.URL(), p), containerPattern: cPattern}
+	t = &blobAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azblob.NewServiceURL(bURLParts.URL(), p), containerPattern: cPattern}
 
 	return
 }

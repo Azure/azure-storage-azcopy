@@ -10,7 +10,6 @@ import (
 )
 
 type fileAccountTraverser struct {
-	rawURL       *url.URL
 	accountURL   azfile.ServiceURL
 	p            pipeline.Pipeline
 	ctx          context.Context
@@ -72,6 +71,6 @@ func newFileAccountTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.C
 		fURLparts.ShareName = ""
 	}
 
-	t = &fileAccountTraverser{rawURL: rawURL, p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern}
+	t = &fileAccountTraverser{p: p, ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, accountURL: azfile.NewServiceURL(fURLparts.URL(), p), sharePattern: sPattern}
 	return
 }
