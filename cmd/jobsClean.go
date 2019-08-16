@@ -40,8 +40,8 @@ func init() {
 	jobsCleanCmd := &cobra.Command{
 		Use:     "clean",
 		Aliases: []string{"cl"},
-		Short:   "", // TODO
-		Long:    "", // TODO
+		Short:   cleanJobsCmdShortDescription,
+		Long:    cleanJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 0 {
 				return errors.New("clean command does not accept arguments")
@@ -81,7 +81,9 @@ func init() {
 
 func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	if givenStatus == common.EJobStatus.All() {
-		return blindDeleteAllJobFiles()
+		numFilesDeleted, err := blindDeleteAllJobFiles()
+		glcm.Info(fmt.Sprintf("Removed %v files.", numFilesDeleted))
+		return err
 	}
 
 	// we must query the jobs and find out which one to remove
@@ -95,6 +97,7 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	for _, job := range resp.JobIDDetails {
 		// delete all jobs matching the givenStatus
 		if job.JobStatus == givenStatus {
+			glcm.Info(fmt.Sprintf("Removing files for job %s", job.JobId))
 			err := handleRemoveSingleJob(job.JobId)
 			if err != nil {
 				return err
@@ -105,28 +108,25 @@ func handleCleanJobsCommand(givenStatus common.JobStatus) error {
 	return nil
 }
 
-func blindDeleteAllJobFiles() error {
+func blindDeleteAllJobFiles() (int, error) {
 	// get rid of the job plan files
-	_, err := removeFilesWithPrefix(azcopyJobPlanFolder, func(s string) bool {
+	numPlanFilesRemoved, err := removeFilesWithPredicate(azcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, ".steV") {
 			return true
 		}
 		return false
 	})
 	if err != nil {
-		return err
+		return numPlanFilesRemoved, err
 	}
 
 	// get rid of the logs
-	_, err = removeFilesWithPrefix(azcopyLogPathFolder, func(s string) bool {
+	numLogFilesRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
 		if strings.HasSuffix(s, ".log") {
 			return true
 		}
 		return false
 	})
-	if err != nil {
-		return err
-	}
 
-	return nil
+	return numPlanFilesRemoved + numLogFilesRemoved, err
 }

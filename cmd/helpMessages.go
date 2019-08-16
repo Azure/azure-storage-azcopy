@@ -143,6 +143,20 @@ const resumeJobsCmdShortDescription = "Resume the existing job with the given jo
 const resumeJobsCmdLongDescription = `
 Resume the existing job with the given job ID.`
 
+const removeJobsCmdShortDescription = "Remove all files associated with the given job ID"
+
+const removeJobsCmdLongDescription = `
+Remove all files associated with the given job ID.
+
+Note that the location of log files and job plan files can be customized. Please refer to the env command.`
+
+const cleanJobsCmdShortDescription = "Clean up log files and job plan files (used for progress tracking and resuming) for jobs"
+
+const cleanJobsCmdLongDescription = `
+Clean up log files and job plan files (used for progress tracking and resuming) for jobs.
+
+Note that the location of log files and job plan files can be customized. Please refer to the env command.`
+
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 

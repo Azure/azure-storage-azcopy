@@ -43,11 +43,11 @@ func init() {
 	jobsRemoveCmd := &cobra.Command{
 		Use:     "remove [jobID]",
 		Aliases: []string{"rm"},
-		Short:   "", // TODO
-		Long:    "", // TODO
+		Short:   removeJobsCmdShortDescription,
+		Long:    removeJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
-				return errors.New("showJob requires only the JobID")
+				return errors.New("remove job command requires the JobID")
 			}
 			// Parse the JobId
 			jobId, err := common.ParseJobID(args[0])
@@ -61,10 +61,10 @@ func init() {
 			err := handleRemoveSingleJob(commandLineInput.JobID)
 			if err == nil {
 				glcm.Exit(func(format common.OutputFormat) string {
-					return fmt.Sprintf("Successfully removed log/plan files for job %s.", commandLineInput.JobID)
+					return fmt.Sprintf("Successfully removed log and job plan files for job %s.", commandLineInput.JobID)
 				}, common.EExitCode.Success())
 			} else {
-				glcm.Error(fmt.Sprintf("Failed to remove log/plan files for job %s due to error: %s.", commandLineInput.JobID, err))
+				glcm.Error(fmt.Sprintf("Failed to remove log and job plan files for job %s due to error: %s.", commandLineInput.JobID, err))
 			}
 		},
 	}
@@ -74,7 +74,7 @@ func init() {
 
 func handleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the job plan files
-	numPlanFileRemoved, err := removeFilesWithPrefix(azcopyJobPlanFolder, func(s string) bool {
+	numPlanFileRemoved, err := removeFilesWithPredicate(azcopyJobPlanFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.Contains(s, ".steV") {
 			return true
 		}
@@ -87,7 +87,7 @@ func handleRemoveSingleJob(jobID common.JobID) error {
 	// get rid of the logs
 	// even though we only have 1 file right now, still scan the directory since we may change the
 	// way we name the logs in the future (with suffix or whatnot)
-	numLogFileRemoved, err := removeFilesWithPrefix(azcopyLogPathFolder, func(s string) bool {
+	numLogFileRemoved, err := removeFilesWithPredicate(azcopyLogPathFolder, func(s string) bool {
 		if strings.Contains(s, jobID.String()) && strings.HasSuffix(s, ".log") {
 			return true
 		}
@@ -105,7 +105,7 @@ func handleRemoveSingleJob(jobID common.JobID) error {
 }
 
 // remove all files whose names are approved by the predicate in the targetFolder
-func removeFilesWithPrefix(targetFolder string, predicate func(string) bool) (int, error) {
+func removeFilesWithPredicate(targetFolder string, predicate func(string) bool) (int, error) {
 	count := 0
 	files, err := ioutil.ReadDir(targetFolder)
 	if err != nil {
