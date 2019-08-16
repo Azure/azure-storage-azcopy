@@ -966,7 +966,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		cca.destination = cleanLocalPath(result)
-		jobPartOrder.DestinationRoot = cca.destination
 	}
 
 	// set the root destination after it's been cleaned
@@ -1259,7 +1258,7 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
-	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\" (ex. sourcedir/subdir1/file1 copies to subdir1/file1 on destination)")
+	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\" (ex. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1)")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
