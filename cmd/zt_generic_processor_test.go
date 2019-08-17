@@ -23,6 +23,7 @@ package cmd
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
+	"os"
 	"path/filepath"
 	"time"
 )
@@ -69,6 +70,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorMultipleFiles(c *chk.C)
 	// set up source and destination
 	containerURL, _ := getContainerURL(c, bsu)
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -115,6 +117,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 
 	// set up the directory with a single file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	dstFileName := blobList[0]
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
