@@ -430,7 +430,13 @@ func createNewObject(c *chk.C, client *minio.Client, bucketName string, prefix s
 	return
 }
 
-func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
+func deleteBucket(c *chk.C, client *minio.Client, bucketName string, waitQuarterMinute bool) {
+	// If we error out in this function, simply just skip over deleting the bucket.
+	// Some of our buckets have become "ghost" buckets in the past.
+	// Ghost buckets show up in list calls but can't actually be interacted with.
+	// Some ghost buckets are temporary, others are permanent.
+	// As such, we need a way to deal with them when they show up.
+	// By doing this, they'll just be cleaned up the next test run instead of failing all tests.
 	objectsCh := make(chan string)
 
 	go func() {
@@ -438,33 +444,50 @@ func deleteBucket(c *chk.C, client *minio.Client, bucketName string) {
 
 		// List all objects from a bucket-name with a matching prefix.
 		for object := range client.ListObjectsV2(bucketName, "", true, context.Background().Done()) {
-			c.Assert(object.Err, chk.IsNil)
+			if object.Err != nil {
+				return
+			}
+
 			objectsCh <- object.Key
 		}
 	}()
 
 	// List bucket, and delete all the objects in the bucket
 	errChn := client.RemoveObjects(bucketName, objectsCh)
+	var err error
 
-	for err := range errChn {
-		c.Assert(err, chk.IsNil)
+	for rmObjErr := range errChn {
+		if rmObjErr.Err != nil {
+			return
+		}
 	}
 
 	// Remove the bucket.
-	err := client.RemoveBucket(bucketName)
-	c.Assert(err, chk.IsNil)
+	err = client.RemoveBucket(bucketName)
+
+	if err != nil {
+		return
+	}
+
+	if waitQuarterMinute {
+		time.Sleep(time.Second * 15)
+	}
 }
 
 func cleanS3Account(c *chk.C, client *minio.Client) {
 	buckets, err := client.ListBuckets()
-	c.Assert(err, chk.IsNil)
+	if err != nil {
+		return
+	}
 
 	for _, bucket := range buckets {
 		if strings.Contains(bucket.Name, "elastic") {
 			continue
 		}
-		deleteBucket(c, client, bucket.Name)
+		deleteBucket(c, client, bucket.Name, false)
 	}
+
+	time.Sleep(time.Minute)
 }
 
 func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
@@ -631,4 +654,35 @@ func getAdlsServiceURLWithSAS(c *chk.C, credential azbfs.SharedKeyCredential) az
 	c.Assert(err, chk.IsNil)
 
 	return azbfs.NewServiceURL(*fullURL, azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{}))
+}
+
+// check.v1 style "StringIncludes" checker
+
+type stringIncludesChecker struct {
+	*chk.CheckerInfo
+}
+
+var StringIncludes = &stringIncludesChecker{
+	&chk.CheckerInfo{Name: "StringIncludes", Params: []string{"obtained", "expected to find"}},
+}
+
+func (checker *stringIncludesChecker) Check(params []interface{}, names []string) (result bool, error string) {
+	if len(params) < 2 {
+		return false, "StringIncludes requires two parameters"
+	} // Ignore extra parameters
+
+	// Assert that params[0] and params[1] are strings
+	aStr, aOK := params[0].(string)
+	bStr, bOK := params[1].(string)
+	if !aOK || !bOK {
+		return false, "All parameters must be strings"
+	}
+
+	if strings.Contains(aStr, bStr) {
+		return true, ""
+	}
+
+	return false, fmt.Sprintf("Failed to find substring in source string:\n\n"+
+		"SOURCE: %s\n"+
+		"EXPECTED: %s\n", aStr, bStr)
 }

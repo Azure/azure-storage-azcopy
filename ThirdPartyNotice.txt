@@ -39,6 +39,8 @@ mattn/go-ieproxy, Copyright (c) 2014 mattn
 mattn/go-ieproxy, Copyright (c) 2017 oliverpool
 mattn/go-ieproxy, Copyright (c) 2019 Adele Reed
 cpuguy83/go-md2man, Copyright (c) 2014 Brian Goff
+Copyright (c) 2014 Stretchr, Inc.
+Copyright (c) 2017-2018 objx contributors
 
 
 The MIT License (MIT)

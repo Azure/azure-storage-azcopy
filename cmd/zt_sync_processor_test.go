@@ -36,6 +36,7 @@ var _ = chk.Suite(&syncProcessorSuite{})
 func (s *syncProcessorSuite) TestLocalDeleter(c *chk.C) {
 	// set up the local file
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 	dstFileName := "extraFile.txt"
 	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, []string{dstFileName})
 
