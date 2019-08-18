@@ -23,8 +23,12 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -100,6 +104,8 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	glcm.Info(common.BenchmarkPreviewNotice)
 
 	dummyCooked := cookedCopyCmdArgs{}
+	jobID := common.NewJobID()
+	virtualDir := "benchmark-" + jobID.String() // create unique directory name, so we won't overwrite anything
 
 	if raw.fileCount <= 0 {
 		return dummyCooked, errors.New(fileCountParam + " must be greater than zero")
@@ -122,10 +128,13 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	c.setMandatoryDefaults()
 
 	// src must be string, but needs to indicate that its for benchmark and encode what we want
-	// virtualDirName is slotted in later, by copy.go, after the job id is known
-	c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile, "")
+	c.src = benchmarkSourceHelper{}.ToUrl(raw.fileCount, bytesPerFile)
 
-	c.dst = raw.dst
+	c.dst, err = raw.appendVirtualDir(raw.dst, virtualDir)
+	if err != nil {
+		return dummyCooked, err
+	}
+	c.stripTopDir = true // prevent processor from trying to append part of our source URL to the destination (since our source isn't a real URL in benchmarking)
 
 	c.recursive = true                                     // because source is directory-like, in which case recursive is required
 	c.forceWrite = common.EOverwriteOption.True().String() // don't want the extra round trip (for overwrite check) when benchmarking
@@ -136,9 +145,7 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	c.output = raw.output
 	c.logVerbosity = raw.logVerbosity
 
-	c.stripTopDir = true // prevent processor from trying to append part of our source URL to the destination (since our source isn't a real URL in benchmarking)
-
-	cooked, err := c.cook()
+	cooked, err := c.cookWithId(jobID)
 	if err != nil {
 		return cooked, err
 	}
@@ -146,6 +153,44 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	return cooked, nil
 }
 
+func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", u.String(), err.Error())
+	}
+
+	var result url.URL
+
+	switch inferArgumentLocation(target) {
+	case common.ELocation.Blob():
+		p := azblob.NewBlobURLParts(*u)
+		if p.ContainerName == "" || p.BlobName != "" {
+			return "", errors.New("the blob target must be a container")
+		}
+		p.BlobName = virtualDir + "/"
+		result = p.URL()
+
+	case common.ELocation.File():
+		p := azfile.NewFileURLParts(*u)
+		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
+			return "", errors.New("the Azure Files target must be a file share root")
+		}
+		p.DirectoryOrFilePath = virtualDir + "/"
+		result = p.URL()
+
+	case common.ELocation.BlobFS():
+		p := azbfs.NewBfsURLParts(*u)
+		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
+			return "", errors.New("the blobFS target must be a file system")
+		}
+		p.DirectoryOrFilePath = virtualDir + "/"
+		result = p.URL()
+	default:
+		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLSGen2")
+	}
+
+	return result.String(), nil
+}
 type benchmarkSourceHelper struct{}
 
 // our code requires sources to be strings. So we may as well do the benchmark sources as URLs
@@ -153,46 +198,35 @@ type benchmarkSourceHelper struct{}
 // you want a URL that can't possibly be a real one, so we'll use that
 const benchmarkSourceHost = "benchmark.invalid"
 
-func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64, virtualDirName string) string {
-	return fmt.Sprintf("https://%s?fc=%d&bpf=%d&vdn=%s", benchmarkSourceHost, fileCount, bytesPerFile, virtualDirName)
+func (h benchmarkSourceHelper) ToUrl(fileCount uint, bytesPerFile int64) string {
+	return fmt.Sprintf("https://%s?fc=%d&bpf=%d", benchmarkSourceHost, fileCount, bytesPerFile)
 }
 
-func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, virtualDirName string, err error) {
+func (h benchmarkSourceHelper) FromUrl(s string) (fileCount uint, bytesPerFile int64, err error) {
 	// TODO: consider replace with regex?
 
 	expectedPrefix := "https://" + benchmarkSourceHost + "?"
 	if !strings.HasPrefix(s, expectedPrefix) {
-		return 0, 0, "", errors.New("invalid benchmark source string")
+		return 0, 0, errors.New("invalid benchmark source string")
 	}
 	s = strings.TrimPrefix(s, expectedPrefix)
 	pieces := strings.Split(s, "&")
-	if len(pieces) != 3 ||
+	if len(pieces) != 2 ||
 		!strings.HasPrefix(pieces[0], "fc=") ||
-		!strings.HasPrefix(pieces[1], "bpf=") ||
-		!strings.HasPrefix(pieces[2], "vdn=") {
-		return 0, 0, "", errors.New("invalid benchmark source string")
+		!strings.HasPrefix(pieces[1], "bpf=") {
+		return 0, 0, errors.New("invalid benchmark source string")
 	}
 	pieces[0] = strings.Split(pieces[0], "=")[1]
 	pieces[1] = strings.Split(pieces[1], "=")[1]
-	pieces[2] = strings.Split(pieces[2], "=")[1]
 	fc, err := strconv.ParseUint(pieces[0], 10, 64)
 	if err != nil {
-		return 0, 0, "", err
+		return 0, 0, err
 	}
 	bpf, err := strconv.ParseInt(pieces[1], 10, 64)
 	if err != nil {
-		return 0, 0, "", err
+		return 0, 0, err
 	}
-	return uint(fc), bpf, pieces[2], nil
-}
-
-// SetVirtualDir returns a new benchmark source URL, identical to the old one but with a new virtual dir name
-func (h benchmarkSourceHelper) SetVirtualDir(oldBenchmarkSource string, virtualDirName string) (string, error) {
-	fc, bpf, _, err := h.FromUrl(oldBenchmarkSource)
-	if err != nil {
-		return "", err
-	}
-	return h.ToUrl(fc, bpf, virtualDirName), nil
+	return uint(fc), bpf, nil
 }
 
 var benchCmd *cobra.Command
