@@ -182,6 +182,7 @@ type ListJobSummaryResponse struct {
 	PerfStrings      []string `json:"-"`
 
 	PerformanceAdvice []PerformanceAdvice
+	IsCleanupJob      bool
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

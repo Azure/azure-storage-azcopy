@@ -630,6 +630,11 @@ type cookedCopyCmdArgs struct {
 	s2sSourceChangeValidation bool
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
+
+	followupJobArgs   *cookedCopyCmdArgs
+	priorJobExitCode  *common.ExitCode
+	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
+	cleanupJobMessage string
 }
 
 func (cca *cookedCopyCmdArgs) isRedirection() bool {
@@ -1041,7 +1046,13 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(),
+		fmt.Sprintf("%s%s%s.log",
+			azcopyLogPathFolder,
+			common.OS_PATH_SEPARATOR,
+			cca.jobID),
+		cca.isCleanupJob,
+		cca.cleanupJobMessage))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -1083,22 +1094,49 @@ func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
+func (cca *cookedCopyCmdArgs) hasFollowup() bool {
+	return cca.followupJobArgs != nil
+}
+
+func (cca *cookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
+	go func() {
+		glcm.AllowReinitiateProgressReporting()
+		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
+		err := cca.followupJobArgs.process()
+		if err != nil {
+			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
+		}
+		glcm.SurrenderControl()
+	}()
+}
+
+func (cca *cookedCopyCmdArgs) getSuccessExitCode() common.ExitCode {
+	if cca.priorJobExitCode != nil {
+		return *cca.priorJobExitCode // in a chain of jobs our best case outcome is whatever the predecessor(s) finished with
+	} else {
+		return common.EExitCode.Success()
+	}
+}
+
 func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
+	summary.IsCleanupJob = cca.isCleanupJob // only FE knows this, so we can only set it here
+	cleanupStatusString := fmt.Sprintf("Cleanup %v/%v", summary.TransfersCompleted, summary.TotalTransfers)
+
 	jobDone := summary.JobStatus.IsJobDone()
 
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
 	if jobDone {
-		exitCode := common.EExitCode.Success()
+		exitCode := cca.getSuccessExitCode()
 		if summary.TransfersFailed > 0 {
 			exitCode = common.EExitCode.Error()
 		}
 
-		lcm.Exit(func(format common.OutputFormat) string {
+		builder := func(format common.OutputFormat) string {
 			if format == common.EOutputFormat.Json() {
 				jsonOutput, err := json.Marshal(summary)
 				common.PanicIfErr(err)
@@ -1129,13 +1167,27 @@ Final Job Status: %v%s
 					summary.JobStatus,
 					formatPerfAdvice(summary.PerformanceAdvice))
 
+				// abbreviated output for cleanup jobs
+				if cca.isCleanupJob {
+					output = fmt.Sprintf("%s: %s)", cleanupStatusString, summary.JobStatus)
+				}
+
+				// log to job log
 				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
 					jobMan.Log(pipeline.LogInfo, output)
 				}
 				return output
 			}
-		}, exitCode)
+		}
+
+		if cca.hasFollowup() {
+			lcm.Exit(builder, common.EExitCode.NoExit()) // leave the app running to process the followup
+			cca.launchFollowup(exitCode)
+			lcm.SurrenderControl() // the followup job will run on its own goroutines
+		} else {
+			lcm.Exit(builder, exitCode)
+		}
 	}
 
 	var computeThroughput = func() float64 {
@@ -1156,6 +1208,11 @@ Final Job Status: %v%s
 			common.PanicIfErr(err)
 			return string(jsonOutput)
 		} else {
+			// abbreviated output for cleanup jobs
+			if cca.isCleanupJob {
+				return cleanupStatusString
+			}
+
 			// if json is not needed, then we generate a message that goes nicely on the same line
 			// display a scanning keyword if the job is not completely ordered
 			var scanningString = " (scanning...)"

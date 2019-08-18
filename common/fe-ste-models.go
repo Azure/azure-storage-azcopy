@@ -216,6 +216,9 @@ type ExitCode uint32
 func (ExitCode) Success() ExitCode { return ExitCode(0) }
 func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 
+// NoExit is used as a marker, to suppress the normal exit behaviour
+func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
+
 type LogLevel uint8
 
 var ELogLevel = LogLevel(pipeline.LogNone)
