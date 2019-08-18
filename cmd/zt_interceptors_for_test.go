@@ -90,6 +90,7 @@ func (mockedLifecycleManager) Prompt(string) string                             
 func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)               {}
 func (mockedLifecycleManager) Error(string)                                             {}
 func (mockedLifecycleManager) SurrenderControl()                                        {}
+func (mockedLifecycleManager) AllowReinitiateProgressReporting()                        {}
 func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController, bool)    {}
 func (mockedLifecycleManager) GetEnvironmentVariable(common.EnvironmentVariable) string { return "" }
 func (mockedLifecycleManager) SetOutputFormat(common.OutputFormat)                      {}

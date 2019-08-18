@@ -172,6 +172,7 @@ type ListJobSummaryResponse struct {
 	PerfStrings      []string `json:"-"`
 
 	PerformanceAdvice []PerformanceAdvice
+	IsCleanupJob      bool
 }
 
 // represents the JobProgressPercentage Summary response for list command when requested the Job Progress Summary for given JobId
