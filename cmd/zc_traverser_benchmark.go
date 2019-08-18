@@ -28,19 +28,17 @@ import (
 type benchmarkTraverser struct {
 	fileCount                   uint
 	bytesPerFile                int64
-	virtualDirName              string
 	incrementEnumerationCounter func()
 }
 
 func newBenchmarkTraverser(source string, incrementEnumerationCounter func()) (*benchmarkTraverser, error) {
-	fc, bpf, vdn, err := benchmarkSourceHelper{}.FromUrl(source)
+	fc, bpf, err := benchmarkSourceHelper{}.FromUrl(source)
 	if err != nil {
 		return nil, err
 	}
 	return &benchmarkTraverser{
 			fileCount:                   fc,
 			bytesPerFile:                bpf,
-			virtualDirName:              vdn,
 			incrementEnumerationCounter: incrementEnumerationCounter},
 		nil
 }
@@ -57,7 +55,7 @@ func (t *benchmarkTraverser) traverse(processor objectProcessor, filters []objec
 	for i := uint(1); i <= t.fileCount; i++ {
 
 		name := fmt.Sprintf("%d", i)
-		relativePath := fmt.Sprintf("%s%s%s", t.virtualDirName, common.AZCOPY_PATH_SEPARATOR_STRING, name)
+		relativePath := name
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()

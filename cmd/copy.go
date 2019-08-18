@@ -171,7 +171,15 @@ func blockSizeInBytes(rawBlockSizeInMiB float64) (uint32, error) {
 
 // validates and transform raw input into cooked input
 func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
-	cooked := cookedCopyCmdArgs{}
+	// generate a unique job ID
+	return raw.cookWithId(common.NewJobID())
+}
+
+func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, error) {
+
+	cooked := cookedCopyCmdArgs{
+		jobID: jobId,
+	}
 
 	fromTo, err := validateFromTo(raw.src, raw.dst, raw.fromTo) // TODO: src/dst
 	if err != nil {
@@ -386,9 +394,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if cooked.isRedirection() {
 		glcm.SetOutputFormat(common.EOutputFormat.None())
 	}
-
-	// generate a unique job ID
-	cooked.jobID = common.NewJobID()
 
 	// check for the flag value relative to fromTo location type
 	// Example1: for Local to Blob, preserve-last-modified-time flag should not be set to true
@@ -846,26 +851,8 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = cleanLocalPath(tmpSrc)
 
 	case common.ELocation.Benchmark():
+		// noop
 
-		// TODO: is this the right place for this virtual dir code?
-		//  Should it instead be destination focussed (manipulate the dest path) and/or be done in benchmark.go (problem with that
-		//  is that we don'nt have the job id there...
-
-		// Add in a unique virtual dir name, so that we know for sure we will never overwrite anything
-		// Use the jobID for clarity and debuggability
-		virtualDir := "benchmark-" + cca.jobID.String()
-
-		// TODO: this seems to be necessary because the processor in init enumerator pre-pends
-		//   a /.  After all refactoring is finished, is that what we still expect?  And should it prepending
-		//  / or AZCOPY_PATH_SEPARATOR_STRING?
-		//  If we don't prepend it here, the stripping out of SourceRoot doesn't work in addTransfer
-		//  Reviewers: this seems messy and error-prone. Any thoughts?
-		jobPartOrder.SourceRoot = common.AZCOPY_PATH_SEPARATOR_STRING + virtualDir
-
-		cca.source, err = benchmarkSourceHelper{}.SetVirtualDir(cca.source, virtualDir)
-		if err != nil {
-			return err
-		}
 	case common.ELocation.Blob():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
