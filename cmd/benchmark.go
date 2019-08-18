@@ -150,6 +150,12 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
+	// set up automatic cleanup
+	cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.destination, raw.logVerbosity)
+	if err != nil {
+		return dummyCooked, err
+	}
+
 	return cooked, nil
 }
 
@@ -191,6 +197,35 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 
 	return result.String(), nil
 }
+
+// define a cleanup job
+func (raw rawBenchmarkCmdArgs) createCleanupJobArgs(benchmarkDest, logVerbosity string) (*cookedCopyCmdArgs, error) {
+
+	rc := rawCopyCmdArgs{}
+
+	rc.src = benchmarkDest // the SOURCE for the deletion is the the dest from the benchmark
+	rc.recursive = true
+	rc.logVerbosity = logVerbosity
+
+	switch inferArgumentLocation(benchmarkDest) {
+	case common.ELocation.Blob():
+		rc.fromTo = common.EFromTo.BlobTrash().String()
+	case common.ELocation.File():
+		rc.fromTo = common.EFromTo.FileTrash().String()
+	case common.ELocation.BlobFS():
+		rc.fromTo = common.EFromTo.BlobFSTrash().String()
+	default:
+		return nil, errors.New("unsupported from-to for cleanup") // should never make it this far, due to earlier validation
+	}
+
+	rc.setMandatoryDefaults()
+
+	cooked, err := rc.cook()
+	cooked.isCleanupJob = true
+	cooked.cleanupJobMessage = "Running cleanup job to delete files created during benchmarking"
+	return &cooked, err
+}
+
 type benchmarkSourceHelper struct{}
 
 // our code requires sources to be strings. So we may as well do the benchmark sources as URLs
