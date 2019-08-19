@@ -31,34 +31,37 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 
 		oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, t.s3URLParts.ObjectKey, minio.StatObjectOptions{})
 
-		if err != nil {
-			return err
+		// If we actually got object properties, process them.
+		// Otherwise, treat it as a directory.
+		// According to IsDirectorySyntactically, objects and folders can share names
+		if err == nil {
+			err = processIfPassedFilters(
+				filters,
+				newStoredObject(
+					objectName,
+					"", // We already know the exact path -- No need.
+					oi.LastModified,
+					oi.Size,
+					nil,
+					blobTypeNA,
+					""), // We already know the bucket name -- no need.
+				processor)
+
+			if err != nil {
+				return err
+			}
+
+			return nil
 		}
-
-		err = processIfPassedFilters(
-			filters,
-			newStoredObject(
-				objectName,
-				"", // We already know the exact path -- No need.
-				oi.LastModified,
-				oi.Size,
-				nil,
-				blobTypeNA,
-				""), // We already know the bucket name -- no need.
-			processor)
-
-		if err != nil {
-			return err
-		}
-
-		return nil
 	}
 
-	searchPrefix, _, wildcard := t.s3URLParts.searchObjectPrefixAndPatternFromS3URL()
-
-	if wildcard {
-		return fmt.Errorf("cannot traverse s3 with wildcard")
+	// Append a trailing slash if it is missing.
+	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") {
+		t.s3URLParts.ObjectKey += "/"
 	}
+
+	// Ignore *s in URLs and treat them as normal characters
+	searchPrefix := t.s3URLParts.ObjectKey
 
 	// It's a bucket or virtual directory.
 	for objectInfo := range t.s3Client.ListObjectsV2(t.s3URLParts.BucketName, searchPrefix, t.recursive, t.ctx.Done()) {
