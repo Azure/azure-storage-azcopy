@@ -76,7 +76,7 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 	}
 
 	// Append a trailing slash if it is missing.
-	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") {
+	if !strings.HasSuffix(t.s3URLParts.ObjectKey, "/") && t.s3URLParts.ObjectKey != "" {
 		t.s3URLParts.ObjectKey += "/"
 	}
 
