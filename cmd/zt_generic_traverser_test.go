@@ -206,7 +206,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
 	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
@@ -322,7 +322,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
 	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	// set up the container with numerous blobs
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
@@ -428,7 +428,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	c.Assert(err, chk.IsNil)
 	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
-	defer deleteBucket(c, s3Client, bucketName)
+	defer deleteBucket(c, s3Client, bucketName, true)
 
 	// set up the container with numerous blobs
 	virDirName := "virdir"
