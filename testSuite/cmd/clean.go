@@ -456,17 +456,11 @@ func cleanS3Account(resourceURL string) {
 		}()
 
 		// List bucket, and delete all the objects in the bucket
-		errChn := s3Client.RemoveObjects(bucket.Name, objectsCh)
-
-		for err := range errChn {
-			fmt.Println("error remove objects from bucket, ", err)
-			os.Exit(1)
-		}
+		_ = s3Client.RemoveObjects(bucket.Name, objectsCh)
 
 		// Remove the bucket.
 		if err := s3Client.RemoveBucket(bucket.Name); err != nil {
 			fmt.Printf("error deleting the bucket %q from account, %v\n", bucket.Name, err)
-			os.Exit(1)
 		}
 	}
 }

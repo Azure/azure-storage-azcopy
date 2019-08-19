@@ -69,7 +69,10 @@ jobs:
         name: 'Acquire_the_distributed_mutex'
       - script: |
           # run unit test and build executable
-          go test -race -short -cover ./cmd ./common ./ste ./azbfs
+          # the set -e line is needed so that the unit tests failure would cause the job to fail properly
+          # -timeout 15m as our tests typically run between 10-12m and I'd rather have some headroom.
+          set -e
+          go test -timeout 15m -race -short -cover ./cmd ./common ./ste ./azbfs
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:

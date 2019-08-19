@@ -24,6 +24,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -37,6 +38,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
 		srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(srcDirName)
 		fileList := []string{srcFileName}
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
 
@@ -96,6 +98,7 @@ func (s *cmdIntegrationSuite) TestUploadSingleFileToBlob(c *chk.C) {
 	for _, srcFileName := range []string{"singleblobisbest", "打麻将.txt", "%4509%4254$85140&"} {
 		// set up the source as a single file
 		srcDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(srcDirName)
 		fileList := []string{srcFileName}
 		scenarioHelper{}.generateLocalFilesFromList(c, srcDirName, fileList)
 
@@ -149,6 +152,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainer(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// set up an empty container
@@ -193,6 +197,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToVirtualDirectory(c *chk.C) {
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// set up an empty container
@@ -237,6 +242,7 @@ func (s *cmdIntegrationSuite) TestUploadDirectoryToContainerWithPattern(c *chk.C
 
 	// set up the source with numerous files
 	srcDirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(srcDirPath)
 	scenarioHelper{}.generateCommonRemoteScenarioForLocal(c, srcDirPath, "")
 
 	// add special files that we wish to include

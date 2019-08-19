@@ -23,6 +23,7 @@ package cmd
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	chk "gopkg.in/check.v1"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -41,6 +42,7 @@ func (s *cmdIntegrationSuite) TestDownloadSingleBlobToFile(c *chk.C) {
 
 		// set up the destination as a single file
 		dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+		defer os.RemoveAll(dstDirName)
 		dstFileName := "whatever"
 		scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, blobList)
 
@@ -93,6 +95,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainer(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -138,6 +141,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobVirtualDirectory(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
@@ -190,6 +194,7 @@ func (s *cmdIntegrationSuite) TestDownloadBlobContainerWithPattern(c *chk.C) {
 
 	// set up the destination with an empty folder
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dstDirName)
 
 	// set up interceptor
 	mockedRPC := interceptor{}
