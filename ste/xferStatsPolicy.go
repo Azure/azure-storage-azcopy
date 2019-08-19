@@ -112,6 +112,13 @@ func (s *pipelineNetworkStats) TotalServerBusyPercentage() float32 {
 	}
 }
 
+func (s *pipelineNetworkStats) GetTotalRetries() int64 {
+	s.nocopy.Check()
+	return atomic.LoadInt64(&s.atomic503CountThroughput) +
+		atomic.LoadInt64(&s.atomic503CountIOPS) +
+		atomic.LoadInt64(&s.atomic503CountUnknown)
+}
+
 func (s *pipelineNetworkStats) IOPSServerBusyPercentage() float32 {
 	s.nocopy.Check()
 	ops := float32(atomic.LoadInt64(&s.atomicOperationCount))
