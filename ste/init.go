@@ -491,6 +491,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	part0PlanStatus := jp0.Plan().JobStatus()
 	if part0PlanStatus == common.EJobStatus.Cancelled() {
 		js.JobStatus = part0PlanStatus
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice()
 		return js
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
@@ -648,6 +649,7 @@ func GetSyncJobSummary(jobID common.JobID) common.ListSyncJobSummaryResponse {
 	part0PlanStatus := jp0.Plan().JobStatus()
 	if part0PlanStatus == common.EJobStatus.Cancelled() {
 		js.JobStatus = part0PlanStatus
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice()
 		return js
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed

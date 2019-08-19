@@ -266,7 +266,7 @@ func (jm *jobMgr) logJobsAdminMessages() {
 
 func (jm *jobMgr) TryGetPerformanceAdvice() []common.PerformanceAdvice {
 	ja := JobsAdmin.(*jobsAdmin)
-	if !ja.providePerfAdvice {
+	if !ja.provideBenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
 	}
 

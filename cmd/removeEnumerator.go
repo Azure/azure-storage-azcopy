@@ -77,7 +77,11 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		}
 
 		if !jobInitiated {
-			glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
+			if cca.isCleanupJob {
+				glcm.Error("Cleanup completed (nothing needed to be deleted)")
+			} else {
+				glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
+			}
 		}
 
 		return nil
