@@ -233,7 +233,7 @@ func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.Perf
 	// or not, especially if we are dynamically tuning the pool size.
 	result[len(result)-1] = fmt.Sprintf(strings.Replace(format, "%c", "%s", -1), "GRs", JobsAdmin.CurrentMainPoolSize())
 
-	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection)
+	con := jm.chunkStatusLogger.GetPrimaryPerfConstraint(atomicTransferDirection, jm.PipelineNetworkStats())
 
 	// logging from here is a bit of a hack
 	// TODO: can we find a better way to get this info into the log?  The caller is at app level,
