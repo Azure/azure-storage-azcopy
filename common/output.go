@@ -103,7 +103,7 @@ func GetStandardInitOutputBuilder(jobID string, logFileLocation string, isCleanu
 
 		var sb strings.Builder
 		if isCleanupJob {
-			cleanupHeader := "(" + cleanupMessage + " with jobID " + jobID
+			cleanupHeader := "(" + cleanupMessage + " with cleanup jobID " + jobID
 			sb.WriteString(strings.Repeat("-", len(cleanupHeader)) + "\n")
 			sb.WriteString(cleanupHeader)
 		} else {

@@ -355,13 +355,14 @@ All the usual authentication types are supported, however the most convenient ap
 to create an empty container with a SAS token and use SAS authentication.
 `
 
-const benchCmdExample = `Run a benchmark uploading 8 files, each 100 MiB in size (suitable for benchmarking on a modest-sized network, e.g. 100 Mbps):'
-- azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 8 --size-per-file 100M
+const benchCmdExample = `Run a benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
+- azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>"
 
-Run a benchmark uploading 100 files, each 1 GiB in size: (suitable for benchmarking on a fast network, e.g. 10 Gbps):'
+Run a benchmark uploading 100 files, each 2 GiB in size: (suitable for benchmarking on a fast network, e.g. 10 Gbps):'
 - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --size-per-file 2G
 
 Same as above, but this time use 50,000 files, each 8 MiB in size and compute their MD5 hashes (the same way that --put-md5 does
-in the copy command):
+in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
+selected file count and size:
 - azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
 `

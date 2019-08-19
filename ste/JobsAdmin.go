@@ -143,18 +143,18 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	}
 
 	ja := &jobsAdmin{
-		concurrency:        concurrency,
-		logger:             common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
-		jobIDToJobMgr:      newJobIDToJobMgr(),
-		logDir:             azcopyLogPathFolder,
-		planDir:            azcopyJobPlanFolder,
-		pacer:              pacer,
-		slicePool:          common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
-		cacheLimiter:       common.NewCacheLimiter(maxRamBytesToUse),
-		fileCountLimiter:   common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
-		appCtx:             appCtx,
-		commandLineMbpsCap: targetRateInMegaBitsPerSec,
-		providePerfAdvice:  providePerfAdvice,
+		concurrency:              concurrency,
+		logger:                   common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
+		jobIDToJobMgr:            newJobIDToJobMgr(),
+		logDir:                   azcopyLogPathFolder,
+		planDir:                  azcopyJobPlanFolder,
+		pacer:                    pacer,
+		slicePool:                common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
+		cacheLimiter:             common.NewCacheLimiter(maxRamBytesToUse),
+		fileCountLimiter:         common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
+		appCtx:                   appCtx,
+		commandLineMbpsCap:       targetRateInMegaBitsPerSec,
+		provideBenchmarkResults:  providePerfAdvice,
 		coordinatorChannels: CoordinatorChannels{
 			partsChannel:     partsCh,
 			normalTransferCh: normalTransferCh,
@@ -278,10 +278,15 @@ func (ja *jobsAdmin) recordTuningCompleted() {
 
 	// Let the user know what we've done
 	msg := "Automatic concurrency tuning completed."
-	if ja.providePerfAdvice {
+	if ja.provideBenchmarkResults {
 		msg += " Recording of performance stats will begin now."
 	}
+	common.GetLifecycleMgr().Info("")
 	common.GetLifecycleMgr().Info(msg)
+	if ja.provideBenchmarkResults {
+		common.GetLifecycleMgr().Info("After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats.")
+	}
+	common.GetLifecycleMgr().Info("")
 	ja.LogToJobLog(msg)
 }
 
@@ -454,7 +459,7 @@ type jobsAdmin struct {
 	workaroundJobLoggingChannel chan string
 	concurrencyTuner            ConcurrencyTuner
 	commandLineMbpsCap          int64
-	providePerfAdvice           bool
+	provideBenchmarkResults     bool
 }
 
 type CoordinatorChannels struct {

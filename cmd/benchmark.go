@@ -308,8 +308,8 @@ func init() {
 	}
 	rootCmd.AddCommand(benchCmd)
 
-	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, sizePerFileParam, "", "size of each auto-generated data file. Must be "+sizeStringDescription)
-	benchCmd.PersistentFlags().UintVar(&raw.fileCount, fileCountParam, 0, "number of auto-generated data files to use")
+	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, sizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
+	benchCmd.PersistentFlags().UintVar(&raw.fileCount, fileCountParam, 75, "number of auto-generated data files to use")
 	_ = benchCmd.MarkFlagRequired(sizePerFileParam)
 	_ = benchCmd.MarkFlagRequired(fileCountParam)
 
