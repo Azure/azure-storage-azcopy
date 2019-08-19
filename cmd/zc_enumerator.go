@@ -90,6 +90,13 @@ type resourceTraverser interface {
 	// Thus, we only check the directory syntax on blob destinations. On sources, we check both syntax and remote, if syntax isn't a directory.
 }
 
+func initAccountMiddlemanProcessor(containerName string, processor objectProcessor) objectProcessor {
+	return func(object storedObject) error {
+		object.containerName = containerName
+		return processor(object)
+	}
+}
+
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
