@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	randomSliceLength = 256 * 1024
+	randomSliceLength = 1024 * 1024
 )
 
 var randomDataBytePool = NewMultiSizeSlicePool(randomSliceLength)
@@ -40,7 +40,9 @@ func NewRandomDataGenerator(length int64) CloseableReaderAt {
 		randBytes: randomDataBytePool.RentSlice(randomSliceLength),
 		randMu:    &sync.Mutex{}}
 
-	r.randGen.Read(r.randBytes)
+	if r.couldBeNewSlice(r.randBytes) {
+		r.randGen.Read(r.randBytes) // fill new arrays with random data
+	}
 	return r
 }
 
@@ -52,7 +54,14 @@ type randomDataGenerator struct {
 	readIterationCount int
 }
 
+func (r *randomDataGenerator) couldBeNewSlice(s []byte) bool {
+	return s[0] == 0
+}
+
 func (r *randomDataGenerator) Close() error {
+	if r.couldBeNewSlice(r.randBytes) {
+		r.randBytes[0] = 1 // so we know its not new when we get it back
+	}
 	randomDataBytePool.ReturnSlice(r.randBytes)
 	r.randBytes = nil
 	return nil
