@@ -44,7 +44,7 @@ func newSyncDownloadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerat
 	}
 
 	// verify that the traversers are targeting the same type of resources
-	_, isSingleBlob := sourceTraverser.getPropertiesIfSingleBlob()
+	_, isSingleBlob, _ := sourceTraverser.getPropertiesIfSingleBlob()
 	_, isSingleFile, _ := destinationTraverser.getInfoIfSingleFile()
 	if isSingleBlob != isSingleFile {
 		return nil, errors.New("sync must happen between source and destination of the same type: either blob <-> file, or container/virtual directory <-> local directory")
@@ -103,7 +103,7 @@ func newSyncUploadEnumerator(cca *cookedSyncCmdArgs) (enumerator *syncEnumerator
 	}
 
 	// verify that the traversers are targeting the same type of resources
-	_, isSingleBlob := destinationTraverser.getPropertiesIfSingleBlob()
+	_, isSingleBlob, _ := destinationTraverser.getPropertiesIfSingleBlob()
 	_, isSingleFile, _ := sourceTraverser.getInfoIfSingleFile()
 	if isSingleBlob != isSingleFile {
 		return nil, errors.New("sync must happen between source and destination of the same type: either blob <-> file, or container/virtual directory <-> local directory")

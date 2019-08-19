@@ -13,16 +13,16 @@ type ErrorEx struct {
 }
 
 // TODO: consider rolling MSRequestID into this, so that all places that use this can pick up, and log, the request ID too
-func (errex ErrorEx) ErrorCodeAndString() (int, string) {
+func (errex ErrorEx) ErrorCodeAndString() (string, int, string) {
 	switch e := interface{}(errex.error).(type) {
 	case azblob.StorageError:
-		return e.Response().StatusCode, e.Response().Status
+		return string(e.ServiceCode()), e.Response().StatusCode, e.Response().Status
 	case azfile.StorageError:
-		return e.Response().StatusCode, e.Response().Status
+		return string(e.ServiceCode()), e.Response().StatusCode, e.Response().Status
 	case azbfs.StorageError:
-		return e.Response().StatusCode, e.Response().Status
+		return string(e.ServiceCode()), e.Response().StatusCode, e.Response().Status
 	default:
-		return 0, errex.Error()
+		return "", 0, errex.Error()
 	}
 }
 
