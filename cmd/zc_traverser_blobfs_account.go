@@ -27,7 +27,6 @@ import (
 	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
@@ -54,19 +53,19 @@ func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []o
 		}
 
 		for _, v := range resp.Filesystems {
-			if t.fileSystemPattern != "" {
-				if ok, err := filepath.Match(t.fileSystemPattern, v.Name); err != nil {
-					return err
-				} else if !ok {
-					continue
-				}
-			}
-
 			var fsName string
 			if v.Name != nil {
 				fsName = *v.Name
 			} else {
 				return errors.New("filesystem listing returned nil container names")
+			}
+
+			if t.fileSystemPattern != "" {
+				if ok, err := filepath.Match(t.fileSystemPattern, fsName); err != nil {
+					return err
+				} else if !ok {
+					continue
+				}
 			}
 
 			fileSystemURL := t.accountURL.NewFileSystemURL(fsName).URL()
