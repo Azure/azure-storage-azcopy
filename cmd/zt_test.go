@@ -522,6 +522,8 @@ func cleanFileAccount(c *chk.C, serviceURL azfile.ServiceURL) {
 
 		marker = resp.NextMarker
 	}
+
+	time.Sleep(time.Minute)
 }
 
 func getGenericCredentialForFile(accountType string) (*azfile.SharedKeyCredential, error) {
