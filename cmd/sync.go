@@ -39,9 +39,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// a max is set because we cannot buffer infinite amount of destination file info in memory
-const MaxNumberOfFilesAllowedInSync = 10000000
-
 type rawSyncCmdArgs struct {
 	src       string
 	dst       string

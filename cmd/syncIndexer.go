@@ -20,10 +20,6 @@
 
 package cmd
 
-import (
-	"fmt"
-)
-
 // the objectIndexer is essential for the generic sync enumerator to work
 // it can serve as a:
 // 		1. objectProcessor: accumulate a lookup map with given storedObjects
@@ -39,9 +35,8 @@ func newObjectIndexer() *objectIndexer {
 
 // process the given stored object by indexing it using its relative path
 func (i *objectIndexer) store(storedObject storedObject) (err error) {
-	if i.counter == MaxNumberOfFilesAllowedInSync {
-		return fmt.Errorf("the maxium number of file allowed in sync is: %v", MaxNumberOfFilesAllowedInSync)
-	}
+	// TODO we might buffer too much data in memory, figure out whether we should limit the max number of files
+	// TODO previously we used 10M as the max, but it was proven to be too small for some users
 
 	i.indexMap[storedObject.relativePath] = storedObject
 	i.counter += 1
