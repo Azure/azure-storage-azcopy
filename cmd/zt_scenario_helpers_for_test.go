@@ -221,6 +221,16 @@ func (s scenarioHelper) generateFileSharesAndFilesFromLists(c *chk.C, serviceURL
 	}
 }
 
+func (s scenarioHelper) generateFilesystemsAndFilesFromLists(c *chk.C, serviceURL azbfs.ServiceURL, fsList []string, fileList []string, data string) {
+	for _, filesystemName := range fsList {
+		fsURL := serviceURL.NewFileSystemURL(filesystemName)
+		_, err := fsURL.Create(ctx)
+		c.Assert(err, chk.IsNil)
+
+		s.generateBFSPathsFromList(c, fsURL, fileList)
+	}
+}
+
 func (s scenarioHelper) generateS3BucketsAndObjectsFromLists(c *chk.C, s3Client *minio.Client, bucketList []string, objectList []string, data string) {
 	for _, bucketName := range bucketList {
 		err := s3Client.MakeBucket(bucketName, "")

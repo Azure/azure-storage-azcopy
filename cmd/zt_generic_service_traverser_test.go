@@ -5,8 +5,84 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
+
+func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk.C) {
+	bfssu := GetBFSSU()
+	bsu := getBSU() // Only used to clean up
+
+	// BlobFS is tested on the same account, therefore this is safe to clean up this way
+	cleanBlobAccount(c, bsu)
+
+	containerList := []string{
+		generateName("suchcontainermanystorage", 63),
+		generateName("containertwoelectricboogaloo", 63),
+		generateName("funnymemereference", 63),
+		generateName("gettingmeta", 63),
+	}
+
+	// convert containerList into a map for easy validation
+	cnames := map[string]bool{}
+	for _, v := range containerList {
+		cnames[v] = true
+	}
+
+	objectList := []string{
+		generateName("basedir", 63),
+		"allyourbase/" + generateName("arebelongtous", 63),
+		"sub1/sub2/" + generateName("", 63),
+		generateName("someobject", 63),
+	}
+
+	objectData := "Hello world!"
+
+	// Generate remote scenarios
+	scenarioHelper{}.generateFilesystemsAndFilesFromLists(c, bfssu, containerList, objectList, objectData)
+
+	// deferred container cleanup
+	defer func() {
+		for _, v := range containerList {
+			// create container URLs
+			blobContainer := bsu.NewContainerURL(v)
+			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
+		}
+	}()
+
+	// Generate local files to ensure behavior conforms to other traversers
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
+
+	// Create a local traversal
+	localTraverser := newLocalTraverser(dstDirName, true, true, func() {})
+
+	// Invoke the traversal with an indexer so the results are indexed for easy validation
+	localIndexer := newObjectIndexer()
+	err := localTraverser.traverse(localIndexer.store, nil)
+	c.Assert(err, chk.IsNil)
+
+	// construct a blob account traverser
+	blobFSPipeline := azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	rawBSU := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c).URL()
+	blobAccountTraverser := newBlobFSAccountTraverser(&rawBSU, blobFSPipeline, ctx, func() {})
+
+	// invoke the blob account traversal with a dummy processor
+	blobDummyProcessor := dummyProcessor{}
+	err = blobAccountTraverser.traverse(blobDummyProcessor.process, nil)
+	c.Assert(err, chk.IsNil)
+
+	c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*len(containerList))
+
+	for _, storedObject := range blobDummyProcessor.record {
+		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, cnamePresent := cnames[storedObject.containerName]
+
+		c.Assert(present, chk.Equals, true)
+		c.Assert(cnamePresent, chk.Equals, true)
+		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+	}
+}
 
 func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	bsu := getBSU()
@@ -23,6 +99,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	if testS3 {
 		cleanS3Account(c, s3Client)
 	}
+	// BlobFS is tested on the same account, therefore this is safe to clean up this way
 	cleanBlobAccount(c, bsu)
 	cleanFileAccount(c, fsu)
 
