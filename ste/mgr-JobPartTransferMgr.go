@@ -485,7 +485,7 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 		jptm.Cancel()
 		serviceCode, status, msg := ErrorEx{err}.ErrorCodeAndString()
 
-		if serviceCode == "BlobUsesCustomerSpecifiedEncryption" {
+		if serviceCode == common.CPK_ERROR_SERVICE_CODE {
 			cpkAccessFailureLogGLCM.Do(func() {
 				common.GetLifecycleMgr().Info("One or more transfers have failed because AzCopy currently does not support blobs encrypted with customer provided keys (CPK). " +
 					"If you wish to access CPK-encrypted blobs, we recommend using one of the Azure Storage SDKs to do so.")

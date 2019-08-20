@@ -57,7 +57,7 @@ func (t *blobTraverser) isDirectory(isSource bool) bool {
 
 	if stgErr, ok := err.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
-		if stgErr.ServiceCode() == "BlobUsesCustomerSpecifiedEncryption" {
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
 			return true
 		}
 	}
@@ -86,8 +86,8 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 
 	if stgErr, ok := propErr.(azblob.StorageError); ok {
 		// We know for sure this is a single blob still, let it walk on through to the traverser.
-		if stgErr.ServiceCode() == "BlobUsesCustomerSpecifiedEncryption" {
-			return errors.New("this blob uses customer provided encryption keys (CPK). at the moment, AzCopy does not support CPK-encrypted blobs. " +
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
 				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
 		}
 	}
