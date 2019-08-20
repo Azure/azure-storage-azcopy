@@ -162,12 +162,12 @@ func (s *genericTraverserSuite) TestWalkWithSymlinksToParentAndChild(c *chk.C) {
 	defer os.RemoveAll(root1)
 	root2 := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(root2)
-
 	child, err := ioutil.TempDir(root2, "childdir")
 	c.Assert(err, chk.IsNil)
 
 	scenarioHelper{}.generateLocalFilesFromList(c, root2, fileNames)
 	scenarioHelper{}.generateLocalFilesFromList(c, child, fileNames)
+
 	c.Assert(os.Symlink(root2, filepath.Join(root1, "toroot")), chk.IsNil)
 	c.Assert(os.Symlink(child, filepath.Join(root1, "tochild")), chk.IsNil)
 

@@ -102,7 +102,7 @@ type rawCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      string
-	s2sCheckLength           bool
+	CheckLength              bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
 	blockBlobTier   string
@@ -259,7 +259,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 				}
 			}
 
-			// This occurs much earlier than the other include or exclude filters. I'd _like_ to move it closer in cook() once we get rid of the other bits of list-of-files.
+			// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
 			includePathList := raw.parsePatterns(raw.includePath)
 
 			for _, v := range includePathList {
@@ -380,10 +380,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Do not check for an error on this. Leaving this as true doesn't hurt, as the event never triggers unless it's an s2s copy anyway.
-	// This is thanks to a type assertion attempt.
-	// Atop this, leaving this on board for up/downloads in the future would be useful.
-	cooked.s2sCheckLength = raw.s2sCheckLength
+	cooked.CheckLength = raw.CheckLength
 
 	cooked.background = raw.background
 	cooked.acl = raw.acl
@@ -402,7 +399,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
@@ -441,7 +438,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
-		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
@@ -482,10 +479,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
 		}
-		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
@@ -608,7 +605,7 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
-	s2sCheckLength           bool
+	CheckLength              bool
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
@@ -1278,7 +1275,7 @@ func init() {
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection of VHD and VHDX files as page blobs when no source blob type is available. (For instance, a VHD from local/Azure Files/S3 is detected as a page blob, but a VHD from blob would be detected as its source type)")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
@@ -1297,7 +1294,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sCheckLength, "s2s-check-length", true, "Check the length of a file transferred S2S after the transfer. If there is a mismatch, fail the transfer.")
+	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+
