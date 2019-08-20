@@ -83,6 +83,7 @@ type rawCopyCmdArgs struct {
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
+	stripTopDir       bool
 	followSymlinks    bool
 	withSnapshots     bool
 	// forceWrite flag is used to define the User behavior
@@ -182,10 +183,18 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
+	cooked.stripTopDir = raw.stripTopDir
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
+
+	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
+	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
+	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.source for wildcards.
+	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source, "*") {
+		cooked.stripTopDir = true
+	}
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
@@ -217,9 +226,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Note: new implementation of list-of-files only works for remove command and upload for now.
-	// * -> Garbage and * -> Local work under this implementation
-	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() {
+	// * -> Garbage, Local -> *, and * -> Local work under this implementation of list of files
+	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Local() {
 		// This handles both list-of-files and include-path as a list enumerator.
 		// This saves us time because we know *exactly* what we're looking for right off the bat.
 		// Note that exclude-path is handled as a filter unlike include-path.
@@ -313,7 +321,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// TODO: When further in the refactor, just check this against a map
-	if cooked.fromTo.From() != common.ELocation.Local() {
+	if cooked.fromTo.From() != common.ELocation.Local() && cooked.fromTo.To() != common.ELocation.Local() {
 		// initialize the include map which contains the list of files to be included
 		// parse the string passed in include flag
 		// more than one file are expected to be separated by ';'
@@ -578,6 +586,7 @@ type cookedCopyCmdArgs struct {
 	listOfFilesToCopy  []string
 	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
 	recursive          bool
+	stripTopDir        bool
 	followSymlinks     bool
 	withSnapshots      bool
 	forceWrite         bool
@@ -847,10 +856,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bUrl := blobParts.URL()
 		cca.source = bUrl.String()
 
-		// set the clean source root
-		bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		// set the clean source root for S2S
+		if cca.fromTo.To() != common.ELocation.Local() {
+			bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		}
 		jobPartOrder.SourceRoot = bUrl.String()
-
 	case common.ELocation.File():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -866,8 +876,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fUrl := fileParts.URL()
 		cca.source = fUrl.String()
 
-		// set the clean source root
-		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		// set the clean source root for S2S
+		if cca.fromTo.To() != common.ELocation.Local() {
+			fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		}
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
@@ -883,7 +895,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 
 		// set the clean source root
-		bfsUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bfsUrl.Path)
 		jobPartOrder.SourceRoot = bfsUrl.String()
 
 	case common.ELocation.Local():
@@ -947,7 +958,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
-		cca.destination = cleanLocalPath(cca.destination)
+		var result string
+		result, err = filepath.Abs(cca.destination)
+
+		if err != nil {
+			return err
+		}
+
+		cca.destination = cleanLocalPath(result)
 	}
 
 	// set the root destination after it's been cleaned
@@ -958,7 +976,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(),
 		common.EFromTo.LocalBlobFS(),
-		common.EFromTo.LocalFile():
+		common.EFromTo.LocalFile(),
+		common.EFromTo.BlobLocal(),
+		common.EFromTo.FileLocal(),
+		common.EFromTo.BlobFSLocal():
 		var e *copyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {
@@ -966,15 +987,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		err = e.enumerate()
-	case common.EFromTo.BlobLocal():
-		e := copyDownloadBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.FileLocal():
-		e := copyDownloadFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.BlobFSLocal():
-		e := copyDownloadBlobFSEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
 	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
@@ -1246,6 +1258,7 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
+	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
