@@ -111,8 +111,13 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		panic("initJobsAdmin was already called once")
 	}
 
-	// let our CPU monitor self-calibrate before we start doing any real work
-	cpuMon := common.NewCalibratedCpuUsageMonitor()
+	cpuMon := common.NewNullCpuMonitor()
+	// One day, we might monitor CPU as the app runs in all cases (and report CPU as possible constraint like we do with disk).
+	// But for now, we only monitor it when tuning the GR pool size.
+	if concurrency.AutoTuneMainPool() && concurrency.CheckCpuWhenTuing.Value {
+		// let our CPU monitor self-calibrate BEFORE we start doing any real work TODO: remove if we switch to gopsutil
+		cpuMon = common.NewCalibratedCpuUsageMonitor()
+	}
 
 	const channelSize = 100000
 	// PartsChannelSize defines the number of JobParts which can be placed into the
@@ -161,7 +166,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		slicePool:               common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:            common.NewCacheLimiter(maxRamBytesToUse),
 		fileCountLimiter:        common.NewCacheLimiter(int64(concurrency.MaxOpenDownloadFiles)),
-		cpuMonitor:       cpuMon,
+		cpuMonitor:              cpuMon,
 		appCtx:                  appCtx,
 		commandLineMbpsCap:      targetRateInMegaBitsPerSec,
 		provideBenchmarkResults: providePerfAdvice,
@@ -326,7 +331,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 	throughputMonitoringInterval := initialMonitoringInterval
 
 	// get initial pool size
-	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1)
+	targetConcurrency, reason := tuner.GetRecommendedConcurrency(-1, ja.cpuMonitor.CPUContentionExists())
 	go func() {
 		time.Sleep(initialMonitoringInterval / 2) // otherwise this message ends up as the very first output from AzCopy. Which looks strange
 		logConcurrency(targetConcurrency, reason)
@@ -365,7 +370,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 					if megabitsPerSec > 11000 {
 						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period if over 10 Gbps, since in some tests it takes a little longer to get a good average
 					}
-					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec))
+					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec), ja.cpuMonitor.CPUContentionExists())
 					logConcurrency(targetConcurrency, reason)
 				} else {
 					// we weren't in steady state before, but given that throughputMonitoringInterval has now elapsed,
@@ -470,7 +475,7 @@ type jobsAdmin struct {
 	concurrencyTuner            ConcurrencyTuner
 	commandLineMbpsCap          int64
 	provideBenchmarkResults     bool
-	cpuMonitor          common.CPUMonitor
+	cpuMonitor                  common.CPUMonitor
 }
 
 type CoordinatorChannels struct {

@@ -40,6 +40,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 	concNotEnoughTime := EAdviceType.ConcurrencyNotEnoughTime()
 	concNotTuned := EAdviceType.ConcurrencyNotTuned()
 	concHitMax := EAdviceType.ConcurrencyHitUpperLimit()
+	concCpu := EAdviceType.ConcurrencyHighCpu()
 	netIsBottleneck := EAdviceType.NetworkIsBottleneck()
 	netOK := EAdviceType.NetworkNotBottleneck()
 	mbpsCapped := EAdviceType.MbpsCapped()
@@ -68,18 +69,19 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		// {"thisIsTheCaseName", /* Begin inputs */ 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 1000, 0, /* Begin expected outputs */ netIsBottleneck, none, none, none},
 		// These initial cases test just one thing at a time (below we test some interactions)
 		{"simpleBandwidth", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 100, 0, netIsBottleneck, none, none, none},
+		{"concHighCpu    ", 0, 0, 0, 0, concurrencyReasonHighCpu, 0, 100, 0, concCpu, none, none, none}, // only difference from netIsBottleneck is that tuner ran out of CPU
 		{"simpleIOPS     ", 7, 0, 0, 0, concurrencyReasonAtOptimum, 0, 1000, 0, iops, netOK, none, none},
 		{"simpleTput     ", 0, 6, 0, 0, concurrencyReasonAtOptimum, 0, 1000, 0, throughput, netOK, none, none},
 		{"otherThrottling", 0, 0, 8, 0, concurrencyReasonAtOptimum, 0, 1000, 0, otherBusy, netOK, none, none},
 		{"networkErrors  ", 0, 0, 0, 7, concurrencyReasonAtOptimum, 0, 1000, 0, netErrors, netOK, none, none},
 		{"cappedMbps     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 1000, 950, 0, mbpsCapped, netOK, none, none},
-		{"concNotTuned   ", 0, 0, 0, 0, concurrencyReasonNone, 0, 1000, 0, concNotTuned, none, none, none},
+		{"concNotTuned   ", 0, 0, 0, 0, concurrencyReasonTunerDisabled, 0, 1000, 0, concNotTuned, none, none, none},
 		{"concHitLimit   ", 0, 0, 0, 0, concurrencyReasonHitMax, 0, 1000, 0, concHitMax, none, none, none},
 		{"concOutOfTime1 ", 0, 0, 0, 0, concurrencyReasonSeeking, 0, 1000, 0, concNotEnoughTime, none, none, none},
 		{"concOutOfTime2 ", 0, 0, 0, 0, concurrencyReasonBackoff, 0, 1000, 0, concNotEnoughTime, none, none, none},
 		{"concOutOfTime3 ", 0, 0, 0, 0, concurrencyReasonInitial, 0, 1000, 0, concNotEnoughTime, none, none, none},
-		{"notVmSize      ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 399, 1, netIsBottleneck, none, none, none},
-		{"vmSize1        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 401, 1, vmSize, none, none, none},
+		{"notVmSize      ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 374, 1, netIsBottleneck, none, none, none},
+		{"vmSize1        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 376, 1, vmSize, none, none, none},
 		{"vmSize2        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 10500, 16, vmSize, none, none, none},
 
 		// these test cases look at combinations

@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
 	"time"
 )
@@ -28,7 +29,7 @@ import (
 type ConcurrencyTuner interface {
 	// GetRecommendedConcurrency is called repeatedly, at intervals decided by the caller,
 	// to compute recommended concurrency levels
-	GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string)
+	GetRecommendedConcurrency(currentMbps int, highCpuUsage bool) (newConcurrency int, reason string)
 
 	// RequestCallbackWhenStable lets interested parties ask the concurrency tuner to call them back when the tuner has reached a stable level
 	RequestCallbackWhenStable(callback func()) (callbackAccepted bool)
@@ -41,7 +42,7 @@ type nullConcurrencyTuner struct {
 	fixedValue int
 }
 
-func (n *nullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string) {
+func (n *nullConcurrencyTuner) GetRecommendedConcurrency(currentMbps int, highCpuUsage bool) (newConcurrency int, reason string) {
 	return n.fixedValue, concurrencyReasonFinished
 }
 
@@ -54,13 +55,17 @@ func (n *nullConcurrencyTuner) GetFinalState() (finalReason string, finalRecomme
 }
 
 type autoConcurrencyTuner struct {
-	mbps        chan int
-	concurrency chan struct {
-		v int
-		s string
+	observations chan struct {
+		mbps      int
+		isHighCpu bool
+	}
+	recommendations chan struct {
+		value  int
+		reason string
 	}
 	initialConcurrency  int
 	maxConcurrency      int
+	cpuMonitor          common.CPUMonitor
 	callbacksWhenStable chan func()
 	finalReason         string
 	finalConcurrency    int
@@ -70,10 +75,13 @@ type autoConcurrencyTuner struct {
 
 func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 	t := &autoConcurrencyTuner{
-		mbps: make(chan int),
-		concurrency: make(chan struct {
-			v int
-			s string
+		observations: make(chan struct {
+			mbps      int
+			isHighCpu bool
+		}),
+		recommendations: make(chan struct {
+			value  int
+			reason string
 		}),
 		initialConcurrency:  initial,
 		maxConcurrency:      max,
@@ -89,14 +97,19 @@ func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 // to run unit tests very quickly. It's up to the caller (in non-test situations) to
 // call at an appropriate frequency such that the currentMbps values are sufficiently accurate
 // (E.g. calling continuously doesn't give enough time to measure actual speeds)
-func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int) (newConcurrency int, reason string) {
+func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int, highCpuUsage bool) (newConcurrency int, reason string) {
 	if currentMbps < 0 {
 		return t.initialConcurrency, concurrencyReasonInitial
 	} else {
 		// push value into worker, and get its result
-		t.mbps <- currentMbps
-		result := <-t.concurrency
-		return result.v, result.s
+		t.observations <- struct {
+			mbps      int
+			isHighCpu bool
+		}{currentMbps, highCpuUsage}
+
+		result := <-t.recommendations
+
+		return result.value, result.reason
 	}
 }
 
@@ -107,6 +120,7 @@ const (
 	concurrencyReasonSeeking       = "seeking optimum"
 	concurrencyReasonBackoff       = "backing off"
 	concurrencyReasonHitMax        = "hit max concurrency limit"
+	concurrencyReasonHighCpu       = "high CPU load, so won't increase concurrency further"
 	concurrencyReasonAtOptimum     = "at optimum"
 	concurrencyReasonFinished      = "tuning already finished (or never started)"
 )
@@ -120,11 +134,12 @@ func (t *autoConcurrencyTuner) worker() {
 	multiplier := float32(initialMultiplier)
 	concurrency := float32(t.initialConcurrency)
 	atMax := false
+	highCpu := false
 	sawHighMultiGbps := false
 	lastReason := concurrencyReasonNone
 
 	// get initial baseline throughput
-	lastSpeed := t.getCurrentSpeed()
+	lastSpeed, _ := t.getCurrentSpeed()
 
 	for { // todo, add the conditions here
 		rateChangeReason := concurrencyReasonSeeking
@@ -143,7 +158,7 @@ func (t *autoConcurrencyTuner) worker() {
 
 		// action the increase and measure its effect
 		lastReason = t.setConcurrency(concurrency, rateChangeReason)
-		lastSpeed = t.getCurrentSpeed()
+		lastSpeed, highCpu = t.getCurrentSpeed()
 		if lastSpeed > 10000 {
 			sawHighMultiGbps = true
 		}
@@ -158,7 +173,7 @@ func (t *autoConcurrencyTuner) worker() {
 		if lastSpeed > desiredNewSpeed || probeHigherRegardless {
 			// Our concurrency change gave the hoped-for speed increase, so loop around and see if another increase will also work,
 			// unless already at max
-			if atMax {
+			if atMax || highCpu {
 				break
 			}
 		} else if dontBackoffRegardless {
@@ -175,7 +190,7 @@ func (t *autoConcurrencyTuner) worker() {
 				break // no point in tuning any more
 			} else {
 				lastReason = t.setConcurrency(concurrency, concurrencyReasonBackoff)
-				lastSpeed = t.getCurrentSpeed() // must re-measure immediately after backing off
+				lastSpeed, _ = t.getCurrentSpeed() // must re-measure immediately after backing off
 			}
 		}
 	}
@@ -184,9 +199,13 @@ func (t *autoConcurrencyTuner) worker() {
 		// provide no special "we found the best value" result, because actually we possibly didn't find it, we just hit the max,
 		// and we've already notified caller of that reason, when we tied using the max
 	} else {
-		// provide the final value once with a reason that shows we've arrived at what we believe to be the optimal value
-		lastReason = t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
-		_ = t.getCurrentSpeed() // read from the channel
+		// provide the final value once with a reason why its our final value
+		if highCpu {
+			lastReason = t.setConcurrency(concurrency, concurrencyReasonHighCpu)
+		} else {
+			lastReason = t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
+		}
+		_, _ = t.getCurrentSpeed() // read from the channel
 	}
 
 	t.storeFinalState(lastReason, concurrency)
@@ -195,23 +214,24 @@ func (t *autoConcurrencyTuner) worker() {
 	// now just provide an "inactive" value for ever
 	for {
 		_ = t.setConcurrency(concurrency, concurrencyReasonFinished)
-		_ = t.getCurrentSpeed() // read from the channel
-		t.signalStability()     // in case anyone new has "subscribed"
+		_, _ = t.getCurrentSpeed() // read from the channel
+		t.signalStability()        // in case anyone new has "subscribed"
 	}
 }
 
 func (t *autoConcurrencyTuner) setConcurrency(mbps float32, reason string) string {
-	t.concurrency <- struct {
-		v int
-		s string
-	}{v: int(mbps), s: reason}
+	t.recommendations <- struct {
+		value  int
+		reason string
+	}{int(mbps), reason}
 	return reason
 }
 
-func (t *autoConcurrencyTuner) getCurrentSpeed() (mbps float32) {
+func (t *autoConcurrencyTuner) getCurrentSpeed() (mbps float32, isHighCpu bool) {
 	// assume that any necessary time delays, to measure or to wait for stablization,
 	// are done by the caller of GetRecommendedConcurrency
-	return float32(<-t.mbps)
+	ob := <-t.observations
+	return float32(ob.mbps), ob.isHighCpu
 }
 
 func (t *autoConcurrencyTuner) signalStability() {

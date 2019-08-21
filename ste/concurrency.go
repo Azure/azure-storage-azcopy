@@ -59,6 +59,36 @@ func tryNewConfiguredInt(envVar common.EnvironmentVariable) *ConfiguredInt {
 	return nil
 }
 
+// ConfiguredBool is a boolean which may be optionally configured by user through an environment variable
+type ConfiguredBool struct {
+	Value             bool
+	IsUserSpecified   bool
+	EnvVarName        string
+	DefaultSourceDesc string
+}
+
+func (b *ConfiguredBool) GetDescription() string {
+	if b.IsUserSpecified {
+		return fmt.Sprintf("Based on %s environment variable", b.EnvVarName)
+	} else {
+		return fmt.Sprintf("Based on %s. Set %s environment variable to true or false override", b.DefaultSourceDesc, b.EnvVarName)
+	}
+}
+
+// tryNewConfiguredBool populates a ConfiguredInt from an environment variable, or returns nil if env var is not set
+func tryNewConfiguredBool(envVar common.EnvironmentVariable) *ConfiguredBool {
+	override := common.GetLifecycleMgr().GetEnvironmentVariable(envVar)
+	if override != "" {
+		val, err := strconv.ParseBool(override)
+		if err != nil {
+			log.Fatalf("error parsing the env %s %q failed with error %v",
+				envVar.Name, override, err)
+		}
+		return &ConfiguredBool{bool(val), true, envVar.Name, ""}
+	}
+	return nil
+}
+
 // ConcurrencySettings stores the set of related numbers that govern concurrency levels in the STE
 type ConcurrencySettings struct {
 
@@ -84,6 +114,9 @@ type ConcurrencySettings struct {
 	// transfer initiation.
 	MaxOpenDownloadFiles int
 	// TODO: consider whether we should also use this (renamed to( MaxOpenFiles) for uploads, somehow (see command above). Is there any actual value in that? Maybe only highly handle-constrained Linux environments?
+
+	// CheckCpuWhenTuing determines whether CPU usage should be taken into account when auto-tuning
+	CheckCpuWhenTuing *ConfiguredBool
 }
 
 // AutoTuneMainPool says whether the main pool size should by dynamically tuned
@@ -106,6 +139,7 @@ func NewConcurrencySettings(maxFileAndSocketHandles int, requestAutoTuneGRs bool
 		MaxMainPoolSize:            maxMainPoolSize,
 		TransferInitiationPoolSize: getTransferInitiationPoolSize(),
 		MaxOpenDownloadFiles:       getMaxOpenPayloadFiles(maxFileAndSocketHandles, maxMainPoolSize.Value),
+		CheckCpuWhenTuing:          getCheckCpuUsageWhenTuning(),
 	}
 
 	// Set the max idle connections that we allow. If there are any more idle connections
@@ -179,6 +213,15 @@ func getTransferInitiationPoolSize() *ConfiguredInt {
 	}
 
 	return &ConfiguredInt{defaultTransferInitiationPoolSize, false, envVar.Name, "hard-coded default"}
+}
+
+func getCheckCpuUsageWhenTuning() *ConfiguredBool {
+	envVar := common.EEnvironmentVariable.AutoTuneToCpu()
+	if c := tryNewConfiguredBool(envVar); c != nil {
+		return c
+	}
+
+	return &ConfiguredBool{true, false, envVar.Name, "hard-coded default"}
 }
 
 // getMaxOpenFiles finds a number of concurrently-openable files
