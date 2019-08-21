@@ -9,6 +9,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/common"
 )
 
+// Separated the ADLS tests from others as ADLS can't safely be tested on the same storage account
 func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithManyObjects(c *chk.C) {
 	bfssu := GetBFSSU()
 	bsu := getBSU() // Only used to clean up
@@ -215,6 +216,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	bsu := getBSU()
 	fsu := getFSU()
+	bfssu := GetBFSSU()
 	testS3 := false // Only test S3 if credentials are present.
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
 	if err == nil {
@@ -237,10 +239,23 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 		generateName("objectmatchtwo", 63),
 	}
 
+	bfsContainerList := []string{
+		generateName("bfsmatchobjectmatchone", 63),
+		generateName("bfsmatchobjectnomatchone", 63),
+		generateName("bfsmatchobjectnomatchtwo", 63),
+		generateName("bfsmatchobjectmatchtwo", 63),
+	}
+
 	// load only matching container names in
 	cnames := map[string]bool{
 		containerList[0]: true,
 		containerList[3]: true,
+	}
+
+	// load matching bfs container names in
+	bfscnames := map[string]bool{
+		bfsContainerList[0]: true,
+		bfsContainerList[3]: true,
 	}
 
 	objectList := []string{
@@ -255,6 +270,8 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	// Generate remote scenarios
 	scenarioHelper{}.generateBlobContainersAndBlobsFromLists(c, bsu, containerList, objectList, objectData)
 	scenarioHelper{}.generateFileSharesAndFilesFromLists(c, fsu, containerList, objectList, objectData)
+	// Subject ADLS tests to a different container name prefix to avoid conflicts with blob
+	scenarioHelper{}.generateFilesystemsAndFilesFromLists(c, bfssu, bfsContainerList, objectList, objectData)
 	if testS3 {
 		scenarioHelper{}.generateS3BucketsAndObjectsFromLists(c, s3Client, containerList, objectList, objectData)
 	}
@@ -309,6 +326,16 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	err = fileAccountTraverser.traverse(fileDummyProcessor.process, nil)
 	c.Assert(err, chk.IsNil)
 
+	// construct a ADLS account traverser
+	blobFSPipeline := azbfs.NewPipeline(azbfs.NewAnonymousCredential(), azbfs.PipelineOptions{})
+	rawBFSSU := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c).URL()
+	rawBFSSU.Path = "/bfsmatchobjectmatch*" // set the container name to contain a wildcard and not conflict with blob
+	bfsAccountTraverser := newBlobFSAccountTraverser(&rawBFSSU, blobFSPipeline, ctx, func() {})
+
+	// invoke the blobFS account traversal with a dummy processor
+	bfsDummyProcessor := dummyProcessor{}
+	err = bfsAccountTraverser.traverse(bfsDummyProcessor.process, nil)
+
 	var s3DummyProcessor dummyProcessor
 	if testS3 {
 		// construct a s3 service traverser
@@ -344,78 +371,12 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 		c.Assert(cnamePresent, chk.Equals, true)
 		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
-}
 
-func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithWildcards(c *chk.C) {
-	bsu := getBSU()
-	bfssu := GetBFSSU()
-
-	// BlobFS is tested on the same account, therefore this is safe to clean up this way
-	cleanBlobAccount(c, bsu)
-
-	containerList := []string{
-		generateName("objectmatchone", 63),
-		generateName("objectnomatchone", 63),
-		generateName("objectnomatchtwo", 63),
-		generateName("objectmatchtwo", 63),
-	}
-
-	// load only matching container names in
-	cnames := map[string]bool{
-		containerList[0]: true,
-		containerList[3]: true,
-	}
-
-	objectList := []string{
-		generateName("basedir", 63),
-		"allyourbase/" + generateName("arebelongtous", 63),
-		"sub1/sub2/" + generateName("", 63),
-		generateName("someobject", 63),
-	}
-
-	objectData := "Hello world!"
-
-	// Generate remote scenarios
-	scenarioHelper{}.generateFilesystemsAndFilesFromLists(c, bfssu, containerList, objectList, objectData)
-
-	// deferred container cleanup
-	defer func() {
-		for _, v := range containerList {
-			// create container URLs
-			blobContainer := bsu.NewContainerURL(v)
-			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
-		}
-	}()
-
-	// Generate local files to ensure behavior conforms to other traversers
-	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
-	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
-
-	// Create a local traversal
-	localTraverser := newLocalTraverser(dstDirName, true, true, func() {})
-
-	// Invoke the traversal with an indexer so the results are indexed for easy validation
-	localIndexer := newObjectIndexer()
-	err := localTraverser.traverse(localIndexer.store, nil)
-	c.Assert(err, chk.IsNil)
-
-	// construct a blob account traverser
-	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
-	rawBSU := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c).URL()
-	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	bfsAccountTraverser := newBlobFSAccountTraverser(&rawBSU, blobPipeline, ctx, func() {})
-
-	// invoke the blob account traversal with a dummy processor
-	bfsDummyProcessor := dummyProcessor{}
-	err = bfsAccountTraverser.traverse(bfsDummyProcessor.process, nil)
-	c.Assert(err, chk.IsNil)
-
-	// Only two containers should match.
+	// Test ADLSG2 separately due to different container naming
 	c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
-
 	for _, storedObject := range bfsDummyProcessor.record {
 		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
-		_, cnamePresent := cnames[storedObject.containerName]
+		_, cnamePresent := bfscnames[storedObject.containerName]
 
 		c.Assert(present, chk.Equals, true)
 		c.Assert(cnamePresent, chk.Equals, true)
