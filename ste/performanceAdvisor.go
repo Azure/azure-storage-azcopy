@@ -267,10 +267,11 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 
 		case concurrencyReasonHighCpu:
 			addAdvice(EAdviceType.ConcurrencyHighCpu(),
-				"When auto-tuning concurrency, AzCopy experienced high CPU usage, so it did not try higher levels of concurrency. Therefore "+
-					"AzCopy may not have reached the full capacity of your network. Consider trying a machine or VM with more CPU power. "+
-					"(This is an experimental feature so, if you believe AzCopy was mistaken and CPU usage was actually fine, consider setting the environment variable %s "+
-					"to false, and re-run the benchmark test.)", common.EEnvironmentVariable.AutoTuneToCpu().Name)
+				"When auto-tuning concurrency, AzCopy experienced high CPU usage so "+
+					"AzCopy might not have reached the full capacity of your network. Consider trying a machine or VM with more CPU power. "+
+					"(This is an experimental feature so, if you believe AzCopy was mistaken and CPU usage was actually fine, you can turn "+
+					"off this message by setting the environment variable %s to false.)", common.EEnvironmentVariable.AutoTuneToCpu().Name)
+			// TODO: review whether we still need the environment variable, and adjust this message if we remove it
 		case concurrencyReasonTunerDisabled:
 			addAdvice(EAdviceType.ConcurrencyNotTuned(),
 				"Auto-tuning of concurrency was prevented by an environment variable setting a specific concurrency value. Therefore "+

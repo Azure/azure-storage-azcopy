@@ -75,9 +75,13 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_ConstrainedCp
 		{16, concurrencyReasonInitial, 1000, false},
 		{32, concurrencyReasonSeeking, 3000, false},
 		{64, concurrencyReasonSeeking, 6000, false},
-		{128, concurrencyReasonSeeking, 12000, true}, // running out of CPU here
-		{128, concurrencyReasonHighCpu, 12000, true}, // so it goes on higher, and reports why it stopped
-		{128, concurrencyReasonFinished, 12000, true},
+		{128, concurrencyReasonSeeking, 12000, true}, // high CPU doesn't stop it probing higher, but does change the final status
+		{256, concurrencyReasonSeeking, 20000, true},
+		{512, concurrencyReasonSeeking, 20000, true},
+		{256, concurrencyReasonBackoff, 20000, false},
+		{307, concurrencyReasonSeeking, 20000, false},
+		{256, concurrencyReasonHighCpu, 20000, false}, // different status reported here if we ever saw high CPU, even if we are not seeing it right now
+		{256, concurrencyReasonFinished, 20000, false},
 	}
 
 	s.runTest(c, steps, s.noMax())
@@ -120,12 +124,12 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround(c *
 	steps := []tunerStep{
 		{16, concurrencyReasonInitial, 1000, false},
 		{32, concurrencyReasonSeeking, 5000, false},
-		{64, concurrencyReasonSeeking, 10000, false},
-		// range of special handling for workaround is >= 32, < 256 & have seen over 10 Gbps
-		{128, concurrencyReasonSeeking, 10100, false},   // this would cause backoff if not for workaround
+		{64, concurrencyReasonSeeking, 10900, false},
+		// range of special handling for workaround is >= 32, < 256 & have (ever) seen over 11 Gbps
+		{128, concurrencyReasonSeeking, 11100, false},   // this would cause backoff if not for workaround
 		{256, concurrencyReasonSeeking, 10200, false},   // this would also cause backoff if not for workaround
 		{256, concurrencyReasonAtOptimum, 10200, false}, // due to workaround, it bails out instead of backing off
-		{256, concurrencyReasonFinished, 10200, false},  // in practice, if we hang around at this level of concurrency, we do get much higher throughputs (where supported)
+		{256, concurrencyReasonFinished, 10200, false},  // in practice, if we hang around at this level of concurrency, we do get higher throughput in at least some cases
 	}
 
 	s.runTest(c, steps, s.noMax())
