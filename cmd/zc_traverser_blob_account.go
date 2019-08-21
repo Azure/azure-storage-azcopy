@@ -1,4 +1,4 @@
-// Copyright © 2019 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -29,6 +29,7 @@ import (
 	"github.com/Azure/azure-storage-blob-go/azblob"
 )
 
+// Enumerates an entire blob account, looking into each matching container as it goes
 type blobAccountTraverser struct {
 	accountURL       azblob.ServiceURL
 	p                pipeline.Pipeline
@@ -63,7 +64,7 @@ func (t *blobAccountTraverser) traverse(processor objectProcessor, filters []obj
 			containerURL := t.accountURL.NewContainerURL(v.Name).URL()
 			containerTraverser := newBlobTraverser(&containerURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
 
-			middlemanProcessor := initAccountMiddlemanProcessor(v.Name, processor)
+			middlemanProcessor := initContainerDecorator(v.Name, processor)
 
 			err = containerTraverser.traverse(middlemanProcessor, filters)
 

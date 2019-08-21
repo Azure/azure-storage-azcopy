@@ -81,6 +81,7 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 	}
 
 	// Ignore *s in URLs and treat them as normal characters
+	// This is because * is both a valid URL path character and a valid portion of an object key in S3.
 	searchPrefix := t.s3URLParts.ObjectKey
 
 	// It's a bucket or virtual directory.

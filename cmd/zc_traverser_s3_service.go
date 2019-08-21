@@ -1,4 +1,4 @@
-// Copyright © 2019 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@ import (
 // As we discussed, the general architecture is that this is going to search a list of buckets and spawn s3Traversers for each bucket.
 // This will modify the storedObject format a slight bit to add a "container" parameter.
 
+// Enumerates an entire S3 account, looking into each matching bucket as it goes
 type s3ServiceTraverser struct {
 	ctx           context.Context
 	bucketPattern string
@@ -67,7 +68,7 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 				return err
 			}
 
-			middlemanProcessor := initAccountMiddlemanProcessor(v.Name, processor)
+			middlemanProcessor := initContainerDecorator(v.Name, processor)
 
 			err = bucketTraverser.traverse(middlemanProcessor, filters)
 

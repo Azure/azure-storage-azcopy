@@ -90,7 +90,7 @@ type resourceTraverser interface {
 	// Thus, we only check the directory syntax on blob destinations. On sources, we check both syntax and remote, if syntax isn't a directory.
 }
 
-func initAccountMiddlemanProcessor(containerName string, processor objectProcessor) objectProcessor {
+func initContainerDecorator(containerName string, processor objectProcessor) objectProcessor {
 	return func(object storedObject) error {
 		object.containerName = containerName
 		return processor(object)

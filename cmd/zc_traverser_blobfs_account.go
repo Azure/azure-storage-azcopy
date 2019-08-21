@@ -1,4 +1,4 @@
-// Copyright © 2019 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -33,6 +33,7 @@ import (
 
 // We don't allow S2S from BlobFS, but what this gives us is the ability for users to download entire accounts at once.
 // This is just added to create that feature parity.
+// Enumerates an entire blobFS account, looking into each matching filesystem as it goes
 type BlobFSAccountTraverser struct {
 	accountURL        azbfs.ServiceURL
 	p                 pipeline.Pipeline
@@ -71,7 +72,7 @@ func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []o
 			fileSystemURL := t.accountURL.NewFileSystemURL(fsName).URL()
 			fileSystemTraverser := newBlobFSTraverser(&fileSystemURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
 
-			middlemanProcessor := initAccountMiddlemanProcessor(fsName, processor)
+			middlemanProcessor := initContainerDecorator(fsName, processor)
 
 			err = fileSystemTraverser.traverse(middlemanProcessor, filters)
 
