@@ -120,7 +120,7 @@ const (
 	concurrencyReasonSeeking       = "seeking optimum"
 	concurrencyReasonBackoff       = "backing off"
 	concurrencyReasonHitMax        = "hit max concurrency limit"
-	concurrencyReasonHighCpu       = "high CPU load, so won't increase concurrency further"
+	concurrencyReasonHighCpu       = "at optimum, but may be limited by CPU"
 	concurrencyReasonAtOptimum     = "at optimum"
 	concurrencyReasonFinished      = "tuning already finished (or never started)"
 )
@@ -135,6 +135,7 @@ func (t *autoConcurrencyTuner) worker() {
 	concurrency := float32(t.initialConcurrency)
 	atMax := false
 	highCpu := false
+	everSawHighCpu := false
 	sawHighMultiGbps := false
 	lastReason := concurrencyReasonNone
 
@@ -159,8 +160,11 @@ func (t *autoConcurrencyTuner) worker() {
 		// action the increase and measure its effect
 		lastReason = t.setConcurrency(concurrency, rateChangeReason)
 		lastSpeed, highCpu = t.getCurrentSpeed()
-		if lastSpeed > 10000 {
+		if lastSpeed > 11000 {
 			sawHighMultiGbps = true
+		}
+		if highCpu {
+			everSawHighCpu = true // this doesn't stop us probing higher concurrency, since sometimes that works even when CPU looks high, but it does change the way we report the result
 		}
 
 		// workaround for variable throughput when targeting 20 Gbps account limit (concurrency > 32 and < 256 didn't seem to give stable throughput)
@@ -173,7 +177,7 @@ func (t *autoConcurrencyTuner) worker() {
 		if lastSpeed > desiredNewSpeed || probeHigherRegardless {
 			// Our concurrency change gave the hoped-for speed increase, so loop around and see if another increase will also work,
 			// unless already at max
-			if atMax || highCpu {
+			if atMax {
 				break
 			}
 		} else if dontBackoffRegardless {
@@ -200,7 +204,7 @@ func (t *autoConcurrencyTuner) worker() {
 		// and we've already notified caller of that reason, when we tied using the max
 	} else {
 		// provide the final value once with a reason why its our final value
-		if highCpu {
+		if everSawHighCpu {
 			lastReason = t.setConcurrency(concurrency, concurrencyReasonHighCpu)
 		} else {
 			lastReason = t.setConcurrency(concurrency, concurrencyReasonAtOptimum)
