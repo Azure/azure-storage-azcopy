@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"net/url"
-	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
@@ -52,7 +51,7 @@ func (t *blobAccountTraverser) traverse(processor objectProcessor, filters []obj
 		for _, v := range resp.ContainerItems {
 			// Match a pattern for the container name and the container name only.
 			if t.containerPattern != "" {
-				if ok, err := filepath.Match(t.containerPattern, v.Name); err != nil {
+				if ok, err := containerNameMatchesPattern(v.Name, t.containerPattern); err != nil {
 					// Break if the pattern is invalid
 					return err
 				} else if !ok {

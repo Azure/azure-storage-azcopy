@@ -24,7 +24,6 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
@@ -62,7 +61,7 @@ func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []o
 			}
 
 			if t.fileSystemPattern != "" {
-				if ok, err := filepath.Match(t.fileSystemPattern, fsName); err != nil {
+				if ok, err := containerNameMatchesPattern(fsName, t.fileSystemPattern); err != nil {
 					return err
 				} else if !ok {
 					continue

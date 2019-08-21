@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"net/url"
-	"path/filepath"
 
 	"github.com/minio/minio-go"
 
@@ -50,7 +49,7 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 		for _, v := range bucketInfo {
 			// Match a pattern for the bucket name and the bucket name only
 			if t.bucketPattern != "" {
-				if ok, err := filepath.Match(t.bucketPattern, v.Name); err != nil {
+				if ok, err := containerNameMatchesPattern(v.Name, t.bucketPattern); err != nil {
 					// Break if the pattern is invalid
 					return err
 				} else if !ok {

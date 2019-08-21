@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"net/url"
-	"path/filepath"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -52,7 +51,7 @@ func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []obj
 		for _, v := range resp.ShareItems {
 			// Match a pattern for the share name and the share name only
 			if t.sharePattern != "" {
-				if ok, err := filepath.Match(t.sharePattern, v.Name); err != nil {
+				if ok, err := containerNameMatchesPattern(v.Name, t.sharePattern); err != nil {
 					// Break if the pattern is invalid
 					return err
 				} else if !ok {
