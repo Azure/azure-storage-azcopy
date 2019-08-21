@@ -345,3 +345,80 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
 	}
 }
+
+func (s *genericTraverserSuite) TestBlobFSServiceTraverserWithWildcards(c *chk.C) {
+	bsu := getBSU()
+	bfssu := GetBFSSU()
+
+	// BlobFS is tested on the same account, therefore this is safe to clean up this way
+	cleanBlobAccount(c, bsu)
+
+	containerList := []string{
+		generateName("objectmatchone", 63),
+		generateName("objectnomatchone", 63),
+		generateName("objectnomatchtwo", 63),
+		generateName("objectmatchtwo", 63),
+	}
+
+	// load only matching container names in
+	cnames := map[string]bool{
+		containerList[0]: true,
+		containerList[3]: true,
+	}
+
+	objectList := []string{
+		generateName("basedir", 63),
+		"allyourbase/" + generateName("arebelongtous", 63),
+		"sub1/sub2/" + generateName("", 63),
+		generateName("someobject", 63),
+	}
+
+	objectData := "Hello world!"
+
+	// Generate remote scenarios
+	scenarioHelper{}.generateFilesystemsAndFilesFromLists(c, bfssu, containerList, objectList, objectData)
+
+	// deferred container cleanup
+	defer func() {
+		for _, v := range containerList {
+			// create container URLs
+			blobContainer := bsu.NewContainerURL(v)
+			_, _ = blobContainer.Delete(ctx, azblob.ContainerAccessConditions{})
+		}
+	}()
+
+	// Generate local files to ensure behavior conforms to other traversers
+	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
+	scenarioHelper{}.generateLocalFilesFromList(c, dstDirName, objectList)
+
+	// Create a local traversal
+	localTraverser := newLocalTraverser(dstDirName, true, true, func() {})
+
+	// Invoke the traversal with an indexer so the results are indexed for easy validation
+	localIndexer := newObjectIndexer()
+	err := localTraverser.traverse(localIndexer.store, nil)
+	c.Assert(err, chk.IsNil)
+
+	// construct a blob account traverser
+	blobPipeline := azblob.NewPipeline(azblob.NewAnonymousCredential(), azblob.PipelineOptions{})
+	rawBSU := scenarioHelper{}.getRawAdlsServiceURLWithSAS(c).URL()
+	rawBSU.Path = "/objectmatch*" // set the container name to contain a wildcard
+	bfsAccountTraverser := newBlobFSAccountTraverser(&rawBSU, blobPipeline, ctx, func() {})
+
+	// invoke the blob account traversal with a dummy processor
+	bfsDummyProcessor := dummyProcessor{}
+	err = bfsAccountTraverser.traverse(bfsDummyProcessor.process, nil)
+	c.Assert(err, chk.IsNil)
+
+	// Only two containers should match.
+	c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap)*2)
+
+	for _, storedObject := range bfsDummyProcessor.record {
+		correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
+		_, cnamePresent := cnames[storedObject.containerName]
+
+		c.Assert(present, chk.Equals, true)
+		c.Assert(cnamePresent, chk.Equals, true)
+		c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+	}
+}
