@@ -36,7 +36,7 @@ import (
 const (
 	defaultLogVerbosityForCopy       = "WARNING"
 	defaultOutputFormatForCopy       = "text"
-	defaultBlobTypeForCopy           = "None"
+	defaultBlobTypeForCopy           = "Detect"
 	defaultBlockBlobTierForCopy      = "None"
 	defaultPageBlobTierForCopy       = "None"
 	defaultS2SPreserveProperties     = true
@@ -50,7 +50,7 @@ var defaultS2SInvalideMetadataHandleOption = common.DefaultInvalidMetadataHandle
 
 func (s *cmdIntegrationSuite) SetUpSuite(c *chk.C) {
 	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
-
+  
 	// If S3 credentials aren't supplied, we're probably only trying to run Azure tests.
 	// As such, gracefully return here instead of cancelling every test because we couldn't clean up S3.
 	if err != nil {

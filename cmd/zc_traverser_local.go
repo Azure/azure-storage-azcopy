@@ -125,7 +125,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 
 				if _, ok := seenPaths[result]; !ok {
 					seenPaths[result] = true
-					seenPaths[slPath] = true // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because
+					seenPaths[slPath] = true // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 					walkQueue = append(walkQueue, walkItem{
 						fullPath:     result,
 						relativeBase: computedRelativePath,

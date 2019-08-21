@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -247,6 +248,18 @@ func epilogueWithCleanupDownload(jptm IJobPartTransferMgr, dl downloader, active
 
 	if dl != nil {
 		dl.Epilogue() // it can release resources here
+
+		if info.DestLengthValidation {
+			fi, err := os.Stat(info.Destination)
+
+			if err != nil {
+				jptm.FailActiveDownload("Download length check", err)
+			}
+
+			if fi.Size() != info.SourceSize {
+				jptm.FailActiveDownload("Download length check", errors.New("destination length did not match source length"))
+			}
+		}
 	}
 
 	// Preserve modified time

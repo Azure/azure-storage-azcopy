@@ -83,6 +83,7 @@ type rawCopyCmdArgs struct {
 	// filters from flags
 	listOfFilesToCopy string
 	recursive         bool
+	stripTopDir       bool
 	followSymlinks    bool
 	withSnapshots     bool
 	// forceWrite flag is used to define the User behavior
@@ -101,7 +102,7 @@ type rawCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      string
-	s2sCheckLength           bool
+	CheckLength              bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
 	blobType        string
 	blockBlobTier   string
@@ -182,10 +183,18 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.fromTo = fromTo
 
 	// copy&transform flags to type-safety
+	cooked.stripTopDir = raw.stripTopDir
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
 	cooked.forceWrite = raw.forceWrite
+
+	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
+	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
+	// Thus, we check for wildcards and instruct the processor to strip the top dir later instead of repeatedly checking cca.source for wildcards.
+	if fromTo.From() == common.ELocation.Local() && strings.Contains(cooked.source, "*") {
+		cooked.stripTopDir = true
+	}
 
 	cooked.blockSize, err = blockSizeInBytes(raw.blockSizeMB)
 	if err != nil {
@@ -217,9 +226,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Note: new implementation of list-of-files only works for remove command and upload for now.
-	// * -> Garbage and * -> Local work under this implementation
-	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() {
+	// * -> Garbage, Local -> *, and * -> Local work under this implementation of list of files
+	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Local() {
 		// This handles both list-of-files and include-path as a list enumerator.
 		// This saves us time because we know *exactly* what we're looking for right off the bat.
 		// Note that exclude-path is handled as a filter unlike include-path.
@@ -251,7 +259,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 				}
 			}
 
-			// This occurs much earlier than the other include or exclude filters. I'd _like_ to move it closer in cook() once we get rid of the other bits of list-of-files.
+			// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
 			includePathList := raw.parsePatterns(raw.includePath)
 
 			for _, v := range includePathList {
@@ -313,7 +321,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	// TODO: When further in the refactor, just check this against a map
-	if cooked.fromTo.From() != common.ELocation.Local() {
+	if cooked.fromTo.From() != common.ELocation.Local() && cooked.fromTo.To() != common.ELocation.Local() {
 		// initialize the include map which contains the list of files to be included
 		// parse the string passed in include flag
 		// more than one file are expected to be separated by ';'
@@ -372,10 +380,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// Do not check for an error on this. Leaving this as true doesn't hurt, as the event never triggers unless it's an s2s copy anyway.
-	// This is thanks to a type assertion attempt.
-	// Atop this, leaving this on board for up/downloads in the future would be useful.
-	cooked.s2sCheckLength = raw.s2sCheckLength
+	cooked.CheckLength = raw.CheckLength
 
 	cooked.background = raw.background
 	cooked.acl = raw.acl
@@ -394,7 +399,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	// Example2: for Blob to Local, follow-symlinks, blob-tier flags should not be provided with values.
 	switch cooked.fromTo {
 	case common.EFromTo.LocalBlobFS():
-		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
 	case common.EFromTo.LocalBlob():
@@ -433,7 +438,7 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.s2sSourceChangeValidation {
 			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
 		}
-		if cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
@@ -474,10 +479,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		}
 		// Disabling blob tier override, when copying block -> block blob or page -> page blob, blob tier will be kept,
 		// For s3 and file, only hot block blob tier is supported.
-		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.FileBlob() && cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from file to blob")
 		}
-		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() && cooked.blobType != common.EBlobType.None() {
+		if cooked.fromTo == common.EFromTo.S3Blob() && cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported while copying from s3 to blob")
 		}
 		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
@@ -578,6 +583,7 @@ type cookedCopyCmdArgs struct {
 	listOfFilesToCopy  []string
 	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
 	recursive          bool
+	stripTopDir        bool
 	followSymlinks     bool
 	withSnapshots      bool
 	forceWrite         bool
@@ -599,7 +605,7 @@ type cookedCopyCmdArgs struct {
 	preserveLastModifiedTime bool
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
-	s2sCheckLength           bool
+	CheckLength              bool
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
@@ -847,10 +853,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bUrl := blobParts.URL()
 		cca.source = bUrl.String()
 
-		// set the clean source root
-		bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		// set the clean source root for S2S
+		if cca.fromTo.To() != common.ELocation.Local() {
+			bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		}
 		jobPartOrder.SourceRoot = bUrl.String()
-
 	case common.ELocation.File():
 		fromUrl, err := url.Parse(cca.source)
 		if err != nil {
@@ -866,8 +873,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fUrl := fileParts.URL()
 		cca.source = fUrl.String()
 
-		// set the clean source root
-		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		// set the clean source root for S2S
+		if cca.fromTo.To() != common.ELocation.Local() {
+			fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		}
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
@@ -883,7 +892,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 
 		// set the clean source root
-		bfsUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bfsUrl.Path)
 		jobPartOrder.SourceRoot = bfsUrl.String()
 
 	case common.ELocation.Local():
@@ -947,7 +955,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bfsUrl := bfsParts.URL()
 		cca.destination = bfsUrl.String() // this escapes spaces in the destination
 	case common.ELocation.Local():
-		cca.destination = cleanLocalPath(cca.destination)
+		var result string
+		result, err = filepath.Abs(cca.destination)
+
+		if err != nil {
+			return err
+		}
+
+		cca.destination = cleanLocalPath(result)
 	}
 
 	// set the root destination after it's been cleaned
@@ -958,7 +973,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	switch cca.fromTo {
 	case common.EFromTo.LocalBlob(),
 		common.EFromTo.LocalBlobFS(),
-		common.EFromTo.LocalFile():
+		common.EFromTo.LocalFile(),
+		common.EFromTo.BlobLocal(),
+		common.EFromTo.FileLocal(),
+		common.EFromTo.BlobFSLocal():
 		var e *copyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {
@@ -966,15 +984,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		err = e.enumerate()
-	case common.EFromTo.BlobLocal():
-		e := copyDownloadBlobEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.FileLocal():
-		e := copyDownloadFileEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
-	case common.EFromTo.BlobFSLocal():
-		e := copyDownloadBlobFSEnumerator(jobPartOrder)
-		err = e.enumerate(cca)
 	case common.EFromTo.BlobTrash(), common.EFromTo.FileTrash():
 		e, createErr := newRemoveEnumerator(cca)
 		if createErr != nil {
@@ -1246,6 +1255,7 @@ func init() {
 	rootCmd.AddCommand(cpCmd)
 
 	// filters change which files get transferred
+	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
@@ -1265,7 +1275,7 @@ func init() {
 	// options change how the transfers are performed
 	cpCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB) when uploading to/downloading from Azure Storage. Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25")
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs).")
-	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection.")
+	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "Detect", "defines the type of blob at the destination. This is used in case of upload / account to account copy. Use --blob-type detect for auto-detection of VHD and VHDX files as page blobs when no source blob type is available. (For instance, a VHD from local/Azure Files/S3 is detected as a page blob, but a VHD from blob would be detected as its source type)")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "upload block blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "upload page blob to Azure Storage using this blob tier.")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "upload to Azure Storage with these key-value pairs as metadata.")
@@ -1284,7 +1294,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.s2sCheckLength, "s2s-check-length", true, "Check the length of a file transferred S2S after the transfer. If there is a mismatch, fail the transfer.")
+	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveAccessTier, "s2s-preserve-access-tier", true, "preserve access tier during service to service copy. "+

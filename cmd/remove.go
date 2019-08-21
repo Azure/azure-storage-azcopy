@@ -61,7 +61,7 @@ func init() {
 
 			// Since remove uses the copy command arguments cook, set the blobType to None and validation option
 			// else parsing the arguments will fail.
-			raw.blobType = common.EBlobType.None().String()
+			raw.blobType = common.EBlobType.Detect().String()
 			raw.md5ValidationOption = common.DefaultHashValidationOption.String()
 			raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
 			return nil
