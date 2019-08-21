@@ -132,7 +132,7 @@ func (s *genericProcessorSuite) TestCopyTransferProcessorSingleFile(c *chk.C) {
 		blobURL, filepath.Join(dstDirName, dstFileName), false, false, nil, nil)
 
 	// exercise the copy transfer processor
-	storedObject := newStoredObject(blobList[0], "", time.Now(), 0, nil, blobTypeNA, "")
+	storedObject := newStoredObject(blobList[0], "", time.Now(), 0, nil, blobTypeNA)
 	err := copyProcessor.scheduleCopyTransfer(storedObject)
 	c.Assert(err, chk.IsNil)
 

@@ -67,7 +67,7 @@ func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) b
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
-func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType, containerName string) storedObject {
+func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType) storedObject {
 	return storedObject{
 		name:             name,
 		relativePath:     relativePath,
@@ -75,7 +75,6 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 		size:             size,
 		md5:              md5,
 		blobType:         blobType,
-		containerName:    containerName,
 	}
 }
 

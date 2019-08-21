@@ -76,14 +76,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	// check if the url points to a single blob
 	blobProperties, isBlob := t.getPropertiesIfSingleBlob()
 	if isBlob {
-		storedObject := newStoredObject(
-			getObjectNameOnly(blobUrlParts.BlobName),
-			"", // We already know the object's location -- no need.
-			blobProperties.LastModified(),
-			blobProperties.ContentLength(),
-			blobProperties.ContentMD5(),
-			blobProperties.BlobType(),
-			"") // We already know the container -- no need.
+		storedObject := newStoredObject(getObjectNameOnly(blobUrlParts.BlobName), "", blobProperties.LastModified(), blobProperties.ContentLength(), blobProperties.ContentMD5(), blobProperties.BlobType())
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -130,14 +123,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				continue
 			}
 
-			storedObject := newStoredObject(
-				getObjectNameOnly(blobInfo.Name),
-				relativePath,
-				blobInfo.Properties.LastModified,
-				*blobInfo.Properties.ContentLength,
-				blobInfo.Properties.ContentMD5,
-				blobInfo.Properties.BlobType,
-				"") // We already know the container name -- no need.
+			storedObject := newStoredObject(getObjectNameOnly(blobInfo.Name), relativePath, blobInfo.Properties.LastModified, *blobInfo.Properties.ContentLength, blobInfo.Properties.ContentMD5, blobInfo.Properties.BlobType)
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

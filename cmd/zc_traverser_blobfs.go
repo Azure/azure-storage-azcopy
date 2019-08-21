@@ -87,14 +87,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 
 	pathProperties, isFile, _ := t.getPropertiesIfSingleFile()
 	if isFile {
-		storedObject := newStoredObject(
-			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
-			"", // We already know the exact location of the file. No need for a relative path.
-			t.parseLMT(pathProperties.LastModified()),
-			pathProperties.ContentLength(),
-			pathProperties.ContentMD5(),
-			blobTypeNA,
-			"") // We already know the container name -- no need.
+		storedObject := newStoredObject(getObjectNameOnly(bfsURLParts.DirectoryOrFilePath), "", t.parseLMT(pathProperties.LastModified()), pathProperties.ContentLength(), pathProperties.ContentMD5(), blobTypeNA)
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -120,14 +113,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 
 		for _, v := range dlr.Paths {
 			if v.IsDirectory == nil {
-				storedObject := newStoredObject(
-					getObjectNameOnly(*v.Name),
-					strings.TrimPrefix(*v.Name, searchPrefix),
-					v.LastModifiedTime(),
-					*v.ContentLength,
-					v.ContentMD5(),
-					blobTypeNA,
-					"") // We already know the container name -- no need.
+				storedObject := newStoredObject(getObjectNameOnly(*v.Name), strings.TrimPrefix(*v.Name, searchPrefix), v.LastModifiedTime(), *v.ContentLength, v.ContentMD5(), blobTypeNA)
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()
