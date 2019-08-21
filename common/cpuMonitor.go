@@ -34,6 +34,16 @@ type CPUMonitor interface {
 //    since this approach here can be tested by using CPU affinity to constrain a process to a smaller number of CPUs (to make it CPU-
 //    constrained, but direct total measurement of CPU usage %age wouldn't support that approach to testing)
 
+type nullCpuMonitor struct{}
+
+func NewNullCpuMonitor() CPUMonitor {
+	return &nullCpuMonitor{}
+}
+
+func (n *nullCpuMonitor) CPUContentionExists() bool {
+	return false
+}
+
 // cpuUsageMonitor is loosely adapted from concepts described (for a different purpose) here https://mattwarren.org/2014/06/18/measuring-the-impact-of-the-net-garbage-collector/
 type cpuUsageMonitor struct {
 	atomicContentionExistsIndicator int32

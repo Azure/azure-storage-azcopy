@@ -66,6 +66,11 @@ func (AdviceType) ConcurrencyHitUpperLimit() AdviceType {
 		"Network bandwidth not measured because concurrency tuning hit its upper concurrency limit"}
 }
 
+func (AdviceType) ConcurrencyHighCpu() AdviceType {
+	return AdviceType{"ConcurrencyTuningHighCpu",
+		"Network bandwidth may not be accurately measured because concurrency tuning encountered high CPU usage"}
+}
+
 func (AdviceType) NetworkIsBottleneck() AdviceType {
 	return AdviceType{"NetworkIsBottleneck",
 		"Network bandwidth appears to be the key factor governing performance."}
@@ -260,6 +265,12 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 					p.mbps, p.finalConcurrency)
 			}
 
+		case concurrencyReasonHighCpu:
+			addAdvice(EAdviceType.ConcurrencyHighCpu(),
+				"When auto-tuning concurrency, AzCopy experienced high CPU usage, so it did not try higher levels of concurrency. Therefore "+
+					"AzCopy may not have reached the full capacity of your network. Consider trying a machine or VM with more CPU power. "+
+					"(This is an experimental feature so, if you believe AzCopy was mistaken and CPU usage was actually fine, consider setting the environment variable %s "+
+					"to false, and re-run the benchmark test.)", common.EEnvironmentVariable.AutoTuneToCpu().Name)
 		case concurrencyReasonTunerDisabled:
 			addAdvice(EAdviceType.ConcurrencyNotTuned(),
 				"Auto-tuning of concurrency was prevented by an environment variable setting a specific concurrency value. Therefore "+
