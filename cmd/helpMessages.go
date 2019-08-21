@@ -317,6 +317,7 @@ The benchmark command runs the same upload processing as 'copy', except that:
     how big they are. The generation process takes place entirely in memory and disk is not used.
   - only a few of 'copy's optional parameters are supported
   - additional diagnostics are measured and reported
+  - all the transferred data is deleted at the end of the test run
 
 By default, benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
 the maximum throughput. It will display that number at the end. To prevent auto tuning, set the 

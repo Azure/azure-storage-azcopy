@@ -658,6 +658,8 @@ type cookedCopyCmdArgs struct {
 	// specify how user wants to handle invalid metadata.
 	s2sInvalidMetadataHandleOption common.InvalidMetadataHandleOption
 
+	// followup/cleanup properties are NOT available on resume, and so should not be used for jobs that may be resumed
+	// TODO: consider find a way to enforce that, or else to allow them to be preserved. Initially, they are just for benchmark jobs, so not a problem immediately because those jobs can't be resumed, by design.
 	followupJobArgs   *cookedCopyCmdArgs
 	priorJobExitCode  *common.ExitCode
 	isCleanupJob      bool // triggers abbreviated status reporting, since we don't want full reporting for cleanup jobs
@@ -1150,6 +1152,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				common.PanicIfErr(err)
 				return string(jsonOutput)
 			} else {
+				screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
+
 				output := fmt.Sprintf(
 					`
 
@@ -1160,9 +1164,7 @@ Number of Transfers Completed: %v
 Number of Transfers Failed: %v
 Number of Transfers Skipped: %v
 TotalBytesTransferred: %v
-IOPS; ms per req: %v; %v 
-Ntwk Err; Srv Busy: %.2f%%; %.2f%%
-Final Job Status: %v%s
+Final Job Status: %v%s%s
 `,
 					summary.JobID.String(),
 					ste.ToFixed(duration.Minutes(), 4),
@@ -1171,8 +1173,8 @@ Final Job Status: %v%s
 					summary.TransfersFailed,
 					summary.TransfersSkipped,
 					summary.TotalBytesTransferred,
-					summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage,
 					summary.JobStatus,
+					screenStats,
 					formatPerfAdvice(summary.PerformanceAdvice))
 
 				// abbreviated output for cleanup jobs
@@ -1183,7 +1185,7 @@ Final Job Status: %v%s
 				// log to job log
 				jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 				if exists {
-					jobMan.Log(pipeline.LogInfo, output)
+					jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 				}
 				return output
 			}
@@ -1274,6 +1276,25 @@ func formatPerfAdvice(advice []common.PerformanceAdvice) string {
 		b.WriteString(common.BenchmarkLinuxExtraDisclaimer)
 	}
 	return b.String()
+}
+
+// format extra stats to include in the log.  If benchmarking, also output them on screen (but not to screen in normal
+// usage because too cluttered)
+func formatExtraStats(fromTo common.FromTo, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
+	logStats = fmt.Sprintf(
+		`
+Diagnostic stats:
+IOPS: %v
+End-to-end ms per request: %v
+Network Errors: %.2f%%
+Server Busy: %.2f%%`,
+		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
+
+	if fromTo.From() == common.ELocation.Benchmark() {
+		screenStats = "\n" + logStats
+	}
+
+	return
 }
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,

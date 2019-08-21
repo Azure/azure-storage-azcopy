@@ -367,6 +367,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			if format == common.EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
 			}
+			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
 
 			output := fmt.Sprintf(
 				`
@@ -380,9 +381,7 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
-IOPS; ms per req: %v; %v 
-Ntwk Err; Srv Busy: %.2f%%; %.2f%%
-Final Job Status: %v%s
+Final Job Status: %v%s%s
 `,
 				summary.JobID.String(),
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
@@ -394,13 +393,13 @@ Final Job Status: %v%s
 				cca.atomicDeletionCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
-				summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage,
 				summary.JobStatus,
+				screenStats,
 				formatPerfAdvice(summary.PerformanceAdvice))
 
 			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 			if exists {
-				jobMan.Log(pipeline.LogInfo, output)
+				jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 			}
 
 			return output

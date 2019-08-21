@@ -80,6 +80,7 @@ func (cca *resumeJobController) Cancel(lcm common.LifecycleMgr) {
 	}
 }
 
+// TODO: can we combine this with the copy one (and the sync one?)
 func (cca *resumeJobController) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	// fetch a job status
 	var summary common.ListJobSummaryResponse
@@ -257,6 +258,13 @@ func (rca resumeCmdArgs) process() error {
 		&getJobFromToResponse)
 	if getJobFromToResponse.ErrorMsg != "" {
 		glcm.Error(getJobFromToResponse.ErrorMsg)
+	}
+
+	if getJobFromToResponse.FromTo.From() == common.ELocation.Benchmark() ||
+		getJobFromToResponse.FromTo.To() == common.ELocation.Benchmark() {
+		// Doesn't make sense to resume a benchmark job.
+		// It's not tested, and wouldn't report progress correctly and wouldn't clean up after itself properly
+		return errors.New("resuming benchmark jobs is not supported")
 	}
 
 	ctx := context.TODO()

@@ -282,7 +282,7 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 		default:
 			addAdvice(EAdviceType.ConcurrencyNotEnoughTime(),
 				"The job completed before AzCopy could find the maximum possible throughput.  Try benchmarking with more files "+
-					"or files of a larger size, to give AzCopy more time.")
+					"to give AzCopy more time. To do so, use the --%s command line parameter.", common.FileCountParam)
 		}
 	}
 
