@@ -1085,7 +1085,7 @@ func (PerfConstraint) Unknown() PerfConstraint         { return PerfConstraint(0
 func (PerfConstraint) Disk() PerfConstraint            { return PerfConstraint(1) }
 func (PerfConstraint) Service() PerfConstraint         { return PerfConstraint(2) }
 func (PerfConstraint) PageBlobService() PerfConstraint { return PerfConstraint(3) }
-func (PerfConstraint) CPU() PerfConstraint     	       { return PerfConstraint(4) }
+func (PerfConstraint) CPU() PerfConstraint             { return PerfConstraint(4) }
 
 // others will be added in future
 
@@ -1125,3 +1125,6 @@ and writing real data, performance may be different. If disk limits throughput, 
 
 const BenchmarkLinuxExtraDisclaimer = `On Linux, when AzCopy is uploading just one or two large files, disk performance may be greatly improved by
 increasing read_ahead_kb to 8192 for the data disk.`
+
+const SizePerFileParam = "size-per-file"
+const FileCountParam = "file-count"

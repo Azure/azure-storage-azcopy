@@ -58,9 +58,6 @@ const (
 	// TODO would it be better to have a trailing B, eg. 12KB or 200GB? (that might make it case sensitive, or at least
 	//    necessitate making the B case sensitive, because lowercase b means bits (and we don't want to bother supporting bits)
 	sizeStringDescription = "a number immediately followed by K, M or G. E.g. 12k or 200G"
-
-	sizePerFileParam = "size-per-file"
-	fileCountParam   = "file-count"
 )
 
 // TODO move to copy handler util
@@ -108,15 +105,15 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	virtualDir := "benchmark-" + jobID.String() // create unique directory name, so we won't overwrite anything
 
 	if raw.fileCount <= 0 {
-		return dummyCooked, errors.New(fileCountParam + " must be greater than zero")
+		return dummyCooked, errors.New(common.FileCountParam + " must be greater than zero")
 	}
 
-	bytesPerFile, err := parseSizeString(raw.sizePerFile, sizePerFileParam)
+	bytesPerFile, err := parseSizeString(raw.sizePerFile, common.SizePerFileParam)
 	if err != nil {
 		return dummyCooked, err
 	}
 	if bytesPerFile <= 0 {
-		return dummyCooked, errors.New(sizePerFileParam + " must be greater than zero")
+		return dummyCooked, errors.New(common.SizePerFileParam + " must be greater than zero")
 	}
 
 	if bytesPerFile > maxBytesPerFile {
@@ -308,10 +305,8 @@ func init() {
 	}
 	rootCmd.AddCommand(benchCmd)
 
-	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, sizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
-	benchCmd.PersistentFlags().UintVar(&raw.fileCount, fileCountParam, 75, "number of auto-generated data files to use")
-	_ = benchCmd.MarkFlagRequired(sizePerFileParam)
-	_ = benchCmd.MarkFlagRequired(fileCountParam)
+	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, common.SizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
+	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, 100, "number of auto-generated data files to use")
 
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
