@@ -1228,7 +1228,8 @@ Final Job Status: %v%s
 			}
 
 			// indicate whether constrained by disk or not
-			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
+			isBenchmark := cca.fromTo.From() == common.ELocation.Benchmark()
+			perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, isBenchmark)
 
 			return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Skipped, %v Total%s, %s%s%s",
 				summary.PercentComplete,
@@ -1269,14 +1270,14 @@ func formatPerfAdvice(advice []common.PerformanceAdvice) string {
 
 // Is disk speed looking like a constraint on throughput?  Ignore the first little-while,
 // to give an (arbitrary) amount of time for things to reach steady-state.
-func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration) (perfString string, diskString string) {
+func getPerfDisplayText(perfDiagnosticStrings []string, constraint common.PerfConstraint, durationOfJob time.Duration, isBench bool) (perfString string, diskString string) {
 	perfString = ""
 	if shouldDisplayPerfStates() {
 		perfString = "[States: " + strings.Join(perfDiagnosticStrings, ", ") + "], "
 	}
 
-	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30 // this duration is an arbitrary guestimate
-	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize {
+	haveBeenRunningLongEnoughToStabilize := durationOfJob.Seconds() > 30                                    // this duration is an arbitrary guestimate
+	if constraint != common.EPerfConstraint.Unknown() && haveBeenRunningLongEnoughToStabilize && !isBench { // don't display when benchmarking, because we got some spurious slow "disk" constraint reports there - which would be confusing given there is no disk in release 1 of benchmarking
 		diskString = fmt.Sprintf(" (%s may be limiting speed)", constraint)
 	} else {
 		diskString = ""
