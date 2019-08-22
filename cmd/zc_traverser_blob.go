@@ -76,7 +76,14 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	// check if the url points to a single blob
 	blobProperties, isBlob := t.getPropertiesIfSingleBlob()
 	if isBlob {
-		storedObject := newStoredObject(getObjectNameOnly(blobUrlParts.BlobName), "", blobProperties.LastModified(), blobProperties.ContentLength(), blobProperties.ContentMD5(), blobProperties.BlobType())
+		storedObject := newStoredObject(
+			getObjectNameOnly(blobUrlParts.BlobName),
+			"",
+			blobProperties.LastModified(),
+			blobProperties.ContentLength(),
+			blobProperties.ContentMD5(),
+			blobProperties.BlobType(),
+		)
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -123,7 +130,14 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				continue
 			}
 
-			storedObject := newStoredObject(getObjectNameOnly(blobInfo.Name), relativePath, blobInfo.Properties.LastModified, *blobInfo.Properties.ContentLength, blobInfo.Properties.ContentMD5, blobInfo.Properties.BlobType)
+			storedObject := newStoredObject(
+				getObjectNameOnly(blobInfo.Name),
+				relativePath,
+				blobInfo.Properties.LastModified,
+				*blobInfo.Properties.ContentLength,
+				blobInfo.Properties.ContentMD5,
+				blobInfo.Properties.BlobType,
+			)
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

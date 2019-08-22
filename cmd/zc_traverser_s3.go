@@ -57,7 +57,13 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 		if err == nil {
 			err = processIfPassedFilters(
 				filters,
-				newStoredObject(objectName, "", oi.LastModified, oi.Size, nil, blobTypeNA),
+				newStoredObject(
+					objectName,
+					"",
+					oi.LastModified,
+					oi.Size,
+					nil,
+					blobTypeNA),
 				processor)
 
 			if err != nil {
@@ -94,7 +100,13 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 		relativePath := strings.TrimPrefix(objectInfo.Key, searchPrefix)
 
 		err = processIfPassedFilters(filters,
-			newStoredObject(objectName, relativePath, objectInfo.LastModified, objectInfo.Size, nil, blobTypeNA),
+			newStoredObject(
+				objectName,
+				relativePath,
+				objectInfo.LastModified,
+				objectInfo.Size,
+				nil,
+				blobTypeNA),
 			processor)
 
 		if err != nil {

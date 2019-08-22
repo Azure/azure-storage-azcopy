@@ -68,7 +68,14 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 		// check if the url points to a single file
 		fileProperties, isFile := t.getPropertiesIfSingleFile()
 		if isFile {
-			storedObject := newStoredObject(getObjectNameOnly(targetURLParts.DirectoryOrFilePath), "", fileProperties.LastModified(), fileProperties.ContentLength(), fileProperties.ContentMD5(), blobTypeNA)
+			storedObject := newStoredObject(
+				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
+				"",
+				fileProperties.LastModified(),
+				fileProperties.ContentLength(),
+				fileProperties.ContentMD5(),
+				blobTypeNA,
+			)
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

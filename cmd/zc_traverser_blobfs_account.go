@@ -80,6 +80,7 @@ func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []o
 			}
 		}
 
+		marker = resp.XMsContinuation()
 		if marker == "" {
 			break
 		}
