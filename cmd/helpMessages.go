@@ -268,12 +268,14 @@ const syncCmdShortDescription = "Replicate source to the destination location"
 const syncCmdLongDescription = `
 Replicate a source to a destination location. The last modified times are used for comparison, the file is skipped if the last modified time in the destination is more recent. The supported pairs are:
   - local <-> Azure Blob (either SAS or OAuth authentication can be used)
+  - Azure Blob <-> Azure Blob (Source must include a SAS or is publicly accessible; either SAS or OAuth authentication can be used for destination)
 
 Please note that the sync command differs from the copy command in several ways:
   0. The recursive flag is on by default.
   1. The source and destination should not contain patterns(such as * or ?).
   2. The include/exclude flags can be a list of patterns matching to the file names. Please refer to the example section for illustration.
   3. If there are files/blobs at the destination that are not present at the source, the user will be prompted to delete them. This prompt can be silenced by using the corresponding flags to automatically answer the deletion question.
+  4. When syncing between virtual directories, add a trailing slash to the path (refer to examples) if there's a blob with the same name as one of the virtual directories 
 
 Advanced:
 Please note that AzCopy automatically detects the Content Type of the files when uploading from the local disk, based on the file extension or content (if no extension is specified).
@@ -306,6 +308,15 @@ Sync a subset of files in a directory (ex: only jpg and pdf files, or if the fil
 
 Sync an entire directory but exclude certain files from the scope (ex: every file that starts with foo or ends with bar):
   - azcopy sync "/path/to/dir" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --exclude="foo*;*bar"
+
+Sync a single blob:
+  - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/blob]?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/blob]"
+
+Sync a virtual directory:
+  - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]" --recursive=true
+
+Sync a virtual directory sharing the same name as a blob (add a trailing slash to the path in order to disambiguate):
+  - azcopy sync "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/?[SAS]" "https://[account].blob.core.windows.net/[container]/[path/to/virtual/dir]/" --recursive=true
 
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
 `
