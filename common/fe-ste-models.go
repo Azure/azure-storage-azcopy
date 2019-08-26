@@ -133,7 +133,7 @@ var EResponseOption = ResponseOption{ResponseType: "", UserFriendlyResponseType:
 type ResponseOption struct {
 	ResponseType             string // helps us clarify the user's intent and support partner team's localization
 	UserFriendlyResponseType string // text to print in interactive mode
-	ResponseString           string // customizable string to map to ResponseOption, future-proof
+	ResponseString           string // short (abbreviation) string that gets sent back by the user to indicate that this response is chosen
 }
 
 // NOTE: these enums are shared with StgExp, so the text is spelled out explicitly (for easy json marshalling)

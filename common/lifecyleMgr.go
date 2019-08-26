@@ -166,6 +166,7 @@ func (lcm *lifecycleMgr) Prompt(message string, details PromptDetails) ResponseO
 	}
 
 	// nothing matched our options, assume default behavior (up to whoever that called Prompt)
+	// we don't re-prompt the user since this makes the integration with Stg Exp more complex
 	return EResponseOption.Default()
 }
 
