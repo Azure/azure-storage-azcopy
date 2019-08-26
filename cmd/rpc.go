@@ -49,9 +49,6 @@ func inprocSend(rpcCmd common.RpcCmd, requestData interface{}, responseData inte
 	case common.ERpcCmd.ListJobSummary():
 		*(responseData.(*common.ListJobSummaryResponse)) = ste.GetJobSummary(*requestData.(*common.JobID))
 
-	case common.ERpcCmd.ListSyncJobSummary():
-		*(responseData.(*common.ListSyncJobSummaryResponse)) = ste.GetSyncJobSummary(*requestData.(*common.JobID))
-
 	case common.ERpcCmd.ListJobTransfers():
 		*(responseData.(*common.ListJobTransfersResponse)) = ste.ListJobTransfers(requestData.(common.ListJobTransfersRequest))
 

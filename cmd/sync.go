@@ -330,12 +330,11 @@ func (cca *cookedSyncCmdArgs) reportScanningProgress(lcm common.LifecycleMgr, th
 	})
 }
 
-func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListSyncJobSummaryResponse) string {
-	// TODO figure out if deletions should be done by the enumeration engine or not
-	// TODO if not, remove this so that we get the proper number from the ste
-	summary.DeleteTotalTransfers = cca.getDeletionCount()
-	summary.DeleteTransfersCompleted = cca.getDeletionCount()
-	jsonOutput, err := json.Marshal(summary)
+func (cca *cookedSyncCmdArgs) getJsonOfSyncJobSummary(summary common.ListJobSummaryResponse) string {
+	wrapped := common.ListSyncJobSummaryResponse{ListJobSummaryResponse: summary}
+	wrapped.DeleteTotalTransfers = cca.getDeletionCount()
+	wrapped.DeleteTransfersCompleted = cca.getDeletionCount()
+	jsonOutput, err := json.Marshal(wrapped)
 	common.PanicIfErr(err)
 	return string(jsonOutput)
 }
@@ -375,9 +374,9 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		}
 
 		lcm.Exit(func(format common.OutputFormat) string {
-			//if format == common.EOutputFormat.Json() {
-			//	return cca.getJsonOfSyncJobSummary(summary)
-			//}
+			if format == common.EOutputFormat.Json() {
+				return cca.getJsonOfSyncJobSummary(summary)
+			}
 
 			output := fmt.Sprintf(
 				`
@@ -415,9 +414,9 @@ Final Job Status: %v
 	}
 
 	lcm.Progress(func(format common.OutputFormat) string {
-		//if format == common.EOutputFormat.Json() {
-		//	return cca.getJsonOfSyncJobSummary(summary)
-		//}
+		if format == common.EOutputFormat.Json() {
+			return cca.getJsonOfSyncJobSummary(summary)
+		}
 
 		// indicate whether constrained by disk or not
 		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
