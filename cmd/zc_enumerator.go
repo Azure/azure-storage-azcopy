@@ -210,6 +210,21 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 	return output, nil
 }
 
+func appendSASIfNecessary(rawURL string, sasToken string) (string, error) {
+	if sasToken != "" {
+		parsedURL, err := url.Parse(rawURL)
+
+		if err != nil {
+			return rawURL, err
+		}
+
+		parsedURL = copyHandlerUtil{}.appendQueryParamToUrl(parsedURL, sasToken)
+		return parsedURL.String(), nil
+	}
+
+	return rawURL, nil
+}
+
 // given a storedObject, process it accordingly
 type objectProcessor func(storedObject storedObject) error
 
