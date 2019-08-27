@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -202,6 +203,11 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 	filesystemURL, _ := createNewFilesystem(c, bfsu)
 	defer deleteFilesystem(c, filesystemURL)
 
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	c.Assert(err, chk.IsNil)
+	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
+	defer deleteBucket(c, s3Client, bucketName, true)
+
 	// test two scenarios, either blob is at the root virtual dir, or inside sub virtual dirs
 	for _, storedObjectName := range []string{"sub1/sub2/singleblobisbest", "nosubsingleblob", "满汉全席.txt"} {
 		// set up the container with a single blob
@@ -278,6 +284,23 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, bfsDummyProcessor.record[0].relativePath)
 		c.Assert(localDummyProcessor.record[0].name, chk.Equals, bfsDummyProcessor.record[0].name)
+
+		// set up the bucket with a single file
+		s3List := []string{storedObjectName}
+		scenarioHelper{}.generateObjects(c, s3Client, bucketName, s3List)
+
+		// construct a s3 traverser
+		url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
+		S3Traverser, err := newS3Traverser(&url, ctx, false, func() {})
+		c.Assert(err, chk.IsNil)
+
+		s3DummyProcessor := dummyProcessor{}
+		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+		c.Assert(len(s3DummyProcessor.record), chk.Equals, 1)
+
+		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, s3DummyProcessor.record[0].relativePath)
+		c.Assert(localDummyProcessor.record[0].name, chk.Equals, s3DummyProcessor.record[0].name)
 	}
 }
 
@@ -296,6 +319,11 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 	filesystemURL, _ := createNewFilesystem(c, bfsu)
 	defer deleteFilesystem(c, filesystemURL)
 
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	c.Assert(err, chk.IsNil)
+	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
+	defer deleteBucket(c, s3Client, bucketName, true)
+
 	// set up the container with numerous blobs
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, "")
 	c.Assert(containerURL, chk.NotNil)
@@ -305,6 +333,9 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 	// set up a filesystem with the same files
 	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
+
+	// set up a bucket with the same files
+	scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
 
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
 	defer os.RemoveAll(dstDirName)
@@ -351,12 +382,22 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		bfsTraverser := newBlobFSTraverser(&rawFilesystemURL, bfsPipeline, ctx, isRecursiveOn, func() {})
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+
+		// construct and run a S3 traverser
+		rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
+		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, func() {})
+		c.Assert(err, chk.IsNil)
+		s3DummyProcessor := dummyProcessor{}
+		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
 
 		// make sure the results are the same
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		for _, storedObject := range append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...) {
+		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 			c.Assert(present, chk.Equals, true)
@@ -384,6 +425,11 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 	filesystemURL, _ := createNewFilesystem(c, bfsu)
 	defer deleteFilesystem(c, filesystemURL)
 
+	s3Client, err := createS3ClientWithMinio(createS3ResOptions{})
+	c.Assert(err, chk.IsNil)
+	bucketName := createNewBucket(c, s3Client, createS3ResOptions{})
+	defer deleteBucket(c, s3Client, bucketName, true)
+
 	// set up the container with numerous blobs
 	virDirName := "virdir"
 	fileList := scenarioHelper{}.generateCommonRemoteScenarioForBlob(c, containerURL, virDirName+"/")
@@ -394,6 +440,10 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 
 	// set up the filesystem with the same files
 	scenarioHelper{}.generateBFSPathsFromList(c, filesystemURL, fileList)
+
+	// Set up the bucket with the same files
+	scenarioHelper{}.generateObjects(c, s3Client, bucketName, fileList)
+	time.Sleep(time.Second * 2) // Ensure the objects' LMTs are in the past
 
 	// set up the destination with a folder that have the exact same files
 	dstDirName := scenarioHelper{}.generateLocalDirectory(c)
@@ -442,15 +492,27 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		bfsDummyProcessor := dummyProcessor{}
 		err = bfsTraverser.traverse(bfsDummyProcessor.process, nil)
 
+		// construct and run a S3 traverser
+		// directory object keys always end with / in S3
+		rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
+		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, func() {})
+		c.Assert(err, chk.IsNil)
+		s3DummyProcessor := dummyProcessor{}
+		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
+		c.Assert(err, chk.IsNil)
+
 		// make sure the results are the same
 		c.Assert(len(blobDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(fileDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
 		c.Assert(len(bfsDummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
-		for _, storedObject := range append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...) {
+		c.Assert(len(s3DummyProcessor.record), chk.Equals, len(localIndexer.indexMap))
+		for _, storedObject := range append(append(append(blobDummyProcessor.record, fileDummyProcessor.record...), bfsDummyProcessor.record...), s3DummyProcessor.record...) {
 			correspondingLocalFile, present := localIndexer.indexMap[storedObject.relativePath]
 
 			c.Assert(present, chk.Equals, true)
 			c.Assert(correspondingLocalFile.name, chk.Equals, storedObject.name)
+			// Say, here's a good question, why do we have this last check?
+			// None of the other tests have it.
 			c.Assert(correspondingLocalFile.isMoreRecentThan(storedObject), chk.Equals, true)
 
 			if !isRecursiveOn {

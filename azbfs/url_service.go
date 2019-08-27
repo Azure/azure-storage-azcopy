@@ -1,6 +1,7 @@
 package azbfs
 
 import (
+	"context"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -8,7 +9,7 @@ import (
 
 // A ServiceURL represents a URL to the Azure Storage File service allowing you to manipulate file shares.
 type ServiceURL struct {
-	client managementClient
+	client filesystemClient
 }
 
 // NewServiceURL creates a ServiceURL object using the specified URL and request policy pipeline.
@@ -16,8 +17,12 @@ func NewServiceURL(url url.URL, p pipeline.Pipeline) ServiceURL {
 	if p == nil {
 		panic("p can't be nil")
 	}
-	client := newManagementClient(url, p)
+	client := filesystemClient{newManagementClient(url, p)}
 	return ServiceURL{client: client}
+}
+
+func (s ServiceURL) ListFilesystemsSegment(ctx context.Context, marker *string) (*FilesystemList, error) {
+	return s.client.List(ctx, nil, marker, nil, nil, nil, nil)
 }
 
 // URL returns the URL endpoint used by the ServiceURL object.

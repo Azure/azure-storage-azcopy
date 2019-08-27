@@ -78,7 +78,7 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	if isBlob {
 		storedObject := newStoredObject(
 			getObjectNameOnly(blobUrlParts.BlobName),
-			"", // relative path makes no sense when the full path already points to the file
+			"",
 			blobProperties.LastModified(),
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),

@@ -36,7 +36,7 @@ import (
 const (
 	defaultLogVerbosityForCopy       = "WARNING"
 	defaultOutputFormatForCopy       = "text"
-	defaultBlobTypeForCopy           = "None"
+	defaultBlobTypeForCopy           = "Detect"
 	defaultBlockBlobTierForCopy      = "None"
 	defaultPageBlobTierForCopy       = "None"
 	defaultS2SPreserveProperties     = true

@@ -125,7 +125,7 @@ func WalkWithSymlinks(fullPath string, walkFunc filepath.WalkFunc) (err error) {
 
 				if _, ok := seenPaths[result]; !ok {
 					seenPaths[result] = true
-					seenPaths[slPath] = true // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because
+					seenPaths[slPath] = true // Note we've seen the symlink as well. We shouldn't ever have issues if we _don't_ do this because we'll just catch it by symlink result
 					walkQueue = append(walkQueue, walkItem{
 						fullPath:     result,
 						relativeBase: computedRelativePath,
@@ -176,9 +176,16 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 			t.incrementEnumerationCounter()
 		}
 
-		return processIfPassedFilters(filters, newStoredObject(singleFileInfo.Name(),
-			"", // relative path makes no sense when the full path already points to the file
-			singleFileInfo.ModTime(), singleFileInfo.Size(), nil, blobTypeNA), processor)
+		return processIfPassedFilters(filters,
+			newStoredObject(
+				singleFileInfo.Name(),
+				"",
+				singleFileInfo.ModTime(),
+				singleFileInfo.Size(),
+				nil,
+				blobTypeNA),
+			processor,
+		)
 	} else {
 		if t.recursive {
 			processFile := func(filePath string, fileInfo os.FileInfo, fileError error) error {
@@ -265,7 +272,15 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					t.incrementEnumerationCounter()
 				}
 
-				err := processIfPassedFilters(filters, newStoredObject(singleFile.Name(), relativePath, singleFile.ModTime(), singleFile.Size(), nil, blobTypeNA), processor)
+				err := processIfPassedFilters(filters,
+					newStoredObject(
+						singleFile.Name(),
+						relativePath,
+						singleFile.ModTime(),
+						singleFile.Size(),
+						nil,
+						blobTypeNA),
+					processor)
 
 				if err != nil {
 					return err

@@ -19,6 +19,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	dst := cca.destination
 	src := cca.source
 
+	// Append SAS tokens if necessary
 	if cca.destinationSAS != "" {
 		destURL, err := url.Parse(dst)
 
@@ -28,6 +29,17 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 		destURL = copyHandlerUtil{}.appendQueryParamToUrl(destURL, cca.destinationSAS)
 		dst = destURL.String()
+	}
+
+	if cca.sourceSAS != "" {
+		srcURL, err := url.Parse(src)
+
+		if err != nil {
+			return nil, err
+		}
+
+		srcURL = copyHandlerUtil{}.appendQueryParamToUrl(srcURL, cca.sourceSAS)
+		src = srcURL.String()
 	}
 
 	// TODO: in download refactor, handle trailing wildcard properly here.
@@ -40,7 +52,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
 	isSourceDir := traverser.isDirectory(true)
-	if isSourceDir && !cca.recursive {
+	if isSourceDir && !cca.recursive && !cca.stripTopDir {
 		return nil, errors.New("cannot use directory as source without --recursive or trailing wildcard (/*)")
 	}
 
@@ -139,10 +151,8 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		}
 		pathParts := strings.Split(path, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-		// Encode disallowed characters on windows explicit to downloads.
-		// TODO: Inform tests of this
-		// TODO: on upload refactor, reverse this operation.
-		if loc == common.ELocation.Local() && !source && runtime.GOOS == "windows" {
+		// If downloading on Windows or uploading to files, encode unsafe characters.
+		if (loc == common.ELocation.Local() && !source && runtime.GOOS == "windows") || (!source && loc == common.ELocation.File()) {
 			invalidChars := `<>\/:"|?*` + string(0x00)
 
 			for _, c := range strings.Split(invalidChars, "") {
@@ -150,7 +160,19 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 					pathParts[k] = strings.ReplaceAll(p, c, url.PathEscape(c))
 				}
 			}
-		} else if loc != common.ELocation.Local() {
+
+			// If uploading from Windows or downloading from files, decode unsafe chars
+		} else if (!source && cca.fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") && (!source && cca.fromTo.From() == common.ELocation.File()) {
+			invalidChars := `<>\/:"|?*` + string(0x00)
+
+			for _, c := range strings.Split(invalidChars, "") {
+				for k, p := range pathParts {
+					pathParts[k] = strings.ReplaceAll(p, url.PathEscape(c), c)
+				}
+			}
+		}
+
+		if loc != common.ELocation.Local() {
 			for k, p := range pathParts {
 				pathParts[k] = url.PathEscape(p)
 			}
@@ -181,7 +203,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 
 	relativePath = "/" + strings.Replace(object.relativePath, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
 
-	if !source && !pathPointsToContents(cca.source) {
+	if !source && !cca.stripTopDir {
 		// We ONLY need to do this adjustment to the destination.
 		// The source SAS has already been removed. No need to convert it to a URL or whatever.
 		// Save to a directory

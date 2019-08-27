@@ -16,11 +16,3 @@ func getPathBeforeFirstWildcard(path string) string {
 
 	return result
 }
-
-// In local cases, many wildcards may be used, hence string.Contains
-// In non-local cases, only a trailing wildcard may be used: ex. https://myAccount.blob.core.windows.net/container/*
-// In both cases, we want to copy the contents of the matches to the exact path specified on the destination.
-// Without this, a directory is created at the destination, and everything is placed under it.
-func pathPointsToContents(path string) bool {
-	return strings.Contains(path, "*")
-}

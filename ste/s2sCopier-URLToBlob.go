@@ -34,11 +34,11 @@ import (
 func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, sip ISourceInfoProvider) (ISenderBase, error) {
 	srcInfoProvider := sip.(IRemoteSourceInfoProvider) // "downcast" to the type we know it really has
 
-	targetBlobType := jptm.Info().SrcBlobType // By default use block blob as destination type
+	var targetBlobType azblob.BlobType
 
 	blobTypeOverride := jptm.BlobTypeOverride() // BlobTypeOverride is copy info specified by user
 
-	if blobTypeOverride != common.EBlobType.None() && blobTypeOverride != common.EBlobType.Detect() { // If a blob type is explicitly specified, determine it.
+	if blobTypeOverride != common.EBlobType.Detect() { // If a blob type is explicitly specified, determine it.
 		targetBlobType = blobTypeOverride.ToAzBlobType()
 
 		if jptm.ShouldLog(pipeline.LogInfo) { // To save fmt.Sprintf
@@ -64,9 +64,9 @@ func newURLToBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline
 			targetBlobType = inferBlobType(fileName, azblob.BlobBlockBlob)
 		}
 
-		// jptm.LogTransferInfo(fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source , intendedType))
-		// TODO: Log these? @JohnRusk and @zezha-msft this creates quite a bit of spam in the logs but is important info.
-		// TODO: Perhaps we should log it only if it isn't a block blob?
+		if targetBlobType != azblob.BlobBlockBlob {
+			jptm.LogTransferInfo(pipeline.LogInfo, srcInfoProvider.RawSource(), destination, fmt.Sprintf("Autodetected %s blob type as %s.", jptm.Info().Source, targetBlobType))
+		}
 	}
 
 	if jptm.ShouldLog(pipeline.LogDebug) { // To save fmt.Sprintf, debug level verbose log

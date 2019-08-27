@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -69,7 +70,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 		if isFile {
 			storedObject := newStoredObject(
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
-				"", // relative path makes no sense when the full path already points to the file
+				"",
 				fileProperties.LastModified(),
 				fileProperties.ContentLength(),
 				fileProperties.ContentMD5(),
@@ -101,25 +102,24 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 			for _, fileInfo := range lResp.FileItems {
 				f := currentDirURL.NewFileURL(fileInfo.Name)
 
-				//// TODO: the cost is high while otherwise we cannot get the last modified time. As Azure file's PM description, list might get more valuable file properties later, optimize the logic after the change...
-				//// TODO this traverser is only being used by rm at the moment, so we don't need the properties, uncomment in the future when this is no longer true
-				//fileProperties, err := f.GetProperties(t.ctx)
-				//if err != nil {
-				//	return err
-				//}
+				fileProperties, err := f.GetProperties(t.ctx)
+				if err != nil {
+					return err
+				}
 
 				// compute the relative path of the file with respect to the target directory
 				fileURLParts := azfile.NewFileURLParts(f.URL())
 				relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				storedObject := storedObject{
-					name:         getObjectNameOnly(fileInfo.Name),
-					relativePath: relativePath,
-					//lastModifiedTime: fileProperties.LastModified(),
-					//md5:              fileProperties.ContentMD5(),
-					//size:             fileProperties.ContentLength(),
-				}
+				storedObject := newStoredObject(
+					getObjectNameOnly(fileInfo.Name),
+					relativePath,
+					fileProperties.LastModified(),
+					fileProperties.ContentLength(),
+					fileProperties.ContentMD5(),
+					azblob.BlobNone,
+				)
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

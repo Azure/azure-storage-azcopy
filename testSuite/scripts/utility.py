@@ -229,8 +229,13 @@ def initialize_test_suite(test_dir_path, container_sas, container_oauth, contain
     test_oauth_container_url = container_oauth
     if not (test_oauth_container_url.endswith("/") and test_oauth_container_url.endwith("\\")):
         test_oauth_container_url = test_oauth_container_url + "/"
+    if not clean_test_container(test_oauth_container_url):
+        print("failed to clean test blob container.")
     
-    # as validate container URL point to same URL as oauth container URL, do clean up with validate container URL
+    # No need to do cleanup on oauth validation URL.
+    # Removed this cleanup step because we use a container SAS.
+    # Therefore, we'd delete the container successfully with the container level SAS
+    # and just not be able to re-make it with the container SAS
     test_oauth_container_validate_sas_url = container_oauth_validate
     if not clean_test_container(test_oauth_container_url):
         print("failed to clean OAuth container.")
@@ -389,6 +394,15 @@ def create_json_file(filename, jsonData):
     outfile.close()
     return file_path
 
+def create_new_list_of_files(filename, list):
+    # creating the file path
+    file_path = os.path.join(test_directory_path, filename + ".txt")
+    if os.path.isfile(file_path):
+        os.remove(file_path)
+    with open(file_path, 'w') as outfile:
+        outfile.writelines(list)
+    outfile.close()
+    return file_path
 
 # creates the a test html file inside the test directory.
 # returns the local file path.
@@ -511,7 +525,7 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        # print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True
@@ -543,12 +557,12 @@ def execute_azcopy_command_get_output(command):
     cmnd = azspath + " " + command
     output = ""
     try:
-        # executing the command with timeout set to 3 minutes / 180 sec.
+        # executing the command with timeout set to 4 minutes / 240 sec.
         output = subprocess.check_output(
-            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=180,
+            cmnd, stderr=subprocess.STDOUT, shell=True, timeout=240,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
-        print("command failed with error code ", exec.returncode, " and message " + exec.output)
+        # print("command failed with error code ", exec.returncode, " and message " + exec.output)
         return exec.output
     else:
         return output
@@ -561,9 +575,9 @@ def verify_operation(command):
     test_suite_path = os.path.join(test_directory_path, test_suite_executable_name)
     command = test_suite_path + " " + command
     try:
-        # executing the command with timeout set to 3 minutes / 180 sec.
+        # executing the command with timeout set to 4 minutes / 240 sec.
         subprocess.check_output(
-            command, stderr=subprocess.STDOUT, shell=True, timeout=600,
+            command, stderr=subprocess.STDOUT, shell=True, timeout=240,
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # print("command failed with error code ", exec.returncode, " and message " + exec.output)

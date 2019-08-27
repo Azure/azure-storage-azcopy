@@ -34,6 +34,10 @@ var _ = chk.Suite(&genericProcessorSuite{})
 
 type processorTestSuiteHelper struct{}
 
+func (s *genericProcessorSuite) SetUpTest(c *chk.C) {
+	c.Log("Still running tests... ", c.TestName())
+}
+
 // return a list of sample entities
 func (processorTestSuiteHelper) getSampleObjectList() []storedObject {
 	return []storedObject{

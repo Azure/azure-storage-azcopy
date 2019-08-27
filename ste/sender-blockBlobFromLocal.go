@@ -134,3 +134,13 @@ func (u *blockBlobUploader) Epilogue() {
 
 	u.blockBlobSenderBase.Epilogue()
 }
+
+func (u *blockBlobUploader) GetDestinationLength() (int64, error) {
+	prop, err := u.destBlockBlobURL.GetProperties(u.jptm.Context(), azblob.BlobAccessConditions{})
+
+	if err != nil {
+		return -1, err
+	}
+
+	return prop.ContentLength(), nil
+}
