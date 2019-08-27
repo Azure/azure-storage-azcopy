@@ -52,6 +52,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if srcCredInfo, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
 		return nil, err
 	} else if cca.fromTo.From() != common.ELocation.Local() && cca.fromTo.To() != common.ELocation.Local() && srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// TODO: Generate a SAS token if it's blob -> *
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers")
 	}
 
@@ -236,7 +237,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 	dstCredInfo := common.CredentialInfo{}
 
-	if dstCredInfo, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.destinationSAS, true); err != nil {
+	if dstCredInfo, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, false); err != nil {
 		return err
 	}
 
@@ -267,7 +268,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 		bcu := bsu.NewContainerURL(containerName)
 		_, err = bcu.GetProperties(ctx, azblob.LeaseAccessConditions{})
 
-		if err != nil {
+		if err == nil {
 			return err // Container already exists, return gracefully
 		}
 
