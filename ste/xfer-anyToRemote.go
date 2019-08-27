@@ -34,7 +34,7 @@ import (
 )
 
 // This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
-var s2sAccessTierFailureLogGLCM sync.Once
+var s2sAccessTierFailureLogStdout sync.Once
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
@@ -340,10 +340,10 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPY SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
 				// Output relative path of file, includes file name.
-				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOAD SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}
