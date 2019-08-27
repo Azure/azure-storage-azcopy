@@ -391,7 +391,9 @@ func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, obje
 
 func LogStdoutAndJobLog(toLog string) {
 	glcm.Info(toLog)
-	ste.JobsAdmin.LogToJobLog(toLog)
+	if ste.JobsAdmin != nil {
+		ste.JobsAdmin.LogToJobLog(toLog)
+	}
 }
 
 func (e *copyEnumerator) enumerate() (err error) {
