@@ -85,7 +85,12 @@ func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNa
 // ResolveName returns resolved name for given bucket name.
 func (s3Resolver *S3BucketNameToAzureResourcesResolver) ResolveName(bucketName string) (string, error) {
 	if resolvedName, ok := s3Resolver.bucketNameResolvingMap[bucketName]; !ok {
-		return "", fmt.Errorf("%s: invalid state, cannot find resolved bucket name for %q", s3BucketNameResolveError, bucketName) // This should not happen logically
+		// Resolve the new bucket name, recurse.
+
+		s3Resolver.bucketNameResolvingMap[bucketName] = bucketName
+		s3Resolver.resolveNewBucketNameInternal(bucketName)
+
+		return s3Resolver.ResolveName(bucketName)
 	} else if resolvedName == failToResolveMapValue {
 		return "", fmt.Errorf("%s: s3 bucket name %q is invalid for Azure container/share/filesystem, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
 	} else {

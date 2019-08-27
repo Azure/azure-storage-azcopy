@@ -94,6 +94,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 			pathProperties.ContentLength(),
 			pathProperties.ContentMD5(),
 			blobTypeNA,
+			bfsURLParts.FileSystemName,
 		)
 
 		if t.incrementEnumerationCounter != nil {
@@ -127,6 +128,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 					*v.ContentLength,
 					v.ContentMD5(),
 					blobTypeNA,
+					bfsURLParts.FileSystemName,
 				)
 
 				if t.incrementEnumerationCounter != nil {

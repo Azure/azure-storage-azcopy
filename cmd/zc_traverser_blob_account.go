@@ -22,6 +22,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -37,6 +38,10 @@ type blobAccountTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
+}
+
+func (t *blobAccountTraverser) isDirectory(isSource bool) bool {
+	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
 func (t *blobAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
@@ -68,7 +73,8 @@ func (t *blobAccountTraverser) traverse(processor objectProcessor, filters []obj
 			err = containerTraverser.traverse(middlemanProcessor, filters)
 
 			if err != nil {
-				return err
+				LogStdoutAndJobLog(fmt.Sprintf("failed to list blobs in container %s: %s", v.Name, err))
+				continue
 			}
 		}
 

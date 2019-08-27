@@ -22,7 +22,9 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/minio/minio-go"
 
@@ -42,6 +44,10 @@ type s3ServiceTraverser struct {
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
+}
+
+func (t *s3ServiceTraverser) isDirectory(isSource bool) bool {
+	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
 func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
@@ -72,7 +78,18 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 			err = bucketTraverser.traverse(middlemanProcessor, filters)
 
 			if err != nil {
-				return err
+				if strings.Contains(err.Error(), "301 response missing Location header") {
+					LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q , as it's not in the region specified by source URL", v.Name))
+					continue
+				}
+
+				if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
+					LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist (perhaps you have a ghost bucket?)", v.Name))
+					continue
+				}
+
+				LogStdoutAndJobLog(fmt.Sprintf("failed to list objects in bucket %s: %s", v.Name, err))
+				continue
 			}
 		}
 	} else {
@@ -105,7 +122,6 @@ func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, incrementEnumer
 			CredentialType: common.ECredentialType.S3AccessKey(),
 			S3CredentialInfo: common.S3CredentialInfo{
 				Endpoint: t.s3URL.Endpoint,
-				Region:   t.s3URL.Region,
 			},
 		},
 		common.CredentialOpOptions{

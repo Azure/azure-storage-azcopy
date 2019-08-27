@@ -22,7 +22,7 @@ package cmd
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net/url"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -43,6 +43,10 @@ type BlobFSAccountTraverser struct {
 	incrementEnumerationCounter func()
 }
 
+func (t *BlobFSAccountTraverser) isDirectory(isSource bool) bool {
+	return true // Returns true as account traversal is inherently folder-oriented and recursive.
+}
+
 func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
 	marker := ""
 	for {
@@ -57,7 +61,8 @@ func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []o
 			if v.Name != nil {
 				fsName = *v.Name
 			} else {
-				return errors.New("filesystem listing returned nil container names")
+				LogStdoutAndJobLog("filesystem listing returned nil filesystem name")
+				continue
 			}
 
 			if t.fileSystemPattern != "" {
@@ -76,7 +81,8 @@ func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []o
 			err = fileSystemTraverser.traverse(middlemanProcessor, filters)
 
 			if err != nil {
-				return err
+				LogStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", fsName, err))
+				continue
 			}
 		}
 

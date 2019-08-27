@@ -61,6 +61,10 @@ func (util copyHandlerUtil) urlIsContainerOrVirtualDirectory(url *url.URL) bool 
 		// If there's no slashes after the first, it's a container.
 		// If there's a slash on the end, it's a virtual directory/container.
 		// Otherwise, it's just a blob.
+		if len(url.Path) == 0 {
+			return true // We know for SURE that it's a account level URL
+		}
+
 		return strings.HasSuffix(url.Path, "/") || strings.Count(url.Path[1:], "/") == 0
 	} else {
 		// IP endpoint style: https://IP:port/accountname/container

@@ -98,6 +98,9 @@ var JobsAdmin interface {
 	// returns number of bytes successfully transferred in transfers that are currently in progress
 	SuccessfulBytesInActiveFiles() uint64
 
+	MessagesForJobLog() <-chan string
+	LogToJobLog(msg string)
+
 	//DeleteJob(jobID common.JobID)
 	common.ILoggerCloser
 }
@@ -172,6 +175,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			lowChunkCh:       lowChunkCh,
 			suicideCh:        suicideCh,
 		},
+		workaroundJobLoggingChannel: make(chan string, 1000), // workaround to support logging from JobsAdmin
 	}
 	// create new context with the defaultService api version set as value to serviceAPIVersionOverride in the app context.
 	ja.appCtx = context.WithValue(ja.appCtx, ServiceAPIVersionOverride, DefaultServiceApiVersion)
@@ -329,15 +333,16 @@ type jobsAdmin struct {
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo
 	// Other global state can be stored in more fields here...
-	logDir              string // Where log files are stored
-	planDir             string // Initialize to directory where Job Part Plans are stored
-	coordinatorChannels CoordinatorChannels
-	xferChannels        XferChannels
-	appCtx              context.Context
-	pacer               pacerAdmin
-	slicePool           common.ByteSlicePooler
-	cacheLimiter        common.CacheLimiter
-	fileCountLimiter    common.CacheLimiter
+	logDir                      string // Where log files are stored
+	planDir                     string // Initialize to directory where Job Part Plans are stored
+	coordinatorChannels         CoordinatorChannels
+	xferChannels                XferChannels
+	appCtx                      context.Context
+	pacer                       pacerAdmin
+	slicePool                   common.ByteSlicePooler
+	cacheLimiter                common.CacheLimiter
+	fileCountLimiter            common.CacheLimiter
+	workaroundJobLoggingChannel chan string
 }
 
 type CoordinatorChannels struct {
@@ -555,6 +560,22 @@ func (ja *jobsAdmin) slicePoolPruneLoop() {
 			break
 		}
 	}
+}
+
+// TODO: review or replace (or confirm to leave as is?)  Originally, JobAdmin couldn't use invidual job logs because there could
+// be several concurrent jobs running. That's not the case any more, so this is safe now, but it does't quite fit with the
+// architecture around it.
+func (ja *jobsAdmin) LogToJobLog(msg string) {
+	select {
+	case ja.workaroundJobLoggingChannel <- msg:
+		// done, we have passed it off to get logged
+	default:
+		// channel buffer is full, have to drop this message
+	}
+}
+
+func (ja *jobsAdmin) MessagesForJobLog() <-chan string {
+	return ja.workaroundJobLoggingChannel
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

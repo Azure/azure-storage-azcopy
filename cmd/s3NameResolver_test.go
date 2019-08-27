@@ -145,10 +145,5 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegativ
 
 	r = NewS3BucketNameToAzureResourcesResolver([]string{"namea"})
 	_, err = r.ResolveName("specialnewnameb")
-	c.Assert(err, chk.NotNil)
-	c.Assert(
-		strings.Contains(err.Error(), "invalid state, cannot find resolved bucket name"),
-		chk.Equals,
-		true)
-
+	c.Assert(err, chk.IsNil) // Bucket resolver now supports new names being injected
 }

@@ -28,10 +28,6 @@ type blockSizeFilterSuite struct{}
 
 var _ = chk.Suite(&blockSizeFilterSuite{})
 
-func (s *blockSizeFilterSuite) SetUpTest(c *chk.C) {
-	c.Log("Still running tests... ", c.TestName())
-}
-
 func (s *genericFilterSuite) TestConversions(c *chk.C) {
 
 	testData := []struct {

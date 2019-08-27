@@ -83,7 +83,10 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),
 			blobProperties.BlobType(),
+			blobUrlParts.ContainerName,
 		)
+
+		storedObject.blobAccessTier = azblob.AccessTierType(blobProperties.AccessTier())
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -137,7 +140,10 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				*blobInfo.Properties.ContentLength,
 				blobInfo.Properties.ContentMD5,
 				blobInfo.Properties.BlobType,
+				blobUrlParts.ContainerName,
 			)
+
+			storedObject.blobAccessTier = blobInfo.Properties.AccessTier
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

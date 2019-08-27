@@ -894,10 +894,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		// set the clean source root
 		jobPartOrder.SourceRoot = bfsUrl.String()
 
-	case common.ELocation.Local():
-		cca.source = cleanLocalPath(cca.source)
-		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
-
 	case common.ELocation.S3():
 		fromURL, err := url.Parse(cca.source)
 		if err != nil {
@@ -976,7 +972,10 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		common.EFromTo.LocalFile(),
 		common.EFromTo.BlobLocal(),
 		common.EFromTo.FileLocal(),
-		common.EFromTo.BlobFSLocal():
+		common.EFromTo.BlobFSLocal(),
+		common.EFromTo.BlobBlob(),
+		common.EFromTo.FileBlob(),
+		common.EFromTo.S3Blob():
 		var e *copyEnumerator
 		e, err = cca.initEnumerator(jobPartOrder, ctx)
 		if err != nil {
@@ -1002,28 +1001,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		}
 
 		return err
-
-	case common.EFromTo.BlobBlob():
-		e := copyS2SMigrationBlobEnumerator{
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-	case common.EFromTo.FileBlob():
-		e := copyS2SMigrationFileEnumerator{
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
-	case common.EFromTo.S3Blob():
-		e := copyS2SMigrationS3Enumerator{ // S3 enumerator for S2S copy.
-			copyS2SMigrationEnumeratorBase: copyS2SMigrationEnumeratorBase{
-				CopyJobPartOrderRequest: jobPartOrder,
-			},
-		}
-		err = e.enumerate(cca)
 
 	// TODO: Hide the File to Blob direction temporarily, as service support on-going.
 	// case common.EFromTo.FileBlob():

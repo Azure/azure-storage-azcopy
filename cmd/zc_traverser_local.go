@@ -183,7 +183,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
 				nil,
-				blobTypeNA),
+				blobTypeNA,
+				"", // Local has no such thing as containers
+			),
 			processor,
 		)
 	} else {
@@ -215,7 +217,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						nil,
-						blobTypeNA),
+						blobTypeNA,
+						"", // Local has no such thing as containers
+					),
 					processor)
 			}
 
@@ -279,7 +283,9 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						singleFile.ModTime(),
 						singleFile.Size(),
 						nil,
-						blobTypeNA),
+						blobTypeNA,
+						"", // Local has no such thing as containers
+					),
 					processor)
 
 				if err != nil {

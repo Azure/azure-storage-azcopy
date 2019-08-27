@@ -32,8 +32,11 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 // -------------------------------------- Component Definitions -------------------------------------- \\
@@ -57,6 +60,10 @@ type storedObject struct {
 	relativePath string
 	// container source, only included by account traversers.
 	containerName string
+	// destination container name. Included in the processor after resolving container names.
+	dstContainerName string
+	// access tier, only included by blob traverser.
+	blobAccessTier azblob.AccessTierType
 }
 
 const (
@@ -68,7 +75,7 @@ func (storedObject *storedObject) isMoreRecentThan(storedObject2 storedObject) b
 }
 
 // a constructor is used so that in case the storedObject has to change, the callers would get a compilation error
-func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType) storedObject {
+func newStoredObject(name string, relativePath string, lmt time.Time, size int64, md5 []byte, blobType azblob.BlobType, containerName string) storedObject {
 	return storedObject{
 		name:             name,
 		relativePath:     relativePath,
@@ -76,6 +83,7 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 		size:             size,
 		md5:              md5,
 		blobType:         blobType,
+		containerName:    containerName,
 	}
 }
 
@@ -101,6 +109,8 @@ func initContainerDecorator(containerName string, processor objectProcessor) obj
 		return processor(object)
 	}
 }
+
+const accountTraversalInherentlyRecursiveError = "account copies are an inherently recursive operation, and thus --recursive is required"
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
@@ -180,7 +190,19 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
 
-		output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		burl := azblob.NewBlobURLParts(*sourceURL)
+
+		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
+			// TODO service traverser
+
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output = newBlobAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+		} else {
+			output = newBlobTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		}
 	case common.ELocation.File():
 		sourceURL, err := url.Parse(source)
 		if err != nil {
@@ -191,7 +213,19 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a file traverser")
 		}
 
-		output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		furl := azfile.NewFileURLParts(*sourceURL)
+
+		if furl.ShareName == "" || strings.Contains(furl.ShareName, "*") {
+			// TODO service traverser
+
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output = newFileAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+		} else {
+			output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		}
 	case common.ELocation.BlobFS():
 		sourceURL, err := url.Parse(source)
 		if err != nil {
@@ -202,9 +236,60 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
 		}
 
-		output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		bfsURL := azbfs.NewBfsURLParts(*sourceURL)
+
+		if bfsURL.FileSystemName == "" || strings.Contains(bfsURL.FileSystemName, "*") {
+			// TODO service traverser
+
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output = newBlobFSAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+		} else {
+			output = newBlobFSTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+		}
+	case common.ELocation.S3():
+		sourceURL, err := url.Parse(source)
+		if err != nil {
+			return nil, err
+		}
+
+		s3URLParts, err := common.NewS3URLParts(*sourceURL)
+		if err != nil {
+			return nil, err
+		}
+
+		if ctx == nil {
+			return nil, errors.New("a valid context must be supplied to create a S3 traverser")
+		}
+
+		if s3URLParts.BucketName == "" || strings.Contains(s3URLParts.BucketName, "*") {
+			// TODO convert to path style URL
+			// TODO service traverser
+
+			if !recursive {
+				return nil, errors.New(accountTraversalInherentlyRecursiveError)
+			}
+
+			output, err = newS3ServiceTraverser(sourceURL, *ctx, incrementEnumerationCounter)
+
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			output, err = newS3Traverser(sourceURL, *ctx, recursive, incrementEnumerationCounter)
+
+			if err != nil {
+				return nil, err
+			}
+		}
 	default:
 		return nil, errors.New("could not choose a traverser from currently available traversers")
+	}
+
+	if output == nil {
+		return nil, errors.New("sanity check: somehow didn't spawn a traverser")
 	}
 
 	return output, nil
@@ -302,6 +387,11 @@ func newCopyEnumerator(traverser resourceTraverser, filters []objectFilter, obje
 		objectDispatcher: objectDispatcher,
 		finalize:         finalizer,
 	}
+}
+
+func LogStdoutAndJobLog(toLog string) {
+	glcm.Info(toLog)
+	ste.JobsAdmin.LogToJobLog(toLog)
 }
 
 func (e *copyEnumerator) enumerate() (err error) {

@@ -75,6 +75,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				fileProperties.ContentLength(),
 				fileProperties.ContentMD5(),
 				blobTypeNA,
+				targetURLParts.ShareName,
 			)
 
 			if t.incrementEnumerationCounter != nil {
@@ -119,6 +120,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 					fileProperties.ContentLength(),
 					fileProperties.ContentMD5(),
 					azblob.BlobNone,
+					targetURLParts.ShareName,
 				)
 
 				if t.incrementEnumerationCounter != nil {

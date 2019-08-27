@@ -32,11 +32,12 @@ import (
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-storage-file-go/azfile"
+
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
 var once sync.Once
@@ -167,11 +168,17 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 	}
 }
 
+var announceOAuthTokenOnce sync.Once
+
 func oAuthTokenExists() (oauthTokenExists bool) {
 	// Note: Environment variable for OAuth token should only be used in testing, or the case user clearly now how to protect
 	// the tokens
 	if common.EnvVarOAuthTokenInfoExists() {
-		glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
+		announceOAuthTokenOnce.Do(
+			func() {
+				glcm.Info(fmt.Sprintf("%v is set.", common.EnvVarOAuthTokenInfo)) // Log the case when env var is set, as it's rare case.
+			},
+		)
 		oauthTokenExists = true
 	}
 
@@ -197,11 +204,17 @@ func getAzureFileCredentialType() (common.CredentialType, error) {
 // Note: This is only used for internal integration, and not encouraged to be used directly.
 const envVarCredentialType = "AZCOPY_CRED_TYPE"
 
+var stashedEnvCredType = ""
+
 // GetCredTypeFromEnvVar tries to get credential type from environment variable defined by envVarCredentialType.
 func GetCredTypeFromEnvVar() common.CredentialType {
-	rawVal := os.Getenv(envVarCredentialType)
-	if rawVal == "" {
-		return common.ECredentialType.Unknown()
+	rawVal := stashedEnvCredType
+	if stashedEnvCredType == "" {
+		rawVal = os.Getenv(envVarCredentialType)
+		if rawVal == "" {
+			return common.ECredentialType.Unknown()
+		}
+		stashedEnvCredType = rawVal
 	}
 
 	// Remove the env var after successfully fetching once,
@@ -223,8 +236,49 @@ type rawFromToInfo struct {
 	sourceSAS, destinationSAS string // Standalone SAS which might be provided
 }
 
+func getCredentialInfoForLocation(ctx context.Context, location common.Location, source, sourceSAS string, isSource bool) (credInfo common.CredentialInfo, err error) {
+	if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
+		switch location {
+		case common.ELocation.Local():
+			credInfo.CredentialType = common.ECredentialType.Anonymous()
+		case common.ELocation.Blob():
+			if credInfo.CredentialType, err = getBlobCredentialType(ctx, source, isSource, sourceSAS != ""); err != nil {
+				return common.CredentialInfo{}, err
+			}
+		case common.ELocation.File():
+			if credInfo.CredentialType, err = getAzureFileCredentialType(); err != nil {
+				return common.CredentialInfo{}, err
+			}
+		case common.ELocation.BlobFS():
+			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, source, sourceSAS != ""); err != nil {
+				return common.CredentialInfo{}, err
+			}
+		case common.ELocation.S3():
+			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
+			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
+			if accessKeyID == "" || secretAccessKey == "" {
+				return common.CredentialInfo{}, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
+			}
+			credInfo.CredentialType = common.ECredentialType.S3AccessKey()
+		}
+	}
+
+	if credInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		uotm := GetUserOAuthTokenManagerInstance()
+
+		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
+			return credInfo, err
+		} else {
+			credInfo.OAuthTokenInfo = *tokenInfo
+		}
+	}
+
+	return
+}
+
 // getCredentialType checks user provided info, and gets the proper credential type
 // for current command.
+// kept around for legacy compatibility at the moment
 func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType common.CredentialType, err error) {
 	// In the integration case, AzCopy directly use caller provided credential type if specified and not Unknown.
 	if credType := GetCredTypeFromEnvVar(); credType != common.ECredentialType.Unknown() {
