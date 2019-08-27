@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
@@ -92,6 +94,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		cca.stripTopDir = true
 	}
 
+	var logDstContainerCreateFailureOnce sync.Once
 	filters := cca.initModularFilters()
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
@@ -108,8 +111,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			object.dstContainerName = cName
 			err = cca.createDstContainer(cName, dst, ctx)
 
-			if err != nil {
-				return fmt.Errorf("failed to create destination container: %s", err)
+			// if JobsAdmin is nil, we're probably in testing mode.
+			// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
+			if err != nil && ste.JobsAdmin != nil {
+				logDstContainerCreateFailureOnce.Do(func() {
+					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed.")
+				})
+				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", cName, err))
 			}
 		}
 
@@ -257,6 +265,12 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 		bsu := azblob.NewServiceURL(*dstURL, dstPipeline)
 		bcu := bsu.NewContainerURL(containerName)
+		_, err = bcu.GetProperties(ctx, azblob.LeaseAccessConditions{})
+
+		if err != nil {
+			return err // Container already exists, return gracefully
+		}
+
 		_, err = bcu.Create(ctx, azblob.Metadata{}, azblob.PublicAccessNone)
 
 		if stgErr, ok := err.(azblob.StorageError); ok {
