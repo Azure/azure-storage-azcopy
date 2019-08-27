@@ -55,6 +55,8 @@ type storedObject struct {
 	// example: rootDir=/var/a/b/c/d/e/f.pdf fullPath=/var/a/b/c/d/e/f.pdf => relativePath=""
 	// in this case, since rootDir already points to the file, relatively speaking the path is nothing.
 	relativePath string
+	// container source, only included by account traversers.
+	containerName string
 }
 
 const (
@@ -86,6 +88,18 @@ type resourceTraverser interface {
 	// Blob should ONLY check remote if it's a source.
 	// On destinations, because blobs and virtual directories can share names, we should support placing in both ways.
 	// Thus, we only check the directory syntax on blob destinations. On sources, we check both syntax and remote, if syntax isn't a directory.
+}
+
+// basically rename a function and change the order of inputs just to make what's happening clearer
+func containerNameMatchesPattern(containerName, pattern string) (bool, error) {
+	return filepath.Match(pattern, containerName)
+}
+
+func initContainerDecorator(containerName string, processor objectProcessor) objectProcessor {
+	return func(object storedObject) error {
+		object.containerName = containerName
+		return processor(object)
+	}
 }
 
 // source, location, recursive, and incrementEnumerationCounter are always required.

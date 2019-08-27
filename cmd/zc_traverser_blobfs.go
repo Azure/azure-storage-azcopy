@@ -1,4 +1,4 @@
-// Copyright © 2019 Microsoft <wastore@microsoft.com>
+// Copyright © Microsoft <wastore@microsoft.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -89,7 +89,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 	if isFile {
 		storedObject := newStoredObject(
 			getObjectNameOnly(bfsURLParts.DirectoryOrFilePath),
-			"", // relative path makes no sense when the full path already points to the file
+			"",
 			t.parseLMT(pathProperties.LastModified()),
 			pathProperties.ContentLength(),
 			pathProperties.ContentMD5(),
@@ -140,6 +140,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 			}
 		}
 
+		marker = dlr.XMsContinuation()
 		if marker == "" { // do-while pattern
 			break
 		}

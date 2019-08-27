@@ -70,7 +70,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 		if isFile {
 			storedObject := newStoredObject(
 				getObjectNameOnly(targetURLParts.DirectoryOrFilePath),
-				"", // relative path makes no sense when the full path already points to the file
+				"",
 				fileProperties.LastModified(),
 				fileProperties.ContentLength(),
 				fileProperties.ContentMD5(),
