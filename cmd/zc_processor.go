@@ -22,8 +22,12 @@ package cmd
 
 import (
 	"fmt"
+
+	"github.com/pkg/errors"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"net/url"
+	"strings"
 )
 
 type copyTransferProcessor struct {
@@ -90,20 +94,10 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 }
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
-	numberOfCopyTransfers := len(s.copyJobTemplate.Transfers)
-
-	// if the number of transfer to copy is 0
-	// and no part was dispatched, then it means there is no work to do
-	if s.copyJobTemplate.PartNum == 0 && numberOfCopyTransfers == 0 {
-		return false, nil
-	}
-
-	if numberOfCopyTransfers > 0 {
-		s.copyJobTemplate.IsFinalPart = true
-		err = s.sendPartToSte()
-		if err != nil {
-			return false, err
-		}
+	s.copyJobTemplate.IsFinalPart = true
+	err = s.sendPartToSte()
+	if err != nil {
+		return false, err
 	}
 
 	if s.reportFinalPartDispatched != nil {
@@ -116,7 +110,11 @@ func (s *copyTransferProcessor) sendPartToSte() error {
 	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), s.copyJobTemplate, &resp)
 	if !resp.JobStarted {
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed to dispatch because %s",
+		if strings.Contains(resp.ErrorMsg, "scheduled") {
+			return errors.New("no transfers were scheduled")
+		}
+
+		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
 			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 

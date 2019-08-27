@@ -141,6 +141,11 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+
+	if len(order.Transfers) == 0 {
+		jpm.Log(pipeline.LogError, "ERROR: No transfers were scheduled.")
+		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: "no transfers were scheduled"}
+	}
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jpm.setInMemoryTransitJobState(
 		InMemoryTransitJobState{

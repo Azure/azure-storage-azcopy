@@ -217,10 +217,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return addTransfer(&jobPartOrder, transfer, cca)
 	}
 	finalizer := func() error {
-		if len(jobPartOrder.Transfers) == 0 {
-			return errors.New("cannot find source to upload")
-		}
-
+		// Use a temporary variable to bypass err returning to nil in the event of no source to upload
 		return dispatchFinalPart(&jobPartOrder, cca)
 	}
 
