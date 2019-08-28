@@ -30,7 +30,8 @@ import (
 func init() {
 	// set the block-blob-tier and page-blob-tier to None since Parse fails for "" string
 	// while parsing block-blob and page-blob tier.
-	raw := rawCopyCmdArgs{blockBlobTier: common.EBlockBlobTier.None().String(), pageBlobTier: common.EPageBlobTier.None().String()}
+	raw := rawCopyCmdArgs{blockBlobTier: common.EBlockBlobTier.None().String(), pageBlobTier: common.EPageBlobTier.None().String(),
+		forceWrite: common.EOverwriteOption.True().String()}
 	// deleteCmd represents the delete command
 	var deleteCmd = &cobra.Command{
 		Use:        "remove [resourceURL]",
