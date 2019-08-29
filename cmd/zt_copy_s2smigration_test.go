@@ -266,7 +266,7 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
-		c.Assert(err.Error(), StringIncludes, "some of the buckets have invalid names for Azure")
+		c.Assert(err.Error(), StringIncludes, "some of the buckets have invalid names for the destination")
 	})
 }
 
