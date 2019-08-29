@@ -46,14 +46,20 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		src = srcURL.String()
 	}
 
-	var err error
+	var (
+		err      error
+		isPublic bool
+	)
 	srcCredInfo := common.CredentialInfo{}
 
-	if srcCredInfo, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
+	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
 		return nil, err
-	} else if cca.fromTo.From() != common.ELocation.Local() && cca.fromTo.To() != common.ELocation.Local() && srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() {
+		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
+	} else if cca.fromTo.From() != common.ELocation.Local() && cca.fromTo.To() != common.ELocation.Local() &&
+		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
+			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.sourceSAS == "")) {
 		// TODO: Generate a SAS token if it's blob -> *
-		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers")
+		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
 	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
@@ -171,7 +177,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) 
 		return false
 	}
 
-	if dstCredInfo, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, true); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(*ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, true); err != nil {
 		return false
 	}
 
@@ -238,7 +244,7 @@ func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS strin
 
 	dstCredInfo := common.CredentialInfo{}
 
-	if dstCredInfo, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, false); err != nil {
+	if dstCredInfo, _, err = getCredentialInfoForLocation(ctx, cca.fromTo.To(), cca.destination, cca.destinationSAS, false); err != nil {
 		return err
 	}
 

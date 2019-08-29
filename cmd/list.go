@@ -95,7 +95,7 @@ func HandleListContainerCommand(source string) (err error) {
 
 	credentialInfo := common.CredentialInfo{}
 	// Use source as resource URL, and it can be public access resource URL.
-	if credentialInfo.CredentialType, err = getBlobCredentialType(ctx, source, true, false); err != nil {
+	if credentialInfo.CredentialType, _, err = getBlobCredentialType(ctx, source, true, false); err != nil {
 		return err
 	} else if credentialInfo.CredentialType == common.ECredentialType.OAuthToken() {
 		// Message user that they are using Oauth token for authentication,

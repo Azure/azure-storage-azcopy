@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -80,27 +81,21 @@ func GetUserOAuthTokenManagerInstance() *common.UserOAuthTokenManager {
 // 4. If there is OAuth token info passed from env var, indicating using token credential. (Note: this is only for testing)
 // 5. Otherwise use anonymous credential.
 // The implementaion logic follows above rule, and adjusts sequence to save web request(for verifying public resource).
-func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool) (common.CredentialType, error) {
+func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePublic bool, standaloneSAS bool) (common.CredentialType, bool, error) {
 	resourceURL, err := url.Parse(blobResourceURL)
 
 	if err != nil {
-		return common.ECredentialType.Unknown(), errors.New("provided blob resource string is not in URL format")
+		return common.ECredentialType.Unknown(), false, errors.New("provided blob resource string is not in URL format")
 	}
 
 	sas := azblob.NewBlobURLParts(*resourceURL).SAS
 
 	// If SAS existed, return anonymous credential type.
 	if isSASExisted := sas.Signature() != ""; isSASExisted || standaloneSAS {
-		return common.ECredentialType.Anonymous(), nil
+		return common.ECredentialType.Anonymous(), false, nil
 	}
 
-	// If SAS token doesn't exist, it could be using OAuth token or the resource is public.
-	if !oAuthTokenExists() { // no oauth token found, then directly return anonymous credential
-		return common.ECredentialType.Anonymous(), nil
-	} else if !canBePublic { // oauth token found, if it can not be public resource, return token credential
-		return common.ECredentialType.OAuthToken(), nil
-	} else { // check if it's public resource, and return credential type correspondingly
-		// If has cached token, and no SAS token provided, it could be a public blob resource.
+	checkPublic := func() (isPublicResource bool) {
 		p := azblob.NewPipeline(
 			azblob.NewAnonymousCredential(),
 			azblob.PipelineOptions{
@@ -114,10 +109,17 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 			})
 
 		isContainer := copyHandlerUtil{}.urlIsContainerOrVirtualDirectory(resourceURL)
-		isPublicResource := false
+		isPublicResource = false
 
 		if isContainer {
 			containerURL := azblob.NewContainerURL(*resourceURL, p)
+			bURLparts := azblob.NewBlobURLParts(*resourceURL)
+
+			if bURLparts.ContainerName == "" || strings.Contains(bURLparts.ContainerName, "*") {
+				// Service level searches can't possibly be public.
+				return false
+			}
+
 			if _, err := containerURL.GetProperties(ctx, azblob.LeaseAccessConditions{}); err == nil {
 				isPublicResource = true
 			}
@@ -128,10 +130,29 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 			}
 		}
 
+		return
+	}
+
+	// If SAS token doesn't exist, it could be using OAuth token or the resource is public.
+	if !oAuthTokenExists() { // no oauth token found, then directly return anonymous credential
+		isPublicResource := checkPublic()
+
+		// No forms of auth are present.
+		if !isPublicResource {
+			return common.ECredentialType.Unknown(), isPublicResource, errors.New("no SAS token or OAuth token is present and the resource is not public")
+		}
+
+		return common.ECredentialType.Anonymous(), isPublicResource, nil
+	} else if !canBePublic { // oauth token found, if it can not be public resource, return token credential
+		return common.ECredentialType.OAuthToken(), false, nil
+	} else { // check if it's public resource, and return credential type correspondingly
+		// If has cached token, and no SAS token provided, it could be a public blob resource.
+		isPublicResource := checkPublic()
+
 		if isPublicResource {
-			return common.ECredentialType.Anonymous(), nil
+			return common.ECredentialType.Anonymous(), true, nil
 		} else {
-			return common.ECredentialType.OAuthToken(), nil
+			return common.ECredentialType.OAuthToken(), false, nil
 		}
 	}
 }
@@ -236,28 +257,28 @@ type rawFromToInfo struct {
 	sourceSAS, destinationSAS string // Standalone SAS which might be provided
 }
 
-func getCredentialInfoForLocation(ctx context.Context, location common.Location, source, sourceSAS string, isSource bool) (credInfo common.CredentialInfo, err error) {
+func getCredentialInfoForLocation(ctx context.Context, location common.Location, source, sourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
 	if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
 		switch location {
 		case common.ELocation.Local():
 			credInfo.CredentialType = common.ECredentialType.Anonymous()
 		case common.ELocation.Blob():
-			if credInfo.CredentialType, err = getBlobCredentialType(ctx, source, isSource, sourceSAS != ""); err != nil {
-				return common.CredentialInfo{}, err
+			if credInfo.CredentialType, isPublic, err = getBlobCredentialType(ctx, source, isSource, sourceSAS != ""); err != nil {
+				return common.CredentialInfo{}, false, err
 			}
 		case common.ELocation.File():
 			if credInfo.CredentialType, err = getAzureFileCredentialType(); err != nil {
-				return common.CredentialInfo{}, err
+				return common.CredentialInfo{}, false, err
 			}
 		case common.ELocation.BlobFS():
 			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, source, sourceSAS != ""); err != nil {
-				return common.CredentialInfo{}, err
+				return common.CredentialInfo{}, false, err
 			}
 		case common.ELocation.S3():
 			accessKeyID := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSAccessKeyID())
 			secretAccessKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AWSSecretAccessKey())
 			if accessKeyID == "" || secretAccessKey == "" {
-				return common.CredentialInfo{}, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
+				return common.CredentialInfo{}, false, errors.New("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables must be set before creating the S3 AccessKey credential")
 			}
 			credInfo.CredentialType = common.ECredentialType.S3AccessKey()
 		}
@@ -267,7 +288,7 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 		uotm := GetUserOAuthTokenManagerInstance()
 
 		if tokenInfo, err := uotm.GetTokenInfo(ctx); err != nil {
-			return credInfo, err
+			return credInfo, false, err
 		} else {
 			credInfo.OAuthTokenInfo = *tokenInfo
 		}
@@ -293,12 +314,12 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 		// If the traditional approach(download+upload) need be supported, credential type should be calculated for both src and dest.
 		fallthrough
 	case common.EFromTo.LocalBlob(), common.EFromTo.PipeBlob():
-		if credentialType, err = getBlobCredentialType(ctx, raw.destination, false, raw.destinationSAS != ""); err != nil {
+		if credentialType, _, err = getBlobCredentialType(ctx, raw.destination, false, raw.destinationSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.EFromTo.BlobTrash():
 		// For BlobTrash direction, use source as resource URL, and it should not be public access resource.
-		if credentialType, err = getBlobCredentialType(ctx, raw.source, false, raw.sourceSAS != ""); err != nil {
+		if credentialType, _, err = getBlobCredentialType(ctx, raw.source, false, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.EFromTo.BlobFSTrash():
@@ -306,7 +327,7 @@ func getCredentialType(ctx context.Context, raw rawFromToInfo) (credentialType c
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.EFromTo.BlobLocal(), common.EFromTo.BlobPipe():
-		if credentialType, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
+		if credentialType, _, err = getBlobCredentialType(ctx, raw.source, true, raw.sourceSAS != ""); err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
 	case common.EFromTo.LocalBlobFS():
