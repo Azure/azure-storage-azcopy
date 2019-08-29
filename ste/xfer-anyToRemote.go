@@ -27,10 +27,15 @@ import (
 	"hash"
 	"net/url"
 	"os"
+	"strings"
+	"sync"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
+
+// This sync.Once is present to ensure we output information about a S2S access tier preservation failure to stdout once
+var s2sAccessTierFailureLogStdout sync.Once
 
 // anyToRemote handles all kinds of sender operations - both uploads from local files, and S2S copies
 func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, senderFactory senderFactory, sipf sourceInfoProviderFactory) {
@@ -311,10 +316,16 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 	s.Epilogue() // Perform service-specific cleanup before jptm cleanup. Some services may actually require setup to make the file actually appear.
 
 	if info.DestLengthValidation {
-		if destLength, err := s.GetDestinationLength(); err != nil {
-			jptm.FailActiveSend("Transfer length check: get destination length", err)
-		} else if destLength != jptm.Info().SourceSize {
-			jptm.FailActiveSend("Transfer length check", errors.New("destination length does not match source length"))
+		if s2sc, isS2SCopier := s.(s2sCopier); isS2SCopier { // TODO: Implement this for upload and download?
+			destLength, err := s2sc.GetDestinationLength()
+
+			if err != nil {
+				jptm.FailActiveSend("S2S Length check: Get destination length", err)
+			}
+
+			if destLength != jptm.Info().SourceSize {
+				jptm.FailActiveSend("S2S Length check", errors.New("destination length does not match source length"))
+			}
 		}
 	}
 
@@ -342,9 +353,10 @@ func epilogueWithCleanupSendToRemote(jptm IJobPartTransferMgr, s ISenderBase, si
 		// Final logging
 		if jptm.ShouldLog(pipeline.LogInfo) { // TODO: question: can we remove these ShouldLogs?  Aren't they inside Log?
 			if _, ok := s.(s2sCopier); ok {
-				jptm.Log(pipeline.LogInfo, "COPY SUCCESSFUL")
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("COPYSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else if _, ok := s.(uploader); ok {
-				jptm.Log(pipeline.LogInfo, "UPLOAD SUCCESSFUL")
+				// Output relative path of file, includes file name.
+				jptm.Log(pipeline.LogInfo, fmt.Sprintf("UPLOADSUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 			} else {
 				panic("invalid state: epilogueWithCleanupSendToRemote should be used by COPY and UPLOAD")
 			}

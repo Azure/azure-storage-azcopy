@@ -141,7 +141,7 @@ func (e *copyS2SMigrationS3Enumerator) enumerate(cca *cookedCopyCmdArgs) error {
 			if err != nil {
 				glcm.Error(err.Error())
 				return errors.New("failed to add transfers from service, some of the buckets have invalid names for Azure. " +
-					"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
+					"Please exclude the invalid buckets in service to service copy, and copy them using bucket to container/share/filesystem copy " +
 					"with customized destination name after the service to service copy finished")
 			}
 
@@ -218,7 +218,7 @@ func (e *copyS2SMigrationS3Enumerator) addTransferFromService(ctx context.Contex
 		// Move the name resolution error to here so that only actually scheduled buckets get checked
 		if err != nil {
 			return errors.New("fail to add transfers from service, some of the buckets have invalid names for Azure. " +
-				"Please exclude the invalid buckets in service to service copy, and copy them use bucket to container/share/filesystem copy " +
+				"Please exclude the invalid buckets in service to service copy, and copy them using bucket to container/share/filesystem copy " +
 				"with customized destination name after the service to service copy finished")
 		}
 		// Whatever the destination type is, it should be equivalent to account level,
