@@ -86,7 +86,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	if srcLevel == 2 && dstLevel == 0 {
+	if srcLevel == ELocationLevel.Object() && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer files/folders to a service")
 	}
 
@@ -104,19 +104,20 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 			if err != nil {
 				glcm.Error(err.Error())
-				return errors.New("failed to add transfers from service, some of the buckets have invalid names for Azure. " +
+				return errors.New("failed to add transfers from service, some of the buckets have invalid names for the destination. " +
 					"Please exclude the invalid buckets in service to service copy, and copy them using bucket to container/share/filesystem copy " +
 					"with customized destination name after the service to service copy finished")
 			}
 
 			object.dstContainerName = cName
+			// The container only ends up getting created if it does not already exist.
 			err = cca.createDstContainer(cName, dst, ctx)
 
 			// if JobsAdmin is nil, we're probably in testing mode.
 			// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
 			if err != nil && ste.JobsAdmin != nil {
 				logDstContainerCreateFailureOnce.Do(func() {
-					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed.")
+					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 				})
 				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", cName, err))
 			}

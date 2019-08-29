@@ -63,6 +63,8 @@ var DefaultTokenExpiryWithinThreshold = time.Minute * 10
 type UserOAuthTokenManager struct {
 	oauthClient *http.Client
 	credCache   *CredCache
+
+	// Stash the credential info as we delete the environment variable after reading it, and we need to get it multiple times.
 	stashedInfo *OAuthTokenInfo
 }
 

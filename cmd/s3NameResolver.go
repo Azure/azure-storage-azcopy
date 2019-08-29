@@ -92,7 +92,7 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) ResolveName(bucketName s
 
 		return s3Resolver.ResolveName(bucketName)
 	} else if resolvedName == failToResolveMapValue {
-		return "", fmt.Errorf("%s: s3 bucket name %q is invalid for Azure container/share/filesystem, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
+		return "", fmt.Errorf("%s: container name %q is invalid for the destination, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
 	} else {
 		return resolvedName, nil
 	}

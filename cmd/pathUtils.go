@@ -37,14 +37,16 @@ func (LocationLevel) Object() LocationLevel    { return 2 } // An Object can be 
 // This is typically used to
 func determineLocationLevel(location string, locationType common.Location, source bool) (LocationLevel, error) {
 	switch locationType {
+	// In local, there's no such thing as a service.
+	// As such, we'll treat folders as containers, and files as objects.
 	case common.ELocation.Local():
-		level := LocationLevel(2)
+		level := LocationLevel(ELocationLevel.Object())
 		if strings.Contains(location, "*") {
-			return 1, nil
+			return ELocationLevel.Container(), nil
 		}
 
 		if strings.HasSuffix(location, "/") {
-			level = 1
+			level = ELocationLevel.Container()
 		}
 
 		if !source {
@@ -58,9 +60,9 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 		}
 
 		if fi.IsDir() {
-			return 1, nil
+			return ELocationLevel.Container(), nil
 		} else {
-			return 2, nil
+			return ELocationLevel.Object(), nil
 		}
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
@@ -68,56 +70,56 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 		URL, err := url.Parse(location)
 
 		if err != nil {
-			return 0, err
+			return ELocationLevel.Service(), err
 		}
 
 		// blobURLParts is the same format and doesn't care about endpoint
 		bURL := azblob.NewBlobURLParts(*URL)
 
 		if strings.Contains(bURL.ContainerName, "*") && bURL.BlobName != "" {
-			return 0, errors.New("can't use a wildcarded container name and specific blob name in combination")
+			return ELocationLevel.Service(), errors.New("can't use a wildcarded container name and specific blob name in combination")
 		}
 
 		if bURL.BlobName != "" {
-			return 2, nil
+			return ELocationLevel.Object(), nil
 		} else if bURL.ContainerName != "" && !strings.Contains(bURL.ContainerName, "*") {
-			return 1, nil
+			return ELocationLevel.Container(), nil
 		} else {
-			return 0, nil
+			return ELocationLevel.Service(), nil
 		}
 	case common.ELocation.S3():
 		URL, err := url.Parse(location)
 
 		if err != nil {
-			return 0, nil
+			return ELocationLevel.Service(), nil
 		}
 
 		s3URL, err := common.NewS3URLParts(*URL)
 
 		if err != nil {
-			return 0, nil
+			return ELocationLevel.Service(), nil
 		}
 
 		if strings.Contains(s3URL.BucketName, "*") && s3URL.ObjectKey != "" {
-			return 0, errors.New("can't use a wildcarded container name and specific object name in combination")
+			return ELocationLevel.Service(), errors.New("can't use a wildcarded container name and specific object name in combination")
 		}
 
 		if s3URL.ObjectKey != "" {
-			return 2, nil
+			return ELocationLevel.Object(), nil
 		} else if s3URL.BucketName != "" && !strings.Contains(s3URL.BucketName, "*") {
-			return 1, nil
+			return ELocationLevel.Container(), nil
 		} else {
-			return 0, nil
+			return ELocationLevel.Service(), nil
 		}
 	default: // Probably won't ever hit this
-		return 0, fmt.Errorf("getting level of location is impossible on location %s", locationType)
+		return ELocationLevel.Service(), fmt.Errorf("getting level of location is impossible on location %s", locationType)
 	}
 }
 
 func GetAccountRoot(path string, location common.Location) (string, error) {
 	switch location {
 	case common.ELocation.Local():
-		return path, nil // Probably won't be triggered, but just on the offchance
+		panic("attempted to get account root on local location")
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():

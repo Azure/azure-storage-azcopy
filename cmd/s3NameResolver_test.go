@@ -131,7 +131,7 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegativ
 	_, err := r.ResolveName("0123456789.0123456789.0123456789.012345678901234567890123456789")
 	c.Assert(err, chk.NotNil)
 	c.Assert(
-		strings.Contains(err.Error(), "invalid for Azure container/share/filesystem, and azcopy failed to convert it automatically"),
+		strings.Contains(err.Error(), "invalid for the destination"),
 		chk.Equals,
 		true)
 
@@ -139,7 +139,7 @@ func (s *s3NameResolverTestSuite) TestS3BucketNameToAzureResourceResolverNegativ
 	_, err = r.ResolveName("0123456789--0123456789-0123456789012345678901234567890123456789")
 	c.Assert(err, chk.NotNil)
 	c.Assert(
-		strings.Contains(err.Error(), "invalid for Azure container/share/filesystem, and azcopy failed to convert it automatically"),
+		strings.Contains(err.Error(), "invalid for the destination"),
 		chk.Equals,
 		true)
 
