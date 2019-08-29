@@ -78,7 +78,7 @@ func newBlobFSUploader(jptm IJobPartTransferMgr, destination string, p pipeline.
 					// the default behavior of creating directory is overwrite, unless there is lease, or destination exists, and there is If-None-Match:"*".
 					// Check for overwrite flag correspondingly, if overwrite is true, and fail to recreate directory, report error.
 					// If overwrite is false, and fail to recreate directoroy, report directory already exists.
-					if !jptm.IsForceWriteTrue() {
+					if !jptm.GetOverwriteOption() {
 						if stgErr, ok := err.(azbfs.StorageError); ok && stgErr.Response().StatusCode == http.StatusConflict {
 							jptm.LogUploadError(info.Source, info.Destination, "Directory already exists ", 0)
 							// Mark the transfer as failed with ADLSGen2PathAlreadyExistsFailure

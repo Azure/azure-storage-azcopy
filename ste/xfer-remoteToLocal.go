@@ -49,18 +49,27 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		jptm.ReportTransferDone()
 		return
 	}
-	// If the force Write flags is set to false
-	// then check the file exists locally or not.
-	// If it does, mark transfer as failed.
-	if !jptm.IsForceWriteTrue() {
+	// if the force Write flags is set to false or prompt
+	// then check the file exists at the remote location
+	// if it does, react accordingly
+	if jptm.GetOverwriteOption() != common.EOverwriteOption.True() {
 		_, err := os.Stat(info.Destination)
 		if err == nil {
-			// If the error is nil, then file exists locally and it doesn't need to be downloaded.
-			jptm.LogDownloadError(info.Source, info.Destination, "File already exists", 0)
-			// Mark the transfer as failed
-			jptm.SetStatus(common.ETransferStatus.FileAlreadyExistsFailure()) // Deliberately not using BlobAlreadyExists, as was previously done in the old xfer-blobToLocal, since this is not blob-specific code, and its the local file we are talking about
-			jptm.ReportTransferDone()
-			return
+			// if the error is nil, then file exists locally
+			shouldOverwrite := false
+
+			// if necessary, prompt to confirm user's intent
+			if jptm.GetOverwriteOption() == common.EOverwriteOption.Prompt() {
+				shouldOverwrite = jptm.GetOverwritePrompter().shouldOverwrite(info.Destination)
+			}
+
+			if !shouldOverwrite {
+				// logging as Warning so that it turns up even in compact logs, and because previously we use Error here
+				jptm.LogAtLevelForCurrentTransfer(pipeline.LogWarning, "File already exists, so will be skipped")
+				jptm.SetStatus(common.ETransferStatus.SkippedFileAlreadyExists())
+				jptm.ReportTransferDone()
+				return
+			}
 		}
 	}
 

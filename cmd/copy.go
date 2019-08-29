@@ -88,7 +88,7 @@ type rawCopyCmdArgs struct {
 	withSnapshots     bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
-	forceWrite bool
+	forceWrite string
 
 	// options from flags
 	blockSizeMB              float64
@@ -104,14 +104,13 @@ type rawCopyCmdArgs struct {
 	md5ValidationOption      string
 	CheckLength              bool
 	// defines the type of the blob at the destination in case of upload / account to account copy
-	blobType        string
-	blockBlobTier   string
-	pageBlobTier    string
-	background      bool
-	output          string
-	acl             string
-	logVerbosity    string
-	cancelFromStdin bool
+	blobType      string
+	blockBlobTier string
+	pageBlobTier  string
+	background    bool
+	output        string
+	acl           string
+	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
 	// whether user wants to preserve full properties during service to service copy, the default value is true.
@@ -187,7 +186,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
 	cooked.withSnapshots = raw.withSnapshots
-	cooked.forceWrite = raw.forceWrite
+	err = cooked.forceWrite.Parse(raw.forceWrite)
+	if err != nil {
+		return cooked, err
+	}
 
 	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
 	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
@@ -384,7 +386,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	cooked.background = raw.background
 	cooked.acl = raw.acl
-	cooked.cancelFromStdin = raw.cancelFromStdin
 
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
@@ -586,7 +587,7 @@ type cookedCopyCmdArgs struct {
 	stripTopDir        bool
 	followSymlinks     bool
 	withSnapshots      bool
-	forceWrite         bool
+	forceWrite         common.OverwriteOption
 
 	// options from flags
 	blockSize uint32
@@ -609,7 +610,6 @@ type cookedCopyCmdArgs struct {
 	background               bool
 	acl                      string
 	logVerbosity             common.LogLevel
-	cancelFromStdin          bool
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
 
@@ -1054,24 +1054,29 @@ func (cca *cookedCopyCmdArgs) waitUntilJobCompletion(blocking bool) {
 
 	// hand over control to the lifecycle manager if blocking
 	if blocking {
-		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca, !cca.cancelFromStdin)
+		glcm.InitiateProgressReporting(cca)
 	}
 }
 
 func (cca *cookedCopyCmdArgs) Cancel(lcm common.LifecycleMgr) {
-	// prompt for confirmation, except when:
-	// 1. output is not in text format
-	// 2. azcopy was spawned by another process (cancelFromStdin indicates this)
-	// 3. enumeration is complete
-	if !(azcopyOutputFormat != common.EOutputFormat.Text() || cca.cancelFromStdin || cca.isEnumerationComplete) {
-		answer := lcm.Prompt("The source enumeration is not complete, cancelling the job at this point means it cannot be resumed. Please confirm with y/n: ")
+	// prompt for confirmation, except when enumeration is complete
+	if !cca.isEnumerationComplete {
+		answer := lcm.Prompt("The source enumeration is not complete, "+
+			"cancelling the job at this point means it cannot be resumed.",
+			common.PromptDetails{
+				PromptType: common.EPromptType.Cancel(),
+				ResponseOptions: []common.ResponseOption{
+					common.EResponseOption.Yes(),
+					common.EResponseOption.No(),
+				},
+			})
 
-		// read a line from stdin, if the answer is not yes, then abort cancel by returning
-		if !strings.EqualFold(answer, "y") {
+		if answer != common.EResponseOption.Yes() {
+			// user aborted cancel
 			return
 		}
 	}
@@ -1267,7 +1272,7 @@ func init() {
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
-	cpCmd.PersistentFlags().BoolVar(&raw.forceWrite, "overwrite", true, "overwrite the conflicting files/blobs at the destination if this flag is set to true.")
+	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "defines whether to overwrite the conflicting files at the destination. Could be set to true, false, or prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
@@ -1289,8 +1294,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.cancelFromStdin, "cancel-from-stdin", false, "true if user wants to cancel the process by passing 'cancel' "+
-		"to the standard input. This is mostly used when the application is spawned by another process.")
 	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
 	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
 
@@ -1322,7 +1325,6 @@ func init() {
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
 	cpCmd.PersistentFlags().MarkHidden("background-op")
-	cpCmd.PersistentFlags().MarkHidden("cancel-from-stdin")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
 	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
 

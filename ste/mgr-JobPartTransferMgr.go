@@ -35,7 +35,7 @@ type IJobPartTransferMgr interface {
 	CacheLimiter() common.CacheLimiter
 	FileCountLimiter() common.CacheLimiter
 	StartJobXfer()
-	IsForceWriteTrue() bool
+	GetOverwriteOption() common.OverwriteOption
 	ReportChunkDone(id common.ChunkID) (lastChunk bool, chunksDone uint32)
 	UnsafeReportChunkDone() (lastChunk bool, chunksDone uint32)
 	TransferStatus() common.TransferStatus
@@ -72,6 +72,7 @@ type IJobPartTransferMgr interface {
 	LogChunkStatus(id common.ChunkID, reason common.WaitReason)
 	ChunkStatusLogger() common.ChunkStatusLogger
 	LogAtLevelForCurrentTransfer(level pipeline.LogLevel, msg string)
+	GetOverwritePrompter() *overwritePrompter
 	common.ILogger
 }
 
@@ -141,6 +142,10 @@ type jobPartTransferMgr struct {
 		chunkChannel chan<- ChunkMsg*/
 }
 
+func (jptm *jobPartTransferMgr) GetOverwritePrompter() *overwritePrompter {
+	return jptm.jobPartMgr.getOverwritePrompter()
+}
+
 func (jptm *jobPartTransferMgr) FromTo() common.FromTo {
 	return jptm.jobPartMgr.Plan().FromTo
 }
@@ -149,8 +154,8 @@ func (jptm *jobPartTransferMgr) StartJobXfer() {
 	jptm.jobPartMgr.StartJobXfer(jptm)
 }
 
-func (jptm *jobPartTransferMgr) IsForceWriteTrue() bool {
-	return jptm.jobPartMgr.IsForceWriteTrue()
+func (jptm *jobPartTransferMgr) GetOverwriteOption() common.OverwriteOption {
+	return jptm.jobPartMgr.GetOverwriteOption()
 }
 
 func (jptm *jobPartTransferMgr) Info() TransferInfo {
