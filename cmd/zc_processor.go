@@ -22,12 +22,11 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/common"
-	"net/url"
-	"strings"
 )
 
 type copyTransferProcessor struct {
@@ -110,7 +109,7 @@ func (s *copyTransferProcessor) sendPartToSte() error {
 	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), s.copyJobTemplate, &resp)
 	if !resp.JobStarted {
-		if strings.Contains(resp.ErrorMsg, "scheduled") {
+		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
 			return errors.New("no transfers were scheduled")
 		}
 
