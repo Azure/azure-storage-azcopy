@@ -45,6 +45,7 @@ func init() {
 		Aliases: []string{"rm"},
 		Short:   removeJobsCmdShortDescription,
 		Long:    removeJobsCmdLongDescription,
+		Example: removeJobsCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 1 {
 				return errors.New("remove job command requires the JobID")

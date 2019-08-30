@@ -42,6 +42,7 @@ func init() {
 		Aliases: []string{"cl"},
 		Short:   cleanJobsCmdShortDescription,
 		Long:    cleanJobsCmdLongDescription,
+		Example: cleanJobsCmdExample,
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 0 {
 				return errors.New("clean command does not accept arguments")

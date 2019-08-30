@@ -48,6 +48,9 @@ func main() {
 	if azcopyLogPathFolder == "" {
 		azcopyLogPathFolder = azcopyAppPathFolder
 	}
+	if err := os.Mkdir(azcopyLogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		common.PanicIfErr(err)
+	}
 
 	// the user can optionally put the plan files somewhere else
 	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation())
