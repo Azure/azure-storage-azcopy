@@ -33,16 +33,32 @@ import (
 type urlToPageBlobCopier struct {
 	pageBlobSenderBase
 
-	srcURL url.URL
+	srcURL      url.URL
+	srcPageList *azblob.PageList
 }
 
 func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipeline.Pipeline, pacer pacer, srcInfoProvider IRemoteSourceInfoProvider) (s2sCopier, error) {
+	srcURL, err := srcInfoProvider.PreSignedSourceURL()
+	if err != nil {
+		return nil, err
+	}
 
 	destBlobTier := azblob.AccessTierNone
-	// If the source is page blob, preserve source's blob tier.
+	var srcPageList *azblob.PageList
 	if blobSrcInfoProvider, ok := srcInfoProvider.(IBlobSourceInfoProvider); ok {
 		if blobSrcInfoProvider.BlobType() == azblob.BlobPageBlob {
+			// if the source is page blob, preserve source's blob tier.
 			destBlobTier = blobSrcInfoProvider.BlobTier()
+
+			// also get the page ranges so that we can skip the empty parts at the expense of one HTTP request
+			srcPageBlobURL := azblob.NewPageBlobURL(*srcURL, p)
+			ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
+
+			// ignore the error, since according to the REST API documentation:
+			// in a highly fragmented page blob with a large number of writes,
+			// a Get Page Ranges request can fail due to an internal server timeout.
+			// thus, if the page blob is not sparse, it's ok for it to fail
+			srcPageList, _ = srcPageBlobURL.GetPageRanges(ctx, 0, 0, azblob.BlobAccessConditions{})
 		}
 	}
 
@@ -51,14 +67,10 @@ func newURLToPageBlobCopier(jptm IJobPartTransferMgr, destination string, p pipe
 		return nil, err
 	}
 
-	srcURL, err := srcInfoProvider.PreSignedSourceURL()
-	if err != nil {
-		return nil, err
-	}
-
 	return &urlToPageBlobCopier{
 		pageBlobSenderBase: *senderBase,
-		srcURL:             *srcURL}, nil
+		srcURL:             *srcURL,
+		srcPageList:        srcPageList}, nil
 }
 
 // Returns a chunk-func for blob copies
@@ -67,6 +79,11 @@ func (c *urlToPageBlobCopier) GenerateCopyFunc(id common.ChunkID, blockIndex int
 	return createSendToRemoteChunkFunc(c.jptm, id, func() {
 		if c.jptm.Info().SourceSize == 0 {
 			// nothing to do, since this is a dummy chunk in a zero-size file, and the prologue will have done all the real work
+			return
+		}
+
+		// if there's no data at the source, skip this chunk
+		if !c.doesRangeContainData(azblob.PageRange{Start: id.OffsetInFile(), End: id.OffsetInFile() + adjustedChunkSize - 1}) {
 			return
 		}
 
@@ -108,4 +125,35 @@ func (c *urlToPageBlobCopier) GetDestinationLength() (int64, error) {
 	}
 
 	return properties.ContentLength(), nil
+}
+
+// check whether a particular given range is worth transferring, i.e. whether there's data at the source
+func (c *urlToPageBlobCopier) doesRangeContainData(givenRange azblob.PageRange) bool {
+	// if we have no page list stored, then assume there's data everywhere
+	if c.srcPageList == nil {
+		return true
+	}
+
+	// note that the page list is ordered in increasing order (in terms of position)
+	for _, srcRange := range c.srcPageList.PageRange {
+		if givenRange.End < srcRange.Start {
+			// case 1: due to the nature of the list (it's sorted), if we've reached such a srcRange
+			// we've checked all the appropriate srcRange already and haven't found any overlapping srcRange
+			// given range:		|   |
+			// source range:			|   |
+			return false
+		} else if srcRange.End < givenRange.Start {
+			// case 2: the givenRange comes after srcRange, continue checking
+			// given range:				|   |
+			// source range:	|   |
+			continue
+		} else {
+			// case 3: srcRange and givenRange overlap somehow
+			// we don't particularly care how it overlaps
+			return true
+		}
+	}
+
+	// went through all srcRanges, but nothing overlapped
+	return false
 }
