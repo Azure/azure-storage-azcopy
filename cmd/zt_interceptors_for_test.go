@@ -84,16 +84,16 @@ func (i *interceptor) reset() {
 // this lifecycle manager substitute does not perform any action
 type mockedLifecycleManager struct{}
 
-func (mockedLifecycleManager) Progress(common.OutputBuilder)                         {}
-func (mockedLifecycleManager) Init(common.OutputBuilder)                             {}
-func (mockedLifecycleManager) Info(msg string)                                       { fmt.Println(msg) }
+func (mockedLifecycleManager) Progress(common.OutputBuilder) {}
+func (mockedLifecycleManager) Init(common.OutputBuilder)     {}
+func (mockedLifecycleManager) Info(msg string)               { fmt.Println(msg) }
 func (mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
-func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)            {}
-func (mockedLifecycleManager) Error(string)                                          {}
-func (mockedLifecycleManager) SurrenderControl()                                     {}
-func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController, bool) {}
+func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
+func (mockedLifecycleManager) Error(string)                                    {}
+func (mockedLifecycleManager) SurrenderControl()                               {}
+func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
 func (mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
 	value := os.Getenv(env.Name)
 	if value == "" {
