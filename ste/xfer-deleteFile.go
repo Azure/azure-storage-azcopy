@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -33,7 +34,7 @@ func DeleteFilePrologue(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pac
 				jptm.LogError(info.Source, "DELETE ERROR ", err)
 			} else {
 				if jptm.ShouldLog(pipeline.LogInfo) {
-					jptm.Log(pipeline.LogInfo, "DELETE SUCCESSFUL")
+					jptm.Log(pipeline.LogInfo, fmt.Sprintf("DELETE SUCCESSFUL: %s", strings.Split(info.Destination, "?")[0]))
 				}
 			}
 		}

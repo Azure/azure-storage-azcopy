@@ -196,6 +196,14 @@ func (s *pageBlobSenderBase) Prologue(ps common.PrologueState) {
 			// Set the latest service version from sdk as service version in the context.
 			ctxWithLatestServiceVersion := context.WithValue(s.jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 			if _, err := s.destPageBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{}); err != nil {
+				if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
+					s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+					s2sAccessTierFailureLogStdout.Do(func() {
+						glcm := common.GetLifecycleMgr()
+						glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+					})
+				}
+
 				s.jptm.FailActiveSendWithStatus("Setting PageBlob tier ", err, common.ETransferStatus.BlobTierFailure())
 				return
 			}

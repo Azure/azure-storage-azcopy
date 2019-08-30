@@ -65,11 +65,11 @@ func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 
 	// hand over control to the lifecycle manager if blocking
 	if blocking {
-		glcm.InitiateProgressReporting(cca, true)
+		glcm.InitiateProgressReporting(cca)
 		glcm.SurrenderControl()
 	} else {
 		// non-blocking, return after spawning a go routine to watch the job
-		glcm.InitiateProgressReporting(cca, true)
+		glcm.InitiateProgressReporting(cca)
 	}
 }
 

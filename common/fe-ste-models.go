@@ -125,6 +125,66 @@ func (dd DeleteDestination) String() string {
 	return enum.StringInt(dd, reflect.TypeOf(dd))
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// represents one possible response
+var EResponseOption = ResponseOption{ResponseType: "", UserFriendlyResponseType: "", ResponseString: ""}
+
+type ResponseOption struct {
+	ResponseType             string // helps us clarify the user's intent and support partner team's localization
+	UserFriendlyResponseType string // text to print in interactive mode
+	ResponseString           string // short (abbreviation) string that gets sent back by the user to indicate that this response is chosen
+}
+
+// NOTE: these enums are shared with StgExp, so the text is spelled out explicitly (for easy json marshalling)
+func (ResponseOption) Yes() ResponseOption {
+	return ResponseOption{ResponseType: "Yes", UserFriendlyResponseType: "Yes", ResponseString: "y"}
+}
+func (ResponseOption) No() ResponseOption {
+	return ResponseOption{ResponseType: "No", UserFriendlyResponseType: "No", ResponseString: "n"}
+}
+func (ResponseOption) YesForAll() ResponseOption {
+	return ResponseOption{ResponseType: "YesForAll", UserFriendlyResponseType: "Yes for all", ResponseString: "a"}
+}
+func (ResponseOption) NoForAll() ResponseOption {
+	return ResponseOption{ResponseType: "NoForAll", UserFriendlyResponseType: "No for all", ResponseString: "l"}
+}
+func (ResponseOption) Default() ResponseOption {
+	return ResponseOption{ResponseType: "", UserFriendlyResponseType: "", ResponseString: ""}
+}
+
+func (o *ResponseOption) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(o), s, true)
+	if err == nil {
+		*o = val.(ResponseOption)
+	}
+	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var EOverwriteOption = OverwriteOption(0)
+
+type OverwriteOption uint8
+
+func (OverwriteOption) True() OverwriteOption   { return OverwriteOption(0) }
+func (OverwriteOption) False() OverwriteOption  { return OverwriteOption(1) }
+func (OverwriteOption) Prompt() OverwriteOption { return OverwriteOption(2) }
+
+func (o *OverwriteOption) Parse(s string) error {
+	val, err := enum.Parse(reflect.TypeOf(o), s, true)
+	if err == nil {
+		*o = val.(OverwriteOption)
+	}
+	return err
+}
+
+func (o OverwriteOption) String() string {
+	return enum.StringInt(o, reflect.TypeOf(o))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 type OutputFormat uint32
 
 var EOutputFormat = OutputFormat(0)
@@ -452,11 +512,7 @@ func (TransferStatus) Failed() TransferStatus { return TransferStatus(-1) }
 // Transfer failed due to failure while Setting blob tier.
 func (TransferStatus) BlobTierFailure() TransferStatus { return TransferStatus(-2) }
 
-func (TransferStatus) BlobAlreadyExistsFailure() TransferStatus { return TransferStatus(-3) }
-
-func (TransferStatus) FileAlreadyExistsFailure() TransferStatus { return TransferStatus(-4) }
-
-func (TransferStatus) ADLSGen2PathAlreadyExistsFailure() TransferStatus { return TransferStatus(-5) }
+func (TransferStatus) SkippedFileAlreadyExists() TransferStatus { return TransferStatus(-3) }
 
 func (ts TransferStatus) ShouldTransfer() bool {
 	return ts == ETransferStatus.NotStarted() || ts == ETransferStatus.Started()

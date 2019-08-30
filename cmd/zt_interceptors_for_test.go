@@ -87,7 +87,9 @@ type mockedLifecycleManager struct{}
 func (mockedLifecycleManager) Progress(common.OutputBuilder)                         {}
 func (mockedLifecycleManager) Init(common.OutputBuilder)                             {}
 func (mockedLifecycleManager) Info(msg string)                                       { fmt.Println(msg) }
-func (mockedLifecycleManager) Prompt(string) string                                  { return "" }
+func (mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
+	return common.EResponseOption.Default()
+}
 func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)            {}
 func (mockedLifecycleManager) Error(string)                                          {}
 func (mockedLifecycleManager) SurrenderControl()                                     {}

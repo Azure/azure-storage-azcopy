@@ -23,7 +23,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -31,12 +30,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-storage-azcopy/azbfs"
+	minio "github.com/minio/minio-go"
+
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 	chk "gopkg.in/check.v1"
-
-	"github.com/minio/minio-go"
 )
 
 const defaultFileSize = 1024
@@ -662,6 +662,7 @@ func getDefaultCopyRawInput(src string, dst string) rawCopyCmdArgs {
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
 	}
 }
 
@@ -684,5 +685,6 @@ func getDefaultRemoveRawInput(src string) rawCopyCmdArgs {
 		pageBlobTier:                   common.EPageBlobTier.None().String(),
 		md5ValidationOption:            common.DefaultHashValidationOption.String(),
 		s2sInvalidMetadataHandleOption: defaultS2SInvalideMetadataHandleOption.String(),
+		forceWrite:                     common.EOverwriteOption.True().String(),
 	}
 }

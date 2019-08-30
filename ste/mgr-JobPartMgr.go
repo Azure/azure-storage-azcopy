@@ -29,7 +29,7 @@ type IJobPartMgr interface {
 	ScheduleTransfers(jobCtx context.Context)
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
-	IsForceWriteTrue() bool
+	GetOverwriteOption() common.OverwriteOption
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
@@ -48,6 +48,7 @@ type IJobPartMgr interface {
 	ChunkStatusLogger() common.ChunkStatusLogger
 	common.ILogger
 	SourceProviderPipeline() pipeline.Pipeline
+	getOverwritePrompter() *overwritePrompter
 }
 
 type serviceAPIVersionOverride struct{}
@@ -266,6 +267,10 @@ type jobPartMgr struct {
 	// which are either completed or failed
 	// numberOfTransfersDone_doNotUse determines the final cancellation of JobPartOrder
 	atomicTransfersDone uint32
+}
+
+func (jpm *jobPartMgr) getOverwritePrompter() *overwritePrompter {
+	return jpm.jobMgr.getOverwritePrompter()
 }
 
 func (jpm *jobPartMgr) Plan() *JobPartPlanHeader { return jpm.planMMF.Plan() }
@@ -545,7 +550,7 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 	jpm.newJobXfer(jptm, jpm.pipeline, jpm.pacer)
 }
 
-func (jpm *jobPartMgr) IsForceWriteTrue() bool {
+func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
 	return jpm.Plan().ForceWrite
 }
 

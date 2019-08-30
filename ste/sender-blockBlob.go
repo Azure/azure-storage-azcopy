@@ -150,6 +150,14 @@ func (s *blockBlobSenderBase) Epilogue() {
 		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
 		if err != nil {
+			if s.jptm.Info().S2SSrcBlobTier != azblob.AccessTierNone {
+				s.jptm.LogTransferInfo(pipeline.LogError, s.jptm.Info().Source, s.jptm.Info().Destination, "Failed to replicate blob tier at destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+				s2sAccessTierFailureLogStdout.Do(func() {
+					glcm := common.GetLifecycleMgr()
+					glcm.Error("One or more blobs have failed blob tier replication at the destination. Try transferring with the flag --s2s-preserve-access-tier=false")
+				})
+			}
+
 			jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
 			// don't return, because need cleanup below
 		}

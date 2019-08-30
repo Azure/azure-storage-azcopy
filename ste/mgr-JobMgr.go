@@ -74,7 +74,7 @@ type IJobMgr interface {
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
 	ChunkStatusLogger() common.ChunkStatusLogger
 	HttpClient() *http.Client
-
+	getOverwritePrompter() *overwritePrompter
 	common.ILoggerCloser
 }
 
@@ -88,10 +88,15 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		logger:            common.NewJobLogger(jobID, level, appLogger, logFileFolder),
 		chunkStatusLogger: common.NewChunkStatusLogger(jobID, logFileFolder, enableChunkLogOutput),
 		concurrency:       concurrency,
+		overwritePrompter: newOverwritePrompter(),
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
 	jm.logJobsAdminMessages()
 	return &jm
+}
+
+func (jm *jobMgr) getOverwritePrompter() *overwritePrompter {
+	return jm.overwritePrompter
 }
 
 func (jm *jobMgr) reset(appCtx context.Context, commandString string) IJobMgr {
@@ -161,6 +166,9 @@ type jobMgr struct {
 	// list of transfer mentioned to exclude while resuming the job
 	exclude          map[string]int
 	finalPartOrdered bool
+
+	// only a single instance of the prompter is needed for all transfers
+	overwritePrompter *overwritePrompter
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
