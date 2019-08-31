@@ -43,6 +43,7 @@ type rawBenchmarkCmdArgs struct {
 	// parameters controlling the auto-generated data
 	sizePerFile string
 	fileCount   uint
+	deleteTestData bool
 
 	// options from flags
 	blockSizeMB  float64
@@ -147,10 +148,12 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// set up automatic cleanup
-	cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.destination, raw.logVerbosity)
-	if err != nil {
-		return dummyCooked, err
+	if raw.deleteTestData {
+		// set up automatic cleanup
+		cooked.followupJobArgs, err = raw.createCleanupJobArgs(cooked.destination, raw.logVerbosity)
+		if err != nil {
+			return dummyCooked, err
+		}
 	}
 
 	return cooked, nil
@@ -307,6 +310,8 @@ func init() {
 
 	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, common.SizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
 	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, 100, "number of auto-generated data files to use")
+	benchCmd.PersistentFlags().BoolVar(&raw.deleteTestData, "delete-test-data", true, "if true, the benchmark data will be deleted at the end of the benchmark run.  Set it to false if you want to keep the data at the destination - e.g. to use it for manual tests outside benchmark mode")
+
 
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")
