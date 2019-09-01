@@ -45,11 +45,8 @@ func init() {
 		Short: showJobsCmdShortDescription,
 		Long:  showJobsCmdLongDescription,
 		Args: func(cmd *cobra.Command, args []string) error {
-
-			// if there is any argument passed
-			// it is an error
-			if len(args) == 0 {
-				return errors.New("showJob require at least the JobID")
+			if len(args) != 1 {
+				return errors.New("show job command requires only the JobID")
 			}
 			// Parse the JobId
 			jobId, err := common.ParseJobID(args[0])

@@ -143,6 +143,24 @@ const resumeJobsCmdShortDescription = "Resume the existing job with the given jo
 const resumeJobsCmdLongDescription = `
 Resume the existing job with the given job ID.`
 
+const removeJobsCmdShortDescription = "Remove all files associated with the given job ID"
+
+const removeJobsCmdLongDescription = `
+Remove all files associated with the given job ID.
+
+Note that the location of log files and job plan files can be customized. Please refer to the env command.`
+
+const removeJobsCmdExample = "  azcopy jobs rm e52247de-0323-b14d-4cc8-76e0be2e2d44"
+
+const cleanJobsCmdShortDescription = "Clean up log files and job plan files (used for progress tracking and resuming) for jobs"
+
+const cleanJobsCmdLongDescription = `
+Clean up log files and job plan files (used for progress tracking and resuming) for jobs.
+
+Note that the location of log files and job plan files can be customized. Please refer to the env command.`
+
+const cleanJobsCmdExample = "  azcopy jobs clean --with-status=completed"
+
 // ===================================== LIST COMMAND ===================================== //
 const listCmdShortDescription = "List the entities in a given resource"
 

@@ -117,6 +117,7 @@ type JobIDDetails struct {
 	JobId         JobID
 	CommandString string
 	StartTime     int64
+	JobStatus     JobStatus
 }
 
 // ListJobsResponse represent the Job with JobId and

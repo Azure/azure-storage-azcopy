@@ -331,6 +331,7 @@ func (j *JobStatus) IsJobDone() bool {
 		*j == EJobStatus.Failed()
 }
 
+func (JobStatus) All() JobStatus                           { return JobStatus(100) }
 func (JobStatus) InProgress() JobStatus                    { return JobStatus(0) }
 func (JobStatus) Paused() JobStatus                        { return JobStatus(1) }
 func (JobStatus) Cancelling() JobStatus                    { return JobStatus(2) }

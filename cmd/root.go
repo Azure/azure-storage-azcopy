@@ -23,18 +23,20 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/spf13/cobra"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
+	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/spf13/cobra"
 )
 
 var azcopyAppPathFolder string
 var azcopyLogPathFolder string
+var azcopyJobPlanFolder string
 var azcopyMaxFileAndSocketHandles int
 var outputFormatRaw string
 var azcopyOutputFormat common.OutputFormat
@@ -56,7 +58,7 @@ var rootCmd = &cobra.Command{
 
 		// startup of the STE happens here, so that the startup can access the values of command line parameters that are defined for "root" command
 		concurrencySettings := ste.NewConcurrencySettings(azcopyMaxFileAndSocketHandles)
-		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyAppPathFolder, azcopyLogPathFolder)
+		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err
 		}
@@ -77,9 +79,10 @@ var glcm = common.GetLifecycleMgr()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute(azsAppPathFolder, logPathFolder string, maxFileAndSocketHandles int) {
+func Execute(azsAppPathFolder, logPathFolder string, jobPlanFolder string, maxFileAndSocketHandles int) {
 	azcopyAppPathFolder = azsAppPathFolder
 	azcopyLogPathFolder = logPathFolder
+	azcopyJobPlanFolder = jobPlanFolder
 	azcopyMaxFileAndSocketHandles = maxFileAndSocketHandles
 
 	if err := rootCmd.Execute(); err != nil {
