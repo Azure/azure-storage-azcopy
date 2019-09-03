@@ -18,8 +18,8 @@ func getPathBeforeFirstWildcard(path string) string {
 	}
 
 	firstWCIndex := strings.Index(path, "*")
-	result := replacePathSeparators(path[:firstWCIndex])
-	lastSepIndex := strings.LastIndex(result, "/")
+	result := consolidatePathSeparators(path[:firstWCIndex])
+	lastSepIndex := strings.LastIndex(result, common.DeterminePathSeparator(path))
 	result = result[:lastSepIndex+1]
 
 	return result

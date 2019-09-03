@@ -200,7 +200,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 					return nil
 				}
 
-				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), "/")
+				relPath := strings.TrimPrefix(strings.TrimPrefix(cleanLocalPath(filePath), cleanLocalPath(t.fullPath)), common.DeterminePathSeparator(t.fullPath))
 				if !t.followSymlinks && fileInfo.Mode()&os.ModeSymlink != 0 {
 					glcm.Info(fmt.Sprintf("Skipping over symlink at %s because --follow-symlinks is false", filepath.Join(t.fullPath, relPath)))
 					return nil
@@ -213,7 +213,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				return processIfPassedFilters(filters,
 					newStoredObject(
 						fileInfo.Name(),
-						relPath,
+						strings.ReplaceAll(relPath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						fileInfo.ModTime(),
 						fileInfo.Size(),
 						nil, // Local MD5s are taken in the STE
@@ -279,7 +279,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				err := processIfPassedFilters(filters,
 					newStoredObject(
 						singleFile.Name(),
-						relativePath,
+						strings.ReplaceAll(relativePath, common.DeterminePathSeparator(t.fullPath), common.AZCOPY_PATH_SEPARATOR_STRING), // Consolidate relative paths to the azcopy path separator for sync
 						singleFile.ModTime(),
 						singleFile.Size(),
 						nil, // Local MD5s are taken in the STE
@@ -298,12 +298,11 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 	return
 }
 
-func replacePathSeparators(path string) string {
-	if os.PathSeparator != common.AZCOPY_PATH_SEPARATOR_CHAR {
-		return strings.Replace(path, string(os.PathSeparator), common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-	} else {
-		return path
-	}
+// Replace azcopy path separators (/) with the OS path separator
+func consolidatePathSeparators(path string) string {
+	pathSep := common.DeterminePathSeparator(path)
+
+	return strings.ReplaceAll(path, common.AZCOPY_PATH_SEPARATOR_STRING, pathSep)
 }
 
 func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, incrementEnumerationCounter func()) *localTraverser {
@@ -316,18 +315,14 @@ func newLocalTraverser(fullPath string, recursive bool, followSymlinks bool, inc
 }
 
 func cleanLocalPath(localPath string) string {
-	normalizedPath := path.Clean(replacePathSeparators(localPath))
+	normalizedPath := path.Clean(consolidatePathSeparators(localPath))
 
-	// detect if we are targeting a network share
-	if strings.HasPrefix(localPath, "//") || strings.HasPrefix(localPath, `\\`) {
-		// if yes, we have trimmed away one of the leading slashes, so add it back
-		normalizedPath = common.AZCOPY_PATH_SEPARATOR_STRING + normalizedPath
-	} else if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
+	// detect if we are targeting a drive (ex: either C:\ or C:)
+	// note that on windows there must be a slash in order to target the root drive properly
+	// otherwise we'd point to the path from where AzCopy is running (if AzCopy is running from the same drive)
+	if len(localPath) == 3 && (strings.HasSuffix(localPath, `:\`) || strings.HasSuffix(localPath, ":/")) ||
 		len(localPath) == 2 && strings.HasSuffix(localPath, ":") {
-		// detect if we are targeting a drive (ex: either C:\ or C:)
-		// note that on windows there must be a slash in order to target the root drive properly
-		// otherwise we'd point to the path from where AzCopy is running (if AzCopy is running from the same drive)
-		normalizedPath += common.AZCOPY_PATH_SEPARATOR_STRING
+		normalizedPath += common.OS_PATH_SEPARATOR
 	}
 
 	return normalizedPath

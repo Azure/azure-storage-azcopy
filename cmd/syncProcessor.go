@@ -40,8 +40,8 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 		JobID:           cca.jobID,
 		CommandString:   cca.commandString,
 		FromTo:          cca.fromTo,
-		SourceRoot:      replacePathSeparators(cca.source),
-		DestinationRoot: replacePathSeparators(cca.destination),
+		SourceRoot:      consolidatePathSeparators(cca.source),
+		DestinationRoot: consolidatePathSeparators(cca.destination),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,

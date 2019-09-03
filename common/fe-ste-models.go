@@ -43,6 +43,8 @@ const (
 	AZCOPY_PATH_SEPARATOR_STRING = "/"
 	AZCOPY_PATH_SEPARATOR_CHAR   = '/'
 	OS_PATH_SEPARATOR            = string(os.PathSeparator)
+	EXTENDED_PATH_PREFIX         = `\\?\`
+	EXTENDED_UNC_PATH_PREFIX     = `\\?\UNC`
 	Dev_Null                     = os.DevNull
 
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666

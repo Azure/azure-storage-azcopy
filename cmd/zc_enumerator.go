@@ -186,7 +186,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			go func() {
 				defer close(globChan)
 				for _, v := range matches {
-					globChan <- strings.TrimPrefix(strings.ReplaceAll(v, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING), basePath)
+					globChan <- strings.TrimPrefix(v, basePath)
 				}
 			}()
 

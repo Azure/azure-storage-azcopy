@@ -5,6 +5,7 @@ import (
 	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 
 	"github.com/Azure/azure-storage-file-go/azfile"
@@ -122,11 +123,23 @@ func (bs ByteSliceExtension) RemoveBOM() []byte {
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+func DeterminePathSeparator(path string) string {
+	// Just use forward-slash everywhere that isn't windows.
+	if runtime.GOOS == "windows" && strings.Contains(path, `\`) {
+		return `\` // Not using OS_PATH_SEPARATOR here explicitly
+	} else {
+		return AZCOPY_PATH_SEPARATOR_STRING
+	}
+}
+
 // it's possible that enumerators didn't form rootPath and childPath correctly for them to be combined plainly
 // so we must behave defensively and make sure the full path is correct
 func GenerateFullPath(rootPath, childPath string) string {
-	rootPath = strings.TrimSuffix(rootPath, AZCOPY_PATH_SEPARATOR_STRING)
-	childPath = strings.TrimPrefix(childPath, AZCOPY_PATH_SEPARATOR_STRING)
+	// align both paths to the root separator and trim the prefixes and suffixes
+	rootSeparator := DeterminePathSeparator(rootPath)
+	rootPath = strings.TrimSuffix(rootPath, rootSeparator)
+	childPath = strings.ReplaceAll(childPath, DeterminePathSeparator(childPath), rootSeparator)
+	childPath = strings.TrimPrefix(childPath, rootSeparator)
 
 	if rootPath == "" {
 		return childPath
@@ -138,5 +151,5 @@ func GenerateFullPath(rootPath, childPath string) string {
 	}
 
 	// otherwise, make sure a path separator is inserted between the rootPath if necessary
-	return rootPath + AZCOPY_PATH_SEPARATOR_STRING + childPath
+	return rootPath + rootSeparator + childPath
 }

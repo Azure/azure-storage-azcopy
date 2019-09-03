@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -109,6 +110,25 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
 	} else {
 		return cooked, fmt.Errorf("source '%s' / destination '%s' combination '%s' not supported for sync command ", raw.src, raw.dst, cooked.fromTo)
+	}
+
+	// Do this check seperately so we don't end up with a bunch of code duplication when new src/dsts are added
+	if cooked.fromTo.From() == common.ELocation.Local() {
+		result, err := filepath.Abs(cooked.source)
+
+		if err != nil {
+			return cooked, fmt.Errorf("failed to resolve absolute path from %s: %s", result, err)
+		}
+
+		cooked.source = common.ToExtendedPath(result)
+	} else if cooked.fromTo.To() == common.ELocation.Local() {
+		result, err := filepath.Abs(cooked.destination)
+
+		if err != nil {
+			return cooked, fmt.Errorf("failed to resolve absolute path from %s: %s", result, err)
+		}
+
+		cooked.destination = common.ToExtendedPath(result)
 	}
 
 	// generate a new job ID

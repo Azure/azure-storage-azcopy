@@ -30,7 +30,7 @@ func newRemoveTransferProcessor(cca *cookedCopyCmdArgs, numOfTransfersPerPart in
 		JobID:         cca.jobID,
 		CommandString: cca.commandString,
 		FromTo:        cca.fromTo,
-		SourceRoot:    replacePathSeparators(cca.source),
+		SourceRoot:    consolidatePathSeparators(cca.source),
 
 		// authentication related
 		CredentialInfo: cca.credentialInfo,
