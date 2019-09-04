@@ -138,7 +138,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 		// commit the blocks.
 		if _, err := s.destBlockBlobURL.CommitBlockList(jptm.Context(), blockIDs, s.headersToApply, s.metadataToApply, azblob.BlobAccessConditions{}); err != nil {
 			jptm.FailActiveSend("Committing block list", err)
-			// don't return, since need cleanup below
+			return
 		}
 	}
 
@@ -159,7 +159,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 			}
 
 			jptm.FailActiveSendWithStatus("Setting BlockBlob tier", err, common.ETransferStatus.BlobTierFailure())
-			// don't return, because need cleanup below
+			return
 		}
 	}
 }
@@ -176,7 +176,16 @@ func (s *blockBlobSenderBase) Cleanup() {
 		//    situation. Deletion has very different semantics then, compared to not deleting.
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFn()
-		_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		if jptm.WasCanceled() {
+			_, err := s.destBlockBlobURL.GetProperties(deletionContext, azblob.BlobAccessConditions{})
+
+			if stgErr, ok := err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound {
+				_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			}
+		} else {
+			_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+		}
+
 		// TODO: question, is it OK to remoe this logging of failures (since there's no adverse effect of failure)
 		//  if stErr, ok := err.(azblob.StorageError); ok && stErr.Response().StatusCode != http.StatusNotFound {
 		// If the delete failed with Status Not Found, then it means there were no uncommitted blocks.

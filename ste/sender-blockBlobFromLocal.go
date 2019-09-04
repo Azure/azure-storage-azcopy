@@ -24,8 +24,9 @@ import (
 	"bytes"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+
+	"github.com/Azure/azure-storage-azcopy/common"
 )
 
 type blockBlobUploader struct {
@@ -128,7 +129,7 @@ func (u *blockBlobUploader) Epilogue() {
 			u.headersToApply.ContentMD5 = md5Hash
 		} else {
 			jptm.FailActiveSend("Getting hash", errNoHash)
-			// don't return, since need cleanup below
+			return
 		}
 	}
 
