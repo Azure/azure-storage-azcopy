@@ -86,6 +86,12 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			blobUrlParts.ContainerName,
 		)
 
+		storedObject.contentDisposition = blobProperties.ContentDisposition()
+		storedObject.cacheControl = blobProperties.CacheControl()
+		storedObject.contentLanguage = blobProperties.ContentLanguage()
+		storedObject.contentEncoding = blobProperties.ContentEncoding()
+		storedObject.contentType = blobProperties.ContentType()
+
 		storedObject.blobAccessTier = azblob.AccessTierType(blobProperties.AccessTier())
 
 		if t.incrementEnumerationCounter != nil {
@@ -142,6 +148,12 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				blobInfo.Properties.BlobType,
 				blobUrlParts.ContainerName,
 			)
+
+			storedObject.contentDisposition = defaultStringIfPointerIsNil(blobInfo.Properties.ContentDisposition, "")
+			storedObject.cacheControl = defaultStringIfPointerIsNil(blobInfo.Properties.CacheControl, "")
+			storedObject.contentLanguage = defaultStringIfPointerIsNil(blobInfo.Properties.ContentLanguage, "")
+			storedObject.contentEncoding = defaultStringIfPointerIsNil(blobInfo.Properties.ContentEncoding, "")
+			storedObject.contentType = defaultStringIfPointerIsNil(blobInfo.Properties.ContentType, "")
 
 			storedObject.blobAccessTier = blobInfo.Properties.AccessTier
 

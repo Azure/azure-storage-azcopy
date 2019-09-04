@@ -97,6 +97,14 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 			bfsURLParts.FileSystemName,
 		)
 
+		/* TODO: Enable this code segment in case we ever do BlobFS->Blob transfers.
+		Read below comment for info
+		storedObject.contentDisposition = pathProperties.ContentDisposition()
+		storedObject.cacheControl = pathProperties.CacheControl()
+		storedObject.contentLanguage = pathProperties.ContentLanguage()
+		storedObject.contentEncoding = pathProperties.ContentEncoding()
+		storedObject.contentType = pathProperties.ContentType()*/
+
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
 		}
@@ -130,6 +138,20 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 					blobTypeNA,
 					bfsURLParts.FileSystemName,
 				)
+
+				/* TODO: Enable this code segment in the case we ever do BlobFS->Blob transfers.
+
+				I leave this here for the sake of feature parity in the future, and because it feels weird letting the other traversers have it but not this one.
+
+				pathProperties, err := dirUrl.NewFileURL(storedObject.relativePath).GetProperties(t.ctx)
+
+				if err == nil {
+					storedObject.contentDisposition = pathProperties.ContentDisposition()
+					storedObject.cacheControl = pathProperties.CacheControl()
+					storedObject.contentLanguage = pathProperties.ContentLanguage()
+					storedObject.contentEncoding = pathProperties.ContentEncoding()
+					storedObject.contentType = pathProperties.ContentType()
+				}*/
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

@@ -52,6 +52,13 @@ type storedObject struct {
 	md5              []byte
 	blobType         azblob.BlobType // will be "None" when unknown or not applicable
 
+	// all of these will be empty when unknown or not applicable.
+	contentDisposition string
+	cacheControl       string
+	contentLanguage    string
+	contentEncoding    string
+	contentType        string
+
 	// partial path relative to its root directory
 	// example: rootDir=/var/a/b/c fullPath=/var/a/b/c/d/e/f.pdf => relativePath=d/e/f.pdf name=f.pdf
 	// note that sometimes the rootDir given by the user turns out to be a single file
@@ -85,6 +92,15 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 		blobType:         blobType,
 		containerName:    containerName,
 	}
+}
+
+// used to get properties in a safe, but not so verbose manner
+func defaultStringIfPointerIsNil(wanted *string, instead string) string {
+	if wanted == nil {
+		return instead
+	}
+
+	return *wanted
 }
 
 // capable of traversing a structured resource like container or local directory

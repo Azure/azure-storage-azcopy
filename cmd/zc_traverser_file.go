@@ -78,6 +78,12 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				targetURLParts.ShareName,
 			)
 
+			storedObject.contentDisposition = fileProperties.ContentDisposition()
+			storedObject.cacheControl = fileProperties.CacheControl()
+			storedObject.contentLanguage = fileProperties.ContentLanguage()
+			storedObject.contentEncoding = fileProperties.ContentEncoding()
+			storedObject.contentType = fileProperties.ContentType()
+
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()
 			}
@@ -122,6 +128,13 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 					azblob.BlobNone,
 					targetURLParts.ShareName,
 				)
+
+				// Leaving this on because it's free IO wise, and file->* is in the works
+				storedObject.contentDisposition = fileProperties.ContentDisposition()
+				storedObject.cacheControl = fileProperties.CacheControl()
+				storedObject.contentLanguage = fileProperties.ContentLanguage()
+				storedObject.contentEncoding = fileProperties.ContentEncoding()
+				storedObject.contentType = fileProperties.ContentType()
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()
