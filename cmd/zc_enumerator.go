@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -125,6 +126,9 @@ func initContainerDecorator(containerName string, processor objectProcessor) obj
 }
 
 const accountTraversalInherentlyRecursiveError = "account copies are an inherently recursive operation, and thus --recursive is required"
+const httpsRecommendedNotice = "NOTE: HTTP is in use for one or more location(s). The use of HTTP is not recommended." // TODO: I had some trouble figuring out this wording. Any ideas?
+
+var httpsRecommendationOnce sync.Once
 
 // source, location, recursive, and incrementEnumerationCounter are always required.
 // ctx, pipeline are only required for remote resources.
@@ -207,6 +211,12 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, err
 		}
 
+		if sourceURL.Scheme == "http" {
+			httpsRecommendationOnce.Do(func() {
+				glcm.Info(httpsRecommendedNotice)
+			})
+		}
+
 		if ctx == nil || p == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a blob traverser")
 		}
@@ -227,6 +237,12 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		sourceURL, err := url.Parse(source)
 		if err != nil {
 			return nil, err
+		}
+
+		if sourceURL.Scheme == "http" {
+			httpsRecommendationOnce.Do(func() {
+				glcm.Info(httpsRecommendedNotice)
+			})
 		}
 
 		if ctx == nil || p == nil {
@@ -250,8 +266,16 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			return nil, err
 		}
 
-		if ctx == nil || p == nil {
+		// check if credential is also nil here (would never trigger) to tame syntax highlighting.
+		// As a precondition to pipeline p, credential must not be nil anyway.
+		if ctx == nil || p == nil || credential == nil {
 			return nil, errors.New("a valid credential and context must be supplied to create a blobFS traverser")
+		}
+
+		if sourceURL.Scheme == "http" && credential.CredentialType != common.ECredentialType.SharedKey() {
+			httpsRecommendationOnce.Do(func() {
+				glcm.Info(httpsRecommendedNotice)
+			})
 		}
 
 		bfsURL := azbfs.NewBfsURLParts(*sourceURL)
@@ -271,6 +295,12 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		sourceURL, err := url.Parse(source)
 		if err != nil {
 			return nil, err
+		}
+
+		if sourceURL.Scheme == "http" {
+			httpsRecommendationOnce.Do(func() {
+				glcm.Info(httpsRecommendedNotice)
+			})
 		}
 
 		s3URLParts, err := common.NewS3URLParts(*sourceURL)
