@@ -61,7 +61,12 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
-		s.sendPartToSte()
+		resp := s.sendPartToSte()
+
+		// TODO: If we ever do launch errors outside of the final "no transfers" error, make them output nicer things here.
+		if resp.ErrorMsg != "" {
+			return errors.New(string(resp.ErrorMsg))
+		}
 
 		// reset the transfers buffer
 		s.copyJobTemplate.Transfers = []common.CopyTransfer{}
