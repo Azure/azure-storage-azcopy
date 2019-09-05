@@ -33,7 +33,8 @@ type decompressingWriter struct {
 	workerError chan error
 }
 
-var decompressingWriterBufferPool = NewMultiSizeSlicePool(1 * 1024 * 1024)
+const decompressingWriterCopyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromize perf
+var decompressingWriterBufferPool = NewMultiSizeSlicePool(decompressingWriterCopyBufferSize)
 
 var ECompressionType = CompressionType(0)
 
@@ -88,8 +89,7 @@ func (d decompressingWriter) worker(tp CompressionType, preader *io.PipeReader, 
 
 	// Now read from the pipe, decompressing as we go, until
 	// reach EOF on the pipe (or encounter an error)
-	const copyBufferSize = 256 * 1024 // 1/4 the size that we usually write to disk with (elsewhere in codebase). 1/4 to try to keep mem usage a bit lower, without going so small as to compromize perf
-	b := decompressingWriterBufferPool.RentSlice(copyBufferSize)
+	b := decompressingWriterBufferPool.RentSlice(decompressingWriterCopyBufferSize)
 	_, err = io.CopyBuffer(destination, dec, b) // returns err==nil if hits EOF, as per docs
 	decompressingWriterBufferPool.ReturnSlice(b)
 	workerError <- err
@@ -118,7 +118,7 @@ func (d decompressingWriter) Write(p []byte) (n int, err error) {
 }
 
 func (d decompressingWriter) Close() error {
-	// close pipe
+	// close pipe, so reader will get EOF
 	closeError := d.pipeWriter.Close()
 	if closeError != nil {
 		return closeError
