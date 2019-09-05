@@ -114,7 +114,7 @@ func inferArgumentLocation(arg string) common.Location {
 		// Let's try to parse the argument as a URL
 		u, err := url.Parse(arg)
 		// NOTE: sometimes, a local path can also be parsed as a url. To avoid thinking it's a URL, check Scheme, Host, and Path
-		if err == nil && u.Scheme != "" && u.Host != "" && u.Path != "" {
+		if err == nil && u.Scheme != "" && u.Host != "" {
 			// Is the argument a URL to blob storage?
 			switch host := strings.ToLower(u.Host); true {
 			// Azure Stack does not have the core.windows.net
