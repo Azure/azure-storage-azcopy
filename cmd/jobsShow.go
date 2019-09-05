@@ -76,7 +76,7 @@ func init() {
 	jobsCmd.AddCommand(shJob)
 
 	// filters
-	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "only list the transfers of job with this status, available values: Started, Success, Failed")
+	shJob.PersistentFlags().StringVar(&commandLineInput.OfStatus, "with-status", "", "Only list the transfers of job with this status, available values: Started, Success, Failed.")
 }
 
 // handles the list command

@@ -94,8 +94,8 @@ func Execute(azsAppPathFolder, logPathFolder string, maxFileAndSocketHandles int
 }
 
 func init() {
-	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
-	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
+	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "Caps the transfer rate, in megabits per second. Moment-by-moment throughput might vary slightly from the cap. If this option is set to zero, or it is omitted, the throughput isn't capped.")
+	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "Format of the command's output. The choices include: text, json. The default value is 'text'.")
 
 	// Special flag for generating test data
 	// TODO: find a cleaner way to get the value into common, rather than just using it directly as a variable here
