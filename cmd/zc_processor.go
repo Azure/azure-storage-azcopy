@@ -61,10 +61,7 @@ func newCopyTransferProcessor(copyJobTemplate *common.CopyJobPartOrderRequest, n
 
 func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) (err error) {
 	if len(s.copyJobTemplate.Transfers) == s.numOfTransfersPerPart {
-		err = s.sendPartToSte()
-		if err != nil {
-			return err
-		}
+		s.sendPartToSte()
 
 		// reset the transfers buffer
 		s.copyJobTemplate.Transfers = []common.CopyTransfer{}
@@ -93,10 +90,17 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 }
 
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
+	var resp common.CopyJobPartOrderResponse
 	s.copyJobTemplate.IsFinalPart = true
-	err = s.sendPartToSte()
-	if err != nil {
-		return false, err
+	resp = s.sendPartToSte()
+
+	if !resp.JobStarted {
+		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
+			return false, errors.New("no transfers were scheduled")
+		}
+
+		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
+			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
 	}
 
 	if s.reportFinalPartDispatched != nil {
@@ -105,22 +109,15 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 	return true, nil
 }
 
-func (s *copyTransferProcessor) sendPartToSte() error {
+// only test the response on the final dispatch as previous ones may for some reason not have transfers.
+func (s *copyTransferProcessor) sendPartToSte() common.CopyJobPartOrderResponse {
 	var resp common.CopyJobPartOrderResponse
 	Rpc(common.ERpcCmd.CopyJobPartOrder(), s.copyJobTemplate, &resp)
-	if !resp.JobStarted {
-		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
-			return errors.New("no transfers were scheduled")
-		}
-
-		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",
-			s.copyJobTemplate.JobID, s.copyJobTemplate.PartNum, resp.ErrorMsg)
-	}
 
 	// if the current part order sent to ste is 0, then alert the progress reporting routine
 	if s.copyJobTemplate.PartNum == 0 && s.reportFirstPartDispatched != nil {
 		s.reportFirstPartDispatched()
 	}
 
-	return nil
+	return resp
 }
