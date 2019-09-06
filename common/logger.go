@@ -28,8 +28,10 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
+	"github.com/Microsoft/ApplicationInsights-Go/appinsights"
 )
 
 type ILogger interface {
@@ -109,12 +111,30 @@ type jobLogger struct {
 	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
 	appLogger         ILogger
+	telemetryClient   appinsights.TelemetryClient
 	sanitizer         pipeline.LogSanitizer
+}
+
+var LogLevelStrings = map[pipeline.LogLevel]string{
+	pipeline.LogFatal:   "FATAL",
+	pipeline.LogPanic:   "PANIC",
+	pipeline.LogError:   "ERROR",
+	pipeline.LogWarning: "WARNING",
+	pipeline.LogInfo:    "INFO",
+	pipeline.LogDebug:   "DEBUG",
 }
 
 func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, logFileFolder string) ILoggerResetable {
 	if appLogger == nil {
 		panic("You must pass a appLogger when creating a JobLogger")
+	}
+
+	var telemetry appinsights.TelemetryClient
+
+	if key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AppInsightsInstrumentationKey()); key != "" {
+		telemetry = appinsights.NewTelemetryClient(key)
+		telemetry.SetIsEnabled(true)
+		telemetry.Context().Tags.Session().SetId(jobID.String())
 	}
 
 	return &jobLogger{
@@ -123,6 +143,7 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, lo
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
 		logFileFolder:     logFileFolder,
 		sanitizer:         NewAzCopyLogSanitizer(),
+		telemetryClient:   telemetry,
 	}
 }
 
@@ -139,9 +160,24 @@ func (jl *jobLogger) OpenLog() {
 	jl.logger = log.New(jl.file, "", log.LstdFlags|log.LUTC)
 	// Log the Azcopy Version
 	jl.logger.Println("AzcopyVersion ", AzcopyVersion)
+	jl.appInsightsLog(pipeline.LogInfo, "AzcopyVersion ", AzcopyVersion)
 	// Log the OS Environment and OS Architecture
 	jl.logger.Println("OS-Environment ", runtime.GOOS)
+	jl.appInsightsLog(pipeline.LogInfo, "OS-Environment ", runtime.GOOS)
 	jl.logger.Println("OS-Architecture ", runtime.GOARCH)
+	jl.appInsightsLog(pipeline.LogInfo, "OS-Architecture ", runtime.GOARCH)
+}
+
+func (jl *jobLogger) appInsightsLog(logLevel pipeline.LogLevel, v ...interface{}) {
+	if jl.telemetryClient != nil && jl.ShouldLog(logLevel) {
+		event := appinsights.NewEventTelemetry("log")
+		event.Properties["message"] = fmt.Sprint(v...)
+		event.Properties["level"] = LogLevelStrings[logLevel]
+		event.Name = "AzCopy Log Event"
+		event.Timestamp = time.Now()
+		jl.telemetryClient.Track(event)
+		jl.telemetryClient.Channel().Flush() // force telemetry to be submitted so we don't lose anything.
+	}
 }
 
 func (jl *jobLogger) MinimumLogLevel() pipeline.LogLevel {
@@ -175,11 +211,13 @@ func (jl jobLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	}
 	if jl.ShouldLog(loglevel) {
 		jl.logger.Println(msg)
+		jl.appInsightsLog(loglevel, msg)
 	}
 }
 
 func (jl jobLogger) Panic(err error) {
-	jl.logger.Println(err)  // We do NOT panic here as the app would terminate; we just log it
+	jl.logger.Println(err) // We do NOT panic here as the app would terminate; we just log it
+	jl.appInsightsLog(pipeline.LogPanic, err)
 	jl.appLogger.Panic(err) // We panic here that it logs and the app terminates
 	// We should never reach this line of code!
 }

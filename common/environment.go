@@ -166,3 +166,12 @@ func (EnvironmentVariable) DefaultServiceApiVersion() EnvironmentVariable {
 		Description:  "Overrides the service API version so that AzCopy could accommodate custom environments such as Azure Stack.",
 	}
 }
+
+// TODO: Add the other TelemetryConfig values
+func (EnvironmentVariable) AppInsightsInstrumentationKey() EnvironmentVariable {
+	return EnvironmentVariable{
+		Name:        "AZCOPY_APP_INSIGHTS_INSTRUMENTATION_KEY",
+		Description: "The Application Insights instrumentation key for remote logging",
+		Hidden:      true,
+	}
+}
