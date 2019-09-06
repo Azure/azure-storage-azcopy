@@ -343,6 +343,15 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	var throughput float64
 	var jobDone bool
 
+	tClient := common.GetTelemetryClient()
+
+	// Ensure a job ID is set.
+	if tClient != nil {
+		if tClient.Context().Tags.Session().GetId() != summary.JobID.String() {
+			tClient.Context().Tags.Session().SetId(summary.JobID.String())
+		}
+	}
+
 	// fetch a job status and compute throughput if the first part was dispatched
 	if cca.firstPartOrdered() {
 		Rpc(common.ERpcCmd.ListSyncJobSummary(), &cca.jobID, &summary)
@@ -352,6 +361,10 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 		bytesInMb := float64(float64(summary.BytesOverWire-cca.intervalBytesTransferred) * 8 / float64(base10Mega))
 		timeElapsed := time.Since(cca.intervalStartTime).Seconds()
 		throughput = common.Iffloat64(timeElapsed != 0, bytesInMb/timeElapsed, 0)
+
+		if tClient != nil {
+			tClient.TrackMetric("azcopyThroughput", ste.ToFixed(throughput, 4))
+		}
 
 		// reset the interval timer and byte count
 		cca.intervalStartTime = time.Now()
@@ -406,6 +419,7 @@ Final Job Status: %v
 			if exists {
 				jobMan.Log(pipeline.LogInfo, output)
 			}
+			jobMan.CloseLog()
 
 			return output
 		}, exitCode)

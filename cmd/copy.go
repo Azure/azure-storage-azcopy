@@ -1093,6 +1093,15 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 	Rpc(common.ERpcCmd.ListJobSummary(), &cca.jobID, &summary)
 	jobDone := summary.JobStatus.IsJobDone()
 
+	tClient := common.GetTelemetryClient()
+
+	// Ensure a job ID is set.
+	if tClient != nil {
+		if tClient.Context().Tags.Session().GetId() != summary.JobID.String() {
+			tClient.Context().Tags.Session().SetId(summary.JobID.String())
+		}
+	}
+
 	// if json is not desired, and job is done, then we generate a special end message to conclude the job
 	duration := time.Now().Sub(cca.jobStartTime) // report the total run time of the job
 
@@ -1123,6 +1132,8 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 				if exists {
 					jobMan.Log(pipeline.LogInfo, output)
 				}
+
+				jobMan.CloseLog()
 				return output
 			}
 		}, exitCode)
@@ -1158,6 +1169,10 @@ func (cca *cookedCopyCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			if throughput == 0 {
 				// As there would be case when no bits sent from local, e.g. service side copy, when throughput = 0, hide it.
 				throughputString = ""
+			}
+
+			if tClient != nil {
+				tClient.TrackMetric("azcopyThroughput", ste.ToFixed(throughput, 4))
 			}
 
 			// indicate whether constrained by disk or not

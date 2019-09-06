@@ -21,6 +21,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -49,6 +50,23 @@ type ILoggerResetable interface {
 	OpenLog()
 	MinimumLogLevel() pipeline.LogLevel
 	ILoggerCloser
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+var telemetry appinsights.TelemetryClient
+
+func GetTelemetryClient() appinsights.TelemetryClient {
+	if telemetry != nil {
+		return telemetry
+	} else {
+		if key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AppInsightsInstrumentationKey()); key != "" {
+			telemetry = appinsights.NewTelemetryClient(key)
+			telemetry.SetIsEnabled(true)
+		}
+
+		return telemetry
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -111,7 +129,6 @@ type jobLogger struct {
 	logFileFolder     string            // The log file's parent folder, needed for opening the file at the right place
 	logger            *log.Logger       // The Job's logger
 	appLogger         ILogger
-	telemetryClient   appinsights.TelemetryClient
 	sanitizer         pipeline.LogSanitizer
 }
 
@@ -129,11 +146,9 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, lo
 		panic("You must pass a appLogger when creating a JobLogger")
 	}
 
-	var telemetry appinsights.TelemetryClient
-
-	if key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AppInsightsInstrumentationKey()); key != "" {
-		telemetry = appinsights.NewTelemetryClient(key)
-		telemetry.SetIsEnabled(true)
+	// Initialize telemetry
+	GetTelemetryClient()
+	if telemetry != nil {
 		telemetry.Context().Tags.Session().SetId(jobID.String())
 	}
 
@@ -143,7 +158,6 @@ func NewJobLogger(jobID JobID, minimumLevelToLog LogLevel, appLogger ILogger, lo
 		minimumLevelToLog: minimumLevelToLog.ToPipelineLogLevel(),
 		logFileFolder:     logFileFolder,
 		sanitizer:         NewAzCopyLogSanitizer(),
-		telemetryClient:   telemetry,
 	}
 }
 
@@ -169,14 +183,19 @@ func (jl *jobLogger) OpenLog() {
 }
 
 func (jl *jobLogger) appInsightsLog(logLevel pipeline.LogLevel, v ...interface{}) {
-	if jl.telemetryClient != nil && jl.ShouldLog(logLevel) {
-		event := appinsights.NewEventTelemetry("log")
-		event.Properties["message"] = fmt.Sprint(v...)
-		event.Properties["level"] = LogLevelStrings[logLevel]
-		event.Name = "AzCopy Log Event"
-		event.Timestamp = time.Now()
-		jl.telemetryClient.Track(event)
-		jl.telemetryClient.Channel().Flush() // force telemetry to be submitted so we don't lose anything.
+	if telemetry != nil && jl.ShouldLog(logLevel) {
+		if logLevel != pipeline.LogError && logLevel != pipeline.LogPanic {
+			event := appinsights.NewEventTelemetry("log")
+			event.Properties["message"] = fmt.Sprint(v...)
+			event.Properties["level"] = LogLevelStrings[logLevel]
+			event.Name = "AzCopy Log Event"
+			event.Timestamp = time.Now()
+			telemetry.Track(event)
+		} else {
+			exTel := appinsights.NewExceptionTelemetry(errors.New(fmt.Sprint(v...)))
+			exTel.Properties["level"] = LogLevelStrings[logLevel]
+			telemetry.Track(exTel)
+		}
 	}
 }
 
@@ -194,6 +213,28 @@ func (jl *jobLogger) ShouldLog(level pipeline.LogLevel) bool {
 func (jl *jobLogger) CloseLog() {
 	jl.logger.Println("Closing Log")
 	err := jl.file.Close()
+	if telemetry != nil {
+		telemetry.Channel().Flush()
+
+		select {
+		case <-telemetry.Channel().Close(10 * time.Second):
+			// Ten second timeout for retries.
+
+			// If we got here, then all telemetry was submitted
+			// successfully, and we can proceed to exiting.
+		case <-time.After(30 * time.Second):
+			// Thirty second absolute timeout.  This covers any
+			// previous telemetry submission that may not have
+			// completed before Close was called.
+
+			// There are a number of reasons we could have
+			// reached here.  We gave it a go, but telemetry
+			// submission failed somewhere.  Perhaps old events
+			// were still retrying, or perhaps we're throttled.
+			// Either way, we don't want to wait around for it
+			// to complete, so let's just exit.
+		}
+	}
 	PanicIfErr(err)
 }
 
