@@ -1164,7 +1164,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.logVerbosity, "log-level", "INFO", "Define the log verbosity for the log file, available levels: INFO(all requests/responses), WARNING(slow responses), ERROR(only failed requests), and NONE(no output logs). (default 'INFO').")
 	cpCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "Defines the type of blob at the destination. This is used for uploading blobs and when copying between accounts (default 'None').")
 	cpCmd.PersistentFlags().StringVar(&raw.blockBlobTier, "block-blob-tier", "None", "Upload block blob to Azure Storage using this blob tier. (default 'None').")
-	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default "None").")
+	cpCmd.PersistentFlags().StringVar(&raw.pageBlobTier, "page-blob-tier", "None", "Upload page blob to Azure Storage using this blob tier. (default 'None').")
 	cpCmd.PersistentFlags().StringVar(&raw.metadata, "metadata", "", "Upload to Azure Storage with these key-value pairs as metadata.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentType, "content-type", "", "Specifies the content type of the file. Implies no-guess-mime-type. Returned on download.")
 	cpCmd.PersistentFlags().StringVar(&raw.contentEncoding, "content-encoding", "", "Set the content-encoding header. Returned on download.")
