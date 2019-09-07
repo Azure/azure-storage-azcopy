@@ -118,7 +118,7 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		// file creations are running at any given instant, for perf diagnostics
 		pseudoId := common.NewPseudoChunkIDForWholeFile(info.Source)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.CreateLocalFile())
-		dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(info.Destination, fileSize, writeThrough)
+		dstFile, err = createDestinationFile(jptm, info.Destination, fileSize, writeThrough)
 		jptm.LogChunkStatus(pseudoId, common.EWaitReason.ChunkDone()) // normal setting to done doesn't apply to these pseudo ids
 		if err != nil {
 			failFileCreation(err, true)
@@ -212,6 +212,27 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 		panic(fmt.Errorf("difference in the number of chunk calculated %v and actual chunks scheduled %v for src %s of size %v", numChunks, chunkCount, info.Source, fileSize))
 	}
 
+}
+
+func createDestinationFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file io.WriteCloser, err error) {
+	ct := common.ECompressionType.None()
+	if jptm.ShouldDecompress() {
+		size = 0 // we don't know what the final size will be, so we can't pre-size it
+		ct, err = jptm.GetSourceCompressionType()
+		if err != nil { // check this, and return error, before we create any disk file, since if we return err, then no cleanup of file will be required
+			return nil, err
+		}
+	}
+
+	var dstFile io.WriteCloser
+	dstFile, err = common.CreateFileOfSizeWithWriteThroughOption(destination, size, writeThrough)
+	if err != nil {
+		return nil, err
+	}
+	if jptm.ShouldDecompress() {
+		dstFile = common.NewDecompressingWriter(dstFile, ct)
+	}
+	return dstFile, nil
 }
 
 // complete epilogue. Handles both success and failure

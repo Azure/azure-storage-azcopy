@@ -77,6 +77,7 @@ func (s *copyTransferProcessor) scheduleCopyTransfer(storedObject storedObject) 
 		LastModifiedTime: storedObject.lastModifiedTime,
 		ContentMD5:       storedObject.md5,
 		BlobType:         storedObject.blobType,
+		ContentEncoding:  storedObject.contentEncoding,
 	})
 	return nil
 }
