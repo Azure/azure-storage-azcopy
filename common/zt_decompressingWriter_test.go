@@ -27,18 +27,23 @@ import (
 	chk "gopkg.in/check.v1"
 	"io"
 	"math/rand"
+	"sync/atomic"
 )
 
 type decompressingWriterSuite struct{}
 
 type closeableBuffer struct {
+	atomicCloseWasCalled int32
 	*bytes.Buffer
-	closeWasCalled bool
 }
 
 func (c *closeableBuffer) Close() error {
-	c.closeWasCalled = true
+	atomic.StoreInt32(&c.atomicCloseWasCalled, 1)
 	return nil
+}
+
+func (c *closeableBuffer) closeWasCalled() bool {
+	return atomic.LoadInt32(&c.atomicCloseWasCalled) == 1
 }
 
 var _ = chk.Suite(&decompressingWriterSuite{})
@@ -68,7 +73,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C
 
 		// when:
 		// we decompress using a decompressing writer
-		destFile := &closeableBuffer{&bytes.Buffer{}, false} // will be a file in real usage, but just a buffer in this test
+		destFile := &closeableBuffer{Buffer: &bytes.Buffer{}} // will be a file in real usage, but just a buffer in this test
 		decWriter := NewDecompressingWriter(destFile, cs.tp)
 		copyBuf := make([]byte, cs.writeBufferSize)
 		_, err := io.CopyBuffer(decWriter, bytes.NewReader(compressedData), copyBuf) // write compressed data to decWriter
@@ -81,7 +86,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_SuccessCases(c *chk.C
 		dataWritten := destFile.Bytes()
 		c.Assert(dataWritten, chk.DeepEquals, originalData)
 		// the dest is closed
-		c.Assert(destFile.closeWasCalled, chk.Equals, true)
+		c.Assert(destFile.closeWasCalled(), chk.Equals, true)
 	}
 }
 
@@ -99,7 +104,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) 
 
 		// when:
 		// we close the decompressing writer before we have processed everything
-		destFile := &closeableBuffer{&bytes.Buffer{}, false} // will be a file in real usage, but just a buffer in this test
+		destFile := &closeableBuffer{Buffer: &bytes.Buffer{}} // will be a file in real usage, but just a buffer in this test
 		decWriter := NewDecompressingWriter(destFile, tp)
 		n, err := io.CopyN(decWriter, bytes.NewReader(compressedData), sizeBeforeEarlyClose) // process only some of the data
 		c.Assert(err, chk.IsNil)
@@ -108,7 +113,7 @@ func (d *decompressingWriterSuite) TestDecompressingWriter_EarlyClose(c *chk.C) 
 		// then:
 		// the amount processed was as expected, the dest file is closed, and an error was returned from close (because decompressor never sees the expected footer)
 		c.Assert(n, chk.Equals, sizeBeforeEarlyClose)
-		c.Assert(destFile.closeWasCalled, chk.Equals, true)
+		c.Assert(destFile.closeWasCalled(), chk.Equals, true)
 		c.Assert(err, chk.NotNil)
 	}
 }
