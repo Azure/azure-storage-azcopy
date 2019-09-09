@@ -327,7 +327,7 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
 	initialMonitoringInterval := time.Duration(4 * time.Second)
-	expandedMonitoringInterval := time.Duration(6 * time.Second)
+	expandedMonitoringInterval := time.Duration(8 * time.Second)
 	throughputMonitoringInterval := initialMonitoringInterval
 
 	// get initial pool size
@@ -367,8 +367,8 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 					elapsedSeconds := time.Since(lastBytesTime).Seconds()
 					bytes := bytesOnWire - lastBytesOnWire
 					megabitsPerSec := (8 * float64(bytes) / elapsedSeconds) / (1000 * 1000)
-					if megabitsPerSec > 11000 {
-						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period if over 10 Gbps, since in some tests it takes a little longer to get a good average
+					if megabitsPerSec > 4000 {
+						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period, since in some tests it takes a little longer to get a good average
 					}
 					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec), ja.cpuMonitor.CPUContentionExists())
 					logConcurrency(targetConcurrency, reason)

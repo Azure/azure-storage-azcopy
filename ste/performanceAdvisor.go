@@ -141,8 +141,8 @@ func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64
 func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 
 	const (
-		serverBusyThresholdPercent   = 2.0
-		networkErrorThresholdPercent = 5.0
+		serverBusyThresholdPercent   = 1.0
+		networkErrorThresholdPercent = 2.0
 
 		// we don't have any API to get exact throughput given a VM size. But a quick look at the documentation
 		// suggests that all current gen VMs get around 500 to 1000 Mbps per core.
