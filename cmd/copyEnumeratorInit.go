@@ -70,7 +70,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Ensure we're only copying from a directory with a trailing wildcard or recursive.
 	isSourceDir := traverser.isDirectory(true)
 	if isSourceDir && !cca.recursive && !cca.stripTopDir {
-		return nil, errors.New("cannot use directory as source without --recursive or trailing wildcard (/*)")
+		return nil, errors.New("cannot use directory as source without --recursive or --strip-top-dir")
 	}
 
 	// Check if the destination is a directory so we can correctly decide where our files land
@@ -105,14 +105,12 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	filters := cca.initModularFilters()
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
-		if object.containerName != "" && cca.fromTo.From() != common.ELocation.Local() && cca.fromTo.To() != common.ELocation.Local() {
+		if object.containerName != "" {
 			cName, err := s3BucketResolver.ResolveName(object.containerName)
 
 			if err != nil {
-				glcm.Error(err.Error())
-				return errors.New("failed to add transfers from service, some of the buckets have invalid names for the destination. " +
-					"Please exclude the invalid buckets in service to service copy, and copy them using bucket to container/share/filesystem copy " +
-					"with customized destination name after the service to service copy finished")
+				LogStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
+				return nil
 			}
 
 			object.dstContainerName = cName
@@ -132,11 +130,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		// If above the service level, we already know the container name and don't need to supply it to makeEscapedRelativePath
 		if srcLevel != ELocationLevel.Service() {
 			object.containerName = ""
-		}
 
-		// When copying directly TO a container from a container, don't drop under a sub directory
-		if dstLevel >= ELocationLevel.Container() {
-			object.dstContainerName = ""
+			// When copying directly TO a container from a container, don't drop under a sub directory
+			if dstLevel >= ELocationLevel.Container() {
+				object.dstContainerName = ""
+			}
 		}
 
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)

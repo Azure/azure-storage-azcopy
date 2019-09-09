@@ -94,15 +94,6 @@ func newStoredObject(name string, relativePath string, lmt time.Time, size int64
 	}
 }
 
-// used to get properties in a safe, but not so verbose manner
-func defaultStringIfPointerIsNil(wanted *string, instead string) string {
-	if wanted == nil {
-		return instead
-	}
-
-	return *wanted
-}
-
 // capable of traversing a structured resource like container or local directory
 // pass each storedObject to the given objectProcessor if it passes all the filters
 type resourceTraverser interface {
@@ -209,7 +200,6 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		burl := azblob.NewBlobURLParts(*sourceURL)
 
 		if burl.ContainerName == "" || strings.Contains(burl.ContainerName, "*") {
-			// TODO service traverser
 
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)

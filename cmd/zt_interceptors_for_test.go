@@ -73,7 +73,9 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 
 func (i *interceptor) init() {
 	// mock out the lifecycle manager so that it can no longer terminate the application
-	glcm = mockedLifecycleManager{}
+	glcm = &mockedLifecycleManager{
+		log: make(chan string, 5000),
+	}
 }
 
 func (i *interceptor) reset() {
@@ -82,26 +84,31 @@ func (i *interceptor) reset() {
 }
 
 // this lifecycle manager substitute does not perform any action
-type mockedLifecycleManager struct{}
+type mockedLifecycleManager struct {
+	log chan string
+}
 
-func (mockedLifecycleManager) Progress(common.OutputBuilder) {}
-func (mockedLifecycleManager) Init(common.OutputBuilder)     {}
-func (mockedLifecycleManager) Info(msg string)               { fmt.Println(msg) }
-func (mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
+func (*mockedLifecycleManager) Progress(common.OutputBuilder) {}
+func (*mockedLifecycleManager) Init(common.OutputBuilder)     {}
+func (m *mockedLifecycleManager) Info(msg string) {
+	fmt.Println(msg)
+	m.log <- msg
+}
+func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()
 }
-func (mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
-func (mockedLifecycleManager) Error(string)                                    {}
-func (mockedLifecycleManager) SurrenderControl()                               {}
-func (mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
-func (mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
+func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
+func (*mockedLifecycleManager) Error(string)                                    {}
+func (*mockedLifecycleManager) SurrenderControl()                               {}
+func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
+func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
 	value := os.Getenv(env.Name)
 	if value == "" {
 		return env.DefaultValue
 	}
 	return value
 }
-func (mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
+func (*mockedLifecycleManager) SetOutputFormat(common.OutputFormat) {}
 
 type dummyProcessor struct {
 	record []storedObject

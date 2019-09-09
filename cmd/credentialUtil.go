@@ -112,8 +112,9 @@ func getBlobCredentialType(ctx context.Context, blobResourceURL string, canBePub
 		isPublicResource = false
 
 		if isContainer {
-			containerURL := azblob.NewContainerURL(*resourceURL, p)
 			bURLparts := azblob.NewBlobURLParts(*resourceURL)
+			bURLparts.BlobName = ""
+			containerURL := azblob.NewContainerURL(bURLparts.URL(), p)
 
 			if bURLparts.ContainerName == "" || strings.Contains(bURLparts.ContainerName, "*") {
 				// Service level searches can't possibly be public.

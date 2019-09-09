@@ -267,7 +267,15 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	// bucket should be resolved, and objects should be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
-		c.Assert(err.Error(), StringIncludes, "some of the buckets have invalid names for the destination")
+
+		loggedError := false
+		for x := range glcm.(*mockedLifecycleManager).log {
+			if strings.Contains(x, "invalid name") {
+				loggedError = true
+			}
+		}
+
+		c.Assert(loggedError, chk.Equals, true)
 	})
 }
 

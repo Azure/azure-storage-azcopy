@@ -149,11 +149,11 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				blobUrlParts.ContainerName,
 			)
 
-			storedObject.contentDisposition = defaultStringIfPointerIsNil(blobInfo.Properties.ContentDisposition, "")
-			storedObject.cacheControl = defaultStringIfPointerIsNil(blobInfo.Properties.CacheControl, "")
-			storedObject.contentLanguage = defaultStringIfPointerIsNil(blobInfo.Properties.ContentLanguage, "")
-			storedObject.contentEncoding = defaultStringIfPointerIsNil(blobInfo.Properties.ContentEncoding, "")
-			storedObject.contentType = defaultStringIfPointerIsNil(blobInfo.Properties.ContentType, "")
+			storedObject.contentDisposition = common.IffStringNotNil(blobInfo.Properties.ContentDisposition, "")
+			storedObject.cacheControl = common.IffStringNotNil(blobInfo.Properties.CacheControl, "")
+			storedObject.contentLanguage = common.IffStringNotNil(blobInfo.Properties.ContentLanguage, "")
+			storedObject.contentEncoding = common.IffStringNotNil(blobInfo.Properties.ContentEncoding, "")
+			storedObject.contentType = common.IffStringNotNil(blobInfo.Properties.ContentType, "")
 
 			storedObject.blobAccessTier = blobInfo.Properties.AccessTier
 
