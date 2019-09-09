@@ -80,9 +80,10 @@ type autoConcurrencyTuner struct {
 	finalConcurrency    int
 	finalTime           time.Time
 	lockFinal           sync.Mutex
+	isBenchmarking      bool
 }
 
-func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
+func NewAutoConcurrencyTuner(initial, max int, isBenchmarking bool) ConcurrencyTuner {
 	t := &autoConcurrencyTuner{
 		observations: make(chan struct {
 			mbps      int
@@ -96,6 +97,7 @@ func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 		maxConcurrency:      max,
 		callbacksWhenStable: make(chan func(), 1000),
 		lockFinal:           sync.Mutex{},
+		isBenchmarking:      isBenchmarking,
 	}
 	go t.worker()
 	return t
@@ -150,6 +152,8 @@ func (t *autoConcurrencyTuner) worker() {
 	highCpu := false
 	everSawHighCpu := false
 	sawHighMultiGbps := false
+	probeHigherRegardless := false
+	dontBackoffRegardless := false
 	lastReason := concurrencyReasonNone
 
 	// get initial baseline throughput
@@ -180,14 +184,18 @@ func (t *autoConcurrencyTuner) worker() {
 			everSawHighCpu = true // this doesn't stop us probing higher concurrency, since sometimes that works even when CPU looks high, but it does change the way we report the result
 		}
 
-		// If we are seeing retries (within "normal" concurrency range) then for benchmarking purposes we don't want to back off.
-		// (Since if we back off the retries might stop and then they won't be reported on as a limiting factor.)
-		sawRetry := atomic.SwapInt64(&t.atomicRetryCount, 0) > 0
-		dontBackoffRegardless := sawRetry && concurrency <= 256
+		if t.isBenchmarking {
+			// Be a little more aggressive if we are tuning for benchmarking purposes (as opposed to day to day use)
 
-		// Workaround for variable throughput when targeting 20 Gbps account limit (concurrency around 64 didn't seem to give stable throughput)
-		// TODO: review this, and look for root cause/better solution
-		probeHigherRegardless := sawHighMultiGbps && concurrency >= 32 && concurrency < 128 && multiplier == initialMultiplier
+			// If we are seeing retries (within "normal" concurrency range) then for benchmarking purposes we don't want to back off.
+			// (Since if we back off the retries might stop and then they won't be reported on as a limiting factor.)
+			sawRetry := atomic.SwapInt64(&t.atomicRetryCount, 0) > 0
+			dontBackoffRegardless = sawRetry && concurrency <= 256
+
+			// Workaround for variable throughput when targeting 20 Gbps account limit (concurrency around 64 didn't seem to give stable throughput in some tests)
+			// TODO: review this, and look for root cause/better solution
+			probeHigherRegardless = sawHighMultiGbps && concurrency >= 32 && concurrency < 128 && multiplier == initialMultiplier
+		}
 
 		// decide what to do based on the measurement
 		if lastSpeed > desiredNewSpeed || probeHigherRegardless {

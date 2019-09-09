@@ -277,7 +277,7 @@ func (ja *jobsAdmin) scheduleJobParts() {
 
 func (ja *jobsAdmin) createConcurrencyTuner() ConcurrencyTuner {
 	if ja.concurrency.AutoTuneMainPool() {
-		t := NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value)
+		t := NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, ja.provideBenchmarkResults)
 		if !t.RequestCallbackWhenStable(ja.recordTuningCompleted) {
 			panic("could not register tuning completion callback")
 		}
@@ -326,6 +326,9 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 	lastBytesOnWire := int64(0)
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
+	// TODO: these monitoring intervals are good for uploads (which is all we do in benchmarking now) but
+	//   they're not good for downloads, where throughput can be more variable in the short term.  Consider detecting direction
+	//  (hard to do in JobsAdmin tho...) and increasing these intervals if downloading.
 	initialMonitoringInterval := time.Duration(4 * time.Second)
 	expandedMonitoringInterval := time.Duration(8 * time.Second)
 	throughputMonitoringInterval := initialMonitoringInterval
