@@ -87,7 +87,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		// these test cases look at combinations
 		{"badStatsAndCap1", 8, 7, 7, 7, concurrencyReasonAtOptimum, 1000, 999, 0, iops, throughput, mbpsCapped, netOK}, // note no netError because we ignore those if throttled
 		{"badStatsAndCap2", 8, 7, 7, 7, concurrencyReasonSeeking, 1000, 999, 0, iops, throughput, mbpsCapped, netOK},   // netOK not concNotEnoughTime because net is not the bottleneck
-		{"combinedThrottl", 2, 2, 2, 0, concurrencyReasonAtOptimum, 0, 1000, 0, otherBusy, netOK, none, none},
+		{"combinedThrottl", 0.5, 0.5, 0.5, 0, concurrencyReasonAtOptimum, 0, 1000, 0, otherBusy, netOK, none, none},
 		{"notVmSize      ", 0, 8, 0, 0, concurrencyReasonAtOptimum, 0, 10500, 16, throughput, netOK, none, none},
 	}
 
@@ -117,7 +117,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		if cs.expectedSecondary3 != none {
 			expectedCount++
 		}
-		c.Assert(len(obtained), chk.Equals, expectedCount)
+		c.Assert(len(obtained), chk.Equals, expectedCount, chk.Commentf(cs.caseName))
 
 		s.assertAdviceMatches(c, cs.caseName, obtained, 0, cs.expectedPrimaryResult)
 		s.assertAdviceMatches(c, cs.caseName, obtained, 1, cs.expectedSecondary1)

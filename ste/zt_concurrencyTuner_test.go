@@ -49,7 +49,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_LowBandwidth(c *chk.C) {
 		{16, concurrencyReasonAtOptimum, 100, false},
 		{16, concurrencyReasonFinished, 100, false}}
 
-	s.runTest(c, steps, s.noMax())
+	s.runTest(c, steps, s.noMax(), true, false)
 
 }
 
@@ -67,7 +67,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_PlentyOfCpu(c
 		{256, concurrencyReasonFinished, 20000, false},
 	}
 
-	s.runTest(c, steps, s.noMax())
+	s.runTest(c, steps, s.noMax(), true, false)
 }
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_ConstrainedCpu(c *chk.C) {
@@ -84,7 +84,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidth_ConstrainedCp
 		{256, concurrencyReasonFinished, 20000, false},
 	}
 
-	s.runTest(c, steps, s.noMax())
+	s.runTest(c, steps, s.noMax(), true, false)
 }
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C) {
@@ -96,7 +96,7 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_CapMaxConcurrency(c *chk.C)
 		{100, concurrencyReasonFinished, 8000, false},
 	}
 
-	s.runTest(c, steps, 100)
+	s.runTest(c, steps, 100, true, false)
 }
 
 func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandardSteps(c *chk.C) {
@@ -116,33 +116,55 @@ func (s *concurrencyTunerSuite) TestConcurrencyTuner_OptimalValueNotNearStandard
 		{737, concurrencyReasonFinished, 19500, false},
 	}
 
-	s.runTest(c, steps, s.noMax())
+	s.runTest(c, steps, s.noMax(), true, false)
 
 }
 
-func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround(c *chk.C) {
+func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround_AppliesWhenBenchmarking(c *chk.C) {
 	steps := []tunerStep{
-		{16, concurrencyReasonInitial, 1000, false},
-		{32, concurrencyReasonSeeking, 5000, false},
-		{64, concurrencyReasonSeeking, 10900, false},
-		// range of special handling for workaround is >= 32, < 256 & have (ever) seen over 11 Gbps
-		{128, concurrencyReasonSeeking, 11100, false},   // this would cause backoff if not for workaround
-		{256, concurrencyReasonSeeking, 10200, false},   // this would also cause backoff if not for workaround
-		{256, concurrencyReasonAtOptimum, 10200, false}, // due to workaround, it bails out instead of backing off
-		{256, concurrencyReasonFinished, 10200, false},  // in practice, if we hang around at this level of concurrency, we do get higher throughput in at least some cases
+		{16, concurrencyReasonInitial, 4000, false},
+		{32, concurrencyReasonSeeking, 10900, false},
+		{64, concurrencyReasonSeeking, 11100, false},  // this would cause backoff if not for workaround
+		{128, concurrencyReasonSeeking, 11600, false}, // instead it tries higher...
+		{64, concurrencyReasonBackoff, 11600, false},  // ... but, with no retries to prevent it backing off, it backs off from the higher value that it tried
 	}
 
-	s.runTest(c, steps, s.noMax())
-
+	s.runTest(c, steps, s.noMax(), true, false)
 }
 
-func (s *concurrencyTunerSuite) runTest(c *chk.C, steps []tunerStep, maxConcurrency int) {
-	t := NewAutoConcurrencyTuner(16, maxConcurrency)
+func (s *concurrencyTunerSuite) TestConcurrencyTuner_HighBandwidthWorkaround_DoesntApplyWhenNotBenchmarking(c *chk.C) {
+	steps := []tunerStep{
+		{16, concurrencyReasonInitial, 4000, false},
+		{32, concurrencyReasonSeeking, 10900, false},
+		{64, concurrencyReasonSeeking, 11100, false},
+		{32, concurrencyReasonBackoff, 11600, false},
+	}
+
+	s.runTest(c, steps, s.noMax(), false, false)
+}
+
+func (s *concurrencyTunerSuite) TestConcurrencyTuner__HighBandwidthWorkaround_StaysHighIfSeesRetries(c *chk.C) {
+	steps := []tunerStep{
+		{16, concurrencyReasonInitial, 4000, false},
+		{32, concurrencyReasonSeeking, 10900, false},
+		{64, concurrencyReasonSeeking, 11100, false},    // this would cause backoff if not for workaround
+		{128, concurrencyReasonSeeking, 11600, false},   // instead it tries higher...
+		{128, concurrencyReasonAtOptimum, 11600, false}, // ... and, because there ARE reties, it does not back off
+	}
+
+	s.runTest(c, steps, s.noMax(), true, true)
+}
+
+func (s *concurrencyTunerSuite) runTest(c *chk.C, steps []tunerStep, maxConcurrency int, isBenchmarking bool, simulateRetries bool) {
+	t := NewAutoConcurrencyTuner(16, maxConcurrency, isBenchmarking)
 	observedMbps := -1 // there's no observation at first
 	observedHighCpu := false
 
 	for _, x := range steps {
 		// ask the tuner what do to
+		if simulateRetries {
+			t.recordRetry() // tell it we got a 503 back from the server
+		}
 		conc, reason := t.GetRecommendedConcurrency(observedMbps, observedHighCpu)
 
 		// assert that it told us what we expect in this test
