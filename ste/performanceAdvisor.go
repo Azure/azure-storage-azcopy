@@ -141,7 +141,7 @@ func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64
 func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 
 	const (
-		serverBusyThresholdPercent   = 5.0
+		serverBusyThresholdPercent   = 2.0
 		networkErrorThresholdPercent = 5.0
 
 		// we don't have any API to get exact throughput given a VM size. But a quick look at the documentation
