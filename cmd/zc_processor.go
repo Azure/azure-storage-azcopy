@@ -94,6 +94,8 @@ func (s *copyTransferProcessor) escapeIfNecessary(path string, shouldEscape bool
 	return path
 }
 
+var NothingScheduledError = errors.New("no transfers were scheduled because no files matched the specified criteria")
+
 func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err error) {
 	var resp common.CopyJobPartOrderResponse
 	s.copyJobTemplate.IsFinalPart = true
@@ -101,7 +103,7 @@ func (s *copyTransferProcessor) dispatchFinalPart() (copyJobInitiated bool, err 
 
 	if !resp.JobStarted {
 		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
-			return false, errors.New("no transfers were scheduled")
+			return false, NothingScheduledError
 		}
 
 		return false, fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s",

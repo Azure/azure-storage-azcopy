@@ -69,7 +69,7 @@ func dispatchFinalPart(e *common.CopyJobPartOrderRequest, cca *cookedCopyCmdArgs
 		glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)))
 
 		if resp.ErrorMsg == common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr() {
-			return fmt.Errorf("no transfers were scheduled")
+			return NothingScheduledError
 		}
 
 		return fmt.Errorf("copy job part order with JobId %s and part number %d failed because %s", e.JobID, e.PartNum, resp.ErrorMsg)
