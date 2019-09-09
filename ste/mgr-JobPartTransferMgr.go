@@ -488,7 +488,15 @@ func (jptm *jobPartTransferMgr) failActiveTransfer(typ transferErrorCode, descri
 	//  consider redesign the lifecycle management in ste
 	if !jptm.WasCanceled() {
 		jptm.Cancel()
-		status, msg := ErrorEx{err}.ErrorCodeAndString()
+		serviceCode, status, msg := ErrorEx{err}.ErrorCodeAndString()
+
+		if serviceCode == common.CPK_ERROR_SERVICE_CODE {
+			cpkAccessFailureLogGLCM.Do(func() {
+				common.GetLifecycleMgr().Info("One or more transfers have failed because AzCopy currently does not support blobs encrypted with customer provided keys (CPK). " +
+					"If you wish to access CPK-encrypted blobs, we recommend using one of the Azure Storage SDKs to do so.")
+			})
+		}
+
 		requestID := ErrorEx{err}.MSRequestID()
 		fullMsg := fmt.Sprintf("%s. When %s. X-Ms-Request-Id: %s\n", msg, descriptionOfWhereErrorOccurred, requestID) // trailing \n to separate it better from any later, unrelated, log lines
 		jptm.logTransferError(typ, jptm.Info().Source, jptm.Info().Destination, fullMsg, status)
@@ -581,7 +589,7 @@ func (jptm *jobPartTransferMgr) LogSendError(source, destination, errorMsg strin
 }
 
 func (jptm *jobPartTransferMgr) LogError(resource, context string, err error) {
-	status, msg := ErrorEx{err}.ErrorCodeAndString()
+	_, status, msg := ErrorEx{err}.ErrorCodeAndString()
 	MSRequestID := ErrorEx{err}.MSRequestID()
 	jptm.Log(pipeline.LogError,
 		fmt.Sprintf("%s: %d: %s-%s. X-Ms-Request-Id:%s\n", common.URLStringExtension(resource).RedactSecretQueryParamForLogging(), status, context, msg, MSRequestID))

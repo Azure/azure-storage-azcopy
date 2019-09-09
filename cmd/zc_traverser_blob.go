@@ -28,6 +28,7 @@ import (
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/pkg/errors"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -52,21 +53,28 @@ func (t *blobTraverser) isDirectory(isSource bool) bool {
 		return isDirDirect
 	}
 
-	_, isSingleBlob := t.getPropertiesIfSingleBlob()
+	_, isSingleBlob, err := t.getPropertiesIfSingleBlob()
+
+	if stgErr, ok := err.(azblob.StorageError); ok {
+		// We know for sure this is a single blob still, let it walk on through to the traverser.
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+			return false
+		}
+	}
 
 	return !isSingleBlob
 }
 
-func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool) {
+func (t *blobTraverser) getPropertiesIfSingleBlob() (*azblob.BlobGetPropertiesResponse, bool, error) {
 	blobURL := azblob.NewBlobURL(*t.rawURL, t.p)
 	blobProps, blobPropertiesErr := blobURL.GetProperties(t.ctx, azblob.BlobAccessConditions{})
 
 	// if there was no problem getting the properties, it means that we are looking at a single blob
 	if blobPropertiesErr == nil && !gCopyUtil.doesBlobRepresentAFolder(blobProps.NewMetadata()) {
-		return blobProps, true
+		return blobProps, true, blobPropertiesErr
 	}
 
-	return nil, false
+	return nil, false, blobPropertiesErr
 }
 
 func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilter) (err error) {
@@ -74,7 +82,17 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	util := copyHandlerUtil{}
 
 	// check if the url points to a single blob
-	blobProperties, isBlob := t.getPropertiesIfSingleBlob()
+	blobProperties, isBlob, propErr := t.getPropertiesIfSingleBlob()
+
+	if stgErr, ok := propErr.(azblob.StorageError); ok {
+		// Don't error out unless it's a CPK error just yet
+		// If it's a CPK error, we know it's a single blob and that we can't get the properties on it anyway.
+		if stgErr.ServiceCode() == common.CPK_ERROR_SERVICE_CODE {
+			return errors.New("this blob uses customer provided encryption keys (CPK). At the moment, AzCopy does not support CPK-encrypted blobs. " +
+				"If you wish to make use of this blob, we recommend using one of the Azure Storage SDKs")
+		}
+	}
+
 	if isBlob {
 		storedObject := newStoredObject(
 			getObjectNameOnly(blobUrlParts.BlobName),

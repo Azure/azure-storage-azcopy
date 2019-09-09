@@ -23,6 +23,7 @@ package ste
 import (
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -49,6 +50,10 @@ const DownloadMaxRetryDelay = time.Second * 60
 
 // pacer related
 const PacerTimeToWaitInMs = 50
+
+// CPK logging related.
+// Sync.Once is used so we only log a CPK error once and prevent gumming up stdout
+var cpkAccessFailureLogGLCM sync.Once
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
