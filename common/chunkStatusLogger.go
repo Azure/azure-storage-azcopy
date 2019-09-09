@@ -90,6 +90,10 @@ func (id ChunkID) OffsetInFile() int64 {
 	return id.offsetInFile
 }
 
+func (id ChunkID) IsPseudoChunk() bool {
+	return id.offsetInFile < 0
+}
+
 var EWaitReason = WaitReason{0, ""}
 
 // WaitReason identifies the one thing that a given chunk is waiting on, at a given moment.
@@ -264,7 +268,7 @@ func (csl *chunkStatusLogger) LogChunkStatus(id ChunkID, reason WaitReason) {
 	// always update the in-memory stats, even if output is disabled
 	csl.countStateTransition(id, reason)
 
-	if !csl.outputEnabled {
+	if !csl.outputEnabled || id.IsPseudoChunk() { // pseudo chunks are only for aggregate stats, not detailed logging
 		return
 	}
 
