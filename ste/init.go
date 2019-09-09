@@ -142,7 +142,7 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
 
-	if len(order.Transfers) == 0 {
+	if len(order.Transfers) == 0 && order.IsFinalPart {
 		jpm.Log(pipeline.LogError, "ERROR: No transfers were scheduled.")
 		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
 	}
