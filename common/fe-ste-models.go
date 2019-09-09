@@ -1128,3 +1128,4 @@ increasing read_ahead_kb to 8192 for the data disk.`
 
 const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
+const FileCountDefault = 100

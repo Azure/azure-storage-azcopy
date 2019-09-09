@@ -96,6 +96,11 @@ func (AdviceType) VMSize() AdviceType {
 		"The size of this Azure VM may have limited throughput"}
 }
 
+func (AdviceType) SmallFilesOrNetwork() AdviceType {
+	return AdviceType{"SmallFilesOrNetwork",
+		"Throughput may have been limited by small file size or by the network"}
+}
+
 type PerformanceAdvisor struct {
 	networkErrorPercentage         float32
 	serverBusyPercentageIOPS       float32
@@ -109,15 +114,17 @@ type PerformanceAdvisor struct {
 	azureVmCores                   int // 0 if not azure VM
 	azureVmSizeName                string
 	direction                      common.TransferDirection
+	avgBytesPerFile                int64
 }
 
-func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection) *PerformanceAdvisor {
+func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64, mbps int64, finalReason string, finalConcurrency int, dir common.TransferDirection, avgBytesPerFile int64) *PerformanceAdvisor {
 	p := &PerformanceAdvisor{
 		capMbps:                     commandLineMbpsCap,
 		mbps:                        mbps,
 		finalConcurrencyTunerReason: finalReason,
 		finalConcurrency:            finalConcurrency,
 		direction:                   dir,
+		avgBytesPerFile:             avgBytesPerFile,
 	}
 
 	p.azureVmSizeName = p.getAzureVmSize()
@@ -141,8 +148,8 @@ func NewPerformanceAdvisor(stats *pipelineNetworkStats, commandLineMbpsCap int64
 func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 
 	const (
-		serverBusyThresholdPercent   = 5.0
-		networkErrorThresholdPercent = 5.0
+		serverBusyThresholdPercent   = 1.0
+		networkErrorThresholdPercent = 2.0
 
 		// we don't have any API to get exact throughput given a VM size. But a quick look at the documentation
 		// suggests that all current gen VMs get around 500 to 1000 Mbps per core.
@@ -151,6 +158,9 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 		// If it's getting more than this amount AND there are no other constraints, then we assume the constraint IS
 		// the throughput cap. (It's probably not the network, because if we use this we already know its an Azure VM).
 		expectedMinAzureMbpsPerCore = 375
+
+		// files this size, and smaller, won't trigger the HTBB path on standard storage accounts
+		htbbThresholdMB = 4
 	)
 
 	result := make([]common.PerformanceAdvice, 0)
@@ -257,12 +267,23 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 				// TODO: can we detect if we're in the same region?  And can we do any better than that, because in many
 				//   (virtually all?) cases even being in different regions is fine.
 			} else {
-				// not limited by VM size
-				addAdvice(EAdviceType.NetworkIsBottleneck(),
-					"No other factors were identified that are limiting performance, so the bottleneck is assumed to be available "+
-						"network bandwidth. The available network bandwidth is the portion of the installed bandwidth that "+
-						"is not already used by other traffic. Throughput of %d Mega bits/sec was obtained with %d concurrent connections.",
-					p.mbps, p.finalConcurrency)
+				// not limited by VM size, so must be file size or network
+				if p.avgBytesPerFile <= (htbbThresholdMB * 1024 * 1024) {
+					addAdvice(EAdviceType.SmallFilesOrNetwork(),
+						"The files in this test are relatively small. In such cases AzCopy cannot tell whether performance was limited by "+
+							"your network, or by the additional processing overheads associated with small files. To check, run another benchmark using "+
+							"files at least 32 MB in size. That will provide a good test of your network speed, unaffected by file size. Then compare that speed "+
+							"to the speed measured just now, with the small files.  If throughput is lower in the small-file case, that means file size "+
+							"is affecting performance.  (AzCopy shows this message when files are less than or equal to %d MiB in size, and no other performance "+
+							"constraints were identified). In this test, throughput of %d Mega bits/sec was obtained with %d concurrent connections.",
+						htbbThresholdMB, p.mbps, p.finalConcurrency)
+				} else {
+					addAdvice(EAdviceType.NetworkIsBottleneck(),
+						"No other factors were identified that are limiting performance, so the bottleneck is assumed to be available "+
+							"network bandwidth. The available network bandwidth is the portion of the installed bandwidth that "+
+							"is not already used by other traffic. Throughput of %d Mega bits/sec was obtained with %d concurrent connections.",
+						p.mbps, p.finalConcurrency)
+				}
 			}
 
 		case concurrencyReasonHighCpu:
@@ -283,7 +304,9 @@ func (p *PerformanceAdvisor) GetAdvice() []common.PerformanceAdvice {
 		default:
 			addAdvice(EAdviceType.ConcurrencyNotEnoughTime(),
 				"The job completed before AzCopy could find the maximum possible throughput.  Try benchmarking with more files "+
-					"to give AzCopy more time. To do so, use the --%s command line parameter.", common.FileCountParam)
+					"to give AzCopy more time. To do so, use the --%s command line parameter. Its default is value %d, so try "+
+					"benchmarking with it set to at least %d", common.FileCountParam, common.FileCountDefault,
+				common.FileCountDefault*20) // * 20 because default is calibrated for 1 Gbps, and 20 Gbps is a common max storage account speed
 		}
 	}
 

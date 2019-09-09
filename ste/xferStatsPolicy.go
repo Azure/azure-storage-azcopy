@@ -170,22 +170,27 @@ func (p *xferStatsPolicy) Do(ctx context.Context, request pipeline.Request) (pip
 
 	resp, err := p.next.Do(ctx, request)
 
-	if p.stats != nil && p.stats.IsStarted() {
-		atomic.AddInt64(&p.stats.atomicOperationCount, 1)
-		atomic.AddInt64(&p.stats.atomicE2ETotalMilliseconds, int64(time.Since(start).Seconds()*1000))
+	if p.stats != nil {
+		if p.stats.IsStarted() {
+			atomic.AddInt64(&p.stats.atomicOperationCount, 1)
+			atomic.AddInt64(&p.stats.atomicE2ETotalMilliseconds, int64(time.Since(start).Seconds()*1000))
 
-		if err != nil && !isContextCancelledError(err) {
-			// no response from server
-			atomic.AddInt64(&p.stats.atomicNetworkErrorCount, 1)
+			if err != nil && !isContextCancelledError(err) {
+				// no response from server
+				atomic.AddInt64(&p.stats.atomicNetworkErrorCount, 1)
+			}
 		}
 
+		// always look at retries, even if not started, because concurrency tuner needs to know about them
 		if resp != nil {
 			// TODO should we also count status 500?  It is mentioned here as timeout:https://docs.microsoft.com/en-us/azure/storage/common/storage-scalability-targets
 			if rr := resp.Response(); rr != nil && rr.StatusCode == http.StatusServiceUnavailable {
-				// we got a response, and it was "retry please, I'm busy"
-				// To find out why the server was busy we need to look at the response
-				responseBodyText := p.transparentlyReadBody(rr)
-				p.stats.recordRetry(responseBodyText)
+				p.stats.tunerInterface.recordRetry() // always tell the tuner
+				if p.stats.IsStarted() {             // but only count it here, if we have started
+					// To find out why the server was busy we need to look at the response
+					responseBodyText := p.transparentlyReadBody(rr)
+					p.stats.recordRetry(responseBodyText)
+				}
 			}
 		}
 	}

@@ -23,7 +23,7 @@ package ste
 import (
 	"github.com/Azure/azure-storage-azcopy/common"
 	"sync"
-	"time"
+	"sync/atomic"
 )
 
 type ConcurrencyTuner interface {
@@ -35,7 +35,10 @@ type ConcurrencyTuner interface {
 	RequestCallbackWhenStable(callback func()) (callbackAccepted bool)
 
 	// GetFinalState returns the final state of the tuner
-	GetFinalState() (finalReason string, finalRecommendedConcurrency int, tm time.Time)
+	GetFinalState() (finalReason string, finalRecommendedConcurrency int)
+
+	// recordRetry informs the concurrencyTuner that a retry has happened
+	recordRetry()
 }
 
 type nullConcurrencyTuner struct {
@@ -50,12 +53,17 @@ func (n *nullConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callb
 	return false
 }
 
-func (n *nullConcurrencyTuner) GetFinalState() (finalReason string, finalRecommendedConcurrency int, tm time.Time) {
-	return concurrencyReasonTunerDisabled, 0, time.Time{}
+func (n *nullConcurrencyTuner) GetFinalState() (finalReason string, finalRecommendedConcurrency int) {
+	return concurrencyReasonTunerDisabled, n.fixedValue
+}
+
+func (n *nullConcurrencyTuner) recordRetry() {
+	// noop
 }
 
 type autoConcurrencyTuner struct {
-	observations chan struct {
+	atomicRetryCount int64
+	observations     chan struct {
 		mbps      int
 		isHighCpu bool
 	}
@@ -69,11 +77,11 @@ type autoConcurrencyTuner struct {
 	callbacksWhenStable chan func()
 	finalReason         string
 	finalConcurrency    int
-	finalTime           time.Time
 	lockFinal           sync.Mutex
+	isBenchmarking      bool
 }
 
-func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
+func NewAutoConcurrencyTuner(initial, max int, isBenchmarking bool) ConcurrencyTuner {
 	t := &autoConcurrencyTuner{
 		observations: make(chan struct {
 			mbps      int
@@ -87,6 +95,7 @@ func NewAutoConcurrencyTuner(initial, max int) ConcurrencyTuner {
 		maxConcurrency:      max,
 		callbacksWhenStable: make(chan func(), 1000),
 		lockFinal:           sync.Mutex{},
+		isBenchmarking:      isBenchmarking,
 	}
 	go t.worker()
 	return t
@@ -113,6 +122,10 @@ func (t *autoConcurrencyTuner) GetRecommendedConcurrency(currentMbps int, highCp
 	}
 }
 
+func (t *autoConcurrencyTuner) recordRetry() {
+	atomic.AddInt64(&t.atomicRetryCount, 1)
+}
+
 const (
 	concurrencyReasonNone          = ""
 	concurrencyReasonTunerDisabled = "tuner disabled" // used as the final (non-finished) state for null tuner
@@ -129,7 +142,10 @@ func (t *autoConcurrencyTuner) worker() {
 	const initialMultiplier = 2
 	const slowdownFactor = 5
 	const minMulitplier = 1.19 // really this is 1.2, but use a little less to make the floating point comparisons robust
-	const fudgeFactor = 0.25
+	fudgeFactor := float32(0.3)
+	if t.isBenchmarking {
+		fudgeFactor = 0.2 // make this even lower (more aggressive in terms of concurrency) if benchmarking
+	}
 
 	multiplier := float32(initialMultiplier)
 	concurrency := float32(t.initialConcurrency)
@@ -137,6 +153,8 @@ func (t *autoConcurrencyTuner) worker() {
 	highCpu := false
 	everSawHighCpu := false
 	sawHighMultiGbps := false
+	probeHigherRegardless := false
+	dontBackoffRegardless := false
 	lastReason := concurrencyReasonNone
 
 	// get initial baseline throughput
@@ -167,11 +185,18 @@ func (t *autoConcurrencyTuner) worker() {
 			everSawHighCpu = true // this doesn't stop us probing higher concurrency, since sometimes that works even when CPU looks high, but it does change the way we report the result
 		}
 
-		// workaround for variable throughput when targeting 20 Gbps account limit (concurrency > 32 and < 256 didn't seem to give stable throughput)
-		// TODO: review this, and look for root cause/better solution. Justification for the current approach is that
-		//    if link supports multiGb speeds, then 256 conns is probably fine (i.e. not so many that it will cause problems)
-		dontBackoffRegardless := sawHighMultiGbps && concurrency >= 32 && concurrency <= 256
-		probeHigherRegardless := sawHighMultiGbps && concurrency >= 32 && concurrency < 256 && multiplier == initialMultiplier
+		if t.isBenchmarking {
+			// Be a little more aggressive if we are tuning for benchmarking purposes (as opposed to day to day use)
+
+			// If we are seeing retries (within "normal" concurrency range) then for benchmarking purposes we don't want to back off.
+			// (Since if we back off the retries might stop and then they won't be reported on as a limiting factor.)
+			sawRetry := atomic.SwapInt64(&t.atomicRetryCount, 0) > 0
+			dontBackoffRegardless = sawRetry && concurrency <= 256
+
+			// Workaround for variable throughput when targeting 20 Gbps account limit (concurrency around 64 didn't seem to give stable throughput in some tests)
+			// TODO: review this, and look for root cause/better solution
+			probeHigherRegardless = sawHighMultiGbps && concurrency >= 32 && concurrency < 128 && multiplier == initialMultiplier
+		}
 
 		// decide what to do based on the measurement
 		if lastSpeed > desiredNewSpeed || probeHigherRegardless {
@@ -255,14 +280,13 @@ func (t *autoConcurrencyTuner) storeFinalState(reason string, concurrency float3
 
 	t.finalReason = reason
 	t.finalConcurrency = int(concurrency)
-	t.finalTime = time.Now()
 }
 
-func (t *autoConcurrencyTuner) GetFinalState() (reason string, concurrency int, tm time.Time) {
+func (t *autoConcurrencyTuner) GetFinalState() (reason string, concurrency int) {
 	t.lockFinal.Lock()
 	defer t.lockFinal.Unlock()
 
-	return t.finalReason, t.finalConcurrency, t.finalTime
+	return t.finalReason, t.finalConcurrency
 }
 
 func (t *autoConcurrencyTuner) RequestCallbackWhenStable(callback func()) (callbackAccepted bool) {

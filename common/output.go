@@ -18,10 +18,11 @@ func (outputMessageType) Init() outputMessageType     { return outputMessageType
 func (outputMessageType) Info() outputMessageType     { return outputMessageType(1) } // simple print, allowed to float up
 func (outputMessageType) Progress() outputMessageType { return outputMessageType(2) } // should be printed on the same line over and over again, not allowed to float up
 
-// TODO: REVIEWERS: this next code was called Exit. But with followup jobs its not actually Exit.  Should we still call it exit
-//    (so that integration partners are not affected by the name change in JSON output, or should we change it, as I have done here,
-//    to endOfJob, to be clearer?  Or should we have separate messages for end-of-job and process exit?
+// EndOfJob used to be called Exit, but now it's not necessarily an exit, because we may have follow-up jobs
 func (outputMessageType) EndOfJob() outputMessageType { return outputMessageType(3) } // (may) exit after printing
+// TODO: if/when we review the STE structure, with regard to the old out-of-process design vs the current in-process design, we should
+//   confirm whether we also need a separate exit code to signal process exit. For now, let's assume that anything listening to our stdout
+//   will detect process exit (if needs to) by detecting that we have closed our stdout.
 
 func (outputMessageType) Error() outputMessageType  { return outputMessageType(4) } // indicate fatal error, exit right after
 func (outputMessageType) Prompt() outputMessageType { return outputMessageType(5) } // ask the user a question after erasing the progress

@@ -336,21 +336,21 @@ const benchCmdShortDescription = "Performs a performance benchmark"
 // TODO: document whether we delete the uploaded data
 
 const benchCmdLongDescription = `
-Performs a performance benchmark by generating test data and uploading it to a specified destination.
-No test data needs to be provided by the user, because the command generates its own payload as needed.
+Runs a performance benchmark, by uploading uploading test data to a specified destination.
+The test data is automatically generated.
 
-The benchmark command runs the same upload processing as 'copy', except that: 
-  - there's no source parameter.  The command requires only a destination (which is typically a blob container, 
-    but may be any of the upload destinations supported by 'copy')
+The benchmark command runs the same upload process as 'copy', except that: 
+  - there's no source parameter.  The command requires only a destination (which must be a blob container, 
+    in the initial release of the benchmark command)
   - the payload is described by command line parameters, which control how many files are auto-generated and 
-    how big they are. The generation process takes place entirely in memory and disk is not used.
+    how big they are. The generation process takes place entirely in memory. Disk is not used.
   - only a few of 'copy's optional parameters are supported
   - additional diagnostics are measured and reported
-  - all the transferred data is deleted at the end of the test run
+  - by default, the transferred data is deleted at the end of the test run
 
-By default, benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
-the maximum throughput. It will display that number at the end. To prevent auto tuning, set the 
-AZCOPY_CONCURRENCY_VALUE environment variable to the desired number of connections. 
+Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
+the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
+AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
 
 All the usual authentication types are supported, however the most convenient approach for benchmarking is typically
 to create an empty container with a SAS token and use SAS authentication.

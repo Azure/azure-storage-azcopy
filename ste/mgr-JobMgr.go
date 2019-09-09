@@ -70,7 +70,7 @@ type IJobMgr interface {
 	// TODO: added for debugging purpose. remove later
 	ActiveConnections() int64
 	GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint)
-	TryGetPerformanceAdvice() []common.PerformanceAdvice
+	TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice
 	//Close()
 	getInMemoryTransitJobState() InMemoryTransitJobState      // get in memory transit job state saved in this job.
 	setInMemoryTransitJobState(state InMemoryTransitJobState) // set in memory transit job state saved in this job.
@@ -263,24 +263,37 @@ func (jm *jobMgr) logPerfInfo(displayStrings []string, constraint common.PerfCon
 	jm.Log(pipeline.LogInfo, msg)
 }
 
-func (jm *jobMgr) TryGetPerformanceAdvice() []common.PerformanceAdvice {
+func (jm *jobMgr) TryGetPerformanceAdvice(bytesInJob uint64, filesInJob uint32) []common.PerformanceAdvice {
 	ja := JobsAdmin.(*jobsAdmin)
 	if !ja.provideBenchmarkResults {
 		return make([]common.PerformanceAdvice, 0)
 	}
 
 	megabitsPerSec := float64(0)
-	finalReason, finalConcurrency, timeOfFinalReason := ja.concurrencyTuner.GetFinalState()
+	finalReason, finalConcurrency := ja.concurrencyTuner.GetFinalState()
 
-	if finalConcurrency != 0 {
-		// tuning did finish
+	secondsAfterTuning := float64(0)
+	tuningEndSeconds := atomic.LoadInt64(&ja.atomicTuningEndSeconds)
+	if tuningEndSeconds > 0 {
 		bytesTransferredAfterTuning := ja.BytesOverWire() - atomic.LoadInt64(&ja.atomicBytesTransferredWhileTuning)
-		secondsAfterTuning := time.Since(timeOfFinalReason).Seconds()
+		secondsAfterTuning = time.Since(time.Unix(tuningEndSeconds, 0)).Seconds()
 		megabitsPerSec = (8 * float64(bytesTransferredAfterTuning) / secondsAfterTuning) / (1000 * 1000)
 	}
 
+	// if we we didn't run enough after the end of tuning, due to too little time or too close the slow patch as throughput winds down approaching 100%,
+	// then pretend that we didn't get any tuning result at all
+	percentCompleteAtTuningStart := 100 * float64(atomic.LoadInt64(&ja.atomicBytesTransferredWhileTuning)) / float64(bytesInJob)
+	if finalReason != concurrencyReasonTunerDisabled && (secondsAfterTuning < 10 || percentCompleteAtTuningStart > 95) {
+		finalReason = concurrencyReasonNone
+	}
+
+	averageBytesPerFile := int64(0)
+	if filesInJob > 0 {
+		averageBytesPerFile = int64(bytesInJob / uint64(filesInJob))
+	}
+
 	dir := jm.atomicTransferDirection.AtomicLoad()
-	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir)
+	a := NewPerformanceAdvisor(jm.pipelineNetworkStats, ja.commandLineMbpsCap, int64(megabitsPerSec), finalReason, finalConcurrency, dir, averageBytesPerFile)
 	return a.GetAdvice()
 }
 

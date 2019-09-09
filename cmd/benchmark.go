@@ -23,10 +23,8 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-blob-go/azblob"
-	"github.com/Azure/azure-storage-file-go/azfile"
 	"github.com/spf13/cobra"
 	"net/url"
 	"strconv"
@@ -41,8 +39,8 @@ type rawBenchmarkCmdArgs struct {
 	dst string
 
 	// parameters controlling the auto-generated data
-	sizePerFile string
-	fileCount   uint
+	sizePerFile    string
+	fileCount      uint
 	deleteTestData bool
 
 	// options from flags
@@ -56,12 +54,9 @@ type rawBenchmarkCmdArgs struct {
 const (
 	maxBytesPerFile = 4.75 * 1024 * 1024 * 1024 * 1024
 
-	// TODO would it be better to have a trailing B, eg. 12KB or 200GB? (that might make it case sensitive, or at least
-	//    necessitate making the B case sensitive, because lowercase b means bits (and we don't want to bother supporting bits)
 	sizeStringDescription = "a number immediately followed by K, M or G. E.g. 12k or 200G"
 )
 
-// TODO move to copy handler util
 func parseSizeString(s string, name string) (int64, error) {
 
 	message := name + " must be " + sizeStringDescription
@@ -160,6 +155,9 @@ func (raw rawBenchmarkCmdArgs) cook() (cookedCopyCmdArgs, error) {
 }
 
 func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (string, error) {
+
+	tempTargetSupportError := errors.New("the current version of the benchmark command only supports Blob Storage. Support for other targets may follow in a future release")
+
 	u, err := url.Parse(target)
 	if err != nil {
 		return "", fmt.Errorf("error parsing the url %s. Failed with error %s", u.String(), err.Error())
@@ -177,20 +175,24 @@ func (raw rawBenchmarkCmdArgs) appendVirtualDir(target, virtualDir string) (stri
 		result = p.URL()
 
 	case common.ELocation.File():
+		return "", tempTargetSupportError
+		/*  TODO: enable and test
 		p := azfile.NewFileURLParts(*u)
 		if p.ShareName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the Azure Files target must be a file share root")
 		}
 		p.DirectoryOrFilePath = virtualDir + "/"
-		result = p.URL()
+		result = p.URL() */
 
 	case common.ELocation.BlobFS():
+		return "", tempTargetSupportError
+		/* TODO: enable and test
 		p := azbfs.NewBfsURLParts(*u)
 		if p.FileSystemName == "" || p.DirectoryOrFilePath != "" {
 			return "", errors.New("the blobFS target must be a file system")
 		}
 		p.DirectoryOrFilePath = virtualDir + "/"
-		result = p.URL()
+		result = p.URL()*/
 	default:
 		return "", errors.New("benchmarking only supports https connections to Blob, Azure Files, and ADLSGen2")
 	}
@@ -309,9 +311,8 @@ func init() {
 	rootCmd.AddCommand(benchCmd)
 
 	benchCmd.PersistentFlags().StringVar(&raw.sizePerFile, common.SizePerFileParam, "250M", "size of each auto-generated data file. Must be "+sizeStringDescription)
-	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, 100, "number of auto-generated data files to use")
+	benchCmd.PersistentFlags().UintVar(&raw.fileCount, common.FileCountParam, common.FileCountDefault, "number of auto-generated data files to use")
 	benchCmd.PersistentFlags().BoolVar(&raw.deleteTestData, "delete-test-data", true, "if true, the benchmark data will be deleted at the end of the benchmark run.  Set it to false if you want to keep the data at the destination - e.g. to use it for manual tests outside benchmark mode")
-
 
 	benchCmd.PersistentFlags().Float64Var(&raw.blockSizeMB, "block-size-mb", 0, "use this block size (specified in MiB). Default is automatically calculated based on file size. Decimal fractions are allowed - e.g. 0.25. Identical to the same-named parameter in the copy command")
 	benchCmd.PersistentFlags().StringVar(&raw.blobType, "blob-type", "None", "defines the type of blob at the destination. Used to allow benchmarking different blob types. Identical to the same-named parameter in the copy command")

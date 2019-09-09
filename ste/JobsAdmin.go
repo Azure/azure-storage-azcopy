@@ -176,7 +176,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
 		},
-		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered
+		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
 			entryNotificationCh: make(chan struct{}),
 			exitNotificationCh:  make(chan struct{}),
 			scalebackRequestCh:  make(chan struct{}),
@@ -271,32 +271,37 @@ func (ja *jobsAdmin) scheduleJobParts() {
 
 func (ja *jobsAdmin) createConcurrencyTuner() ConcurrencyTuner {
 	if ja.concurrency.AutoTuneMainPool() {
-		t := NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value)
-		if !t.RequestCallbackWhenStable(ja.recordTuningCompleted) {
+		t := NewAutoConcurrencyTuner(ja.concurrency.InitialMainPoolSize, ja.concurrency.MaxMainPoolSize.Value, ja.provideBenchmarkResults)
+		if !t.RequestCallbackWhenStable(func() { ja.recordTuningCompleted(true) }) {
 			panic("could not register tuning completion callback")
 		}
 		return t
 	} else {
+		ja.recordTuningCompleted(false)
 		return &nullConcurrencyTuner{fixedValue: ja.concurrency.InitialMainPoolSize}
 	}
 }
 
-func (ja *jobsAdmin) recordTuningCompleted() {
+func (ja *jobsAdmin) recordTuningCompleted(showOutput bool) {
 	// remember how many bytes were transferred during tuning, so we can exclude them from our post-tuning throughput calculations
 	atomic.StoreInt64(&ja.atomicBytesTransferredWhileTuning, ja.BytesOverWire())
+	atomic.StoreInt64(&ja.atomicTuningEndSeconds, time.Now().Unix())
 
-	// Let the user know what we've done
-	msg := "Automatic concurrency tuning completed."
-	if ja.provideBenchmarkResults {
-		msg += " Recording of performance stats will begin now."
+	if showOutput {
+		msg := "Automatic concurrency tuning completed."
+		if ja.provideBenchmarkResults {
+			msg += " Recording of performance stats will begin now."
+		}
+		common.GetLifecycleMgr().Info("")
+		common.GetLifecycleMgr().Info(msg)
+		if ja.provideBenchmarkResults {
+			common.GetLifecycleMgr().Info("")
+			common.GetLifecycleMgr().Info("*** After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats. ***")
+			common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
+		}
+		common.GetLifecycleMgr().Info("")
+		ja.LogToJobLog(msg)
 	}
-	common.GetLifecycleMgr().Info("")
-	common.GetLifecycleMgr().Info(msg)
-	if ja.provideBenchmarkResults {
-		common.GetLifecycleMgr().Info("After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats.")
-	}
-	common.GetLifecycleMgr().Info("")
-	ja.LogToJobLog(msg)
 }
 
 // worker that sizes the chunkProcessor pool, dynamically if necessary
@@ -320,8 +325,11 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 	lastBytesOnWire := int64(0)
 	lastBytesTime := time.Now()
 	hasHadTimeToStablize := false
+	// TODO: these monitoring intervals are good for uploads (which is all we do in benchmarking now) but
+	//   they're not good for downloads, where throughput can be more variable in the short term.  Consider detecting direction
+	//  (hard to do in JobsAdmin tho...) and increasing these intervals if downloading.
 	initialMonitoringInterval := time.Duration(4 * time.Second)
-	expandedMonitoringInterval := time.Duration(6 * time.Second)
+	expandedMonitoringInterval := time.Duration(8 * time.Second)
 	throughputMonitoringInterval := initialMonitoringInterval
 
 	// get initial pool size
@@ -361,8 +369,8 @@ func (ja *jobsAdmin) poolSizer(tuner ConcurrencyTuner) {
 					elapsedSeconds := time.Since(lastBytesTime).Seconds()
 					bytes := bytesOnWire - lastBytesOnWire
 					megabitsPerSec := (8 * float64(bytes) / elapsedSeconds) / (1000 * 1000)
-					if megabitsPerSec > 11000 {
-						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period if over 10 Gbps, since in some tests it takes a little longer to get a good average
+					if megabitsPerSec > 4000 {
+						throughputMonitoringInterval = expandedMonitoringInterval // start averaging throughputs over longer time period, since in some tests it takes a little longer to get a good average
 					}
 					targetConcurrency, reason = tuner.GetRecommendedConcurrency(int(megabitsPerSec), ja.cpuMonitor.CPUContentionExists())
 					logConcurrency(targetConcurrency, reason)
@@ -451,6 +459,7 @@ type jobsAdmin struct {
 	atomicSuccessfulBytesInActiveFiles int64
 	atomicCurrentMainPoolSize          int32
 	atomicBytesTransferredWhileTuning  int64
+	atomicTuningEndSeconds             int64
 	concurrency                        ConcurrencySettings
 	logger                             common.ILoggerCloser
 	jobIDToJobMgr                      jobIDToJobMgr // Thread-safe map from each JobID to its JobInfo

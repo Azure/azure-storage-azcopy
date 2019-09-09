@@ -46,6 +46,11 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 	mbpsCapped := EAdviceType.MbpsCapped()
 	netErrors := EAdviceType.NetworkErrors()
 	vmSize := EAdviceType.VMSize()
+	smallFilesOrNetwork := EAdviceType.SmallFilesOrNetwork()
+
+	// file sizes
+	const normal = 8 * 1024 * 1024
+	const small = 32 * 1024
 
 	// define test cases
 	cases := []struct {
@@ -55,6 +60,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		serverBusyPercentageOther      float32
 		networkErrorPercentage         float32
 		finalConcurrencyTunerReason    string
+		avgFileSize                    int64
 		capMbps                        int64 // 0 if no cap
 		mbps                           int64
 		azureVmCores                   int // 0 if not azure VM
@@ -68,27 +74,29 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		// E.g:
 		// {"thisIsTheCaseName", /* Begin inputs */ 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 1000, 0, /* Begin expected outputs */ netIsBottleneck, none, none, none},
 		// These initial cases test just one thing at a time (below we test some interactions)
-		{"simpleBandwidth", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 100, 0, netIsBottleneck, none, none, none},
-		{"concHighCpu    ", 0, 0, 0, 0, concurrencyReasonHighCpu, 0, 100, 0, concCpu, none, none, none}, // only difference from netIsBottleneck is that tuner ran out of CPU
-		{"simpleIOPS     ", 7, 0, 0, 0, concurrencyReasonAtOptimum, 0, 1000, 0, iops, netOK, none, none},
-		{"simpleTput     ", 0, 6, 0, 0, concurrencyReasonAtOptimum, 0, 1000, 0, throughput, netOK, none, none},
-		{"otherThrottling", 0, 0, 8, 0, concurrencyReasonAtOptimum, 0, 1000, 0, otherBusy, netOK, none, none},
-		{"networkErrors  ", 0, 0, 0, 7, concurrencyReasonAtOptimum, 0, 1000, 0, netErrors, netOK, none, none},
-		{"cappedMbps     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 1000, 950, 0, mbpsCapped, netOK, none, none},
-		{"concNotTuned   ", 0, 0, 0, 0, concurrencyReasonTunerDisabled, 0, 1000, 0, concNotTuned, none, none, none},
-		{"concHitLimit   ", 0, 0, 0, 0, concurrencyReasonHitMax, 0, 1000, 0, concHitMax, none, none, none},
-		{"concOutOfTime1 ", 0, 0, 0, 0, concurrencyReasonSeeking, 0, 1000, 0, concNotEnoughTime, none, none, none},
-		{"concOutOfTime2 ", 0, 0, 0, 0, concurrencyReasonBackoff, 0, 1000, 0, concNotEnoughTime, none, none, none},
-		{"concOutOfTime3 ", 0, 0, 0, 0, concurrencyReasonInitial, 0, 1000, 0, concNotEnoughTime, none, none, none},
-		{"notVmSize      ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 374, 1, netIsBottleneck, none, none, none},
-		{"vmSize1        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 376, 1, vmSize, none, none, none},
-		{"vmSize2        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, 0, 10500, 16, vmSize, none, none, none},
+		{"simpleBandwidth", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 100, 0, netIsBottleneck, none, none, none},
+		{"concHighCpu    ", 0, 0, 0, 0, concurrencyReasonHighCpu, normal, 0, 100, 0, concCpu, none, none, none}, // only difference from netIsBottleneck is that tuner ran out of CPU
+		{"simpleIOPS     ", 7, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 1000, 0, iops, netOK, none, none},
+		{"simpleTput     ", 0, 6, 0, 0, concurrencyReasonAtOptimum, normal, 0, 1000, 0, throughput, netOK, none, none},
+		{"otherThrottling", 0, 0, 8, 0, concurrencyReasonAtOptimum, normal, 0, 1000, 0, otherBusy, netOK, none, none},
+		{"networkErrors  ", 0, 0, 0, 7, concurrencyReasonAtOptimum, normal, 0, 1000, 0, netErrors, netOK, none, none},
+		{"cappedMbps     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 1000, 950, 0, mbpsCapped, netOK, none, none},
+		{"concNotTuned   ", 0, 0, 0, 0, concurrencyReasonTunerDisabled, normal, 0, 1000, 0, concNotTuned, none, none, none},
+		{"concHitLimit   ", 0, 0, 0, 0, concurrencyReasonHitMax, normal, 0, 1000, 0, concHitMax, none, none, none},
+		{"concOutOfTime1 ", 0, 0, 0, 0, concurrencyReasonSeeking, normal, 0, 1000, 0, concNotEnoughTime, none, none, none},
+		{"concOutOfTime2 ", 0, 0, 0, 0, concurrencyReasonBackoff, normal, 0, 1000, 0, concNotEnoughTime, none, none, none},
+		{"concOutOfTime3 ", 0, 0, 0, 0, concurrencyReasonInitial, normal, 0, 1000, 0, concNotEnoughTime, none, none, none},
+		{"notVmSize      ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 374, 1, netIsBottleneck, none, none, none},
+		{"vmSize1        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 376, 1, vmSize, none, none, none},
+		{"vmSize2        ", 0, 0, 0, 0, concurrencyReasonAtOptimum, normal, 0, 10500, 16, vmSize, none, none, none},
+		{"smallFiles     ", 0, 0, 0, 0, concurrencyReasonAtOptimum, small, 0, 10000, 0, smallFilesOrNetwork, none, none, none},
 
 		// these test cases look at combinations
-		{"badStatsAndCap1", 8, 7, 7, 7, concurrencyReasonAtOptimum, 1000, 999, 0, iops, throughput, mbpsCapped, netOK}, // note no netError because we ignore those if throttled
-		{"badStatsAndCap2", 8, 7, 7, 7, concurrencyReasonSeeking, 1000, 999, 0, iops, throughput, mbpsCapped, netOK},   // netOK not concNotEnoughTime because net is not the bottleneck
-		{"combinedThrottl", 2, 2, 2, 0, concurrencyReasonAtOptimum, 0, 1000, 0, otherBusy, netOK, none, none},
-		{"notVmSize      ", 0, 8, 0, 0, concurrencyReasonAtOptimum, 0, 10500, 16, throughput, netOK, none, none},
+		{"badStatsAndCap1", 8, 7, 7, 7, concurrencyReasonAtOptimum, normal, 1000, 999, 0, iops, throughput, mbpsCapped, netOK}, // note no netError because we ignore those if throttled
+		{"badStatsAndCap2", 8, 7, 7, 7, concurrencyReasonSeeking, normal, 1000, 999, 0, iops, throughput, mbpsCapped, netOK},   // netOK not concNotEnoughTime because net is not the bottleneck
+		{"combinedThrottl", 0.5, 0.5, 0.5, 0, concurrencyReasonAtOptimum, normal, 0, 1000, 0, otherBusy, netOK, none, none},
+		{"notVmSize      ", 0, 8, 0, 0, concurrencyReasonAtOptimum, normal, 0, 10500, 16, throughput, netOK, none, none},
+		{"smallFilesOK   ", 0, 8, 0, 0, concurrencyReasonAtOptimum, small, 0, 10500, 0, throughput, netOK, none, none},
 	}
 
 	// Run the tests, asserting that for each case, the given inputs produces the expected output
@@ -105,6 +113,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 			finalConcurrency:               123, // just informational, not used for computations
 			azureVmCores:                   cs.azureVmCores,
 			azureVmSizeName:                "DS1", // just informational, not used for computations
+			avgBytesPerFile:                cs.avgFileSize,
 		}
 		obtained := a.GetAdvice()
 		expectedCount := 1
@@ -117,7 +126,7 @@ func (s *perfAdvisorSuite) TestPerfAdvisor(c *chk.C) {
 		if cs.expectedSecondary3 != none {
 			expectedCount++
 		}
-		c.Assert(len(obtained), chk.Equals, expectedCount)
+		c.Assert(len(obtained), chk.Equals, expectedCount, chk.Commentf(cs.caseName))
 
 		s.assertAdviceMatches(c, cs.caseName, obtained, 0, cs.expectedPrimaryResult)
 		s.assertAdviceMatches(c, cs.caseName, obtained, 1, cs.expectedSecondary1)
