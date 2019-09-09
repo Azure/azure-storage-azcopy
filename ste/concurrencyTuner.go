@@ -144,7 +144,10 @@ func (t *autoConcurrencyTuner) worker() {
 	const initialMultiplier = 2
 	const slowdownFactor = 5
 	const minMulitplier = 1.19 // really this is 1.2, but use a little less to make the floating point comparisons robust
-	const fudgeFactor = 0.25
+	fudgeFactor := float32(0.3)
+	if t.isBenchmarking {
+		fudgeFactor = 0.2 // make this even lower (more aggressive in terms of concurrency) if benchmarking
+	}
 
 	multiplier := float32(initialMultiplier)
 	concurrency := float32(t.initialConcurrency)
