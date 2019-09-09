@@ -264,12 +264,14 @@ func (s *cmdIntegrationSuite) TestS2SCopyFromS3ToBlobWithBucketNameNeedBeResolve
 	rawDstBlobServiceURLWithSAS := scenarioHelper{}.getRawBlobServiceURLWithSAS(c)
 	raw := getDefaultRawCopyInput(rawSrcS3BucketURL.String(), rawDstBlobServiceURLWithSAS.String())
 
-	// bucket should be resolved, and objects should be scheduled for transfer
+	// bucket should not be resolved, and objects should not be scheduled for transfer
 	runCopyAndVerify(c, raw, func(err error) {
 		c.Assert(err, chk.NotNil)
 
 		loggedError := false
-		for x := range glcm.(*mockedLifecycleManager).log {
+		log := glcm.(*mockedLifecycleManager).log
+		count := len(log)
+		for x := <-log; count > 0; count = len(log) {
 			if strings.Contains(x, "invalid name") {
 				loggedError = true
 			}

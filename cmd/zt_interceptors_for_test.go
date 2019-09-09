@@ -92,7 +92,10 @@ func (*mockedLifecycleManager) Progress(common.OutputBuilder) {}
 func (*mockedLifecycleManager) Init(common.OutputBuilder)     {}
 func (m *mockedLifecycleManager) Info(msg string) {
 	fmt.Println(msg)
-	m.log <- msg
+	select {
+	case m.log <- msg:
+	default:
+	}
 }
 func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetails) common.ResponseOption {
 	return common.EResponseOption.Default()

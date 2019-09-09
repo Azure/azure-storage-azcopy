@@ -102,6 +102,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	var logDstContainerCreateFailureOnce sync.Once
+	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
 	filters := cca.initModularFilters()
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
@@ -109,7 +110,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			cName, err := s3BucketResolver.ResolveName(object.containerName)
 
 			if err != nil {
-				LogStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
+				if _, ok := seenFailedContainers[object.containerName]; !ok {
+					LogStdoutAndJobLog(fmt.Sprintf("failed to add transfers from container %s as it has an invalid name. Please manually transfer from this container to one with a valid name.", object.containerName))
+					seenFailedContainers[object.containerName] = true
+				}
 				return nil
 			}
 
