@@ -182,7 +182,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 			normalChunckCh:   normalChunkCh,
 			lowChunkCh:       lowChunkCh,
 		},
-		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered
+		poolSizingChannels: poolSizingChannels{ // all deliberately unbuffered, because pool sizer routine works in lock-step with these - processing them as they happen, never catching up on populated buffer later
 			entryNotificationCh: make(chan struct{}),
 			exitNotificationCh:  make(chan struct{}),
 			scalebackRequestCh:  make(chan struct{}),
