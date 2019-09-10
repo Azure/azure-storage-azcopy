@@ -61,12 +61,8 @@ const failToResolveMapValue = "<resolving_failed>"
 var s3BucketNameResolveError = "fail to resolve s3 bucket name"
 
 // NewS3BucketNameToAzureResourcesResolver creates S3BucketNameToAzureResourcesResolver.
-// S3BucketNameToAzureResourcesResolver works in such pattern:
-// 1. User provided all the bucket names returned in a certain time. (S3 has service limitation, that one S3 account can only have 100 buckets, except opening service ticket to increase the number.)
-// 2. S3BucketNameToAzureResourcesResolver resolves the names with one logic pass during creating the resolver instance.
-// 3. User can get resolved name later with ResolveName.
-// As S3BucketNameToAzureResourcesResolver need to detect naming collision, the resolver doesn't accept adding new bucket name except the initial s3BucketNames,
-// considering there could be future valid name that is not predictable during previous naming resolving.
+// Users can provide bucket names upfront and on-demand via ResolveName.
+// Previously resolved names will be returned outright by ResolveName.
 func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNameToAzureResourcesResolver {
 	s3Resolver := S3BucketNameToAzureResourcesResolver{
 		bucketNameResolvingMap: make(map[string]string),
@@ -74,10 +70,8 @@ func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNa
 	}
 
 	for _, bucketName := range s3BucketNames {
-		s3Resolver.bucketNameResolvingMap[bucketName] = bucketName
+		_, _ = s3Resolver.ResolveName(bucketName)
 	}
-
-	s3Resolver.resolveS3BucketNameToAzureResources()
 
 	return &s3Resolver
 }
@@ -92,15 +86,9 @@ func (s3Resolver *S3BucketNameToAzureResourcesResolver) ResolveName(bucketName s
 
 		return s3Resolver.ResolveName(bucketName)
 	} else if resolvedName == failToResolveMapValue {
-		return "", fmt.Errorf("%s: container name %q is invalid for the destination, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
+		return "", fmt.Errorf("%s: container/bucket name %q is invalid for the destination, and azcopy failed to convert it automatically", s3BucketNameResolveError, bucketName)
 	} else {
 		return resolvedName, nil
-	}
-}
-
-func (s3Resolver *S3BucketNameToAzureResourcesResolver) resolveS3BucketNameToAzureResources() {
-	for orgBucketName := range s3Resolver.bucketNameResolvingMap {
-		s3Resolver.resolveNewBucketNameInternal(orgBucketName)
 	}
 }
 

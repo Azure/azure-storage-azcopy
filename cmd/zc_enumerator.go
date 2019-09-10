@@ -222,8 +222,6 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 		furl := azfile.NewFileURLParts(*sourceURL)
 
 		if furl.ShareName == "" || strings.Contains(furl.ShareName, "*") {
-			// TODO service traverser
-
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
@@ -272,7 +270,6 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 
 		if s3URLParts.BucketName == "" || strings.Contains(s3URLParts.BucketName, "*") {
 			// TODO convert to path style URL
-			// TODO service traverser
 
 			if !recursive {
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)

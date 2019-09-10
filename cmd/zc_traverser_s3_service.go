@@ -84,7 +84,7 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 				}
 
 				if strings.Contains(err.Error(), "cannot list objects, The specified bucket does not exist") {
-					LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist (perhaps you have a ghost bucket?)", v.Name))
+					LogStdoutAndJobLog(fmt.Sprintf("skip enumerating the bucket %q, as it does not exist.", v.Name))
 					continue
 				}
 

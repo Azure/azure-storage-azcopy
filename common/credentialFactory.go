@@ -25,16 +25,16 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/azbfs"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/adal"
-	minio "github.com/minio/minio-go"
+	"github.com/minio/minio-go"
 	"github.com/minio/minio-go/pkg/credentials"
+
+	"github.com/Azure/azure-storage-azcopy/azbfs"
 )
 
 // ==============================================================================================
@@ -175,8 +175,8 @@ func CreateBlobFSCredential(ctx context.Context, credInfo CredentialInfo, option
 
 	case ECredentialType.SharedKey():
 		// Get the Account Name and Key variables from environment
-		name := os.Getenv("ACCOUNT_NAME")
-		key := os.Getenv("ACCOUNT_KEY")
+		name := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountName())
+		key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AccountKey())
 		// If the ACCOUNT_NAME and ACCOUNT_KEY are not set in environment variables
 		if name == "" || key == "" {
 			options.panicError(errors.New("ACCOUNT_NAME and ACCOUNT_KEY environment variables must be set before creating the blobfs SharedKey credential"))

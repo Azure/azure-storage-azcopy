@@ -104,6 +104,9 @@ func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      
 func (*mockedLifecycleManager) Error(string)                                    {}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
+func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
+	_ = os.Setenv(env.Name, "")
+}
 func (*mockedLifecycleManager) GetEnvironmentVariable(env common.EnvironmentVariable) string {
 	value := os.Getenv(env.Name)
 	if value == "" {

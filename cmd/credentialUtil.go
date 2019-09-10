@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 
@@ -181,8 +180,8 @@ func getBlobFSCredentialType(ctx context.Context, blobResourceURL string, standa
 		return common.ECredentialType.OAuthToken(), nil
 	}
 
-	name := os.Getenv("ACCOUNT_NAME")
-	key := os.Getenv("ACCOUNT_KEY")
+	name := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountName())
+	key := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AccountKey())
 	if name != "" && key != "" { // TODO: To remove, use for internal testing, SharedKey should not be supported from commandline
 		return common.ECredentialType.SharedKey(), nil
 	} else {
@@ -232,7 +231,7 @@ var stashedEnvCredType = ""
 func GetCredTypeFromEnvVar() common.CredentialType {
 	rawVal := stashedEnvCredType
 	if stashedEnvCredType == "" {
-		rawVal = os.Getenv(envVarCredentialType)
+		rawVal = glcm.GetEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
 		if rawVal == "" {
 			return common.ECredentialType.Unknown()
 		}
@@ -241,7 +240,7 @@ func GetCredTypeFromEnvVar() common.CredentialType {
 
 	// Remove the env var after successfully fetching once,
 	// in case of env var is further spreading into child processes unexpectly.
-	os.Setenv(envVarCredentialType, "")
+	glcm.ClearEnvironmentVariable(common.EEnvironmentVariable.CredentialType())
 
 	// Try to get the value set.
 	var credType common.CredentialType
@@ -258,13 +257,13 @@ type rawFromToInfo struct {
 	sourceSAS, destinationSAS string // Standalone SAS which might be provided
 }
 
-func getCredentialInfoForLocation(ctx context.Context, location common.Location, source, sourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
+func getCredentialInfoForLocation(ctx context.Context, location common.Location, resource, resourceSAS string, isSource bool) (credInfo common.CredentialInfo, isPublic bool, err error) {
 	if credInfo.CredentialType = GetCredTypeFromEnvVar(); credInfo.CredentialType == common.ECredentialType.Unknown() {
 		switch location {
 		case common.ELocation.Local():
 			credInfo.CredentialType = common.ECredentialType.Anonymous()
 		case common.ELocation.Blob():
-			if credInfo.CredentialType, isPublic, err = getBlobCredentialType(ctx, source, isSource, sourceSAS != ""); err != nil {
+			if credInfo.CredentialType, isPublic, err = getBlobCredentialType(ctx, resource, isSource, resourceSAS != ""); err != nil {
 				return common.CredentialInfo{}, false, err
 			}
 		case common.ELocation.File():
@@ -272,7 +271,7 @@ func getCredentialInfoForLocation(ctx context.Context, location common.Location,
 				return common.CredentialInfo{}, false, err
 			}
 		case common.ELocation.BlobFS():
-			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, source, sourceSAS != ""); err != nil {
+			if credInfo.CredentialType, err = getBlobFSCredentialType(ctx, resource, resourceSAS != ""); err != nil {
 				return common.CredentialInfo{}, false, err
 			}
 		case common.ELocation.S3():

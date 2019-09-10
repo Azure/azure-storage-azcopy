@@ -853,7 +853,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		bUrl := blobParts.URL()
 		cca.source = bUrl.String()
 
-		// set the clean source root for S2S
+		// set the clean source root
 		bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
 		jobPartOrder.SourceRoot = bUrl.String()
 	case common.ELocation.File():
@@ -871,7 +871,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		fUrl := fileParts.URL()
 		cca.source = fUrl.String()
 
-		// set the clean source root for S2S
+		// set the clean source root
 		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
 		jobPartOrder.SourceRoot = fUrl.String()
 

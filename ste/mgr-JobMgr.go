@@ -209,6 +209,7 @@ func (jm *jobMgr) ActiveConnections() int64 {
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
 func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint) {
+	jm.logJobsAdminMessages()
 	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction

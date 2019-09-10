@@ -55,7 +55,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
 		return nil, err
 		// If S2S and source takes OAuthToken as its cred type (OR) source takes anonymous as its cred type, but it's not public and there's no SAS
-	} else if cca.fromTo.From() != common.ELocation.Local() && cca.fromTo.To() != common.ELocation.Local() &&
+	} else if cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() &&
 		(srcCredInfo.CredentialType == common.ECredentialType.OAuthToken() ||
 			(srcCredInfo.CredentialType == common.ECredentialType.Anonymous() && !isPublic && cca.sourceSAS == "")) {
 		// TODO: Generate a SAS token if it's blob -> *
@@ -79,6 +79,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Create a S3 bucket resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
 	s3BucketResolver := NewS3BucketNameToAzureResourcesResolver(make([]string, 0))
+	existingContainers := make(map[string]bool)
 
 	srcLevel, err := determineLocationLevel(cca.source, cca.fromTo.From(), true)
 
@@ -93,11 +94,11 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	}
 
 	if srcLevel == ELocationLevel.Object() && dstLevel == ELocationLevel.Service() {
-		return nil, errors.New("cannot transfer files/folders to a service")
+		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
 
 	// When copying a container directly to a container, strip the top directory
-	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.fromTo.From() != common.ELocation.Local() && cca.fromTo.To() != common.ELocation.Local() {
+	if srcLevel == ELocationLevel.Container() && dstLevel == ELocationLevel.Container() && cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() {
 		cca.stripTopDir = true
 	}
 
@@ -118,8 +119,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			}
 
 			object.dstContainerName = cName
-			// The container only ends up getting created if it does not already exist.
-			err = cca.createDstContainer(cName, dst, ctx)
+			// The container only ends up getting created if the destination is a service and it does not already exist.
+			if dstLevel == ELocationLevel.Service() {
+				err = cca.createDstContainer(cName, dst, ctx, existingContainers)
+			}
 
 			// if JobsAdmin is nil, we're probably in testing mode.
 			// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
@@ -135,7 +138,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		if srcLevel != ELocationLevel.Service() {
 			object.containerName = ""
 
-			// When copying directly TO a container from a container, don't drop under a sub directory
+			// When copying directly TO a container or object from a container, don't drop under a sub directory
 			if dstLevel >= ELocationLevel.Container() {
 				object.dstContainerName = ""
 			}
@@ -241,9 +244,7 @@ func (cca *cookedCopyCmdArgs) initModularFilters() []objectFilter {
 	return filters
 }
 
-var existingContainers = map[string]bool{}
-
-func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS string, ctx context.Context) (err error) {
+func (cca *cookedCopyCmdArgs) createDstContainer(containerName, dstWithSAS string, ctx context.Context, existingContainers map[string]bool) (err error) {
 	if _, ok := existingContainers[containerName]; ok {
 		return
 	}
@@ -332,7 +333,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			}
 		}
 
-		if loc != common.ELocation.Local() {
+		if loc.IsRemote() {
 			for k, p := range pathParts {
 				pathParts[k] = url.PathEscape(p)
 			}
@@ -371,7 +372,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 		// Save to a directory
 		rootDir := filepath.Base(cca.source)
 
-		if cca.fromTo.From() != common.ELocation.Local() {
+		if cca.fromTo.From().IsRemote() {
 			ueRootDir, err := url.PathUnescape(rootDir)
 
 			// Realistically, err should never not be nil here.
