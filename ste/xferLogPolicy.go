@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -107,6 +108,7 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 				logLevel, forceLog = pipeline.LogError, true
 			}
 
+			logBody := false
 			if shouldLog := po.ShouldLog(logLevel); forceLog || shouldLog {
 				// We're going to log this; build the string to log
 				b := &bytes.Buffer{}
@@ -115,11 +117,12 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 					slow = fmt.Sprintf("[SLOW >%v]", o.LogWarningIfTryOverThreshold)
 				}
 				fmt.Fprintf(b, "==> REQUEST/RESPONSE (Try=%d/%v%s, OpTime=%v) -- ", try, tryDuration, slow, opDuration)
-				if err != nil { // This HTTP request did not get a response from the service
+				if err != nil { // This HTTP request did not get a response from the service (note, this assumes that we are running lower in the pipeline (closer to the wire) that the method factory, since SDK method factories DO create Storage Errors when (error) responses were received from Service)
 					fmt.Fprint(b, "REQUEST ERROR\n")
 				} else {
 					if logLevel == pipeline.LogError {
 						fmt.Fprint(b, "RESPONSE STATUS CODE ERROR\n")
+						logBody = true
 					} else {
 						fmt.Fprint(b, "RESPONSE SUCCESSFULLY RECEIVED\n")
 					}
@@ -129,6 +132,11 @@ func NewRequestLogPolicyFactory(o RequestLogOptions) pipeline.Factory {
 					pipeline.WriteRequestWithResponse(b, prepareRequestForLogging(request), response.Response(), err) // only write full headers if debugging or error
 				} else {
 					writeRequestAsOneLine(b, prepareRequestForLogging(request))
+				}
+
+				if logBody {
+					body := transparentlyReadBody(response.Response())
+					fmt.Fprint(b, "Response Details: ", formatBody(body), "\n") // simple logging of response body, as raw XML (better than not logging it at all!)
 				}
 
 				//Dropping HTTP errors as grabbing the stack is an expensive operation & fills the log too much
@@ -187,6 +195,23 @@ func prepareRequestForLogging(request pipeline.Request) *http.Request {
 	}
 
 	return prepareRequestForServiceLogging(req)
+}
+
+var errorBodyRemovalRegex = regexp.MustCompile("RequestId:.*?</Message>")
+
+func formatBody(rawBody string) string {
+	//Turn something like this:
+	//    <?xml version="1.0" encoding="utf-8"?><Error><Code>ServerBusy</Code><Message>Ingress is over the account limit.
+	//    RequestId:99909524-001e-006f-1fb1-67ad25000000
+	//    Time:2019-01-01T01:00:00.000000Z</Message><Foo>bar</Foo></Error>
+	// into something a little less verbose, like this:
+	//    <Code>ServerBusy</Code><Message>Ingress is over the account limit. </Message><Foo>bar</Foo>
+	const start = `<?xml version="1.0" encoding="utf-8"?><Error>`
+	b := strings.Replace(rawBody, start, "", -1)
+	b = strings.Replace(b, "</Error>", "", -1)
+	b = strings.Replace(b, "\n", " ", -1)
+	b = errorBodyRemovalRegex.ReplaceAllString(b, "</Message>") // strip out the RequestID and Time, which we log separately in the headers
+	return b
 }
 
 func stack() []byte {
