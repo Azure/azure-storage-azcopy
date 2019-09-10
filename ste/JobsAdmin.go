@@ -299,7 +299,8 @@ func (ja *jobsAdmin) recordTuningCompleted() {
 	common.GetLifecycleMgr().Info("")
 	common.GetLifecycleMgr().Info(msg)
 	if ja.provideBenchmarkResults {
-		common.GetLifecycleMgr().Info("After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats.")
+		common.GetLifecycleMgr().Info("*** After a minute or two, you may cancel the job with CTRL-C to trigger early analysis of the stats. ***")
+		common.GetLifecycleMgr().Info("*** You do not need to wait for whole job to finish.                                                  ***")
 	}
 	common.GetLifecycleMgr().Info("")
 	ja.LogToJobLog(msg)
