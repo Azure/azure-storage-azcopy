@@ -78,7 +78,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Create a S3 bucket resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	s3BucketResolver := NewS3BucketNameToAzureResourcesResolver(make([]string, 0))
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
@@ -92,7 +91,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			return nil, err
 		}
 
-		if cca.fromTo.From().IsRemote() {
+		// only create the destination container in S2S scenarios
+		if cca.fromTo.From().IsRemote() && dstContainerName != "" {
 			// Attempt to create the container. If we fail, fail silently.
 			err = cca.createDstContainer(dstContainerName, dst, ctx, existingContainers)
 
@@ -119,6 +119,42 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
+	var containerResolver *S3BucketNameToAzureResourcesResolver
+	if acctTraverser, ok := traverser.(accountTraverser); ok && dstLevel == ELocationLevel.Service() {
+		containers, err := acctTraverser.listContainers()
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to list containers: %s", err)
+		}
+
+		containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
+
+		for _, v := range containers {
+			bucketName, err := containerResolver.ResolveName(v)
+
+			if err != nil {
+				// Silently ignore the failure; it'll get logged later.
+				continue
+			}
+
+			err = cca.createDstContainer(bucketName, dst, ctx, existingContainers)
+
+			// if JobsAdmin is nil, we're probably in testing mode.
+			// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
+			// check against seenFailedContainers so we don't spam the job log with initialization failed errors
+			if _, ok := seenFailedContainers[bucketName]; err != nil && ste.JobsAdmin != nil && !ok {
+				fmt.Println(err)
+				logDstContainerCreateFailureOnce.Do(func() {
+					glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
+				})
+				ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", bucketName, err))
+				seenFailedContainers[bucketName] = true
+			}
+		}
+	} else {
+		containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
+	}
+
 	if srcLevel == ELocationLevel.Object() && dstLevel == ELocationLevel.Service() {
 		return nil, errors.New("cannot transfer individual files/folders to the root of a service. Add a container or directory to the destination URL")
 	}
@@ -132,9 +168,10 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	processor := func(object storedObject) error {
 		// Start by resolving the name and creating the container
 		if object.containerName != "" {
+			// set up the destination container name.
 			cName := dstContainerName
 			if cName == "" {
-				cName, err = s3BucketResolver.ResolveName(object.containerName)
+				cName, err = containerResolver.ResolveName(object.containerName)
 
 				if err != nil {
 					if _, ok := seenFailedContainers[object.containerName]; !ok {
@@ -145,22 +182,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 				}
 
 				object.dstContainerName = cName
-			}
-
-			// The container only ends up getting created if the destination is a service and it does not already exist.
-			if dstLevel == ELocationLevel.Service() {
-				err = cca.createDstContainer(cName, dst, ctx, existingContainers)
-
-				// if JobsAdmin is nil, we're probably in testing mode.
-				// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
-				// check against seenFailedContainers so we don't spam the job log with initialization failed errors
-				if _, ok := seenFailedContainers[cName]; err != nil && ste.JobsAdmin != nil && !ok {
-					logDstContainerCreateFailureOnce.Do(func() {
-						glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
-					})
-					ste.JobsAdmin.LogToJobLog(fmt.Sprintf("failed to initialize destination container %s; the transfer will continue (but be wary it may fail): %s", cName, err))
-					seenFailedContainers[cName] = true
-				}
 			}
 		}
 

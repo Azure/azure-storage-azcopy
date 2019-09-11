@@ -69,6 +69,11 @@ func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNa
 		collisionDetectionMap:  make(map[string]struct{}),
 	}
 
+	// Set resolving map to empty so all get resolved in the next for loop.
+	for _, bucketName := range s3BucketNames {
+		s3Resolver.bucketNameResolvingMap[bucketName] = ""
+	}
+
 	for _, bucketName := range s3BucketNames {
 		_, _ = s3Resolver.ResolveName(bucketName)
 	}
@@ -78,7 +83,8 @@ func NewS3BucketNameToAzureResourcesResolver(s3BucketNames []string) *S3BucketNa
 
 // ResolveName returns resolved name for given bucket name.
 func (s3Resolver *S3BucketNameToAzureResourcesResolver) ResolveName(bucketName string) (string, error) {
-	if resolvedName, ok := s3Resolver.bucketNameResolvingMap[bucketName]; !ok {
+	// If a resolved name is empty, it won't be valid either. Take advantage of this to initialize the resolver with a list of buckets.
+	if resolvedName, ok := s3Resolver.bucketNameResolvingMap[bucketName]; !ok || resolvedName == "" {
 		// Resolve the new bucket name, recurse.
 
 		s3Resolver.bucketNameResolvingMap[bucketName] = bucketName
