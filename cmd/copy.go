@@ -854,7 +854,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = bUrl.String()
 
 		// set the clean source root
-		bUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bUrl.Path)
+		if strings.Contains(blobParts.ContainerName, "*") {
+			if blobParts.BlobName != "" {
+				return errors.New("cannot combine a wildcarded container name and blob path")
+			}
+
+			blobParts.ContainerName = ""
+		}
+		bUrl = blobParts.URL()
 		jobPartOrder.SourceRoot = bUrl.String()
 	case common.ELocation.File():
 		fromUrl, err := url.Parse(cca.source)
@@ -872,7 +879,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = fUrl.String()
 
 		// set the clean source root
-		fUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fUrl.Path)
+		if strings.Contains(fileParts.ShareName, "*") {
+			if fileParts.DirectoryOrFilePath != "" {
+				return errors.New("cannot combine a wildcarded share name and file path")
+			}
+
+			fileParts.ShareName = ""
+		}
+		fUrl = fileParts.URL()
 		jobPartOrder.SourceRoot = fUrl.String()
 
 	case common.ELocation.BlobFS():
@@ -888,7 +902,14 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = bfsUrl.String() // this escapes spaces in the source
 
 		// set the clean source root
-		bfsUrl.Path, _ = gCopyUtil.getRootPathWithoutWildCards(bfsUrl.Path)
+		if strings.Contains(bfsParts.FileSystemName, "*") {
+			if bfsParts.DirectoryOrFilePath != "" {
+				return errors.New("cannot combine a wildcarded filesystem name and file path")
+			}
+
+			bfsParts.FileSystemName = ""
+		}
+		bfsUrl = bfsParts.URL()
 		jobPartOrder.SourceRoot = bfsUrl.String()
 
 	case common.ELocation.S3():
@@ -903,9 +924,20 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		cca.source = fromURL.String()
 
 		// set the clean source root
-		fromURL.Path, _ = gCopyUtil.getRootPathWithoutWildCards(fromURL.Path)
-		jobPartOrder.SourceRoot = fromURL.String()
+		s3URLParts, err := common.NewS3URLParts(*fromURL)
+		if err != nil {
+			return err
+		}
 
+		if strings.Contains(s3URLParts.BucketName, "*") {
+			if s3URLParts.ObjectKey != "" {
+				return errors.New("cannot combine a wildcarded bucket name and object key")
+			}
+
+			s3URLParts.BucketName = ""
+		}
+		*fromURL = s3URLParts.URL()
+		jobPartOrder.SourceRoot = fromURL.String()
 	default:
 		jobPartOrder.SourceRoot, _ = gCopyUtil.getRootPathWithoutWildCards(cca.source)
 	}

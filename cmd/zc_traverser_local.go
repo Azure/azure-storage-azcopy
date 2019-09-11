@@ -182,7 +182,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 				"",
 				singleFileInfo.ModTime(),
 				singleFileInfo.Size(),
-				nil,
+				nil, // Local MD5s are taken in the STE
 				blobTypeNA,
 				"", // Local has no such thing as containers
 			),
@@ -216,7 +216,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						relPath,
 						fileInfo.ModTime(),
 						fileInfo.Size(),
-						nil,
+						nil, // Local MD5s are taken in the STE
 						blobTypeNA,
 						"", // Local has no such thing as containers
 					),
@@ -282,7 +282,7 @@ func (t *localTraverser) traverse(processor objectProcessor, filters []objectFil
 						relativePath,
 						singleFile.ModTime(),
 						singleFile.Size(),
-						nil,
+						nil, // Local MD5s are taken in the STE
 						blobTypeNA,
 						"", // Local has no such thing as containers
 					),

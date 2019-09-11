@@ -116,6 +116,8 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 	}
 }
 
+// Both of the below functions only really do one thing at the moment.
+// They've been separated from copyEnumeratorInit.go in order to make the code more maintainable, should we want more destinations in the future.
 func GetAccountRoot(path string, location common.Location) (string, error) {
 	switch location {
 	case common.ELocation.Local():
@@ -138,5 +140,25 @@ func GetAccountRoot(path string, location common.Location) (string, error) {
 		return bURL.String(), nil
 	default:
 		return "", fmt.Errorf("cannot get account root on location type %s", location.String())
+	}
+}
+
+func GetContainerName(path string, location common.Location) (string, error) {
+	switch location {
+	case common.ELocation.Local():
+		panic("attempted to get container name on local location")
+	case common.ELocation.Blob(),
+		common.ELocation.File(),
+		common.ELocation.BlobFS():
+		baseURL, err := url.Parse(path)
+
+		if err != nil {
+			return "", err
+		}
+
+		bURLParts := azblob.NewBlobURLParts(*baseURL)
+		return bURLParts.ContainerName, nil
+	default:
+		return "", fmt.Errorf("cannot get container name on location type %s", location.String())
 	}
 }
