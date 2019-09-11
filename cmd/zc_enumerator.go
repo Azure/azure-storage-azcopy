@@ -105,6 +105,11 @@ type resourceTraverser interface {
 	// Thus, we only check the directory syntax on blob destinations. On sources, we check both syntax and remote, if syntax isn't a directory.
 }
 
+type accountTraverser interface {
+	resourceTraverser
+	listContainers() ([]string, error)
+}
+
 // basically rename a function and change the order of inputs just to make what's happening clearer
 func containerNameMatchesPattern(containerName, pattern string) (bool, error) {
 	return filepath.Match(pattern, containerName)

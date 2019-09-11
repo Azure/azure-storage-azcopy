@@ -38,6 +38,7 @@ type BlobFSAccountTraverser struct {
 	p                 pipeline.Pipeline
 	ctx               context.Context
 	fileSystemPattern string
+	cachedFileSystems []string
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
@@ -47,48 +48,72 @@ func (t *BlobFSAccountTraverser) isDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
-	marker := ""
-	for {
-		resp, err := t.accountURL.ListFilesystemsSegment(t.ctx, &marker)
+func (t *BlobFSAccountTraverser) listContainers() ([]string, error) {
+	// a nil list also returns 0
+	if len(t.cachedFileSystems) == 0 {
+		marker := ""
+		fsList := make([]string, 0)
 
-		if err != nil {
-			return err
-		}
-
-		for _, v := range resp.Filesystems {
-			var fsName string
-			if v.Name != nil {
-				fsName = *v.Name
-			} else {
-				LogStdoutAndJobLog("filesystem listing returned nil filesystem name")
-				continue
-			}
-
-			if t.fileSystemPattern != "" {
-				if ok, err := containerNameMatchesPattern(fsName, t.fileSystemPattern); err != nil {
-					return err
-				} else if !ok {
-					continue
-				}
-			}
-
-			fileSystemURL := t.accountURL.NewFileSystemURL(fsName).URL()
-			fileSystemTraverser := newBlobFSTraverser(&fileSystemURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
-
-			middlemanProcessor := initContainerDecorator(fsName, processor)
-
-			err = fileSystemTraverser.traverse(middlemanProcessor, filters)
+		for {
+			resp, err := t.accountURL.ListFilesystemsSegment(t.ctx, &marker)
 
 			if err != nil {
-				LogStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", fsName, err))
-				continue
+				return nil, err
+			}
+
+			for _, v := range resp.Filesystems {
+				var fsName string
+
+				if v.Name != nil {
+					fsName = *v.Name
+				} else {
+					// realistically this should never ever happen
+					// but on the off-chance that it does, should we panic?
+					LogStdoutAndJobLog("filesystem listing returned nil filesystem name")
+					continue
+				}
+
+				// match against the filesystem name pattern if present
+				if t.fileSystemPattern != "" {
+					if ok, err := containerNameMatchesPattern(fsName, t.fileSystemPattern); err != nil {
+						return nil, err
+					} else if !ok {
+						// ignore any filesystems that don't match
+						continue
+					}
+				}
+
+				fsList = append(fsList, fsName)
+			}
+
+			marker = resp.XMsContinuation()
+			if marker == "" {
+				break
 			}
 		}
 
-		marker = resp.XMsContinuation()
-		if marker == "" {
-			break
+		t.cachedFileSystems = fsList
+		return fsList, nil
+	} else {
+		return t.cachedFileSystems, nil
+	}
+}
+
+func (t *BlobFSAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
+	// listContainers will return the cached filesystem list if filesystems have already been listed by this traverser.
+	fsList, err := t.listContainers()
+
+	for _, v := range fsList {
+		fileSystemURL := t.accountURL.NewFileSystemURL(v).URL()
+		fileSystemTraverser := newBlobFSTraverser(&fileSystemURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
+
+		middlemanProcessor := initContainerDecorator(v, processor)
+
+		err = fileSystemTraverser.traverse(middlemanProcessor, filters)
+
+		if err != nil {
+			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in filesystem %s: %s", v, err))
+			continue
 		}
 	}
 

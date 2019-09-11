@@ -35,6 +35,7 @@ type fileAccountTraverser struct {
 	p            pipeline.Pipeline
 	ctx          context.Context
 	sharePattern string
+	cachedShares []string
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
@@ -44,41 +45,63 @@ func (t *fileAccountTraverser) isDirectory(isSource bool) bool {
 	return true // Returns true as account traversal is inherently folder-oriented and recursive.
 }
 
-func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
-	marker := azfile.Marker{}
-	for marker.NotDone() {
-		resp, err := t.accountURL.ListSharesSegment(t.ctx, marker, azfile.ListSharesOptions{})
+func (t *fileAccountTraverser) listContainers() ([]string, error) {
+	if len(t.cachedShares) == 0 {
+		marker := azfile.Marker{}
+		shareList := make([]string, 0)
 
-		if err != nil {
-			return err
-		}
-
-		for _, v := range resp.ShareItems {
-			// Match a pattern for the share name and the share name only
-			if t.sharePattern != "" {
-				if ok, err := containerNameMatchesPattern(v.Name, t.sharePattern); err != nil {
-					// Break if the pattern is invalid
-					return err
-				} else if !ok {
-					// Ignore the share if it doesn't match the pattern.
-					continue
-				}
-			}
-
-			shareURL := t.accountURL.NewShareURL(v.Name).URL()
-			shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
-
-			middlemanProcessor := initContainerDecorator(v.Name, processor)
-
-			err = shareTraverser.traverse(middlemanProcessor, filters)
+		for marker.NotDone() {
+			resp, err := t.accountURL.ListSharesSegment(t.ctx, marker, azfile.ListSharesOptions{})
 
 			if err != nil {
-				LogStdoutAndJobLog(fmt.Sprintf("failed to list files in share %s: %s", v.Name, err))
-				continue
+				return nil, err
 			}
+
+			for _, v := range resp.ShareItems {
+				// Match a pattern for the share name and the share name only
+				if t.sharePattern != "" {
+					if ok, err := containerNameMatchesPattern(v.Name, t.sharePattern); err != nil {
+						// Break if the pattern is invalid
+						return nil, err
+					} else if !ok {
+						// Ignore the share if it doesn't match the pattern.
+						continue
+					}
+				}
+
+				shareList = append(shareList, v.Name)
+			}
+
+			marker = resp.NextMarker
 		}
 
-		marker = resp.NextMarker
+		t.cachedShares = shareList
+		return shareList, nil
+	} else {
+		return t.cachedShares, nil
+	}
+}
+
+func (t *fileAccountTraverser) traverse(processor objectProcessor, filters []objectFilter) error {
+	// listContainers will return the cached share list if shares have already been listed by this traverser.
+	shareList, err := t.listContainers()
+
+	if err != nil {
+		return err
+	}
+
+	for _, v := range shareList {
+		shareURL := t.accountURL.NewShareURL(v).URL()
+		shareTraverser := newFileTraverser(&shareURL, t.p, t.ctx, true, t.incrementEnumerationCounter)
+
+		middlemanProcessor := initContainerDecorator(v, processor)
+
+		err = shareTraverser.traverse(middlemanProcessor, filters)
+
+		if err != nil {
+			LogStdoutAndJobLog(fmt.Sprintf("failed to list files in share %s: %s", v, err))
+			continue
+		}
 	}
 
 	return nil
