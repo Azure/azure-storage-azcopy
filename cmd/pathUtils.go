@@ -158,6 +158,20 @@ func GetContainerName(path string, location common.Location) (string, error) {
 
 		bURLParts := azblob.NewBlobURLParts(*baseURL)
 		return bURLParts.ContainerName, nil
+	case common.ELocation.S3():
+		baseURL, err := url.Parse(path)
+
+		if err != nil {
+			return "", err
+		}
+
+		s3URLParts, err := common.NewS3URLParts(*baseURL)
+
+		if err != nil {
+			return "", err
+		}
+
+		return s3URLParts.BucketName, nil
 	default:
 		return "", fmt.Errorf("cannot get container name on location type %s", location.String())
 	}
