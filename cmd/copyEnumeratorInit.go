@@ -99,7 +99,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 
 	// Create a S3 bucket resolver
 	// Giving it nothing to work with as new names will be added as we traverse.
-	var containerResolver *S3BucketNameToAzureResourcesResolver
+	var containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 	existingContainers := make(map[string]bool)
 	var logDstContainerCreateFailureOnce sync.Once
 	seenFailedContainers := make(map[string]bool) // Create map of already failed container conversions so we don't log a million items just for one container.
@@ -165,8 +165,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// this will probably never be reached
 					return nil, fmt.Errorf("failed to get container name from source (is it formatted correctly?)")
 				}
-
-				containerResolver = NewS3BucketNameToAzureResourcesResolver(nil)
 
 				resName, err := containerResolver.ResolveName(cName)
 
