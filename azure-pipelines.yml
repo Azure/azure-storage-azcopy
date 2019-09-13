@@ -70,9 +70,9 @@ jobs:
       - script: |
           # run unit test and build executable
           # the set -e line is needed so that the unit tests failure would cause the job to fail properly
-          # -timeout 20m as our tests typically run between 10-15m and I'd rather have some headroom.
+          # -timeout 25m as our tests typically run between 10-15m and I'd rather have some headroom.
           set -e
-          go test -timeout 20m -race -short -cover ./cmd ./common ./ste ./azbfs
+          go test -timeout 25m -race -short -cover ./cmd ./common ./ste ./azbfs
           GOARCH=amd64 GOOS=linux go build -o azcopy_linux_amd64
         name: 'Run_unit_tests'
         env:
