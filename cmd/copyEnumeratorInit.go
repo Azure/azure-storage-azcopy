@@ -16,36 +16,20 @@ import (
 func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrderRequest, ctx context.Context) (*copyEnumerator, error) {
 	var traverser resourceTraverser
 
-	dst := cca.destination
-	src := cca.source
-
-	// Append SAS tokens if necessary
-	if cca.destinationSAS != "" {
-		destURL, err := url.Parse(dst)
-
-		if err != nil {
-			return nil, err
-		}
-
-		destURL = copyHandlerUtil{}.appendQueryParamToUrl(destURL, cca.destinationSAS)
-		dst = destURL.String()
+	dst, err := appendSASIfNecessary(cca.destination, cca.destinationSAS)
+	if err != nil {
+		return nil, err
 	}
 
-	if cca.sourceSAS != "" {
-		srcURL, err := url.Parse(src)
-
-		if err != nil {
-			return nil, err
-		}
-
-		srcURL = copyHandlerUtil{}.appendQueryParamToUrl(srcURL, cca.sourceSAS)
-		src = srcURL.String()
+	src, err := appendSASIfNecessary(cca.source, cca.sourceSAS)
+	if err != nil {
+		return nil, err
 	}
 
 	// TODO: in download refactor, handle trailing wildcard properly here.
 	// As is, we don't cut it off at the moment,
 	// and we also don't properly handle the "source points to contents" scenario aside from on local, which waives it through wildcard support.
-	traverser, err := initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
+	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &cca.credentialInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
 	if err != nil {
 		return nil, err
 	}

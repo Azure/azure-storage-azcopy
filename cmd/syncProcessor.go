@@ -178,7 +178,7 @@ func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProce
 	rawURL, err := url.Parse(cca.destination)
 	if err != nil {
 		return nil, err
-	} else if err == nil && cca.destinationSAS != "" {
+	} else if cca.destinationSAS != "" {
 		copyHandlerUtil{}.appendQueryParamToUrl(rawURL, cca.destinationSAS)
 	}
 
