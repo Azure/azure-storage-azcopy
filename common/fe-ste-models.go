@@ -48,6 +48,10 @@ const (
 	//  this is the perm that AzCopy has used throughout its preview.  So, while we considered relaxing it to 0666
 	//  we decided that the best option was to leave it as is, and only relax it if user feedback so requires.
 	DEFAULT_FILE_PERM = 0644
+
+	// Since we haven't updated the Go SDKs to handle CPK just yet, we need to detect CPK related errors
+	// and inform the user that we don't support CPK yet.
+	CPK_ERROR_SERVICE_CODE = "BlobUsesCustomerSpecifiedEncryption"
 )
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -331,6 +335,7 @@ func (j *JobStatus) IsJobDone() bool {
 		*j == EJobStatus.Failed()
 }
 
+func (JobStatus) All() JobStatus                           { return JobStatus(100) }
 func (JobStatus) InProgress() JobStatus                    { return JobStatus(0) }
 func (JobStatus) Paused() JobStatus                        { return JobStatus(1) }
 func (JobStatus) Cancelling() JobStatus                    { return JobStatus(2) }

@@ -23,7 +23,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -44,20 +43,6 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 
 		// mock the result
 		*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: true}
-
-	case common.ERpcCmd.ListSyncJobSummary():
-		copyRequest := *request.(*common.CopyJobPartOrderRequest)
-
-		// fake the result saying that job is already completed
-		// doing so relies on the mockedLifecycleManager not quitting the application
-		*(response.(*common.ListSyncJobSummaryResponse)) = common.ListSyncJobSummaryResponse{
-			Timestamp:          time.Now().UTC(),
-			JobID:              copyRequest.JobID,
-			ErrorMsg:           "",
-			JobStatus:          common.EJobStatus.Completed(),
-			CompleteJobOrdered: true,
-			FailedTransfers:    []common.TransferDetail{},
-		}
 	case common.ERpcCmd.ListJobs():
 	case common.ERpcCmd.ListJobSummary():
 	case common.ERpcCmd.ListJobTransfers():
@@ -103,7 +88,7 @@ func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetai
 func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
 func (*mockedLifecycleManager) Error(string)                                    {}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
-func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
+func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {} 
 func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
 	_ = os.Setenv(env.Name, "")
 }

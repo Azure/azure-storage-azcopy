@@ -23,6 +23,7 @@ package main
 import (
 	"log"
 	"os"
+	"path"
 	"runtime"
 	"runtime/debug"
 	"time"
@@ -38,20 +39,35 @@ var glcm = common.GetLifecycleMgr()
 func main() {
 	pipeline.SetLogSanitizer(common.NewAzCopyLogSanitizer()) // make sure ForceLog logs get secrets redacted
 
+	// note: azcopyAppPathFolder is the default location for all AzCopy data (logs, job plans, oauth token on Windows)
+	// but both logs and job plans can be put elsewhere as they can become very large
 	azcopyAppPathFolder := GetAzCopyAppPath()
+
+	// the user can optionally put the log files somewhere else
 	azcopyLogPathFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.LogLocation())
 	if azcopyLogPathFolder == "" {
 		azcopyLogPathFolder = azcopyAppPathFolder
 	}
+	if err := os.Mkdir(azcopyLogPathFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		common.PanicIfErr(err)
+	}
+
+	// the user can optionally put the plan files somewhere else
+	azcopyJobPlanFolder := common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.JobPlanLocation())
+	if azcopyJobPlanFolder == "" {
+		azcopyJobPlanFolder = path.Join(azcopyAppPathFolder, "plans")
+	}
+	if err := os.Mkdir(azcopyJobPlanFolder, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
+		common.PanicIfErr(err)
+	}
 
 	// If insufficient arguments, show usage & terminate
 	if len(os.Args) == 1 {
-		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, 0)
+		cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, 0)
 		return
 	}
 
 	configureGoMaxProcs()
-
 	configureGC()
 
 	// Perform os specific initialization
@@ -60,7 +76,7 @@ func main() {
 		log.Fatalf("initialization failed: %v", err)
 	}
 
-	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, maxFileAndSocketHandles)
+	cmd.Execute(azcopyAppPathFolder, azcopyLogPathFolder, azcopyJobPlanFolder, maxFileAndSocketHandles)
 	glcm.Exit(nil, common.EExitCode.Success())
 }
 

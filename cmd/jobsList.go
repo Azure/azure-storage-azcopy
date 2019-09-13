@@ -92,9 +92,10 @@ func PrintExistingJobIds(listJobResponse common.ListJobsResponse) error {
 		sb.WriteString("Existing Jobs \n")
 		for index := 0; index < len(listJobResponse.JobIDDetails); index++ {
 			jobDetail := listJobResponse.JobIDDetails[index]
-			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nCommand: %s\n\n",
+			sb.WriteString(fmt.Sprintf("JobId: %s\nStart Time: %s\nStatus: %s\nCommand: %s\n\n",
 				jobDetail.JobId.String(),
 				time.Unix(0, jobDetail.StartTime).Format(time.RFC850),
+				jobDetail.JobStatus,
 				jobDetail.CommandString))
 		}
 		return sb.String()

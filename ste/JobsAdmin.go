@@ -33,8 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"path"
-
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -105,7 +103,7 @@ var JobsAdmin interface {
 	common.ILoggerCloser
 }
 
-func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyAppPathFolder string, azcopyLogPathFolder string) {
+func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder string, azcopyLogPathFolder string) {
 	if JobsAdmin != nil {
 		panic("initJobsAdmin was already called once")
 	}
@@ -132,11 +130,6 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 	// TODO: this is not used. Remove it.
 	suicideCh := make(chan SuicideJob, concurrency.MainPoolSize.Value)
 
-	planDir := path.Join(azcopyAppPathFolder, "plans")
-	if err := os.Mkdir(planDir, os.ModeDir|os.ModePerm); err != nil && !os.IsExist(err) {
-		common.PanicIfErr(err)
-	}
-
 	maxRamBytesToUse := getMaxRamForChunks()
 
 	// default to a pacer that doesn't actually control the rate
@@ -156,7 +149,7 @@ func initJobsAdmin(appCtx context.Context, concurrency ConcurrencySettings, targ
 		logger:           common.NewAppLogger(pipeline.LogInfo, azcopyLogPathFolder),
 		jobIDToJobMgr:    newJobIDToJobMgr(),
 		logDir:           azcopyLogPathFolder,
-		planDir:          planDir,
+		planDir:          azcopyJobPlanFolder,
 		pacer:            pacer,
 		slicePool:        common.NewMultiSizeSlicePool(common.MaxBlockBlobBlockSize),
 		cacheLimiter:     common.NewCacheLimiter(maxRamBytesToUse),

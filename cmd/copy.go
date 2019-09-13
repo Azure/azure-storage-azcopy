@@ -376,6 +376,10 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.noGuessMimeType = raw.noGuessMimeType
 	cooked.preserveLastModifiedTime = raw.preserveLastModifiedTime
 
+	if cooked.contentType != "" {
+		cooked.noGuessMimeType = true // As specified in the help text, noGuessMimeType is inferred here.
+	}
+
 	cooked.putMd5 = raw.putMd5
 	err = cooked.md5ValidationOption.Parse(raw.md5ValidationOption)
 	if err != nil {

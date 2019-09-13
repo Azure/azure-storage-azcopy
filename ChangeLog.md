@@ -1,6 +1,12 @@
 
 # Change Log
 
+## Version 10.XX.XX
+
+### Breaking change
+
+1. The sync command's output in JSON has changed for consistency reasons. Tools integrating AzCopy should be aware.
+
 ## Version 10.2.1
 
 ### Bug fix
