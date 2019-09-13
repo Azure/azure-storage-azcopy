@@ -30,10 +30,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, err
 	}
 
-	var (
-		err      error
-		isPublic bool
-	)
+	var isPublic bool
 	srcCredInfo := common.CredentialInfo{}
 
 	if srcCredInfo, isPublic, err = getCredentialInfoForLocation(ctx, cca.fromTo.From(), cca.source, cca.sourceSAS, true); err != nil {
