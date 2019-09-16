@@ -84,6 +84,9 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 			storedObject.contentEncoding = fileProperties.ContentEncoding()
 			storedObject.contentType = fileProperties.ContentType()
 
+			// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
+			storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
+
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()
 			}
@@ -135,6 +138,9 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				storedObject.contentLanguage = fileProperties.ContentLanguage()
 				storedObject.contentEncoding = fileProperties.ContentEncoding()
 				storedObject.contentType = fileProperties.ContentType()
+
+				// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
+				storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

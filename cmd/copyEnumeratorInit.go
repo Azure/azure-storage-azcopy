@@ -211,6 +211,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			CacheControl:       object.cacheControl,
 			ContentType:        object.contentType,
 			ContentMD5:         object.md5,
+			Metadata:           object.Metadata,
 		}
 
 		if cca.s2sPreserveAccessTier {

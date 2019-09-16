@@ -71,6 +71,8 @@ type storedObject struct {
 	dstContainerName string
 	// access tier, only included by blob traverser.
 	blobAccessTier azblob.AccessTierType
+	// metadata, included in S2S transfers
+	Metadata common.Metadata
 }
 
 const (
