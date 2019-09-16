@@ -27,7 +27,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"os"
@@ -228,98 +227,54 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		return cooked, err
 	}
 
-	// * -> Garbage, Local -> *, and * -> Local work under this implementation of list of files
-	if fromTo.To() == common.ELocation.Unknown() || cooked.fromTo.From() == common.ELocation.Local() || cooked.fromTo.To() == common.ELocation.Local() {
-		// This handles both list-of-files and include-path as a list enumerator.
-		// This saves us time because we know *exactly* what we're looking for right off the bat.
-		// Note that exclude-path is handled as a filter unlike include-path.
+	// Everything uses the new implementation of list-of-files now.
+	// This handles both list-of-files and include-path as a list enumerator.
+	// This saves us time because we know *exactly* what we're looking for right off the bat.
+	// Note that exclude-path is handled as a filter unlike include-path.
 
-		if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
-			return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
-		}
+	if (len(raw.include) > 0 || len(raw.exclude) > 0) && cooked.fromTo == common.EFromTo.BlobFSTrash() {
+		return cooked, fmt.Errorf("include/exclude flags are not supported for this destination")
+	}
 
-		// unbuffered so this reads as we need it to rather than all at once in bulk
-		listChan := make(chan string)
-		var f *os.File
+	// unbuffered so this reads as we need it to rather than all at once in bulk
+	listChan := make(chan string)
+	var f *os.File
 
-		if raw.listOfFilesToCopy != "" {
-			f, err = os.Open(raw.listOfFilesToCopy)
+	if raw.listOfFilesToCopy != "" {
+		f, err = os.Open(raw.listOfFilesToCopy)
 
-			if err != nil {
-				return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
-			}
-		}
-
-		go func() {
-			defer close(listChan)
-
-			if f != nil {
-				scanner := bufio.NewScanner(f)
-				for scanner.Scan() {
-					v := scanner.Text()
-					listChan <- v
-				}
-			}
-
-			// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
-			includePathList := raw.parsePatterns(raw.includePath)
-
-			for _, v := range includePathList {
-				listChan <- v
-			}
-		}()
-
-		// A combined implementation reduces the amount of code duplication present.
-		// However, it _does_ increase the amount of code-intertwining present.
-		if raw.listOfFilesToCopy != "" && raw.includePath != "" {
-			return cooked, errors.New("cannot combine list of files and include path")
-		}
-
-		if raw.listOfFilesToCopy != "" || raw.includePath != "" {
-			cooked.listOfFilesChannel = listChan
-		}
-	} else if len(raw.listOfFilesToCopy) > 0 {
-		// TODO remove this legacy implementation after copy enumerator refactoring
-
-		// User can provide either listOfFilesToCopy or include since listOFFiles mentions
-		// file names to include explicitly and include file may mention the pattern.
-		// This could conflict enumerating the files to queue up for transfer.
-		if len(raw.listOfFilesToCopy) > 0 && len(raw.legacyInclude) > 0 {
-			return cooked, fmt.Errorf("both list-of-files and include flag were provided." +
-				"Only one of them is allowed at a time")
-		}
-
-		// If the user provided the list of files explicitly to be copied, then parse the argument
-		// The user passes the location of json file which will have the list of files to be copied.
-		// The "json file" is chosen as input because there is limit on the number of characters that
-		// can be supplied with the argument, but Storage Explorer folks requirements was not to impose
-		// any limit on the number of files that can be copied.
-
-		jsonFile, err := os.Open(raw.listOfFilesToCopy)
 		if err != nil {
 			return cooked, fmt.Errorf("cannot open %s file passed with the list-of-file flag", raw.listOfFilesToCopy)
 		}
-		// read opened json file as a byte array.
-		jsonBytes, err := ioutil.ReadAll(jsonFile)
-		if err != nil {
-			return cooked, fmt.Errorf("error %s read %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
-		}
-		var files common.ListOfFiles
-		err = json.Unmarshal(jsonBytes, &files)
-		if err != nil {
-			return cooked, fmt.Errorf("error %s unmarshalling the contents of %s file passed with the list-of-file flag", err.Error(), raw.listOfFilesToCopy)
-		}
-		for _, file := range files.Files {
-			// If split of the include string leads to an empty string
-			// not include that string
-			if len(file) == 0 {
-				continue
+	}
+
+	go func() {
+		defer close(listChan)
+
+		if f != nil {
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				v := scanner.Text()
+				listChan <- v
 			}
-			// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-			// this replacement is done to handle the windows file paths where path separator "\\"
-			filePath := strings.Replace(file, common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-			cooked.listOfFilesToCopy = append(cooked.listOfFilesToCopy, filePath)
 		}
+
+		// This occurs much earlier than the other include or exclude filters. It would be preferable to move them closer later on in the refactor.
+		includePathList := raw.parsePatterns(raw.includePath)
+
+		for _, v := range includePathList {
+			listChan <- v
+		}
+	}()
+
+	// A combined implementation reduces the amount of code duplication present.
+	// However, it _does_ increase the amount of code-intertwining present.
+	if raw.listOfFilesToCopy != "" && raw.includePath != "" {
+		return cooked, errors.New("cannot combine list of files and include path")
+	}
+
+	if raw.listOfFilesToCopy != "" || raw.includePath != "" {
+		cooked.listOfFilesChannel = listChan
 	}
 
 	// TODO: When further in the refactor, just check this against a map
