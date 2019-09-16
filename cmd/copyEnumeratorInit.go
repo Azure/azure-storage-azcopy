@@ -373,7 +373,7 @@ func (cca *cookedCopyCmdArgs) makeEscapedRelativePath(source bool, dstIsDir bool
 			}
 
 			// If uploading from Windows or downloading from files, decode unsafe chars
-		} else if (!source && cca.fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") && (!source && cca.fromTo.From() == common.ELocation.File()) {
+		} else if (!source && cca.fromTo.From() == common.ELocation.Local() && runtime.GOOS == "windows") || (!source && cca.fromTo.From() == common.ELocation.File()) {
 			invalidChars := `<>\/:"|?*` + string(0x00)
 
 			for _, c := range strings.Split(invalidChars, "") {
