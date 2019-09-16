@@ -199,20 +199,15 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		srcRelPath := cca.makeEscapedRelativePath(true, isDestDir, object)
 		dstRelPath := cca.makeEscapedRelativePath(false, isDestDir, object)
 
-		transfer := common.CopyTransfer{
-			Source:             srcRelPath,
-			Destination:        dstRelPath,
-			LastModifiedTime:   object.lastModifiedTime,
-			SourceSize:         object.size,
-			BlobType:           object.blobType,
-			ContentDisposition: object.contentDisposition,
-			ContentLanguage:    object.contentLanguage,
-			ContentEncoding:    object.contentEncoding,
-			CacheControl:       object.cacheControl,
-			ContentType:        object.contentType,
-			ContentMD5:         object.md5,
-			Metadata:           object.Metadata,
-		}
+		transfer := common.NewCopyTransfer(
+			srcRelPath, dstRelPath,
+			object.lastModifiedTime,
+			object.size,
+			object.contentType, object.contentEncoding, object.contentDisposition, object.contentLanguage, object.cacheControl,
+			object.md5,
+			object.Metadata,
+			object.blobType,
+			object.blobAccessTier)
 
 		if cca.s2sPreserveAccessTier {
 			transfer.BlobTier = object.blobAccessTier

@@ -795,6 +795,31 @@ type CopyTransfer struct {
 	BlobTier azblob.AccessTierType
 }
 
+func NewCopyTransfer(Source, Destination string,
+	LMT time.Time,
+	ContentSize int64,
+	ContentType, ContentEncoding, ContentDisposition, ContentLanguage, CacheControl string,
+	ContentMD5 []byte,
+	Metadata Metadata,
+	BlobType azblob.BlobType,
+	BlobTier azblob.AccessTierType) CopyTransfer {
+	return CopyTransfer{
+		Source:             Source,
+		Destination:        Destination,
+		LastModifiedTime:   LMT,
+		SourceSize:         ContentSize,
+		ContentType:        ContentType,
+		ContentEncoding:    ContentEncoding,
+		ContentDisposition: ContentDisposition,
+		ContentLanguage:    ContentLanguage,
+		CacheControl:       CacheControl,
+		ContentMD5:         ContentMD5,
+		Metadata:           Metadata,
+		BlobType:           BlobType,
+		BlobTier:           BlobTier,
+	}
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Metadata used in AzCopy.
