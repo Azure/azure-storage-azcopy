@@ -116,6 +116,8 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					return nil, fmt.Errorf("failed to list containers: %s", err)
 				}
 
+				// Resolve all container names up front.
+				// If we were to resolve on-the-fly, then name order would affect the results inconsistently.
 				containerResolver = NewS3BucketNameToAzureResourcesResolver(containers)
 
 				for _, v := range containers {
@@ -132,7 +134,6 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 					// As a result, container creation failures are expected as we don't give the SAS tokens adequate permissions.
 					// check against seenFailedContainers so we don't spam the job log with initialization failed errors
 					if _, ok := seenFailedContainers[bucketName]; err != nil && ste.JobsAdmin != nil && !ok {
-						fmt.Println(err)
 						logDstContainerCreateFailureOnce.Do(func() {
 							glcm.Info("Failed to create one or more destination container(s). Your transfers may still succeed if the container already exists.")
 						})
@@ -207,7 +208,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 			object.md5,
 			object.Metadata,
 			object.blobType,
-			object.blobAccessTier)
+			azblob.AccessTierNone) // access tier is assigned conditionally
 
 		if cca.s2sPreserveAccessTier {
 			transfer.BlobTier = object.blobAccessTier
