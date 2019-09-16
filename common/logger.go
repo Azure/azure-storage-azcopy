@@ -60,7 +60,7 @@ func GetTelemetryClient() appinsights.TelemetryClient {
 	if telemetry != nil {
 		return telemetry
 	} else {
-		if key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AppInsightsInstrumentationKey()); key != "" {
+		if key := lcm.GetEnvironmentVariable(EEnvironmentVariable.AppInsightsInstrumentationKey()); AppInsightsLogging && key != "" {
 			telemetry = appinsights.NewTelemetryClient(key)
 			telemetry.SetIsEnabled(true)
 		}
@@ -119,6 +119,12 @@ func (al *appLogger) Panic(err error) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// TODO: Maybe find a better way to inform common of app insights logging being enabled?
+// Currently this just gets set via the root cmd on the FE.
+// I feel like that causes a slight maintainability issue because it doesn't head down the same pipe as all the other options
+// but at the same time, I almost prefer this so we don't bloat the plan file, and a user can disable it during a job re-run if needbe.
+var AppInsightsLogging = false
 
 type jobLogger struct {
 	// maximum loglevel represents the maximum severity of log messages which can be logged to Job Log file.

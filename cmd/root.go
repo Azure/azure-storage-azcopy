@@ -23,15 +23,18 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-storage-azcopy/common"
-	"github.com/Azure/azure-storage-azcopy/ste"
 	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/spf13/cobra"
+
+	"github.com/Azure/azure-storage-azcopy/common"
+	"github.com/Azure/azure-storage-azcopy/ste"
 )
 
 var azcopyAppPathFolder string
@@ -61,6 +64,13 @@ var rootCmd = &cobra.Command{
 		err = ste.MainSTE(concurrencySettings, int64(cmdLineCapMegaBitsPerSecond), azcopyJobPlanFolder, azcopyLogPathFolder)
 		if err != nil {
 			return err
+		}
+
+		instrumentationKey := glcm.GetEnvironmentVariable(common.EEnvironmentVariable.AppInsightsInstrumentationKey())
+		if instrumentationKey == "" && common.AppInsightsLogging { // error out if the user said to log to appinsights but no key is specified
+			glcm.Error("Error: " + errors.New("can't log to Azure Application Insights if no instrumentation key is specified").Error())
+		} else if instrumentationKey != "" && !common.AppInsightsLogging { // Warn the user that they have a key specified (but we're not using it)
+			glcm.Info("An Azure Application Insights key was specified but --app-insights-logging was not enabled. AzCopy will not log to Application Insights.")
 		}
 
 		// spawn a routine to fetch and compare the local application's version against the latest version available
@@ -106,6 +116,7 @@ func init() {
 
 	rootCmd.PersistentFlags().Uint32Var(&cmdLineCapMegaBitsPerSecond, "cap-mbps", 0, "caps the transfer rate, in Mega bits per second. Moment-by-moment throughput may vary slightly from the cap. If zero or omitted, throughput is not capped.")
 	rootCmd.PersistentFlags().StringVar(&outputFormatRaw, "output-type", "text", "format of the command's output, the choices include: text, json.")
+	rootCmd.PersistentFlags().BoolVar(&common.AppInsightsLogging, "app-insights-logging", false, fmt.Sprintf("log output to Azure Application Insights (%s must be set)", common.GetLifecycleMgr().GetEnvironmentVariable(common.EEnvironmentVariable.AppInsightsInstrumentationKey())))
 
 	// Special flag for generating test data
 	// TODO: find a cleaner way to get the value into common, rather than just using it directly as a variable here
