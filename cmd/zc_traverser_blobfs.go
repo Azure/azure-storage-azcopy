@@ -152,6 +152,7 @@ func (t *blobFSTraverser) traverse(processor objectProcessor, filters []objectFi
 					storedObject.contentLanguage = pathProperties.ContentLanguage()
 					storedObject.contentEncoding = pathProperties.ContentEncoding()
 					storedObject.contentType = pathProperties.ContentType()
+				    storedObject.metadata ...
 				}*/
 
 				if t.incrementEnumerationCounter != nil {
