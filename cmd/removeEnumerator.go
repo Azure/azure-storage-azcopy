@@ -74,8 +74,7 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
 			if err == NothingScheduledError {
-				// Create a log file, etc.
-				glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)))
+				// No log file needed. Logging begins as a part of awaiting job completion.
 				return errors.New("nothing found to remove")
 			}
 

@@ -56,7 +56,7 @@ type resumeJobController struct {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *resumeJobController) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID)))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
