@@ -230,7 +230,11 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 		return nil, err
 	}
 	if jptm.ShouldDecompress() {
+		// wrap for automatic decompression
 		dstFile = common.NewDecompressingWriter(dstFile, ct)
+		// why don't we just let Go's network stack automatically decompress for us? Because
+		// 1. Then we can't check the MD5 hash (since logically, any stored hash should be the hash of the file that exists in Storage, i.e. the compressed one)
+		// 2. Then we can't pre-plan a certain number of fixed-size chunks (which is required by the way our architecture currently works).
 	}
 	return dstFile, nil
 }
