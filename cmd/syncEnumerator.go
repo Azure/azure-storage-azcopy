@@ -112,7 +112,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			}
 
 			jobInitiated, err := transferScheduler.dispatchFinalPart()
-			if err != nil {
+			// sync cleanly exits if nothing is scheduled.
+			if err != nil && err != NothingScheduledError {
 				return err
 			}
 
@@ -151,7 +152,8 @@ func (cca *cookedSyncCmdArgs) initEnumerator(ctx context.Context) (enumerator *s
 			// let the deletions happen first
 			// otherwise if the final part is executed too quickly, we might quit before deletions could finish
 			jobInitiated, err := transferScheduler.dispatchFinalPart()
-			if err != nil {
+			// sync cleanly exits if nothing is scheduled.
+			if err != nil && err != NothingScheduledError {
 				return err
 			}
 
