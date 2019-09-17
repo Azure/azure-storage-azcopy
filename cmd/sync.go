@@ -24,19 +24,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"net/url"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 
-	"net/url"
-	"strings"
-
-	"sync/atomic"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 
 	"github.com/spf13/cobra"
 )
@@ -114,21 +112,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check seperately so we don't end up with a bunch of code duplication when new src/dsts are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
-		result, err := filepath.Abs(cooked.source)
-
-		if err != nil {
-			return cooked, fmt.Errorf("failed to resolve absolute path from %s: %s", result, err)
-		}
-
-		cooked.source = common.ToExtendedPath(result)
+		cooked.source = common.ToExtendedPath(cooked.source)
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
-		result, err := filepath.Abs(cooked.destination)
-
-		if err != nil {
-			return cooked, fmt.Errorf("failed to resolve absolute path from %s: %s", result, err)
-		}
-
-		cooked.destination = common.ToExtendedPath(result)
+		cooked.destination = common.ToExtendedPath(cooked.destination)
 	}
 
 	// generate a new job ID
