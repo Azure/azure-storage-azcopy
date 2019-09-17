@@ -27,6 +27,8 @@ import (
 	"os"
 	"path"
 
+	"github.com/Azure/azure-storage-file-go/azfile"
+
 	"github.com/Azure/azure-pipeline-go/pipeline"
 	"github.com/Azure/azure-storage-azcopy/common"
 	"github.com/Azure/azure-storage-azcopy/ste"
@@ -53,8 +55,11 @@ func newSyncTransferProcessor(cca *cookedSyncCmdArgs, numOfTransfersPerPart int)
 			PutMd5:                   cca.putMd5,
 			MD5ValidationOption:      cca.md5ValidationOption,
 			BlockSizeInBytes:         cca.blockSize},
-		ForceWrite: common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
-		LogLevel:   cca.logVerbosity,
+		ForceWrite:                common.EOverwriteOption.True(), // once we decide to transfer for a sync operation, we overwrite the destination regardless
+		LogLevel:                  cca.logVerbosity,
+		S2SSourceChangeValidation: true,
+		S2SDestLengthValidation:   true,
+		S2SGetPropertiesInBackend: true,
 	}
 
 	reportFirstPart := func() { cca.setFirstPartOrdered() }
@@ -173,7 +178,7 @@ func (l *localFileDeleter) deleteFile(object storedObject) error {
 	return os.Remove(common.GenerateFullPath(l.rootPath, object.relativePath))
 }
 
-func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
+func newSyncDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProcessor, error) {
 	rawURL, err := url.Parse(cca.destination)
 	if err != nil {
 		return nil, err
@@ -182,38 +187,48 @@ func newSyncBlobDeleteProcessor(cca *cookedSyncCmdArgs) (*interactiveDeleteProce
 	}
 
 	ctx := context.WithValue(context.TODO(), ste.ServiceAPIVersionOverride, ste.DefaultServiceApiVersion)
-	p, err := createBlobPipeline(ctx, cca.credentialInfo)
+
+	p, err := initPipeline(ctx, cca.fromTo.To(), cca.credentialInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	return newInteractiveDeleteProcessor(newBlobDeleter(rawURL, p, ctx).deleteBlob,
-		cca.deleteDestination, "blob", cca.destination, cca.incrementDeletionCount), nil
+	return newInteractiveDeleteProcessor(newRemoteResourceDeleter(rawURL, p, ctx, cca.fromTo.To()).delete,
+		cca.deleteDestination, cca.fromTo.To().String(), cca.destination, cca.incrementDeletionCount), nil
 }
 
-type blobDeleter struct {
-	rootURL *url.URL
-	p       pipeline.Pipeline
-	ctx     context.Context
+type remoteResourceDeleter struct {
+	rootURL        *url.URL
+	p              pipeline.Pipeline
+	ctx            context.Context
+	targetLocation common.Location
 }
 
-func newBlobDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context) *blobDeleter {
-	return &blobDeleter{
-		rootURL: rawRootURL,
-		p:       p,
-		ctx:     ctx,
+func newRemoteResourceDeleter(rawRootURL *url.URL, p pipeline.Pipeline, ctx context.Context, targetLocation common.Location) *remoteResourceDeleter {
+	return &remoteResourceDeleter{
+		rootURL:        rawRootURL,
+		p:              p,
+		ctx:            ctx,
+		targetLocation: targetLocation,
 	}
 }
 
-func (b *blobDeleter) deleteBlob(object storedObject) error {
-	glcm.Info("Deleting extra blob: " + object.relativePath)
-
-	// construct the blob URL using its relative path
-	// the rootURL could be pointing to a container, or a virtual directory
-	blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
-	blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
-
-	blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
-	_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
-	return err
+func (b *remoteResourceDeleter) delete(object storedObject) error {
+	glcm.Info("Deleting extra " + b.targetLocation.String() + ": " + object.relativePath)
+	switch b.targetLocation {
+	case common.ELocation.Blob():
+		blobURLParts := azblob.NewBlobURLParts(*b.rootURL)
+		blobURLParts.BlobName = path.Join(blobURLParts.BlobName, object.relativePath)
+		blobURL := azblob.NewBlobURL(blobURLParts.URL(), b.p)
+		_, err := blobURL.Delete(b.ctx, azblob.DeleteSnapshotsOptionInclude, azblob.BlobAccessConditions{})
+		return err
+	case common.ELocation.File():
+		fileURLParts := azfile.NewFileURLParts(*b.rootURL)
+		fileURLParts.DirectoryOrFilePath = path.Join(fileURLParts.DirectoryOrFilePath, object.relativePath)
+		fileURL := azfile.NewFileURL(fileURLParts.URL(), b.p)
+		_, err := fileURL.Delete(b.ctx)
+		return err
+	default:
+		panic("not implemented, check your code")
+	}
 }

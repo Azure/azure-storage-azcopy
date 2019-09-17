@@ -21,6 +21,7 @@
 package ste
 
 import (
+	"context"
 	"time"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -29,6 +30,7 @@ import (
 
 // Source info provider for Azure blob
 type fileSourceInfoProvider struct {
+	ctx context.Context
 	defaultRemoteSourceInfoProvider
 }
 
@@ -40,7 +42,11 @@ func newFileSourceInfoProvider(jptm IJobPartTransferMgr) (ISourceInfoProvider, e
 
 	base := b.(*defaultRemoteSourceInfoProvider)
 
-	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base}, nil
+	// due to the REST parity feature added in 2019-02-02, the File APIs are no longer backward compatible
+	// so we must use the latest SDK version to stay safe
+	ctx := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azfile.ServiceVersion)
+
+	return &fileSourceInfoProvider{defaultRemoteSourceInfoProvider: *base, ctx: ctx}, nil
 }
 
 func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
@@ -57,7 +63,7 @@ func (p *fileSourceInfoProvider) Properties() (*SrcProperties, error) {
 		}
 
 		fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
-		properties, err := fileURL.GetProperties(p.jptm.Context())
+		properties, err := fileURL.GetProperties(p.ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +91,7 @@ func (p *fileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
 	}
 
 	fileURL := azfile.NewFileURL(*presignedURL, p.jptm.SourceProviderPipeline())
-	properties, err := fileURL.GetProperties(p.jptm.Context())
+	properties, err := fileURL.GetProperties(p.ctx)
 	if err != nil {
 		return time.Time{}, err
 	}

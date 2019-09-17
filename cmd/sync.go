@@ -87,7 +87,7 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
 		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
 		common.PanicIfErr(err)
-	} else if cooked.fromTo == common.EFromTo.BlobBlob() {
+	} else if cooked.fromTo == common.EFromTo.BlobBlob() || cooked.fromTo == common.EFromTo.FileFile() {
 		cooked.destination, cooked.destinationSAS, err = SplitAuthTokenFromResource(raw.dst, cooked.fromTo.To())
 		common.PanicIfErr(err)
 		cooked.source, cooked.sourceSAS, err = SplitAuthTokenFromResource(raw.src, cooked.fromTo.From())
