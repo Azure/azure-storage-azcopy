@@ -75,7 +75,17 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				fileProperties.ContentLength(),
 				fileProperties.ContentMD5(),
 				blobTypeNA,
+				targetURLParts.ShareName,
 			)
+
+			storedObject.contentDisposition = fileProperties.ContentDisposition()
+			storedObject.cacheControl = fileProperties.CacheControl()
+			storedObject.contentLanguage = fileProperties.ContentLanguage()
+			storedObject.contentEncoding = fileProperties.ContentEncoding()
+			storedObject.contentType = fileProperties.ContentType()
+
+			// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
+			storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()
@@ -119,7 +129,18 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 					fileProperties.ContentLength(),
 					fileProperties.ContentMD5(),
 					azblob.BlobNone,
+					targetURLParts.ShareName,
 				)
+
+				// Leaving this on because it's free IO wise, and file->* is in the works
+				storedObject.contentDisposition = fileProperties.ContentDisposition()
+				storedObject.cacheControl = fileProperties.CacheControl()
+				storedObject.contentLanguage = fileProperties.ContentLanguage()
+				storedObject.contentEncoding = fileProperties.ContentEncoding()
+				storedObject.contentType = fileProperties.ContentType()
+
+				// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
+				storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()

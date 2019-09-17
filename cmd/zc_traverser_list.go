@@ -32,6 +32,7 @@ import (
 // behaves like a single traverser (basically a "traverser of traverser")
 type listTraverser struct {
 	listReader              chan string
+	recursive               bool
 	childTraverserGenerator childTraverserGenerator
 }
 
@@ -56,6 +57,11 @@ func (l *listTraverser) traverse(processor objectProcessor, filters []objectFilt
 		if err != nil {
 			glcm.Info(fmt.Sprintf("Skipping %s due to error %s", childPath, err))
 			continue
+		}
+
+		// listTraverser will only ever execute on the source
+		if childTraverser.isDirectory(true) && !l.recursive {
+			continue // skip over directories
 		}
 
 		// when scanning a child path under the parent, we need to make sure that the relative paths of
@@ -109,6 +115,7 @@ func newListTraverser(parent string, parentSAS string, parentType common.Locatio
 
 	return &listTraverser{
 		listReader:              listChan,
+		recursive:               recursive,
 		childTraverserGenerator: traverserGenerator,
 	}
 }

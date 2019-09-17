@@ -46,6 +46,7 @@ type LifecycleMgr interface {
 	SurrenderControl()                                           // give up control, this should never return
 	InitiateProgressReporting(WorkController)                    // start writing progress with another routine
 	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
+	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
 }
 
@@ -63,6 +64,10 @@ type lifecycleMgr struct {
 	logSanitizer   pipeline.LogSanitizer
 }
 
+func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
+	_ = os.Setenv(variable.Name, "")
+}
+
 func (lcm *lifecycleMgr) SetOutputFormat(format OutputFormat) {
 	lcm.outputFormat = format
 }
@@ -72,7 +77,7 @@ func (lcm *lifecycleMgr) checkAndStartCPUProfiling() {
 	// the value AZCOPY_PROFILE_CPU indicates the path to save CPU profiling data.
 	// e.g. export AZCOPY_PROFILE_CPU="cpu.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	cpuProfilePath := os.Getenv("AZCOPY_PROFILE_CPU")
+	cpuProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileCPU())
 	if cpuProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start CPU profiling, and saving profiling data to: %q", cpuProfilePath))
 		f, err := os.Create(cpuProfilePath)
@@ -95,7 +100,7 @@ func (lcm *lifecycleMgr) checkAndTriggerMemoryProfiling() {
 	// the value AZCOPY_PROFILE_MEM indicates the path to save memory profiling data.
 	// e.g. export AZCOPY_PROFILE_MEM="mem.prof"
 	// For more details, please refer to https://golang.org/pkg/runtime/pprof/
-	memProfilePath := os.Getenv("AZCOPY_PROFILE_MEM")
+	memProfilePath := lcm.GetEnvironmentVariable(EEnvironmentVariable.ProfileMemory())
 	if memProfilePath != "" {
 		lcm.Info(fmt.Sprintf("pprof start memory profiling, and saving profiling data to: %q", memProfilePath))
 		f, err := os.Create(memProfilePath)

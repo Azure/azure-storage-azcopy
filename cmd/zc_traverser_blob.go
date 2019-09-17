@@ -94,6 +94,11 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 	}
 
 	if isBlob {
+		// sanity checking so highlighting doesn't highlight things we're not worried about.
+		if blobProperties == nil {
+			panic("isBlob should never be set if getting properties is an error")
+		}
+
 		storedObject := newStoredObject(
 			getObjectNameOnly(blobUrlParts.BlobName),
 			"",
@@ -101,7 +106,18 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 			blobProperties.ContentLength(),
 			blobProperties.ContentMD5(),
 			blobProperties.BlobType(),
+			blobUrlParts.ContainerName,
 		)
+
+		storedObject.contentDisposition = blobProperties.ContentDisposition()
+		storedObject.cacheControl = blobProperties.CacheControl()
+		storedObject.contentLanguage = blobProperties.ContentLanguage()
+		storedObject.contentEncoding = blobProperties.ContentEncoding()
+		storedObject.contentType = blobProperties.ContentType()
+
+		// .NewMetadata() seems odd to call, but it does actually retrieve the metadata from the blob properties.
+		storedObject.Metadata = common.FromAzBlobMetadataToCommonMetadata(blobProperties.NewMetadata())
+		storedObject.blobAccessTier = azblob.AccessTierType(blobProperties.AccessTier())
 
 		if t.incrementEnumerationCounter != nil {
 			t.incrementEnumerationCounter()
@@ -155,7 +171,18 @@ func (t *blobTraverser) traverse(processor objectProcessor, filters []objectFilt
 				*blobInfo.Properties.ContentLength,
 				blobInfo.Properties.ContentMD5,
 				blobInfo.Properties.BlobType,
+				blobUrlParts.ContainerName,
 			)
+
+			storedObject.contentDisposition = common.IffStringNotNil(blobInfo.Properties.ContentDisposition, "")
+			storedObject.cacheControl = common.IffStringNotNil(blobInfo.Properties.CacheControl, "")
+			storedObject.contentLanguage = common.IffStringNotNil(blobInfo.Properties.ContentLanguage, "")
+			storedObject.contentEncoding = common.IffStringNotNil(blobInfo.Properties.ContentEncoding, "")
+			storedObject.contentType = common.IffStringNotNil(blobInfo.Properties.ContentType, "")
+
+			storedObject.Metadata = common.FromAzBlobMetadataToCommonMetadata(blobInfo.Metadata)
+
+			storedObject.blobAccessTier = blobInfo.Properties.AccessTier
 
 			if t.incrementEnumerationCounter != nil {
 				t.incrementEnumerationCounter()

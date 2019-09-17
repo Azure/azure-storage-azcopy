@@ -28,10 +28,6 @@ type genericFilterSuite struct{}
 
 var _ = chk.Suite(&genericFilterSuite{})
 
-func (s *genericFilterSuite) SetUpTest(c *chk.C) {
-	c.Log("Still running tests... ", c.TestName())
-}
-
 func (s *genericFilterSuite) TestIncludeFilter(c *chk.C) {
 	// set up the filters
 	raw := rawSyncCmdArgs{}

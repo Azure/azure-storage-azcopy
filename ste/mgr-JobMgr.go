@@ -91,6 +91,7 @@ func newJobMgr(concurrency ConcurrencySettings, appLogger common.ILogger, jobID 
 		overwritePrompter: newOverwritePrompter(),
 		/*Other fields remain zero-value until this job is scheduled */}
 	jm.reset(appCtx, commandString)
+	jm.logJobsAdminMessages()
 	return &jm
 }
 
@@ -208,6 +209,7 @@ func (jm *jobMgr) ActiveConnections() int64 {
 // GetPerfStrings returns strings that may be logged for performance diagnostic purposes
 // The number and content of strings may change as we enhance our perf diagnostics
 func (jm *jobMgr) GetPerfInfo() (displayStrings []string, constraint common.PerfConstraint) {
+	jm.logJobsAdminMessages()
 	atomicTransferDirection := jm.atomicTransferDirection.AtomicLoad()
 
 	// get data appropriate to our current transfer direction
@@ -394,6 +396,18 @@ func (jm *jobMgr) CloseLog() {
 
 func (jm *jobMgr) ChunkStatusLogger() common.ChunkStatusLogger {
 	return jm.chunkStatusLogger
+}
+
+// TODO: find a better way for JobsAdmin to log (it doesn't have direct access to the job log, because it was originally designed to support multilpe jobs
+func (jm *jobMgr) logJobsAdminMessages() {
+	for {
+		select {
+		case msg := <-JobsAdmin.MessagesForJobLog():
+			jm.Log(pipeline.LogInfo, msg)
+		default:
+			return
+		}
+	}
 }
 
 // PartsDone returns the number of the Job's parts that are either completed or failed

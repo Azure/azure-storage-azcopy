@@ -20,6 +20,10 @@
 
 package common
 
+import (
+	"runtime"
+)
+
 type EnvironmentVariable struct {
 	Name         string
 	DefaultValue string
@@ -44,6 +48,13 @@ var VisibleEnvironmentVariables = []EnvironmentVariable{
 }
 
 var EEnvironmentVariable = EnvironmentVariable{}
+
+func (EnvironmentVariable) UserDir() EnvironmentVariable {
+	// Only used internally, not listed in the environment variables.
+	return EnvironmentVariable{
+		Name: IffString(runtime.GOOS == "windows", "USERPROFILE", "HOME"),
+	}
+}
 
 func (EnvironmentVariable) ClientSecret() EnvironmentVariable {
 	return EnvironmentVariable{

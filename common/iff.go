@@ -104,3 +104,12 @@ func Iffloat64(test bool, trueVal, falseVal float64) float64 {
 	}
 	return falseVal
 }
+
+// used to get properties in a safe, but not so verbose manner
+func IffStringNotNil(wanted *string, instead string) string {
+	if wanted == nil {
+		return instead
+	}
+
+	return *wanted
+}

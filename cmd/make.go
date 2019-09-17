@@ -79,7 +79,7 @@ func (cma cookedMakeCmdArgs) getCredentialType(ctx context.Context) (credentialT
 		}
 	case common.ELocation.Blob():
 		// The resource URL cannot be public access URL, as it need delete permission.
-		credentialType, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
+		credentialType, _, err = getBlobCredentialType(ctx, cma.resourceURL.String(), false, false)
 		if err != nil {
 			return common.ECredentialType.Unknown(), err
 		}
