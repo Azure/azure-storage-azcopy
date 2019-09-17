@@ -73,6 +73,11 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 	finalize := func() error {
 		jobInitiated, err := transferScheduler.dispatchFinalPart()
 		if err != nil {
+			if err == NothingScheduledError {
+				// No log file needed. Logging begins as a part of awaiting job completion.
+				return errors.New("nothing found to remove")
+			}
+
 			return err
 		}
 
