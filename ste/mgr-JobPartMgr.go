@@ -30,6 +30,7 @@ type IJobPartMgr interface {
 	StartJobXfer(jptm IJobPartTransferMgr)
 	ReportTransferDone() uint32
 	GetOverwriteOption() common.OverwriteOption
+	AutoDecompress() bool
 	ScheduleChunks(chunkFunc chunkFunc)
 	RescheduleTransfer(jptm IJobPartTransferMgr)
 	BlobTypeOverride() common.BlobType
@@ -552,6 +553,10 @@ func (jpm *jobPartMgr) StartJobXfer(jptm IJobPartTransferMgr) {
 
 func (jpm *jobPartMgr) GetOverwriteOption() common.OverwriteOption {
 	return jpm.Plan().ForceWrite
+}
+
+func (jpm *jobPartMgr) AutoDecompress() bool {
+	return jpm.Plan().AutoDecompress
 }
 
 func (jpm *jobPartMgr) blobDstData(fullFilePath string, dataFileToXfer []byte) (headers azblob.BlobHTTPHeaders, metadata azblob.Metadata) {

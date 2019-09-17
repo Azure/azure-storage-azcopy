@@ -781,7 +781,7 @@ type CopyTransfer struct {
 	LastModifiedTime time.Time //represents the last modified time of source which ensures that source hasn't changed while transferring
 	SourceSize       int64     // size of the source entity in bytes.
 
-	// Properties for service to service copy
+	// Properties for service to service copy (some also used in upload or download too)
 	ContentType        string
 	ContentEncoding    string
 	ContentDisposition string

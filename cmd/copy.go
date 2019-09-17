@@ -85,6 +85,7 @@ type rawCopyCmdArgs struct {
 	stripTopDir       bool
 	followSymlinks    bool
 	withSnapshots     bool
+	autoDecompress    bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
 	forceWrite string
@@ -189,6 +190,11 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	if err != nil {
 		return cooked, err
 	}
+	allowAutoDecompress := fromTo == common.EFromTo.BlobLocal() || fromTo == common.EFromTo.FileLocal()
+	if raw.autoDecompress && !allowAutoDecompress {
+		return cooked, errors.New("automatic decompression is only supported for downloads from Blob and Azure Files") // as at Sept 2019, our ADLS Gen 2 Swagger does not include content-encoding for directory (path) listings so we can't support it there
+	}
+	cooked.autoDecompress = raw.autoDecompress
 
 	// cooked.stripTopDir is effectively a workaround for the lack of wildcards in remote sources.
 	// Local, however, still supports wildcards, and thus needs its top directory stripped whenever a wildcard is used.
@@ -547,6 +553,7 @@ type cookedCopyCmdArgs struct {
 	followSymlinks     bool
 	withSnapshots      bool
 	forceWrite         common.OverwriteOption
+	autoDecompress     bool
 
 	// options from flags
 	blockSize uint32
@@ -756,6 +763,7 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		JobID:           cca.jobID,
 		FromTo:          cca.fromTo,
 		ForceWrite:      cca.forceWrite,
+		AutoDecompress:  cca.autoDecompress,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.logVerbosity,
 		Include:         cca.legacyInclude,
@@ -1238,6 +1246,7 @@ func init() {
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
 	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "defines whether to overwrite the conflicting files at the destination. Could be set to true, false, or prompt.")
+	cpCmd.PersistentFlags().BoolVar(&raw.autoDecompress, "decompress", false, "automatically decompress files when downloading, if their content-encoding indicates that they are compressed. The supported content-encoding values are 'gzip' and 'deflate'.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")
 	cpCmd.PersistentFlags().StringVar(&raw.excludeBlobType, "exclude-blob-type", "", "optionally specifies the type of blob (BlockBlob/ PageBlob/ AppendBlob) to exclude when copying blobs from Container / Account. Use of "+
