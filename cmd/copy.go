@@ -1275,6 +1275,7 @@ func formatPerfAdvice(advice []common.PerformanceAdvice) string {
 func formatExtraStats(fromTo common.FromTo, avgIOPS int, avgE2EMilliseconds int, networkErrorPercent float32, serverBusyPercent float32) (screenStats, logStats string) {
 	logStats = fmt.Sprintf(
 		`
+
 Diagnostic stats:
 IOPS: %v
 End-to-end ms per request: %v
@@ -1283,7 +1284,8 @@ Server Busy: %.2f%%`,
 		avgIOPS, avgE2EMilliseconds, networkErrorPercent, serverBusyPercent)
 
 	if fromTo.From() == common.ELocation.Benchmark() {
-		screenStats = "\n" + logStats
+		screenStats = logStats
+		logStats = "" // since will display in the screen stats, and they get logged too
 	}
 
 	return
