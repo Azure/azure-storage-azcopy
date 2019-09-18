@@ -67,14 +67,11 @@ type rawCopyCmdArgs struct {
 	fromTo string
 	//blobUrlForRedirection string
 
-	// TODO remove after refactoring
-	legacyInclude string
-	legacyExclude string
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
 	include               string
 	exclude               string
-	includePath           string
+	includePath           string // NOTE: This gets handled like list-of-files! It may LOOK like a bug, but it is not.
 	excludePath           string
 	includeFileAttributes string
 	excludeFileAttributes string
@@ -275,51 +272,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 
 	if raw.listOfFilesToCopy != "" || raw.includePath != "" {
 		cooked.listOfFilesChannel = listChan
-	}
-
-	// TODO: When further in the refactor, just check this against a map
-	if cooked.fromTo.From() != common.ELocation.Local() && cooked.fromTo.To() != common.ELocation.Local() {
-		// initialize the include map which contains the list of files to be included
-		// parse the string passed in include flag
-		// more than one file are expected to be separated by ';'
-		cooked.legacyInclude = make(map[string]int)
-		if len(raw.legacyInclude) > 0 {
-			files := strings.Split(raw.legacyInclude, ";")
-			for index := range files {
-				// If split of the include string leads to an empty string
-				// not include that string
-				if len(files[index]) == 0 {
-					continue
-				}
-				// replace the OS path separator in includePath string with AZCOPY_PATH_SEPARATOR
-				// this replacement is done to handle the windows file paths where path separator "\\"
-				includePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-				cooked.legacyInclude[includePath] = index
-			}
-		}
-
-		// initialize the exclude map which contains the list of files to be excluded
-		// parse the string passed in exclude flag
-		// more than one file are expected to be separated by ';'
-		cooked.legacyExclude = make(map[string]int)
-		if len(raw.legacyExclude) > 0 {
-			files := strings.Split(raw.legacyExclude, ";")
-			for index := range files {
-				// If split of the include string leads to an empty string
-				// not include that string
-				if len(files[index]) == 0 {
-					continue
-				}
-				// replace the OS path separator in excludePath string with AZCOPY_PATH_SEPARATOR
-				// this replacement is done to handle the windows file paths where path separator "\\"
-				excludePath := strings.Replace(files[index], common.OS_PATH_SEPARATOR, common.AZCOPY_PATH_SEPARATOR_STRING, -1)
-				cooked.legacyExclude[excludePath] = index
-			}
-		}
-	} else {
-		// I do not like this implementation whatsoever, but just for now, we need to circumvent the legacy include and excludes.
-		raw.include = raw.legacyInclude
-		raw.exclude = raw.legacyExclude
 	}
 
 	cooked.metadata = raw.metadata
@@ -527,21 +479,17 @@ type cookedCopyCmdArgs struct {
 	destinationSAS string
 	fromTo         common.FromTo
 
-	// TODO remove after refactoring
-	legacyInclude map[string]int
-	legacyExclude map[string]int
 	// new include/exclude only apply to file names
 	// implemented for remove (and sync) only
+	// includePathPatterns are handled like a list-of-files. Do not panic. This is not a bug that it is not present here.
 	includePatterns       []string
-	includePathPatterns   []string
 	excludePatterns       []string
 	excludePathPatterns   []string
 	includeFileAttributes []string
 	excludeFileAttributes []string
 
 	// filters from flags
-	listOfFilesToCopy  []string
-	listOfFilesChannel chan string // We make it a pointer so we can check if it exists w/o reading from it & tack things onto it if necessary.
+	listOfFilesChannel chan string // Channels are nullable.
 	recursive          bool
 	stripTopDir        bool
 	followSymlinks     bool
@@ -758,8 +706,6 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 		ForceWrite:      cca.forceWrite,
 		Priority:        common.EJobPriority.Normal(),
 		LogLevel:        cca.logVerbosity,
-		Include:         cca.legacyInclude,
-		Exclude:         cca.legacyExclude,
 		ExcludeBlobType: cca.excludeBlobType,
 		BlobAttributes: common.BlobTransferAttributes{
 			BlobType:                 cca.blobType,
@@ -1228,7 +1174,7 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
 	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyInclude, "include-pattern", "", "only include these files when copying. "+
+	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
 		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
@@ -1236,7 +1182,7 @@ func init() {
 		"Does not support using wildcards. Checks relative path prefix. ex. myFolder;myFolder/subDirName/file.pdf")
 	// This flag is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().StringVar(&raw.listOfFilesToCopy, "list-of-files", "", "defines the location of json which has the list of only files to be copied")
-	cpCmd.PersistentFlags().StringVar(&raw.legacyExclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
+	cpCmd.PersistentFlags().StringVar(&raw.exclude, "exclude-pattern", "", "exclude these files when copying. Support use of *.")
 	cpCmd.PersistentFlags().StringVar(&raw.forceWrite, "overwrite", "true", "defines whether to overwrite the conflicting files at the destination. Could be set to true, false, or prompt.")
 	cpCmd.PersistentFlags().BoolVar(&raw.recursive, "recursive", false, "look into sub-directories recursively when uploading from local file system.")
 	cpCmd.PersistentFlags().StringVar(&raw.fromTo, "from-to", "", "optionally specifies the source destination combination. For Example: LocalBlob, BlobLocal, LocalBlobFS.")

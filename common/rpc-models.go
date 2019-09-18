@@ -48,8 +48,6 @@ type CopyJobPartOrderRequest struct {
 	ForceWrite  OverwriteOption // to determine if the existing needs to be overwritten or not. If set to true, existing blobs are overwritten
 	Priority    JobPriority     // priority of the task
 	FromTo      FromTo
-	Include     map[string]int
-	Exclude     map[string]int
 	// list of blobTypes to exclude.
 	ExcludeBlobType []azblob.BlobType
 	SourceRoot      string
