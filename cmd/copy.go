@@ -1037,7 +1037,11 @@ func (cca *cookedCopyCmdArgs) processCopyJobPartOrders() (err error) {
 	}
 
 	if err != nil {
-		return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		if err == NothingToRemoveError || err == NothingScheduledError {
+			return err // don't wrap it with anything that uses the word "error"
+		} else {
+			return fmt.Errorf("cannot start job due to error: %s.\n", err)
+		}
 	}
 
 	return nil
@@ -1105,7 +1109,10 @@ func (cca *cookedCopyCmdArgs) launchFollowup(priorJobExitCode common.ExitCode) {
 		glcm.AllowReinitiateProgressReporting()
 		cca.followupJobArgs.priorJobExitCode = &priorJobExitCode
 		err := cca.followupJobArgs.process()
-		if err != nil {
+		if err == NothingToRemoveError {
+			glcm.Info("Cleanup completed (nothing needed to be deleted)")
+			glcm.Exit(nil, common.EExitCode.Success())
+		} else if err != nil {
 			glcm.Error("failed to perform followup/cleanup job due to error: " + err.Error())
 		}
 		glcm.SurrenderControl()
