@@ -130,7 +130,7 @@ const accountTraversalInherentlyRecursiveError = "account copies are an inherent
 // ctx, pipeline are only required for remote resources.
 // followSymlinks is only required for local resources (defaults to false)
 // errorOnDirWOutRecursive is used by copy.
-func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
+func initResourceTraverser(source string, location common.Location, ctx *context.Context, credential *common.CredentialInfo, followSymlinks *bool, listofFilesChannel chan string, recursive, getProperties bool, incrementEnumerationCounter func()) (resourceTraverser, error) {
 	var output resourceTraverser
 	var p *pipeline.Pipeline
 
@@ -164,7 +164,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 			sas = splitsrc[1]
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, getProperties, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
@@ -190,7 +190,7 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				}
 			}()
 
-			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, globChan, incrementEnumerationCounter)
+			output = newListTraverser(cleanLocalPath(basePath), "", location, nil, nil, recursive, toFollow, getProperties, globChan, incrementEnumerationCounter)
 		} else {
 			output = newLocalTraverser(source, recursive, toFollow, incrementEnumerationCounter)
 		}
@@ -233,9 +233,9 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output = newFileAccountTraverser(sourceURL, *p, *ctx, incrementEnumerationCounter)
+			output = newFileAccountTraverser(sourceURL, *p, *ctx, getProperties, incrementEnumerationCounter)
 		} else {
-			output = newFileTraverser(sourceURL, *p, *ctx, recursive, incrementEnumerationCounter)
+			output = newFileTraverser(sourceURL, *p, *ctx, recursive, getProperties, incrementEnumerationCounter)
 		}
 	case common.ELocation.BlobFS():
 		sourceURL, err := url.Parse(source)

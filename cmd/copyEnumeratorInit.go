@@ -43,7 +43,14 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 		return nil, errors.New("a SAS token (or S3 access key) is required as a part of the source in S2S transfers, unless the source is a public resource")
 	}
 
-	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, func() {})
+	// Infer on download so that we get LMT and MD5 on files download
+	// On S2S transfers the following rules apply:
+	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
+	// If source change validation is enabled on files to remote, turn it on (consider a seperate flag entirely?)
+	getRemoteProperties := (cca.fromTo.From().IsRemote() && !cca.fromTo.To().IsRemote()) ||
+		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend)
+
+	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
 
 	if err != nil {
 		return nil, err
@@ -241,7 +248,7 @@ func (cca *cookedCopyCmdArgs) isDestDirectory(dst string, ctx *context.Context) 
 		return false
 	}
 
-	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, func() {})
+	rt, err := initResourceTraverser(dst, cca.fromTo.To(), ctx, &dstCredInfo, nil, nil, false, false, func() {})
 
 	if err != nil {
 		return false

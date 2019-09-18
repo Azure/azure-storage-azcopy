@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
-	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/azure-storage-file-go/azfile"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -35,10 +34,11 @@ import (
 
 // allow us to iterate through a path pointing to the file endpoint
 type fileTraverser struct {
-	rawURL    *url.URL
-	p         pipeline.Pipeline
-	ctx       context.Context
-	recursive bool
+	rawURL        *url.URL
+	p             pipeline.Pipeline
+	ctx           context.Context
+	recursive     bool
+	getProperties bool
 
 	// a generic function to notify that a new stored object has been enumerated
 	incrementEnumerationCounter func()
@@ -112,35 +112,49 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 			for _, fileInfo := range lResp.FileItems {
 				f := currentDirURL.NewFileURL(fileInfo.Name)
 
-				fileProperties, err := f.GetProperties(t.ctx)
-				if err != nil {
-					return err
-				}
-
 				// compute the relative path of the file with respect to the target directory
 				fileURLParts := azfile.NewFileURLParts(f.URL())
 				relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				storedObject := newStoredObject(
+				/*storedObject := newStoredObject(
 					getObjectNameOnly(fileInfo.Name),
 					relativePath,
-					fileProperties.LastModified(),
-					fileProperties.ContentLength(),
+					time.Time{},
+					fileInfo.Properties.ContentLength,
 					fileProperties.ContentMD5(),
 					azblob.BlobNone,
 					targetURLParts.ShareName,
-				)
+				)*/
 
-				// Leaving this on because it's free IO wise, and file->* is in the works
-				storedObject.contentDisposition = fileProperties.ContentDisposition()
-				storedObject.cacheControl = fileProperties.CacheControl()
-				storedObject.contentLanguage = fileProperties.ContentLanguage()
-				storedObject.contentEncoding = fileProperties.ContentEncoding()
-				storedObject.contentType = fileProperties.ContentType()
+				// We need to omit some properties if we don't get properties
+				storedObject := storedObject{
+					name:          getObjectNameOnly(fileInfo.Name),
+					relativePath:  relativePath,
+					size:          fileInfo.Properties.ContentLength,
+					containerName: targetURLParts.ShareName,
+				}
 
-				// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
-				storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
+				// Only get the properties if we're told to
+				if t.getProperties {
+					fileProperties, err := f.GetProperties(t.ctx)
+					if err != nil {
+						return err
+					}
+
+					// Leaving this on because it's free IO wise, and file->* is in the works
+					storedObject.contentDisposition = fileProperties.ContentDisposition()
+					storedObject.cacheControl = fileProperties.CacheControl()
+					storedObject.contentLanguage = fileProperties.ContentLanguage()
+					storedObject.contentEncoding = fileProperties.ContentEncoding()
+					storedObject.contentType = fileProperties.ContentType()
+					storedObject.md5 = fileProperties.ContentMD5()
+
+					// .NewMetadata() seems odd to call here, but it does actually obtain the metadata.
+					storedObject.Metadata = common.FromAzFileMetadataToCommonMetadata(fileProperties.NewMetadata())
+
+					storedObject.lastModifiedTime = fileProperties.LastModified()
+				}
 
 				if t.incrementEnumerationCounter != nil {
 					t.incrementEnumerationCounter()
@@ -166,7 +180,7 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 	return
 }
 
-func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *fileTraverser) {
-	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
+func newFileTraverser(rawURL *url.URL, p pipeline.Pipeline, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter func()) (t *fileTraverser) {
+	t = &fileTraverser{rawURL: rawURL, p: p, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 	return
 }

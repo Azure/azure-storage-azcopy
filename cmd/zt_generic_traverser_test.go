@@ -246,6 +246,9 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 		c.Assert(localDummyProcessor.record[0].relativePath, chk.Equals, blobDummyProcessor.record[0].relativePath)
 
 		// Azure File cannot handle names with '/' in them
+		// TODO: Construct a directory URL and then build a file URL atop it in order to solve this portion of the test.
+		//  We shouldn't be excluding things the traverser is actually capable of doing.
+		//  Fix within scenarioHelper.generateAzureFilesFromList, since that's what causes the fail.
 		if !strings.Contains(storedObjectName, "/") {
 			// set up the Azure Share with a single file
 			fileList := []string{storedObjectName}
@@ -254,7 +257,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 			// construct an Azure file traverser
 			filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 			rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, fileList[0])
-			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, func() {})
+			azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, false, false, func() {})
 
 			// invoke the file traversal with a dummy processor
 			fileDummyProcessor := dummyProcessor{}
@@ -366,7 +369,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawShareURLWithSAS(c, shareName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func() {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}
@@ -475,7 +478,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct an Azure File traverser
 		filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 		rawFileURLWithSAS := scenarioHelper{}.getRawFileURLWithSAS(c, shareName, virDirName)
-		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, func() {})
+		azureFileTraverser := newFileTraverser(&rawFileURLWithSAS, filePipeline, ctx, isRecursiveOn, false, func() {})
 
 		// invoke the file traversal with a dummy processor
 		fileDummyProcessor := dummyProcessor{}

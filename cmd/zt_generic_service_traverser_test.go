@@ -174,7 +174,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithManyObjects(c *chk.C) {
 	// construct a file account traverser
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(c)
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, func() {})
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func() {})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
@@ -319,7 +319,7 @@ func (s *genericTraverserSuite) TestServiceTraverserWithWildcards(c *chk.C) {
 	filePipeline := azfile.NewPipeline(azfile.NewAnonymousCredential(), azfile.PipelineOptions{})
 	rawFSU := scenarioHelper{}.getRawFileServiceURLWithSAS(c)
 	rawFSU.Path = "/objectmatch*" // set the container name to contain a wildcard
-	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, func() {})
+	fileAccountTraverser := newFileAccountTraverser(&rawFSU, filePipeline, ctx, false, func() {})
 
 	// invoke the file account traversal with a dummy processor
 	fileDummyProcessor := dummyProcessor{}
