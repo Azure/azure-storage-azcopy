@@ -49,6 +49,7 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// If source change validation is enabled on files to remote, turn it on (consider a seperate flag entirely?)
 	getRemoteProperties := (cca.fromTo.From().IsRemote() && !cca.fromTo.To().IsRemote()) ||
 		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend)
+	jobPartOrder.S2SGetPropertiesInBackend = !getRemoteProperties && cca.s2sGetPropertiesInBackend
 
 	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
 
