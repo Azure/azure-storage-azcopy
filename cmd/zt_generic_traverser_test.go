@@ -294,7 +294,7 @@ func (s *genericTraverserSuite) TestTraverserWithSingleObject(c *chk.C) {
 
 		// construct a s3 traverser
 		url := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, storedObjectName)
-		S3Traverser, err := newS3Traverser(&url, ctx, false, func() {})
+		S3Traverser, err := newS3Traverser(&url, ctx, false, false, func() {})
 		c.Assert(err, chk.IsNil)
 
 		s3DummyProcessor := dummyProcessor{}
@@ -389,7 +389,7 @@ func (s *genericTraverserSuite) TestTraverserContainerAndLocalDirectory(c *chk.C
 
 		// construct and run a S3 traverser
 		rawS3URL := scenarioHelper{}.getRawS3BucketURL(c, "", bucketName)
-		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, func() {})
+		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
 		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
 		err = S3Traverser.traverse(s3DummyProcessor.process, nil)
@@ -498,7 +498,7 @@ func (s *genericTraverserSuite) TestTraverserWithVirtualAndLocalDirectory(c *chk
 		// construct and run a S3 traverser
 		// directory object keys always end with / in S3
 		rawS3URL := scenarioHelper{}.getRawS3ObjectURL(c, "", bucketName, virDirName+"/")
-		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, func() {})
+		S3Traverser, err := newS3Traverser(&rawS3URL, ctx, isRecursiveOn, false, func() {})
 		c.Assert(err, chk.IsNil)
 		s3DummyProcessor := dummyProcessor{}
 		err = S3Traverser.traverse(s3DummyProcessor.process, nil)

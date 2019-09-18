@@ -117,16 +117,6 @@ func (t *fileTraverser) traverse(processor objectProcessor, filters []objectFilt
 				relativePath := strings.TrimPrefix(fileURLParts.DirectoryOrFilePath, targetURLParts.DirectoryOrFilePath)
 				relativePath = strings.TrimPrefix(relativePath, common.AZCOPY_PATH_SEPARATOR_STRING)
 
-				/*storedObject := newStoredObject(
-					getObjectNameOnly(fileInfo.Name),
-					relativePath,
-					time.Time{},
-					fileInfo.Properties.ContentLength,
-					fileProperties.ContentMD5(),
-					azblob.BlobNone,
-					targetURLParts.ShareName,
-				)*/
-
 				// We need to omit some properties if we don't get properties
 				storedObject := storedObject{
 					name:          getObjectNameOnly(fileInfo.Name),

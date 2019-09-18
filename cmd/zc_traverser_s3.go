@@ -32,9 +32,10 @@ import (
 )
 
 type s3Traverser struct {
-	rawURL    *url.URL // No pipeline needed for S3
-	ctx       context.Context
-	recursive bool
+	rawURL        *url.URL // No pipeline needed for S3
+	ctx           context.Context
+	recursive     bool
+	getProperties bool
 
 	s3URLParts s3URLPartsExtension
 	s3Client   *minio.Client
@@ -125,15 +126,34 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 			continue
 		}
 
+		storedObject := newStoredObject(
+			objectName,
+			relativePath,
+			objectInfo.LastModified,
+			objectInfo.Size,
+			nil,
+			blobTypeNA,
+			t.s3URLParts.BucketName)
+
+		if t.getProperties {
+			oi, err := t.s3Client.StatObject(t.s3URLParts.BucketName, objectInfo.Key, minio.StatObjectOptions{})
+
+			if err != nil {
+				return err
+			}
+
+			oie := common.ObjectInfoExtension{ObjectInfo: oi}
+
+			storedObject.md5 = oie.ContentMD5()
+			storedObject.cacheControl = oie.CacheControl()
+			storedObject.contentLanguage = oie.ContentLanguage()
+			storedObject.contentDisposition = oie.ContentDisposition()
+			storedObject.contentEncoding = oie.ContentEncoding()
+			storedObject.Metadata = oie.NewCommonMetadata()
+		}
+
 		err = processIfPassedFilters(filters,
-			newStoredObject(
-				objectName,
-				relativePath,
-				objectInfo.LastModified,
-				objectInfo.Size,
-				nil,
-				blobTypeNA,
-				t.s3URLParts.BucketName),
+			storedObject,
 			processor)
 
 		if err != nil {
@@ -143,8 +163,8 @@ func (t *s3Traverser) traverse(processor objectProcessor, filters []objectFilter
 	return
 }
 
-func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive bool, incrementEnumerationCounter func()) (t *s3Traverser, err error) {
-	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, incrementEnumerationCounter: incrementEnumerationCounter}
+func newS3Traverser(rawURL *url.URL, ctx context.Context, recursive, getProperties bool, incrementEnumerationCounter func()) (t *s3Traverser, err error) {
+	t = &s3Traverser{rawURL: rawURL, ctx: ctx, recursive: recursive, getProperties: getProperties, incrementEnumerationCounter: incrementEnumerationCounter}
 
 	// initialize S3 client and URL parts
 	var s3URLParts common.S3URLParts

@@ -282,13 +282,13 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 				return nil, errors.New(accountTraversalInherentlyRecursiveError)
 			}
 
-			output, err = newS3ServiceTraverser(sourceURL, *ctx, incrementEnumerationCounter)
+			output, err = newS3ServiceTraverser(sourceURL, *ctx, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			output, err = newS3Traverser(sourceURL, *ctx, recursive, incrementEnumerationCounter)
+			output, err = newS3Traverser(sourceURL, *ctx, recursive, getProperties, incrementEnumerationCounter)
 
 			if err != nil {
 				return nil, err

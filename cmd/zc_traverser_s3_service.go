@@ -39,6 +39,7 @@ type s3ServiceTraverser struct {
 	ctx           context.Context
 	bucketPattern string
 	cachedBuckets []string
+	getProperties bool
 
 	s3URL    s3URLPartsExtension
 	s3Client *minio.Client
@@ -92,7 +93,7 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 		tmpS3URL := t.s3URL
 		tmpS3URL.BucketName = v
 		urlResult := tmpS3URL.URL()
-		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.incrementEnumerationCounter)
+		bucketTraverser, err := newS3Traverser(&urlResult, t.ctx, true, t.getProperties, t.incrementEnumerationCounter)
 
 		if err != nil {
 			return err
@@ -121,8 +122,8 @@ func (t *s3ServiceTraverser) traverse(processor objectProcessor, filters []objec
 	return nil
 }
 
-func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, incrementEnumerationCounter func()) (t *s3ServiceTraverser, err error) {
-	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter}
+func newS3ServiceTraverser(rawURL *url.URL, ctx context.Context, getProperties bool, incrementEnumerationCounter func()) (t *s3ServiceTraverser, err error) {
+	t = &s3ServiceTraverser{ctx: ctx, incrementEnumerationCounter: incrementEnumerationCounter, getProperties: getProperties}
 
 	var s3URLParts common.S3URLParts
 	s3URLParts, err = common.NewS3URLParts(*rawURL)
