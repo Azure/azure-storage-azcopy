@@ -46,10 +46,13 @@ func (cca *cookedCopyCmdArgs) initEnumerator(jobPartOrder common.CopyJobPartOrde
 	// Infer on download so that we get LMT and MD5 on files download
 	// On S2S transfers the following rules apply:
 	// If preserve properties is enabled, but get properties in backend is disabled, turn it on
-	// If source change validation is enabled on files to remote, turn it on (consider a seperate flag entirely?)
-	getRemoteProperties := (cca.fromTo.From().IsRemote() && !cca.fromTo.To().IsRemote()) ||
-		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend)
-	jobPartOrder.S2SGetPropertiesInBackend = !getRemoteProperties && cca.s2sGetPropertiesInBackend
+	// If source change validation is enabled on files to remote, turn it on (consider a separate flag entirely?)
+	getRemoteProperties := (cca.fromTo.From().IsRemote() && !cca.fromTo.To().IsRemote()) || // If download, we still need LMT and MD5 from files.
+		(cca.fromTo.From() == common.ELocation.File() && cca.fromTo.To().IsRemote() && cca.s2sSourceChangeValidation) || // If S2S from File to *, and sourceChangeValidation is enabled, we get properties anyway (according to the old code)
+		(cca.fromTo.From().IsRemote() && cca.fromTo.To().IsRemote() && cca.s2sPreserveProperties && !cca.s2sGetPropertiesInBackend) // If S2S and
+	jobPartOrder.S2SGetPropertiesInBackend = !getRemoteProperties && cca.s2sGetPropertiesInBackend // Infer GetProperties if GetPropertiesInBackend is enabled.
+	jobPartOrder.S2SSourceChangeValidation = cca.s2sSourceChangeValidation
+	jobPartOrder.S2SDestLengthValidation = cca.CheckLength
 
 	traverser, err = initResourceTraverser(src, cca.fromTo.From(), &ctx, &srcCredInfo, &cca.followSymlinks, cca.listOfFilesChannel, cca.recursive, getRemoteProperties, func() {})
 
