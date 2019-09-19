@@ -206,8 +206,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url,
             "File",
             1,
-            checkLMT="pass"
-        )
+            checkLMT="pass")
 
     def test_copy_single_1kb_file_from_file_to_blob_fail_lmt(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name)
@@ -218,8 +217,7 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             dst_container_url,
             "File",
             1,
-            checkLMT="fail"
-        )
+            checkLMT="fail")
 
     def test_copy_single_file_from_file_to_blob_propertyandmetadata_in_frontend(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name)
