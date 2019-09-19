@@ -157,14 +157,20 @@ func initResourceTraverser(source string, location common.Location, ctx *context
 
 	// Feed list of files channel into new list traverser, separate SAS.
 	if listofFilesChannel != nil {
-		splitsrc := strings.Split(source, "?")
 		sas := ""
+		if location.IsRemote() {
+			srcURL, err := url.Parse(source)
 
-		if len(splitsrc) > 1 {
-			sas = splitsrc[1]
+			if err != nil {
+				return nil, err
+			}
+
+			sas = srcURL.RawQuery
+			srcURL.RawQuery = ""
+			source = srcURL.String()
 		}
 
-		output = newListTraverser(splitsrc[0], sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
+		output = newListTraverser(source, sas, location, credential, ctx, recursive, toFollow, listofFilesChannel, incrementEnumerationCounter)
 		return output, nil
 	}
 
