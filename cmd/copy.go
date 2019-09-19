@@ -307,6 +307,25 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 		if cooked.blobType != common.EBlobType.Detect() {
 			return cooked, fmt.Errorf("blob-type is not supported on ADLS Gen 2")
 		}
+		if cooked.preserveLastModifiedTime {
+			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
+		}
+		if cooked.blockBlobTier != common.EBlockBlobTier.None() ||
+			cooked.pageBlobTier != common.EPageBlobTier.None() {
+			return cooked, fmt.Errorf("blob-tier is not supported while uploading to ADLS Gen 2")
+		}
+		if cooked.s2sPreserveProperties {
+			return cooked, fmt.Errorf("s2s-preserve-properties is not supported while uploading")
+		}
+		if cooked.s2sPreserveAccessTier {
+			return cooked, fmt.Errorf("s2s-preserve-access-tier is not supported while uploading")
+		}
+		if cooked.s2sInvalidMetadataHandleOption != common.DefaultInvalidMetadataHandleOption {
+			return cooked, fmt.Errorf("s2s-handle-invalid-metadata is not supported while uploading")
+		}
+		if cooked.s2sSourceChangeValidation {
+			return cooked, fmt.Errorf("s2s-detect-source-changed is not supported while uploading")
+		}
 	case common.EFromTo.LocalBlob():
 		if cooked.preserveLastModifiedTime {
 			return cooked, fmt.Errorf("preserve-last-modified-time is not supported while uploading")
@@ -347,7 +366,8 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 			return cooked, fmt.Errorf("blob-type is not supported on Azure File")
 		}
 	case common.EFromTo.BlobLocal(),
-		common.EFromTo.FileLocal():
+		common.EFromTo.FileLocal(),
+		common.EFromTo.BlobFSLocal():
 		if cooked.followSymlinks {
 			return cooked, fmt.Errorf("follow-symlinks flag is not supported while downloading")
 		}
