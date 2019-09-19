@@ -49,9 +49,9 @@ func ToFixed(num float64, precision int) float64 {
 }
 
 // MainSTE initializes the Storage Transfer Engine
-func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder, azcopyLogPathFolder string) error {
+func MainSTE(concurrency ConcurrencySettings, targetRateInMegaBitsPerSec int64, azcopyJobPlanFolder, azcopyLogPathFolder string, providePerfAdvice bool) error {
 	// Initialize the JobsAdmin, resurrect Job plan files
-	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder)
+	initJobsAdmin(steCtx, concurrency, targetRateInMegaBitsPerSec, azcopyJobPlanFolder, azcopyLogPathFolder, providePerfAdvice)
 	// No need to read the existing JobPartPlan files since Azcopy is running in process
 	//JobsAdmin.ResurrectJobParts()
 	// TODO: We may want to list listen first and terminate if there is already an instance listening
@@ -141,6 +141,11 @@ func ExecuteNewCopyJobPartOrder(order common.CopyJobPartOrderRequest) common.Cop
 	jppfn := JobsAdmin.NewJobPartPlanFileName(order.JobID, order.PartNum)
 	jppfn.Create(order)                                                                   // Convert the order to a plan file
 	jpm := JobsAdmin.JobMgrEnsureExists(order.JobID, order.LogLevel, order.CommandString) // Get a this job part's job manager (create it if it doesn't exist)
+
+	if len(order.Transfers) == 0 && order.IsFinalPart {
+		jpm.Log(pipeline.LogError, "ERROR: No transfers were scheduled.")
+		return common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
+	}
 	// Get credential info from RPC request order, and set in InMemoryTransitJobState.
 	jpm.setInMemoryTransitJobState(
 		InMemoryTransitJobState{
@@ -468,10 +473,20 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	}
 
 	js.BytesOverWire = uint64(JobsAdmin.BytesOverWire())
+
 	// Get the number of active go routines performing the transfer or executing the chunk Func
-	// TODO: added for debugging purpose. remove later
+	// TODO: added for debugging purpose. remove later (is covered by GetPerfInfo now anyway)
 	js.ActiveConnections = jm.ActiveConnections()
+
 	js.PerfStrings, js.PerfConstraint = jm.GetPerfInfo()
+
+	pipeStats := jm.PipelineNetworkStats()
+	if pipeStats != nil {
+		js.AverageIOPS = pipeStats.OperationsPerSecond()
+		js.AverageE2EMilliseconds = pipeStats.AverageE2EMilliseconds()
+		js.NetworkErrorPercentage = pipeStats.NetworkErrorPercentage()
+		js.ServerBusyPercentage = pipeStats.TotalServerBusyPercentage()
+	}
 
 	// If the status is cancelled, then no need to check for completerJobOrdered
 	// since user must have provided the consent to cancel an incompleteJob if that
@@ -479,6 +494,7 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	part0PlanStatus := jp0.Plan().JobStatus()
 	if part0PlanStatus == common.EJobStatus.Cancelled() {
 		js.JobStatus = part0PlanStatus
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped)
 		return js
 	}
 	// Job is completed if Job order is complete AND ALL transfers are completed/failed
@@ -490,6 +506,10 @@ func GetJobSummary(jobID common.JobID) common.ListJobSummaryResponse {
 	if js.JobStatus == common.EJobStatus.Completed() {
 		js.JobStatus = js.JobStatus.EnhanceJobStatusInfo(js.TransfersSkipped > 0, js.TransfersFailed > 0,
 			js.TransfersCompleted > 0)
+
+		js.PerformanceAdvice = jm.TryGetPerformanceAdvice(js.TotalBytesExpected, js.TotalTransfers-js.TransfersSkipped)
+
+
 	}
 
 	return js

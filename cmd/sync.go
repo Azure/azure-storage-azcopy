@@ -257,7 +257,7 @@ func (cca *cookedSyncCmdArgs) scanningComplete() bool {
 // if blocking is specified to false, then another goroutine spawns and wait out the job
 func (cca *cookedSyncCmdArgs) waitUntilJobCompletion(blocking bool) {
 	// print initial message to indicate that the job is starting
-	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s/%s.log", azcopyLogPathFolder, cca.jobID)))
+	glcm.Init(common.GetStandardInitOutputBuilder(cca.jobID.String(), fmt.Sprintf("%s%s%s.log", azcopyLogPathFolder, common.OS_PATH_SEPARATOR, cca.jobID), false, ""))
 
 	// initialize the times necessary to track progress
 	cca.jobStartTime = time.Now()
@@ -377,6 +377,7 @@ func (cca *cookedSyncCmdArgs) ReportProgressOrExit(lcm common.LifecycleMgr) {
 			if format == common.EOutputFormat.Json() {
 				return cca.getJsonOfSyncJobSummary(summary)
 			}
+			screenStats, logStats := formatExtraStats(cca.fromTo, summary.AverageIOPS, summary.AverageE2EMilliseconds, summary.NetworkErrorPercentage, summary.ServerBusyPercentage)
 
 			output := fmt.Sprintf(
 				`
@@ -390,7 +391,7 @@ Number of Copy Transfers Failed: %v
 Number of Deletions at Destination: %v
 Total Number of Bytes Transferred: %v
 Total Number of Bytes Enumerated: %v
-Final Job Status: %v
+Final Job Status: %v%s%s
 `,
 				summary.JobID.String(),
 				atomic.LoadUint64(&cca.atomicSourceFilesScanned),
@@ -402,11 +403,13 @@ Final Job Status: %v
 				cca.atomicDeletionCount,
 				summary.TotalBytesTransferred,
 				summary.TotalBytesEnumerated,
-				summary.JobStatus)
+				summary.JobStatus,
+				screenStats,
+				formatPerfAdvice(summary.PerformanceAdvice))
 
 			jobMan, exists := ste.JobsAdmin.JobMgr(summary.JobID)
 			if exists {
-				jobMan.Log(pipeline.LogInfo, output)
+				jobMan.Log(pipeline.LogInfo, logStats+"\n"+output)
 			}
 
 			return output
@@ -419,7 +422,7 @@ Final Job Status: %v
 		}
 
 		// indicate whether constrained by disk or not
-		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration)
+		perfString, diskString := getPerfDisplayText(summary.PerfStrings, summary.PerfConstraint, duration, false)
 
 		return fmt.Sprintf("%.1f %%, %v Done, %v Failed, %v Pending, %v Total%s, 2-sec Throughput (Mb/s): %v%s",
 			summary.PercentComplete,

@@ -27,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"strings"
 	"syscall"
 
 	"github.com/Azure/azure-storage-azcopy/common"
@@ -58,7 +59,7 @@ func ProcessOSSpecificInitialization() (int, error) {
 func GetAzCopyAppPath() string {
 	lcm := common.GetLifecycleMgr()
 	userProfile := lcm.GetEnvironmentVariable(common.EEnvironmentVariable.UserDir())
-	azcopyAppDataFolder := path.Join(userProfile, ".azcopy")
+	azcopyAppDataFolder := strings.ReplaceAll(path.Join(userProfile, ".azcopy"), "/", `\`)
 	if err := os.Mkdir(azcopyAppDataFolder, os.ModeDir); err != nil && !os.IsExist(err) {
 		return ""
 	}

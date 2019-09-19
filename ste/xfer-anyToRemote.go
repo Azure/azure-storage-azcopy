@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"hash"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 
@@ -111,9 +110,7 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 	var sourceFileFactory func() (common.CloseableReaderAt, error)
 	srcFile := (common.CloseableReaderAt)(nil)
 	if srcInfoProvider.IsLocal() {
-		sourceFileFactory = func() (common.CloseableReaderAt, error) {
-			return openSourceFile(info)
-		}
+		sourceFileFactory = srcInfoProvider.(ILocalSourceInfoProvider).OpenSourceFile // all local providers must implement this interface
 		srcFile, err = sourceFileFactory()
 		if err != nil {
 			jptm.LogSendError(info.Source, info.Destination, "Couldn't open source-"+err.Error(), 0)
@@ -162,16 +159,6 @@ func anyToRemote(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, sen
 
 	// Step 6: Go through the file and schedule chunk messages to send each chunk
 	scheduleSendChunks(jptm, info.Source, srcFile, srcSize, s, sourceFileFactory, srcInfoProvider)
-}
-
-func openSourceFile(info TransferInfo) (common.CloseableReaderAt, error) {
-	if common.IsPlaceholderForRandomDataGenerator(info.Source) {
-		// Generate a "file" of random data. Useful for testing when you want really big files, but don't want
-		// to make them yourself
-		return common.NewRandomDataGenerator(info.SourceSize), nil
-	} else {
-		return os.Open(info.Source)
-	}
 }
 
 // Schedule all the send chunks.

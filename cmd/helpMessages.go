@@ -321,9 +321,49 @@ Sync a virtual directory sharing the same name as a blob (add a trailing slash t
 Note: if include/exclude flags are used together, only files matching the include patterns would be looked at, but those matching the exclude patterns would be always be ignored.
 `
 
+// ===================================== DOC COMMAND ===================================== //
+
 const docCmdShortDescription = "Generates documentation for the tool in Markdown format"
 
 const docCmdLongDescription = `Generates documentation for the tool in Markdown format, and stores them in the designated location.
 
 By default, the files are stored in a folder named 'doc' inside the current directory.
+`
+
+// ===================================== BENCH COMMAND ===================================== //
+const benchCmdShortDescription = "Performs a performance benchmark"
+
+// TODO: document whether we delete the uploaded data
+
+const benchCmdLongDescription = `
+Runs a performance benchmark, by uploading uploading test data to a specified destination.
+The test data is automatically generated.
+
+The benchmark command runs the same upload process as 'copy', except that: 
+  - there's no source parameter.  The command requires only a destination (which must be a blob container, 
+    in the initial release of the benchmark command)
+  - the payload is described by command line parameters, which control how many files are auto-generated and 
+    how big they are. The generation process takes place entirely in memory. Disk is not used.
+  - only a few of 'copy's optional parameters are supported
+  - additional diagnostics are measured and reported
+  - by default, the transferred data is deleted at the end of the test run
+
+Benchmark mode will automatically tune itself to the number of parallel TCP connections that gives 
+the maximum throughput. It will display that number at the end. To prevent auto-tuning, set the 
+AZCOPY_CONCURRENCY_VALUE environment variable to a specific number of connections. 
+
+All the usual authentication types are supported, however the most convenient approach for benchmarking is typically
+to create an empty container with a SAS token and use SAS authentication.
+`
+
+const benchCmdExample = `Run a benchmark with default parameters (suitable for benchmarking networks up to 1 Gbps):'
+- azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>"
+
+Run a benchmark uploading 100 files, each 2 GiB in size: (suitable for benchmarking on a fast network, e.g. 10 Gbps):'
+- azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 100 --size-per-file 2G
+
+Same as above, but this time use 50,000 files, each 8 MiB in size and compute their MD5 hashes (the same way that --put-md5 does
+in the copy command). The purpose of --put-md5 when benchmarking is to test whether MD5 computation affects throughput for the 
+selected file count and size:
+- azcopy bench "https://[account].blob.core.windows.net/[container]?<SAS>" --file-count 50000 --size-per-file 8M --put-md5
 `

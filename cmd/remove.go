@@ -28,10 +28,7 @@ import (
 )
 
 func init() {
-	// set the block-blob-tier and page-blob-tier to None since Parse fails for "" string
-	// while parsing block-blob and page-blob tier.
-	raw := rawCopyCmdArgs{blockBlobTier: common.EBlockBlobTier.None().String(), pageBlobTier: common.EPageBlobTier.None().String(),
-		forceWrite: common.EOverwriteOption.True().String()}
+	raw := rawCopyCmdArgs{}
 	// deleteCmd represents the delete command
 	var deleteCmd = &cobra.Command{
 		Use:        "remove [resourceURL]",
@@ -60,11 +57,8 @@ func init() {
 				return fmt.Errorf("invalid source type %s to delete. azcopy support removing blobs/files/adls gen2", srcLocationType.String())
 			}
 
-			// Since remove uses the copy command arguments cook, set the blobType to None and validation option
-			// else parsing the arguments will fail.
-			raw.blobType = common.EBlobType.Detect().String()
-			raw.md5ValidationOption = common.DefaultHashValidationOption.String()
-			raw.s2sInvalidMetadataHandleOption = common.DefaultInvalidMetadataHandleOption.String()
+			raw.setMandatoryDefaults()
+
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {

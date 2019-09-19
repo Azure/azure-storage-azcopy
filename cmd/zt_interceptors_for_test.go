@@ -42,7 +42,11 @@ func (i *interceptor) intercept(cmd common.RpcCmd, request interface{}, response
 		i.lastRequest = request
 
 		// mock the result
-		*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: true}
+		if len(i.transfers) != 0 || !copyRequest.IsFinalPart {
+			*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: true}
+		} else {
+			*(response.(*common.CopyJobPartOrderResponse)) = common.CopyJobPartOrderResponse{JobStarted: false, ErrorMsg: common.ECopyJobPartOrderErrorType.NoTransfersScheduledErr()}
+		}
 	case common.ERpcCmd.ListJobs():
 	case common.ERpcCmd.ListJobSummary():
 	case common.ERpcCmd.ListJobTransfers():
@@ -88,7 +92,8 @@ func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetai
 func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
 func (*mockedLifecycleManager) Error(string)                                    {}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
-func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {} 
+func (mockedLifecycleManager) AllowReinitiateProgressReporting()                        {}
+func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
 func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
 	_ = os.Setenv(env.Name, "")
 }

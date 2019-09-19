@@ -215,26 +215,33 @@ type ChunkStatusLogger interface {
 type ChunkStatusLoggerCloser interface {
 	ChunkStatusLogger
 	GetCounts(td TransferDirection) []chunkStatusCount
-	GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint
+	GetPrimaryPerfConstraint(td TransferDirection, rc RetryCounter) PerfConstraint
 	FlushLog() // not close, because we had issues with writes coming in after this // TODO: see if that issue still exists
+}
+
+type RetryCounter interface {
+	GetTotalRetries() int64
 }
 
 // chunkStatusLogger records all chunk state transitions, and makes aggregate data immediately available
 // for performance diagnostics. Also optionally logs every individual transition to a file.
 type chunkStatusLogger struct {
+	atomicLastRetryCount            int64
+	atomicIsWaitingOnFinalBodyReads int32
 	counts                          []int64
 	outputEnabled                   bool
 	unsavedEntries                  chan *chunkWaitState
 	flushDone                       chan struct{}
-	atomicIsWaitingOnFinalBodyReads int32
+	cpuMonitor                      CPUMonitor
 }
 
-func NewChunkStatusLogger(jobID JobID, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
+func NewChunkStatusLogger(jobID JobID, cpuMon CPUMonitor, logFileFolder string, enableOutput bool) ChunkStatusLoggerCloser {
 	logger := &chunkStatusLogger{
 		counts:         make([]int64, numWaitReasons()),
 		outputEnabled:  enableOutput,
 		unsavedEntries: make(chan *chunkWaitState, 1000000),
 		flushDone:      make(chan struct{}),
+		cpuMonitor:     cpuMon,
 	}
 	if enableOutput {
 		chunkLogPath := path.Join(logFileFolder, jobID.String()+"-chunks.log") // its a CSV, but using log extension for consistency with other files in the directory
@@ -374,17 +381,29 @@ func (csl *chunkStatusLogger) GetCounts(td TransferDirection) []chunkStatusCount
 	return result
 }
 
-func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection) PerfConstraint {
+func (csl *chunkStatusLogger) GetPrimaryPerfConstraint(td TransferDirection, rc RetryCounter) PerfConstraint {
+	newCount := rc.GetTotalRetries()
+	oldCount := atomic.SwapInt64(&csl.atomicLastRetryCount, newCount)
+	retriesSinceLastCall := newCount - oldCount
+
 	switch {
 	// it seems sensible to report file pacer (Service) constraint as a higher priority than Disk, if both exist at the same time (but usually they won't)
 	case csl.isConstrainedByFilePacer():
-		return EPerfConstraint.Service() // service is throttling us (as at March 2019, we only detect this for page blobs, but that may change in future)
+		return EPerfConstraint.PageBlobService() // distinguish this from ordinary service throttling for ease of diagnostic understanding (page blobs have per-blob limits)
+
+	// check this ahead of disk, because for uploads retries can force disk activity, and so can be mistaken as a disk constraint
+	// if we looked at disk first
+	case retriesSinceLastCall > 0:
+		return EPerfConstraint.Service()
 
 	case td == ETransferDirection.Upload() && csl.isUploadDiskConstrained():
 		return EPerfConstraint.Disk()
 
 	case td == ETransferDirection.Download() && csl.isDownloadDiskConstrained():
 		return EPerfConstraint.Disk()
+
+	case csl.cpuMonitor.CPUContentionExists():
+		return EPerfConstraint.CPU()
 
 	default:
 		return EPerfConstraint.Unknown()

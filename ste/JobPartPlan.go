@@ -14,7 +14,7 @@ import (
 // dataSchemaVersion defines the data schema version of JobPart order files supported by
 // current version of azcopy
 // To be Incremented every time when we release azcopy with changed dataSchema
-const DataSchemaVersion common.Version = 8
+const DataSchemaVersion common.Version = 9
 
 const (
 	CustomHeaderMaxBytes = 256
@@ -48,6 +48,7 @@ type JobPartPlanHeader struct {
 	DestinationRoot       [1000]byte             // The root directory of the destination
 	IsFinalPart           bool                   // True if this is the Job's last part; else false
 	ForceWrite            common.OverwriteOption // True if the existing blobs needs to be overwritten.
+	AutoDecompress        bool                   // if true, source data with encodings that represent compression are automatically decompressed when downloading
 	Priority              common.JobPriority     // The Job Part's priority
 	TTLAfterCompletion    uint32                 // Time to live after completion is used to persists the file on disk of specified time after the completion of JobPartOrder
 	FromTo                common.FromTo          // The location of the transfer's source & destination

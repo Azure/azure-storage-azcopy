@@ -28,6 +28,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
 )
@@ -87,6 +88,7 @@ func (al *appLogger) CloseLog() {
 
 func (al *appLogger) Log(loglevel pipeline.LogLevel, msg string) {
 	// TODO consider delete completely to get rid of app logger
+	// TODO: see also the workaround in jobsAdmin.LogToJobLog
 	// TODO: if we DON'T delete, use azCopyLogSanitizer
 	//if al.ShouldLog(loglevel) {
 	//	al.logger.Println(msg)
@@ -136,12 +138,17 @@ func (jl *jobLogger) OpenLog() {
 	PanicIfErr(err)
 
 	jl.file = file
-	jl.logger = log.New(jl.file, "", log.LstdFlags|log.LUTC)
+
+	flags := log.LstdFlags | log.LUTC
+	utcMessage := fmt.Sprintf("Log times are in UTC. Local time is " + time.Now().Format("2 Jan 2006 15:04:05"))
+
+	jl.logger = log.New(jl.file, "", flags)
 	// Log the Azcopy Version
 	jl.logger.Println("AzcopyVersion ", AzcopyVersion)
 	// Log the OS Environment and OS Architecture
 	jl.logger.Println("OS-Environment ", runtime.GOOS)
 	jl.logger.Println("OS-Architecture ", runtime.GOARCH)
+	jl.logger.Println(utcMessage)
 }
 
 func (jl *jobLogger) MinimumLogLevel() pipeline.LogLevel {

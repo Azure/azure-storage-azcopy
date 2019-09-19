@@ -525,7 +525,7 @@ def execute_azcopy_command(command):
             universal_newlines=True)
     except subprocess.CalledProcessError as exec:
         # todo kill azcopy command in case of timeout
-        # print("command failed with error code " , exec.returncode , " and message " + exec.output)
+        print("command failed with error code " , exec.returncode , " and message " + exec.output)
         return False
     else:
         return True

@@ -64,6 +64,9 @@ func determineLocationLevel(location string, locationType common.Location, sourc
 		} else {
 			return ELocationLevel.Object(), nil
 		}
+	case common.ELocation.Benchmark():
+		return ELocationLevel.Object(), nil // we always benchmark to a subfolder, not the container root
+
 	case common.ELocation.Blob(),
 		common.ELocation.File(),
 		common.ELocation.BlobFS():
