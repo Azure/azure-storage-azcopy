@@ -207,6 +207,30 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
         self.util_test_copy_single_file_from_x_to_x(src_share_url, "File", dst_container_url, "Blob", 0)
 
+    def test_copy_single_1kb_file_from_file_to_blob_pass_lmt(self):
+        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(
+            src_share_url,
+            "Blob",
+            dst_container_url,
+            "File",
+            1,
+            checkLMT="pass"
+        )
+
+    def test_copy_single_1kb_file_from_file_to_blob_fail_lmt(self):
+        src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x(
+            src_share_url,
+            "Blob",
+            dst_container_url,
+            "File",
+            1,
+            checkLMT="fail"
+        )
+
     def test_copy_single_63mb_file_from_file_to_blob(self):
         src_share_url = util.get_object_sas(util.test_s2s_src_file_account_url, self.bucket_name_file_blob)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name_file_blob)
@@ -679,6 +703,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
 
         self.assertTrue(result)
 
+    # checkLMT has 3 states: "", "pass", "fail"
+    # pass handles LMT as normal
+    # fail tells azcopy to pass a false LMT to fail the transfer
     def util_test_copy_single_file_from_x_to_x(
         self,
         srcBucketURL,
@@ -689,7 +716,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         oAuth=False,
         customizedFileName="",
         srcBlobType="",
-        dstBlobType=""):
+        dstBlobType="",
+        checkLMT=""):
         # create source bucket
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
@@ -715,6 +743,9 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         # Upload file.
         self.util_upload_to_src(file_path, srcType, srcFileURL, blobType=srcBlobType)
 
+        if checkLMT == "pass" or checkLMT == "fail":
+            time.sleep(2) # Just get the LMT in the past.
+
         # Copy file using azcopy from srcURL to destURL
         result = util.Command("copy").add_arguments(srcFileURL).add_arguments(dstFileURL). \
             add_flags("log-level", "info")
@@ -729,12 +760,26 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         local_validate_dest_dir = util.create_test_dir(validate_dir_name)
         local_validate_dest = os.path.join(local_validate_dest_dir, filename)
         result = util.Command("copy").add_arguments(dstFileURL).add_arguments(local_validate_dest). \
-            add_flags("log-level", "info").execute_azcopy_copy_command()
+            add_flags("log-level", "info")
+
+        if checkLMT == "pass":
+            result.add_flags("s2s-detect-source-changed", "True")
+        elif checkLMT == "fail":
+            result.add_flags("s2s-detect-source-changed", "True")
+            # Poison the well
+            result.add_flags("supply-invalid-lmt", "False")
+
+        result = result.execute_azcopy_copy_command()
         self.assertTrue(result)
 
         # Verifying the downloaded blob
         result = filecmp.cmp(file_path, local_validate_dest, shallow=False)
-        self.assertTrue(result)
+        if not checkLMT == "fail":
+            # Do not expect a failure
+            self.assertTrue(result)
+        else:
+            # Expect a failure caused by supply-invalid-lmt
+            self.assertFalse(result)
 
         # clean up both source and destination bucket
         # util.Command("clean").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \

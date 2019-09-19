@@ -62,5 +62,12 @@ func (p *blobSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	return properties.LastModified(), nil
+	lmt := properties.LastModified()
+
+	// Offset the LMT by an hour to create a invalid LMT for testing purposes.
+	if SupplyInvalidSrcTimeCheck {
+		lmt = lmt.Add(time.Hour)
+	}
+
+	return lmt, nil
 }

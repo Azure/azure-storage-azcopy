@@ -68,5 +68,13 @@ func (f localFileSourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	return i.ModTime(), nil
+
+	lmt := i.ModTime()
+
+	// Offset the LMT by an hour to create a invalid LMT for testing purposes.
+	if SupplyInvalidSrcTimeCheck {
+		lmt = lmt.Add(time.Hour)
+	}
+
+	return lmt, nil
 }

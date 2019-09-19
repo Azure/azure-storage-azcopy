@@ -1421,4 +1421,6 @@ func init() {
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on accounts that have a hierarchical namespace.")
 	cpCmd.PersistentFlags().MarkHidden("flush-threshold")
+	cpCmd.PersistentFlags().BoolVar(&ste.SupplyInvalidSrcTimeCheck, "supply-invalid-lmt", false, "Have SIP hand off an invalid LMT to fail a transfer intentionally")
+	cpCmd.PersistentFlags().MarkHidden("supply-invalid-lmt")
 }

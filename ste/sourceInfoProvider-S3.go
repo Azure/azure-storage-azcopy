@@ -170,5 +170,13 @@ func (p *s3SourceInfoProvider) GetLastModifiedTime() (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
-	return objectInfo.LastModified, nil
+
+	lmt := objectInfo.LastModified
+
+	// Offset the LMT by an hour to create a invalid LMT for testing purposes.
+	if SupplyInvalidSrcTimeCheck {
+		lmt = lmt.Add(time.Hour)
+	}
+
+	return lmt, nil
 }
