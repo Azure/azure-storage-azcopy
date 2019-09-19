@@ -81,7 +81,6 @@ type rawCopyCmdArgs struct {
 	recursive         bool
 	stripTopDir       bool
 	followSymlinks    bool
-	withSnapshots     bool
 	// forceWrite flag is used to define the User behavior
 	// to overwrite the existing blobs or not.
 	forceWrite string
@@ -103,9 +102,7 @@ type rawCopyCmdArgs struct {
 	blobType      string
 	blockBlobTier string
 	pageBlobTier  string
-	background    bool
 	output        string
-	acl           string
 	logVerbosity  string
 	// list of blobTypes to exclude while enumerating the transfer
 	excludeBlobType string
@@ -181,7 +178,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	cooked.stripTopDir = raw.stripTopDir
 	cooked.recursive = raw.recursive
 	cooked.followSymlinks = raw.followSymlinks
-	cooked.withSnapshots = raw.withSnapshots
 	err = cooked.forceWrite.Parse(raw.forceWrite)
 	if err != nil {
 		return cooked, err
@@ -294,9 +290,6 @@ func (raw rawCopyCmdArgs) cook() (cookedCopyCmdArgs, error) {
 	}
 
 	cooked.CheckLength = raw.CheckLength
-
-	cooked.background = raw.background
-	cooked.acl = raw.acl
 
 	// if redirection is triggered, avoid printing any output
 	if cooked.isRedirection() {
@@ -493,7 +486,6 @@ type cookedCopyCmdArgs struct {
 	recursive          bool
 	stripTopDir        bool
 	followSymlinks     bool
-	withSnapshots      bool
 	forceWrite         common.OverwriteOption
 
 	// options from flags
@@ -514,8 +506,6 @@ type cookedCopyCmdArgs struct {
 	putMd5                   bool
 	md5ValidationOption      common.HashValidationOption
 	CheckLength              bool
-	background               bool
-	acl                      string
 	logVerbosity             common.LogLevel
 	// commandString hold the user given command which is logged to the Job log file
 	commandString string
@@ -1173,7 +1163,6 @@ func init() {
 	// filters change which files get transferred
 	cpCmd.PersistentFlags().BoolVar(&raw.stripTopDir, "strip-top-dir", false, "strip the source's root folder from the destination path, akin to \"cp dir/*\". E.g. sourcedir/subdir1/file1 copies to subdir1/file1 on destination; whereas without --strip-top-dir, it copies to sourcedir/subdir1/file1. May be used with and without --recursive. Without --recursive, just copies files under the folder but does not recurse into sub-directories")
 	cpCmd.PersistentFlags().BoolVar(&raw.followSymlinks, "follow-symlinks", false, "follow symbolic links when uploading from local file system.")
-	cpCmd.PersistentFlags().BoolVar(&raw.withSnapshots, "with-snapshots", false, "include the snapshots. Only valid when the source is blobs.")
 	cpCmd.PersistentFlags().StringVar(&raw.include, "include-pattern", "", "only include these files when copying. "+
 		"Support use of *. Files should be separated with ';'.")
 	cpCmd.PersistentFlags().StringVar(&raw.includePath, "include-path", "", "only include these paths when copying. "+
@@ -1205,9 +1194,6 @@ func init() {
 	cpCmd.PersistentFlags().BoolVar(&raw.putMd5, "put-md5", false, "create an MD5 hash of each file, and save the hash as the Content-MD5 property of the destination blob/file. (By default the hash is NOT created.) Only available when uploading.")
 	cpCmd.PersistentFlags().StringVar(&raw.md5ValidationOption, "check-md5", common.DefaultHashValidationOption.String(), "specifies how strictly MD5 hashes should be validated when downloading. Only available when downloading. Available options: NoCheck, LogOnly, FailIfDifferent, FailIfDifferentOrMissing.")
 
-	cpCmd.PersistentFlags().BoolVar(&raw.background, "background-op", false, "true if user has to perform the operations as a background operation.")
-	cpCmd.PersistentFlags().StringVar(&raw.acl, "acl", "", "Access conditions to be used when uploading/downloading from Azure Storage.")
-
 	cpCmd.PersistentFlags().BoolVar(&raw.CheckLength, "check-length", true, "Check the length of a file on the destination after the transfer. If there is a mismatch between source and destination, fail the transfer.")
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sPreserveProperties, "s2s-preserve-properties", true, "preserve full properties during service to service copy. "+
 		"For S3 and Azure File non-single file source, as list operation doesn't return full properties of objects/files, to preserve full properties AzCopy needs to send one additional request per object/file.")
@@ -1228,16 +1214,10 @@ func init() {
 	// The usage of this hidden flag is to provide fallback to traditional behavior, when service supports returning full properties during list.
 	cpCmd.PersistentFlags().BoolVar(&raw.s2sGetPropertiesInBackend, "s2s-get-properties-in-backend", true, "get S3 objects' or Azure files' properties in backend. ")
 
-	// not implemented
-	cpCmd.PersistentFlags().MarkHidden("acl")
-
 	// permanently hidden
 	// Hide the list-of-files flag since it is implemented only for Storage Explorer.
 	cpCmd.PersistentFlags().MarkHidden("list-of-files")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots")
-	cpCmd.PersistentFlags().MarkHidden("background-op")
 	cpCmd.PersistentFlags().MarkHidden("s2s-get-properties-in-backend")
-	cpCmd.PersistentFlags().MarkHidden("with-snapshots") // TODO this flag is not supported right now
 
 	// Hide the flush-threshold flag since it is implemented only for CI.
 	cpCmd.PersistentFlags().Uint32Var(&ste.ADLSFlushThreshold, "flush-threshold", 7500, "Adjust the number of blocks to flush at once on ADLS gen 2")
