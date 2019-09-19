@@ -114,6 +114,16 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             "Blob",
             self.bucket_name)
 
+    def test_copy_single_file_from_blob_to_blob_propertyandmetadata_in_frontend(self):
+        src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
+        dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
+        self.util_test_copy_single_file_from_x_to_x_propertyandmetadata(
+            src_container_url,
+            "Blob",
+            dst_container_url,
+            "Blob",
+            preservePropertiesInBackend=False)
+
     def test_copy_single_file_from_blob_to_blob_propertyandmetadata(self):
         src_container_url = util.get_object_sas(util.test_s2s_src_blob_account_url, self.bucket_name)
         dst_container_url = util.get_object_sas(util.test_s2s_dst_blob_account_url, self.bucket_name)
@@ -1027,7 +1037,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
         srcType,
         dstBucketURL,
         dstType,
-        preserveProperties=True):
+        preserveProperties=True,
+        preservePropertiesInBackend=False):
         # create bucket and create file with metadata and properties
         result = util.Command("create").add_arguments(srcBucketURL).add_flags("serviceType", srcType). \
             add_flags("resourceType", "Bucket").execute_azcopy_create()
@@ -1054,6 +1065,8 @@ class Service_2_Service_Copy_User_Scenario(unittest.TestCase):
             add_flags("log-level", "info")
         if preserveProperties == False:
             cpCmd.add_flags("s2s-preserve-properties", "false")
+        if preservePropertiesInBackend == False:
+            cpCmd.add_flags("s2s-get-properties-in-backend", "false")
 
         result = cpCmd.execute_azcopy_copy_command()
         self.assertTrue(result)
