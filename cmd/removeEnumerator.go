@@ -36,6 +36,8 @@ import (
 	"github.com/Azure/azure-storage-file-go/azfile"
 )
 
+var NothingToRemoveError = errors.New("nothing found to remove")
+
 // provide an enumerator that lists a given resource (Blob, File)
 // and schedule delete transfers to remove them
 // TODO: Make this merge into the other copy refactor code
@@ -75,14 +77,19 @@ func newRemoveEnumerator(cca *cookedCopyCmdArgs) (enumerator *copyEnumerator, er
 		if err != nil {
 			if err == NothingScheduledError {
 				// No log file needed. Logging begins as a part of awaiting job completion.
-				return errors.New("nothing found to remove")
+				return NothingToRemoveError
 			}
 
 			return err
 		}
 
+		// TODO: this appears to be obsolete due to the above err == NothingScheduledError. Review/discuss.
 		if !jobInitiated {
-			glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
+			if cca.isCleanupJob {
+				glcm.Error("Cleanup completed (nothing needed to be deleted)")
+			} else {
+				glcm.Error("Nothing to delete. Please verify that recursive flag is set properly if targeting a directory.")
+			}
 		}
 
 		return nil

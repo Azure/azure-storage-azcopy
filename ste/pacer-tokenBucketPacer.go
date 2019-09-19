@@ -45,8 +45,7 @@ type pacer interface {
 type pacerAdmin interface {
 	pacer
 
-	// GetTotalTraffic returns the cumulative count of all traffic that has been processed,
-	// both paced (via GetTrafficAllocation minus any UndoRequest's) and unpaced (via RecordUnpacedTraffic)
+	// GetTotalTraffic returns the cumulative count of all traffic that has been processed
 	GetTotalTraffic() int64
 }
 

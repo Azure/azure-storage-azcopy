@@ -168,10 +168,21 @@ type ListJobSummaryResponse struct {
 
 	PercentComplete float32
 
+	// Stats measured from the network pipeline
+	// Values are all-time values, for the duration of the job.
+	// Will be zero if read outside the process running the job (e.g. with 'jobs show' command)
+	AverageIOPS            int
+	AverageE2EMilliseconds int
+	ServerBusyPercentage   float32
+	NetworkErrorPercentage float32
+
 	FailedTransfers  []TransferDetail
 	SkippedTransfers []TransferDetail
 	PerfConstraint   PerfConstraint
 	PerfStrings      []string `json:"-"`
+
+	PerformanceAdvice []PerformanceAdvice
+	IsCleanupJob      bool
 }
 
 // wraps the standard ListJobSummaryResponse with sync-specific stats

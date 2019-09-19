@@ -146,7 +146,7 @@ func newAzcopyHTTPClientFactory(pipelineHTTPClient *http.Client) pipeline.Factor
 }
 
 // NewBlobPipeline creates a Pipeline using the specified credentials and options.
-func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -161,13 +161,14 @@ func NewBlobPipeline(c azblob.Credential, o azblob.PipelineOptions, r XferRetryO
 		//NewPacerPolicyFactory(p),
 		NewVersionPolicyFactory(),
 		NewRequestLogPolicyFactory(RequestLogOptions{LogWarningIfTryOverThreshold: o.RequestLog.LogWarningIfTryOverThreshold}),
+		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewBlobFSPipeline creates a pipeline for transfers to and from BlobFS Service
 // The blobFS operations currently in azcopy are supported by SharedKey Credentials
-func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
+func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -183,13 +184,14 @@ func NewBlobFSPipeline(c azbfs.Credential, o azbfs.PipelineOptions, r XferRetryO
 
 	f = append(f,
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
-		azbfs.NewRequestLogPolicyFactory(o.RequestLog))
+		azbfs.NewRequestLogPolicyFactory(o.RequestLog),
+		newXferStatsPolicyFactory(statsAcc))
 
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
 
 // NewFilePipeline creates a Pipeline using the specified credentials and options.
-func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client) pipeline.Pipeline {
+func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.RetryOptions, p pacer, client *http.Client, statsAcc *pipelineNetworkStats) pipeline.Pipeline {
 	if c == nil {
 		panic("c can't be nil")
 	}
@@ -203,6 +205,7 @@ func NewFilePipeline(c azfile.Credential, o azfile.PipelineOptions, r azfile.Ret
 		pipeline.MethodFactoryMarker(), // indicates at what stage in the pipeline the method factory is invoked
 		NewVersionPolicyFactory(),
 		azfile.NewRequestLogPolicyFactory(o.RequestLog),
+		newXferStatsPolicyFactory(statsAcc),
 	}
 	return pipeline.NewPipeline(f, pipeline.Options{HTTPSender: newAzcopyHTTPClientFactory(client), Log: o.Log})
 }
@@ -427,6 +430,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 	userAgent := common.UserAgent
 	if fromTo.From() == common.ELocation.S3() {
 		userAgent = common.S3ImportUserAgent
+	} else if fromTo.From() == common.ELocation.Benchmark() || fromTo.To() == common.ELocation.Benchmark() {
+		userAgent = common.BenchmarkUserAgent
 	}
 
 	credOption := common.CredentialOpOptions{
@@ -444,6 +449,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 		RetryDelay:    UploadRetryDelay,
 		MaxRetryDelay: UploadMaxRetryDelay}
 
+	var statsAccForSip *pipelineNetworkStats = nil // we don'nt accumulate stats on the source info provider
+
 	// Create source info provider's pipeline for S2S copy.
 	if fromTo == common.EFromTo.BlobBlob() {
 		jpm.sourceProviderPipeline = NewBlobPipeline(
@@ -456,7 +463,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			xferRetryOption,
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			statsAccForSip)
 	}
 	if fromTo == common.EFromTo.FileBlob() {
 		jpm.sourceProviderPipeline = NewFilePipeline(
@@ -475,12 +483,13 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			statsAccForSip)
 	}
 
 	// Create pipeline for data transfer.
 	switch fromTo {
-	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(),
+	case common.EFromTo.BlobTrash(), common.EFromTo.BlobLocal(), common.EFromTo.LocalBlob(), common.EFromTo.BenchmarkBlob(),
 		common.EFromTo.BlobBlob(), common.EFromTo.FileBlob(), common.EFromTo.S3Blob():
 		credential := common.CreateBlobCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
@@ -494,9 +503,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			xferRetryOption,
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure BlobFS.
-	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS():
+	case common.EFromTo.BlobFSLocal(), common.EFromTo.LocalBlobFS(), common.EFromTo.BenchmarkBlobFS():
 		credential := common.CreateBlobFSCredential(ctx, credInfo, credOption)
 		jpm.Log(pipeline.LogInfo, fmt.Sprintf("JobID=%v, credential type: %v", jpm.Plan().JobID, credInfo.CredentialType))
 
@@ -510,9 +520,10 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 			},
 			xferRetryOption,
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	// Create pipeline for Azure File.
-	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile():
+	case common.EFromTo.FileTrash(), common.EFromTo.FileLocal(), common.EFromTo.LocalFile(), common.EFromTo.BenchmarkFile():
 		jpm.pipeline = NewFilePipeline(
 			azfile.NewAnonymousCredential(),
 			azfile.PipelineOptions{
@@ -529,7 +540,8 @@ func (jpm *jobPartMgr) createPipelines(ctx context.Context) {
 				MaxRetryDelay: UploadMaxRetryDelay,
 			},
 			jpm.pacer,
-			jpm.jobMgr.HttpClient())
+			jpm.jobMgr.HttpClient(),
+			jpm.jobMgr.PipelineNetworkStats())
 	default:
 		panic(fmt.Errorf("Unrecognized from-to: %q", fromTo.String()))
 	}

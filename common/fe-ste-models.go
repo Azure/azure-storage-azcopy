@@ -216,6 +216,9 @@ type ExitCode uint32
 func (ExitCode) Success() ExitCode { return ExitCode(0) }
 func (ExitCode) Error() ExitCode   { return ExitCode(1) }
 
+// NoExit is used as a marker, to suppress the normal exit behaviour
+func (ExitCode) NoExit() ExitCode { return ExitCode(99) }
+
 type LogLevel uint8
 
 var ELogLevel = LogLevel(pipeline.LogNone)
@@ -356,13 +359,15 @@ var ELocation = Location(0)
 // Location indicates the type of Location
 type Location uint8
 
-func (Location) Unknown() Location { return Location(0) }
-func (Location) Local() Location   { return Location(1) }
-func (Location) Pipe() Location    { return Location(2) }
-func (Location) Blob() Location    { return Location(3) }
-func (Location) File() Location    { return Location(4) }
-func (Location) BlobFS() Location  { return Location(5) }
-func (Location) S3() Location      { return Location(6) }
+func (Location) Unknown() Location   { return Location(0) }
+func (Location) Local() Location     { return Location(1) }
+func (Location) Pipe() Location      { return Location(2) }
+func (Location) Blob() Location      { return Location(3) }
+func (Location) File() Location      { return Location(4) }
+func (Location) BlobFS() Location    { return Location(5) }
+func (Location) S3() Location        { return Location(6) }
+func (Location) Benchmark() Location { return Location(7) }
+
 func (l Location) String() string {
 	return enum.StringInt(uint32(l), reflect.TypeOf(l))
 }
@@ -378,10 +383,18 @@ func (l Location) IsRemote() bool {
 	switch l {
 	case ELocation.BlobFS(), ELocation.Blob(), ELocation.File(), ELocation.S3():
 		return true
-	case ELocation.Local(), ELocation.Pipe(), ELocation.Unknown():
+	case ELocation.Local(), ELocation.Benchmark(), ELocation.Pipe(), ELocation.Unknown():
 		return false
 	default:
 		panic("unexpected location, please specify if it is remote")
+	}
+}
+
+func (l Location) IsLocal() bool {
+	if l == ELocation.Unknown() {
+		return false
+	} else {
+		return !l.IsRemote()
 	}
 }
 
@@ -413,6 +426,17 @@ func (FromTo) BlobFSLocal() FromTo { return FromTo(fromToValue(ELocation.BlobFS(
 func (FromTo) BlobBlob() FromTo    { return FromTo(fromToValue(ELocation.Blob(), ELocation.Blob())) }
 func (FromTo) FileBlob() FromTo    { return FromTo(fromToValue(ELocation.File(), ELocation.Blob())) }
 func (FromTo) S3Blob() FromTo      { return FromTo(fromToValue(ELocation.S3(), ELocation.Blob())) }
+
+// todo: to we really want these?  Starts to look like a bit of a combinatorial explosion
+func (FromTo) BenchmarkBlob() FromTo {
+	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.Blob()))
+}
+func (FromTo) BenchmarkFile() FromTo {
+	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.File()))
+}
+func (FromTo) BenchmarkBlobFS() FromTo {
+	return FromTo(fromToValue(ELocation.Benchmark(), ELocation.BlobFS()))
+}
 
 func (ft FromTo) String() string {
 	return enum.StringInt(ft, reflect.TypeOf(ft))
@@ -447,10 +471,20 @@ func (ft *FromTo) From() Location {
 }
 
 func (ft *FromTo) IsDownload() bool {
-	isFromRemote := ft.From().IsRemote()
-	isToRemote := ft.To().IsRemote()
-	return isFromRemote && !isToRemote
+	return ft.From().IsRemote() && ft.To().IsLocal()
 }
+
+func (ft *FromTo) IsS2S() bool {
+	return ft.From().IsRemote() && ft.To().IsRemote()
+}
+
+func (ft *FromTo) IsUpload() bool {
+	return ft.From().IsLocal() && ft.To().IsRemote()
+}
+
+// TODO: deletes are not covered by the above Is* routines
+
+var BenchmarkLmt = time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Enumerates the values for blob type.
@@ -1047,9 +1081,11 @@ var EPerfConstraint = PerfConstraint(0)
 
 type PerfConstraint int32
 
-func (PerfConstraint) Unknown() PerfConstraint { return PerfConstraint(0) }
-func (PerfConstraint) Disk() PerfConstraint    { return PerfConstraint(1) }
-func (PerfConstraint) Service() PerfConstraint { return PerfConstraint(2) }
+func (PerfConstraint) Unknown() PerfConstraint         { return PerfConstraint(0) }
+func (PerfConstraint) Disk() PerfConstraint            { return PerfConstraint(1) }
+func (PerfConstraint) Service() PerfConstraint         { return PerfConstraint(2) }
+func (PerfConstraint) PageBlobService() PerfConstraint { return PerfConstraint(3) }
+func (PerfConstraint) CPU() PerfConstraint             { return PerfConstraint(4) }
 
 // others will be added in future
 
@@ -1064,3 +1100,32 @@ func (pc *PerfConstraint) Parse(s string) error {
 	}
 	return err
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+type PerformanceAdvice struct {
+
+	// Code representing the type of the advice
+	Code string `json:"Code"` // reminder that PerformanceAdvice may be serialized in JSON output
+
+	// Human-friendly title (directly corresponds to Code, but more readable)
+	Title string
+
+	// Reason why this advice has been given
+	Reason string
+
+	// Is this the primary advice (used to distinguish most important advice in cases where multiple advice objects are returned)
+	PriorityAdvice bool
+}
+
+const BenchmarkPreviewNotice = "The benchmark feature is currently in Preview status."
+
+const BenchmarkFinalDisclaimer = `This benchmark tries to find optimal performance, computed without touching any local disk. When reading 
+and writing real data, performance may be different. If disk limits throughput, AzCopy will display a message on screen.`
+
+const BenchmarkLinuxExtraDisclaimer = `On Linux, when AzCopy is uploading just one or two large files, disk performance may be greatly improved by
+increasing read_ahead_kb to 8192 for the data disk.`
+
+const SizePerFileParam = "size-per-file"
+const FileCountParam = "file-count"
+const FileCountDefault = 100

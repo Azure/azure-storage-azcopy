@@ -470,11 +470,8 @@ func (jptm *jobPartTransferMgr) FailActiveS2SCopyWithStatus(where string, err er
 func (jptm *jobPartTransferMgr) TempJudgeUploadOrCopy() (isUpload, isCopy bool) {
 	fromTo := jptm.FromTo()
 
-	fromIsLocal := fromTo.From() == common.ELocation.Local()
-	toIsLocal := fromTo.To() == common.ELocation.Local()
-
-	isUpload = fromIsLocal && !toIsLocal
-	isCopy = !fromIsLocal && !toIsLocal
+	isUpload = fromTo.IsUpload()
+	isCopy = fromTo.IsS2S()
 
 	return isUpload, isCopy
 }

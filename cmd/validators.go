@@ -96,6 +96,12 @@ func inferFromTo(src, dst string) common.FromTo {
 		return common.EFromTo.FileBlob()
 	case srcLocation == common.ELocation.S3() && dstLocation == common.ELocation.Blob():
 		return common.EFromTo.S3Blob()
+	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.Blob():
+		return common.EFromTo.BenchmarkBlob()
+	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.File():
+		return common.EFromTo.BenchmarkFile()
+	case srcLocation == common.ELocation.Benchmark() && dstLocation == common.ELocation.BlobFS():
+		return common.EFromTo.BenchmarkBlobFS()
 	}
 	return common.EFromTo.Unknown()
 }
@@ -118,6 +124,8 @@ func inferArgumentLocation(arg string) common.Location {
 				return common.ELocation.File()
 			case strings.Contains(host, ".dfs"):
 				return common.ELocation.BlobFS()
+			case strings.Contains(host, benchmarkSourceHost):
+				return common.ELocation.Benchmark()
 			}
 
 			if common.IsS3URL(*u) {
