@@ -126,6 +126,10 @@ func (bs ByteSliceExtension) RemoveBOM() []byte {
 func DeterminePathSeparator(path string) string {
 	// Just use forward-slash everywhere that isn't windows.
 	if runtime.GOOS == "windows" && strings.Contains(path, `\`) {
+		if strings.Contains(path, `/`) {
+			panic("inconsistent path separators. Some are forward, some are back. This is not supported.")
+		}
+
 		return `\` // Not using OS_PATH_SEPARATOR here explicitly
 	} else {
 		return AZCOPY_PATH_SEPARATOR_STRING
