@@ -247,8 +247,10 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 }
 
 func (lcm *lifecycleMgr) processNoneOutput(msgToOutput outputMessage) {
-	if msgToOutput.shouldExitProcess() {
+	if msgToOutput.msgType == eOutputMessageType.Error() {
 		os.Exit(int(EExitCode.Error()))
+	} else if msgToOutput.shouldExitProcess() {
+		os.Exit(int(msgToOutput.exitCode))
 	}
 
 	// ignore all other outputs
