@@ -1157,3 +1157,31 @@ increasing read_ahead_kb to 8192 for the data disk.`
 const SizePerFileParam = "size-per-file"
 const FileCountParam = "file-count"
 const FileCountDefault = 100
+
+//////////////////////////////////////////////////////////////////////////////////////
+
+var ECompressionType = CompressionType(0)
+
+type CompressionType uint8
+
+func (CompressionType) None() CompressionType        { return CompressionType(0) }
+func (CompressionType) ZLib() CompressionType        { return CompressionType(1) }
+func (CompressionType) GZip() CompressionType        { return CompressionType(2) }
+func (CompressionType) Unsupported() CompressionType { return CompressionType(255) }
+
+func (ct CompressionType) String() string {
+	return enum.StringInt(ct, reflect.TypeOf(ct))
+}
+
+func GetCompressionType(contentEncoding string) (CompressionType, error) {
+	switch strings.ToLower(contentEncoding) {
+	case "":
+		return ECompressionType.None(), nil
+	case "gzip":
+		return ECompressionType.GZip(), nil
+	case "deflate":
+		return ECompressionType.ZLib(), nil
+	default:
+		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
+	}
+}
