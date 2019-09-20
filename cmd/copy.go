@@ -270,7 +270,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 			scanner := bufio.NewScanner(f)
 			for scanner.Scan() {
 				v := scanner.Text()
-				listChan <- v
+				// empty strings should be ignored, otherwise the source root itself is selected
+				if len(v) > 0 {
+					listChan <- v
+				}
 			}
 		}
 
@@ -278,7 +281,10 @@ func (raw rawCopyCmdArgs) cookWithId(jobId common.JobID) (cookedCopyCmdArgs, err
 		includePathList := raw.parsePatterns(raw.includePath)
 
 		for _, v := range includePathList {
-			listChan <- v
+			// empty strings should be ignored, otherwise the source root itself is selected
+			if len(v) > 0 {
+				listChan <- v
+			}
 		}
 	}()
 
