@@ -23,6 +23,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/Azure/azure-storage-azcopy/common"
 )
@@ -77,6 +78,10 @@ type mockedLifecycleManager struct {
 	log chan string
 }
 
+func (m *mockedLifecycleManager) GetTaskWaitGroup() *sync.WaitGroup {
+	return &sync.WaitGroup{} // Return an empty waitgroup; Only used in ste
+}
+
 func (*mockedLifecycleManager) Progress(common.OutputBuilder) {}
 func (*mockedLifecycleManager) Init(common.OutputBuilder)     {}
 func (m *mockedLifecycleManager) Info(msg string) {
@@ -92,7 +97,7 @@ func (*mockedLifecycleManager) Prompt(message string, details common.PromptDetai
 func (*mockedLifecycleManager) Exit(common.OutputBuilder, common.ExitCode)      {}
 func (*mockedLifecycleManager) Error(string)                                    {}
 func (*mockedLifecycleManager) SurrenderControl()                               {}
-func (mockedLifecycleManager) AllowReinitiateProgressReporting()                        {}
+func (mockedLifecycleManager) AllowReinitiateProgressReporting()                {}
 func (*mockedLifecycleManager) InitiateProgressReporting(common.WorkController) {}
 func (*mockedLifecycleManager) ClearEnvironmentVariable(env common.EnvironmentVariable) {
 	_ = os.Setenv(env.Name, "")
