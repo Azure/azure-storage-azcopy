@@ -207,7 +207,7 @@ func initResourceTraverser(resource string, location common.Location, ctx *conte
 			output = newLocalTraverser(resource, recursive, toFollow, incrementEnumerationCounter)
 		}
 	case common.ELocation.Benchmark():
-		ben, err := newBenchmarkTraverser(source, incrementEnumerationCounter)
+		ben, err := newBenchmarkTraverser(resource, incrementEnumerationCounter)
 		if err != nil {
 			return nil, err
 		}
