@@ -119,6 +119,12 @@ func (u *azureFileSenderBase) Prologue(state common.PrologueState) {
 		return
 	}
 
+	if state.CanInferContentType() {
+		// sometimes, specifically when reading local files, we have more info
+		// about the file type at this time than what we had before
+		u.headersToApply.ContentType = state.GetInferredContentType(u.jptm)
+	}
+
 	// Create Azure file with the source size
 	_, err = u.fileURL.Create(u.ctx, info.SourceSize, u.headersToApply, u.metadataToApply)
 	if err != nil {
