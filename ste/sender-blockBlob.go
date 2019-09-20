@@ -186,6 +186,7 @@ func (s *blockBlobSenderBase) Cleanup() {
 			// Require BlobNotFound. A valid SAS token will receive AuthorizationPermissionMismatch in the event it doesn't have read perms.
 			// Thus, if a SAS token had write and delete permissions, we wouldn't know any better than to just delete the blob if we didn't check what kind of error was present.
 			if stgErr, ok := err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound {
+				// Delete can delete uncommitted blobs.
 				_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 			}
 		} else {
