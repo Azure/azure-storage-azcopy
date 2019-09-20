@@ -98,11 +98,9 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 	if cooked.fromTo == common.EFromTo.Unknown() {
 		return cooked, fmt.Errorf("Unable to infer the source '%s' / destination '%s'. ", raw.src, raw.dst)
 	} else if cooked.fromTo == common.EFromTo.LocalBlob() {
-		cooked.source = cleanLocalPath(raw.src)
 		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
 	} else if cooked.fromTo == common.EFromTo.BlobLocal() {
 		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
-		cooked.destination = cleanLocalPath(raw.dst)
 	} else if cooked.fromTo == common.EFromTo.BlobBlob() {
 		cooked.source, cooked.sourceSAS = raw.separateSasFromURL(raw.src)
 		cooked.destination, cooked.destinationSAS = raw.separateSasFromURL(raw.dst)
@@ -112,8 +110,10 @@ func (raw *rawSyncCmdArgs) cook() (cookedSyncCmdArgs, error) {
 
 	// Do this check seperately so we don't end up with a bunch of code duplication when new src/dsts are added
 	if cooked.fromTo.From() == common.ELocation.Local() {
+		cooked.source = cleanLocalPath(raw.src)
 		cooked.source = common.ToExtendedPath(cooked.source)
 	} else if cooked.fromTo.To() == common.ELocation.Local() {
+		cooked.destination = cleanLocalPath(raw.dst)
 		cooked.destination = common.ToExtendedPath(cooked.destination)
 	}
 

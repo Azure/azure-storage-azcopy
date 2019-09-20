@@ -29,6 +29,84 @@ import (
 	"strings"
 )
 
+func (s *cmdIntegrationSuite) TestIncludeDir(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	files := []string{
+		"filea",
+		"fileb",
+		"filec",
+		"sub/filea",
+		"sub/fileb",
+		"sub/filec",
+		"sub/subsub/filea",
+		"sub/subsub/fileb",
+		"sub/subsub/filec",
+	}
+
+	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dirPath)
+	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.includePath = "sub/subsub"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 3)
+		// trim / and /folder/ off
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[6:], mockedRPC)
+	})
+}
+
+func (s *cmdIntegrationSuite) TestExcludeDir(c *chk.C) {
+	bsu := getBSU()
+	containerURL, containerName := createNewContainer(c, bsu)
+	defer deleteContainer(c, containerURL)
+
+	files := []string{
+		"filea",
+		"fileb",
+		"filec",
+		"sub/filea",
+		"sub/fileb",
+		"sub/filec",
+		"sub/subsub/filea",
+		"sub/subsub/fileb",
+		"sub/subsub/filec",
+	}
+
+	dirPath := scenarioHelper{}.generateLocalDirectory(c)
+	defer os.RemoveAll(dirPath)
+	scenarioHelper{}.generateLocalFilesFromList(c, dirPath, files)
+
+	mockedRPC := interceptor{}
+	Rpc = mockedRPC.intercept
+	mockedRPC.init()
+
+	rawBlobURLWithSAS := scenarioHelper{}.getRawContainerURLWithSAS(c, containerName)
+	raw := getDefaultRawCopyInput(dirPath, rawBlobURLWithSAS.String())
+	raw.recursive = true
+	raw.excludePath = "sub/subsub"
+
+	runCopyAndVerify(c, raw, func(err error) {
+		c.Assert(err, chk.IsNil)
+
+		c.Assert(len(mockedRPC.transfers), chk.Equals, 6)
+		// Trim / and /folder/ off
+		validateDownloadTransfersAreScheduled(c, "/", "/"+filepath.Base(dirPath)+"/", files[:6], mockedRPC)
+	})
+}
+
 // regular local file->blob upload
 func (s *cmdIntegrationSuite) TestUploadSingleFileToBlobVirtualDirectory(c *chk.C) {
 	bsu := getBSU()
