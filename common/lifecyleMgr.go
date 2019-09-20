@@ -245,7 +245,7 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 
 		// These are exit conditions.
 		// TODO: Await all jobs finished signal.
-		if msgToPrint.msgType == eOutputMessageType.Exit() || msgToPrint.msgType == eOutputMessageType.Error() {
+		if msgToPrint.shouldExitProcess() {
 			lcm.taskWaitGroup.Wait()
 		}
 
