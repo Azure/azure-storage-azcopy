@@ -217,11 +217,14 @@ func remoteToLocal(jptm IJobPartTransferMgr, p pipeline.Pipeline, pacer pacer, d
 func createDestinationFile(jptm IJobPartTransferMgr, destination string, size int64, writeThrough bool) (file io.WriteCloser, err error) {
 	ct := common.ECompressionType.None()
 	if jptm.ShouldDecompress() {
-		size = 0 // we don't know what the final size will be, so we can't pre-size it
-		ct, err = jptm.GetSourceCompressionType()
-		if err != nil { // check this, and return error, before we create any disk file, since if we return err, then no cleanup of file will be required
+		size = 0                                  // we don't know what the final size will be, so we can't pre-size it
+		ct, err = jptm.GetSourceCompressionType() // calls same decompression getter routine as the front-end does
+		if err != nil {                           // check this, and return error, before we create any disk file, since if we return err, then no cleanup of file will be required
 			return nil, err
 		}
+		// Why get the decompression type again here, when we already looked at it at enumeration time?
+		// Because we have better ability to report unsupported compression types here, with clear "transfer failed" handling,
+		// and we still need to set size to zero here, so relying on enumeration more wouldn't simply this code much, if at all.
 	}
 
 	var dstFile io.WriteCloser

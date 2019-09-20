@@ -24,7 +24,9 @@ import (
 	"compress/gzip"
 	"compress/zlib"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -44,6 +46,19 @@ func (CompressionType) None() CompressionType        { return CompressionType(0)
 func (CompressionType) ZLib() CompressionType        { return CompressionType(1) }
 func (CompressionType) GZip() CompressionType        { return CompressionType(2) }
 func (CompressionType) Unsupported() CompressionType { return CompressionType(255) }
+
+func GetCompressionType(contentEncoding string) (CompressionType, error) {
+	switch strings.ToLower(contentEncoding) {
+	case "":
+		return ECompressionType.None(), nil
+	case "gzip":
+		return ECompressionType.GZip(), nil
+	case "deflate":
+		return ECompressionType.ZLib(), nil
+	default:
+		return ECompressionType.Unsupported(), fmt.Errorf("encoding type '%s' is not recognised as a supported encoding type for auto-decompression", contentEncoding)
+	}
+}
 
 // NewDecompressingWriter returns a WriteCloser which decompresses the data
 // that is written to it, before passing the decompressed data on to a final destination
