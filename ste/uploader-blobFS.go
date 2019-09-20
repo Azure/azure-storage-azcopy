@@ -178,7 +178,7 @@ func (u *blobFSUploader) Epilogue() {
 	jptm := u.jptm
 
 	// flush
-	if jptm.TransferStatus() > 0 {
+	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
 		ss := jptm.Info().SourceSize
 		md5Hash, ok := <-u.md5Channel
 		if ok {

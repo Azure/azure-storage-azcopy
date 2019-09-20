@@ -132,7 +132,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// TODO: finalize and wrap in functions whether 0 is included or excluded in status comparisons
 
 	// commit block list if necessary
-	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded {
+	if jptm.TransferStatus() > 0 && shouldPutBlockList == putListNeeded && !jptm.WasCanceled() {
 		jptm.Log(pipeline.LogDebug, fmt.Sprintf("Conclude Transfer with BlockList %s", blockIDs))
 
 		// commit the blocks.
@@ -145,7 +145,7 @@ func (s *blockBlobSenderBase) Epilogue() {
 	// Set tier
 	// GPv2 or Blob Storage is supported, GPv1 is not supported, can only set to blob without snapshot in active status.
 	// https://docs.microsoft.com/en-us/azure/storage/blobs/storage-blob-storage-tiers
-	if jptm.TransferStatus() > 0 && s.destBlobTier != azblob.AccessTierNone {
+	if jptm.TransferStatus() > 0 && s.destBlobTier != azblob.AccessTierNone && !jptm.WasCanceled() {
 		// Set the latest service version from sdk as service version in the context.
 		ctxWithLatestServiceVersion := context.WithValue(jptm.Context(), ServiceAPIVersionOverride, azblob.ServiceVersion)
 		_, err := s.destBlockBlobURL.SetTier(ctxWithLatestServiceVersion, s.destBlobTier, azblob.LeaseAccessConditions{})
@@ -167,8 +167,10 @@ func (s *blockBlobSenderBase) Epilogue() {
 func (s *blockBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 
+	fmt.Println(jptm.TransferStatus())
+
 	// Cleanup
-	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
+	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
@@ -177,8 +179,12 @@ func (s *blockBlobSenderBase) Cleanup() {
 		deletionContext, cancelFn := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancelFn()
 		if jptm.WasCanceled() {
+			// If we cancelled, check if the blob exists.
 			_, err := s.destBlockBlobURL.GetProperties(deletionContext, azblob.BlobAccessConditions{})
 
+			// If it does NOT exist, attempt to delete it.
+			// Require BlobNotFound. A valid SAS token will receive AuthorizationPermissionMismatch in the event it doesn't have read perms.
+			// Thus, if a SAS token had write and delete permissions, we wouldn't know any better than to just delete the blob if we didn't check what kind of error was present.
 			if stgErr, ok := err.(azblob.StorageError); ok && stgErr.ServiceCode() == azblob.ServiceCodeBlobNotFound {
 				_, _ = s.destBlockBlobURL.Delete(deletionContext, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
 			}

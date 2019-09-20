@@ -9,7 +9,9 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/Azure/azure-pipeline-go/pipeline"
@@ -49,6 +51,7 @@ type LifecycleMgr interface {
 	GetEnvironmentVariable(EnvironmentVariable) string           // get the environment variable or its default value
 	ClearEnvironmentVariable(EnvironmentVariable)                // clears the environment variable
 	SetOutputFormat(OutputFormat)                                // change the output format of the entire application
+	GetTaskWaitGroup() *sync.WaitGroup                           // get the task wait group. Use it to tally new JobPartTransferMgrs and their finishes. Wait on it when we try to exit.
 }
 
 func GetLifecycleMgr() LifecycleMgr {
@@ -57,12 +60,17 @@ func GetLifecycleMgr() LifecycleMgr {
 
 // single point of control for all outputs
 type lifecycleMgr struct {
+	taskWaitGroup  sync.WaitGroup // Keep tabs on all running tasks. If an exit or error is called, wait for this.
 	msgQueue       chan outputMessage
 	progressCache  string // useful for keeping job progress on the last line
 	cancelChannel  chan os.Signal
 	waitEverCalled int32
 	outputFormat   OutputFormat
 	logSanitizer   pipeline.LogSanitizer
+}
+
+func (lcm *lifecycleMgr) GetTaskWaitGroup() *sync.WaitGroup {
+	return &lcm.taskWaitGroup
 }
 
 func (lcm *lifecycleMgr) ClearEnvironmentVariable(variable EnvironmentVariable) {
@@ -233,7 +241,15 @@ func (lcm *lifecycleMgr) processOutputMessage() {
 	// this function constantly pulls out message to output
 	// and pass them onto the right handler based on the output format
 	for {
-		switch msgToPrint := <-lcm.msgQueue; lcm.outputFormat {
+		msgToPrint := <-lcm.msgQueue
+
+		// These are exit conditions.
+		// TODO: Await all jobs finished signal.
+		if msgToPrint.msgType == eOutputMessageType.Exit() || msgToPrint.msgType == eOutputMessageType.Error() {
+			lcm.taskWaitGroup.Wait()
+		}
+
+		switch lcm.outputFormat {
 		case EOutputFormat.Json():
 			lcm.processJSONOutput(msgToPrint)
 		case EOutputFormat.Text():
@@ -370,6 +386,11 @@ func (lcm *lifecycleMgr) InitiateProgressReporting(jc WorkController) {
 	go func() {
 		// cancelChannel will be notified when os receives os.Interrupt and os.Kill signals
 		signal.Notify(lcm.cancelChannel, os.Interrupt, os.Kill)
+
+		go func() {
+			time.Sleep(time.Second * 5)
+			lcm.cancelChannel <- syscall.SIGINT
+		}()
 
 		for {
 			select {

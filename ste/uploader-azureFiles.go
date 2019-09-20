@@ -155,7 +155,7 @@ func (u *azureFilesUploader) Epilogue() {
 	jptm := u.jptm
 
 	// set content MD5 (only way to do this is to re-PUT all the headers, this time with the MD5 included)
-	if jptm.TransferStatus() > 0 {
+	if jptm.TransferStatus() > 0 && !jptm.WasCanceled() {
 		tryPutMd5Hash(jptm, u.md5Channel, func(md5Hash []byte) error {
 			epilogueHeaders := *u.creationTimeHeaders
 			epilogueHeaders.ContentMD5 = md5Hash
@@ -169,7 +169,7 @@ func (u *azureFilesUploader) Cleanup() {
 	jptm := u.jptm
 
 	// Cleanup
-	if jptm.TransferStatus() <= 0 {
+	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() {
 		// If the transfer status is less than or equal to 0
 		// then transfer was either failed or cancelled
 		// the file created in share needs to be deleted, since it's

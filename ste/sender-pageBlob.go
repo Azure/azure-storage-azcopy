@@ -219,7 +219,7 @@ func (s *pageBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 
 	// Cleanup
-	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
+	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() { // TODO: <=0 or <0?
 		if s.isInManagedDiskImportExportAccount() {
 			// no deletion is possible. User just has to upload it again.
 		} else {

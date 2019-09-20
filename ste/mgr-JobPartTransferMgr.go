@@ -381,8 +381,10 @@ func (jptm *jobPartTransferMgr) UnsafeReportChunkDone() (lastChunk bool, chunksD
 // makes it easier to create DRY epilogue code.)
 func (jptm *jobPartTransferMgr) runActionAfterLastChunk() {
 	if jptm.actionAfterLastChunk != nil {
-		jptm.actionAfterLastChunk()
-		jptm.actionAfterLastChunk = nil // make sure it can't be run again, since epilogue methods are not expected to be idempotent
+		lcm := common.GetLifecycleMgr()
+		jptm.actionAfterLastChunk()     // Call the final action first,
+		jptm.actionAfterLastChunk = nil // make sure it can't be run again, since epilogue methods are not expected to be idempotent,
+		lcm.GetTaskWaitGroup().Done()   // Then mark it as done. This ensures that our finalizer runs.
 	}
 }
 

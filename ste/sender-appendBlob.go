@@ -150,7 +150,7 @@ func (s *appendBlobSenderBase) Epilogue() {
 func (s *appendBlobSenderBase) Cleanup() {
 	jptm := s.jptm
 	// Cleanup
-	if jptm.TransferStatus() <= 0 { // TODO: <=0 or <0?
+	if jptm.TransferStatus() <= 0 || jptm.WasCanceled() { // TODO: <=0 or <0?
 		// If the transfer status value < 0, then transfer failed with some failure
 		// there is a possibility that some uncommitted blocks will be there
 		// Delete the uncommitted blobs
