@@ -233,6 +233,8 @@ func createDestinationFile(jptm IJobPartTransferMgr, destination string, size in
 		return nil, err
 	}
 	if jptm.ShouldDecompress() {
+		jptm.LogAtLevelForCurrentTransfer(pipeline.LogInfo, "will be decompressed from "+ct.String())
+
 		// wrap for automatic decompression
 		dstFile = common.NewDecompressingWriter(dstFile, ct)
 		// why don't we just let Go's network stack automatically decompress for us? Because
